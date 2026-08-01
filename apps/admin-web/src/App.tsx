@@ -18,6 +18,8 @@ const JournalPage = lazy(() => import('./pages/JournalPage').then((m) => ({ defa
 const MediaPage = lazy(() => import('./pages/MediaPage').then((m) => ({ default: m.MediaPage })));
 const BillingPage = lazy(() => import('./pages/BillingPage').then((m) => ({ default: m.BillingPage })));
 const ChildrenPage = lazy(() => import('./pages/ChildrenPage').then((m) => ({ default: m.ChildrenPage })));
+const CompliancePage = lazy(() => import('./pages/CompliancePage').then((m) => ({ default: m.CompliancePage })));
+const HealthPage = lazy(() => import('./pages/HealthPage').then((m) => ({ default: m.HealthPage })));
 const OrgSettingsPage = lazy(() => import('./pages/OrgSettingsPage').then((m) => ({ default: m.OrgSettingsPage })));
 
 function Layout({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -30,6 +32,8 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
     { to: '/journal', label: t('nav.journal') },
     { to: '/media', label: t('nav.media') },
     { to: '/billing', label: t('nav.billing') },
+    { to: '/health', label: t('nav.health') },
+    { to: '/compliance', label: t('nav.compliance') },
     { to: '/sites', label: t('nav.sites') },
     { to: '/rooms', label: t('nav.rooms') },
     { to: '/children', label: t('nav.children') },
@@ -109,6 +113,8 @@ export function AppRoutes(): React.JSX.Element {
         <Route path="/journal" element={<JournalPage />} />
         <Route path="/media" element={<MediaPage />} />
         <Route path="/billing" element={<BillingPage />} />
+        <Route path="/health" element={<HealthPage />} />
+        <Route path="/compliance" element={<CompliancePage />} />
         <Route path="/organizations" element={<OrganizationsPage />} />
         <Route path="/sites" element={<SitesPage />} />
         <Route path="/rooms" element={<RoomsPage />} />

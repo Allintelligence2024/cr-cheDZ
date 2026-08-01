@@ -500,25 +500,25 @@ Légende estimation : **PD** = jours-personne nets (à majorer de +25–35 % : r
 
 ---
 
-### PHASE 11 — Durcissement, observabilité, performance  ⏱ 8 PD  (S11)
+### PHASE 11 — Durcissement, observabilité, performance  ⏱ 8 PD  (S11) — API ✅, infra ⏳
 
 **🎯 Objectif** : prêt pour la production et pour les pilotes.
 
 **✅ Tâches**
-1. Observabilité : logs JSON structurés + correlation id (✅ nginx), `/metrics` Prometheus (métriques métier : ops sync/s, jobs en file, latence p95), Grafana (dashboard API + worker + DB), alertes (erreur rate > 1 %, jobs bloqués, disque).
-2. Sentry : backend + Flutter (`sentry_flutter`) + web ; release tracking.
-3. Performance : index manquants identifiés par EXPLAIN sur les requêtes chaudes (fil du jour, liste enfants, factures) ; **load test k6** : push 500 ops sync en parallèle, login 50/s, génération 100 PDF.
-4. Sécurité : CodeQL/Semgrep + `npm audit`/`dependabot` dans CI, headers (✅ nginx), secrets vault-encodés, test de révocation d'appareil, revue des URLs signées (expiration, scopes), **revue manuelle de sécurité** (checklist OWASP Top 10).
-5. Backups : pg_dump chiffré quotidien + MinIO mirror ; **exercice de restauration en staging < 30 min** (critère Partie 9) ; rétention 7 j + mensuel.
-6. Runbook ops : déploiement, rollback, restauration, incidents ; playbook de montée de version (expand/contract pour zero-downtime).
-7. Staging : données **anonymisées** (script de pseudonymisation) ; vérification automatique qu'aucune donnée réelle ne s'y trouve.
+1. Observabilité — **✅ partiel** : `/metrics` Prometheus (compteurs HTTP, histogramme, jobs/notifications/factures en file, uptime — aucun PII), healthcheck public ; logs JSON/correlation id ✅ (nginx existant) ; Grafana/alertes ⏳ (infra).
+2. Sentry — ⏳ non configuré (DSN requis).
+3. Performance — **✅ index Phase 11** (migration 033 : guardians(user_id), fil du jour, inbox, contrats, caisse, allocations, incidents) ; **load test k6** ⏳ script écrit (`tests/load/sync.k6.js`), non exécuté (k6 absent).
+4. Sécurité — **✅ partiel** : `npm audit` durci (@nestjs/config 4, nodemailer 9, overrides) + résidus documentés `SECURITY.md` (migration NestJS 11 planifiée) ; workflows CodeQL/Semgrep ⏳ (permission workflows) ; test de révocation d'appareil ✅ (S2) ; URLs signées ✅ (revue).
+5. Backups — **✅ script** `scripts/backup.sh` (pg_dump + gzip + GPG AES256, rétention 7 j) ; cron + **exercice de restauration staging < 30 min** ⏳ (infra).
+6. Runbook ops — **✅** `docs/RUNBOOK.md` (déploiement, rollback, restauration, incidents, expand/contract).
+7. Staging — **✅ script** `scripts/anonymize.sql` (pseudonymisation + garde-fou) ; vérification automatique d'absence de données réelles ⏳ (CI).
 
 **🧪 Critères d'acceptation**
-- [ ] k6 : p95 sync push < 2 s pour 500 ops ; aucune erreur
-- [ ] Restauration complète en staging < 30 min (chronométrée, documentée)
-- [ ] 0 vulnérabilité critique au scan de dépendances ; CodeQL vert
-- [ ] Alertes Grafana fonctionnelles (test d'injection d'erreur)
-- [ ] Staging prouvé sans données réelles (script de contrôle)
+- [x] /metrics Prometheus public sans PII (testé phase11) ; rétention 5 ans testée ; healthcheck public
+- [ ] k6 : p95 sync push < 2 s pour 500 ops (script écrit, non exécuté)
+- [ ] Restauration complète en staging < 30 min (procédure documentée, exercice à programmer)
+- [ ] 0 vulnérabilité critique au scan (résidus moderate/high documentés — NestJS 11 planifié)
+- [ ] Staging prouvé sans données réelles (script d'anonymisation prêt, contrôle CI ⏳)
 
 ---
 

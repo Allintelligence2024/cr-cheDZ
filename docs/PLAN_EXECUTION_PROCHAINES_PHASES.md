@@ -358,7 +358,41 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 - [x] 151e enfant refusé (409, testé création + import) ; violations chrono 5 j ; DPIA ; export droits testé
 - [ ] Notification ANPDP réelle (SMTP) non testée de bout en bout (pas de serveur SMTP dans la sandbox — chemin 503 testé)
 - [ ] Rétention/purge (job d'archivage 5 ans) non implémentée
-- [ ] Écrans admin-web santé/conformité/violations : non implémentés (API prête)
+- [x] Écrans admin-web santé + conformité (Phase 10 UI) — pages HealthPage/CompliancePage (i18n AR/FR)
+- [ ] Écran admin-web violations/DPIA : non implémenté (API prête)
+
+---
+
+## 10. Phase 11 — DURCISSEMENT, OBSERVABILITÉ, PERFORMANCE (EN COURS ✅)
+
+### Tâches (faites et validées sur PostgreSQL 18 réel, rôle NOBYPASSRLS)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 11.1 | **Métriques Prometheus** : `GET /api/v1/metrics` public (format text), compteurs HTTP (méthode/route/statut) via middleware, histogramme de durée, métriques métier (jobs en attente, notifications en file, factures impayées), uptime — **aucune PII** (testé) | `modules/metrics/*`, `shared/metrics.middleware.ts` | ✅ |
+| 11.2 | **Rétention 5 ans** : fonction `retention_purge_logs` SECURITY DEFINER (migration 034) + job worker `retention_purge` (`RETENTION_DAYS`, défaut 1825) ; purge par lots d'audit_logs, data_access_logs, media_access_logs (RLS) | migrations 033-034, `worker/src/main.ts` | ✅ |
+| 11.3 | **Index Phase 11** : revue des requêtes chaudes → 7 index (guardians(user_id), fil du jour, inbox, contrats, caisse, allocations, incidents) | migration 033 | ✅ |
+| 11.4 | **Idempotence mensuelle testée** : job `send_monthly_invoices` — 2 contrats actifs + 1 inactif → 2 factures avec lignes ; seconde exécution → 0 nouvelle | `phase11-hardening.api.test.mjs` | ✅ |
+| 11.5 | **Sécurité dépendances** : @nestjs/config 4.0.4, nodemailer 9.0.3, overrides lodash/body-parser ; `npm audit --omit=dev` ramené à des résidus documentés (migration NestJS 11 planifiée) — `SECURITY.md` | `package.json`, `SECURITY.md` | ✅ |
+| 11.6 | **Healthcheck public** : `GET /api/v1/health` sans JWT (bug préexistant corrigé — healthchecks CI/nginx/Playwright échouaient) | `health.controller.ts` | ✅ |
+| 11.7 | **Feature flags (console)** : `GET/POST /support/flags` (super_admin, fonctions SECURITY DEFINER 035) + onglet Flags de la console support | migration 035, `privacy.service.ts`, support-console | ✅ |
+| 11.8 | **Écrans admin-web santé + conformité** (complétion Phase 10 UI) : dossier/allergies/vaccinations/médicaments + double saisie ; checks 19-253 + accusé de réception ; i18n AR/FR | `HealthPage.tsx`, `CompliancePage.tsx` | ✅ |
+| 11.9 | **Ops** : `scripts/backup.sh` (pg_dump + gzip + GPG AES256, rétention 7 j), `scripts/anonymize.sql` (pseudonymisation staging + garde-fou), `docs/RUNBOOK.md`, `tests/load/sync.k6.js`, `apps/worker/Dockerfile` | scripts/, docs/, tests/load/ | ✅ (k6 non exécuté) |
+| 11.10 | **CI** : workflows restaurés (ci.yml : database/API/web/security/e2e ; docker.yml) — **bloqués par la permission `workflows` de la GitHub App** (voir CI-RESTORE.md) | `.github/workflows/*` | ⏳ locaux uniquement |
+| 11.11 | **Suite `phase11-hardening.api.test.mjs`** : 4 volets verts sur PostgreSQL réel NOBYPASSRLS | `tests/tenant-isolation/phase11-hardening.api.test.mjs` | ✅ |
+
+### Bugs réels corrigés pendant la Phase 11
+1. **/metrics → 401 permanent** : la méthode `metrics()` entrait en conflit avec la propriété injectée `metrics` du contrôleur → renommée `index()` (handler public OK).
+2. **/health → 401** : le healthcheck était protégé par JWT (bug préexistant) → `@Public()`.
+3. **npm audit** : @nestjs/config 3→4 (worker inclus), nodemailer 6→9, overrides lodash 4.18.1/body-parser 1.20.6 (override bloqué par npm pour body-parser — documenté).
+
+### DoD Phase 11
+- [x] /metrics Prometheus public sans PII (testé) ; rétention 5 ans testée (3 journaux, dont RLS)
+- [x] Index chauds ajoutés (033) ; idempotence mensuelle worker testée ; healthcheck public
+- [x] npm audit : résidus documentés + plan NestJS 11 ; SECURITY.md
+- [ ] e2e Playwright : écrit (phase 9), non exécuté (navigateur indisponible) — à exécuter en CI une fois les workflows restaurés
+- [ ] k6 : script écrit, non exécuté (k6 absent de la sandbox)
+- [ ] Sentry, Grafana, backups programmés (cron), exercice de restauration chronométré : à mettre en place avec l'infrastructure réelle
 
 ---
 
@@ -371,7 +405,8 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 | **P7 — App parents** | ✅ FAIT (API) | Portail `/parent/*` (feed, absence, consentements à révocation immédiate, préférences/quiet hours, photos signées), OTP téléphone + PIN, FCM HTTP v1 + APNs direct (worker) | **11/11 cas verts** sur PostgreSQL réel NOBYPASSRLS ; Flutter parent-mobile + golden RTL non exécutés (SDK absent) ; SMS Twilio déclaré non configuré |
 | **P8 — Facturation** | ✅ FAIT (API + worker) | Contrats, génération mensuelle idempotente (index 021), paiements espèces, allocations bornées (trigger 023), caisse, reçus, webhook signé/idempotent (024), PDF worker (local/S3) | **16/16 cas verts** sur PostgreSQL réel NOBYPASSRLS ; PDF AR (composition arabe) et exports Excel non implémentés |
 | **P9 — Admin web** | ✅ API + écrans web | Dashboard réel (présences/jour + alertes), présences (pointage + corrections), journal (modération directrice), photos (validation visibilité), facturation (contrats/factures/paiements/caisse), fiche enfant (historique), paramètres org (tarifs 19-253) — bundle 63,7 kB gzip (lazy) | **7 cas phase9 verts** sur PostgreSQL réel NOBYPASSRLS ; Playwright e2e écrit mais NON exécuté (navigateur indisponible dans la sandbox) ; messagerie non implémentée |
-| **P10 — Santé, conformité, vie privée, support** | ✅ API + console | Santé (dossier, allergies, vaccinations, médicaments double saisie, accès parent can_view_health), conformité 19-253 (checks + capacité enforceée 409), vie privée 25-11 (demandes de droits + export JSON, violations chrono 5 j ANPDP, DPIA, registre seedé), console support (recherche globale, impersonation auditée, jobs retry) — migrations 029-032 | **3 suites phase10 (29 cas) vertes** sur PostgreSQL réel NOBYPASSRLS ; notification ANPDP réelle (SMTP) non testée de bout en bout (pas de SMTP) ; rétention/purge et écrans admin-web santé/conformité ⏳ |
+| **P10 — Santé, conformité, vie privée, support** | ✅ API + console + écrans web | Santé (dossier, allergies, vaccinations, médicaments double saisie, accès parent can_view_health), conformité 19-253 (checks + capacité enforceée 409), vie privée 25-11 (demandes + export JSON, violations chrono 5 j ANPDP, DPIA, registre seedé), console support (recherche, impersonation auditée, jobs retry, feature flags) — migrations 029-032 + écrans admin-web Santé/Conformité | **3 suites phase10 (29 cas) vertes** ; notification ANPDP réelle (SMTP) non testée de bout en bout (pas de SMTP) |
+| **P11 — Durcissement** | ✅ en cours | /metrics Prometheus (sans PII), rétention 5 ans (job retention_purge), index Phase 11 (033-034), idempotence mensuelle testée (worker), npm audit durci (config 4/nodemailer 9/overrides), health public, workflows CI restaurés (locaux), backup chiffré, anonymisation staging, runbook, k6 script | **suite phase11 verte** (4 volets) ; migration NestJS 11 planifiée (résidus audit documentés SECURITY.md) ; e2e Playwright et k6 non exécutés (navigateur/k6 absents) |
 
 ---
 

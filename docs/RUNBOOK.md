@@ -1,0 +1,76 @@
+# RUNBOOK — Exploitation (Phase 11)
+
+> Procédures opérationnelles : déploiement, restauration, incidents, montée de
+> version. À compléter avec les accès réels (vault) et les alertes Grafana.
+
+## 1. Déploiement
+
+1. Migrations (expand) :
+   ```bash
+   DATABASE_URL="$DATABASE_URL_PROD" node scripts/migrate.mjs
+   DATABASE_URL="$DATABASE_URL_PROD" node scripts/seed.mjs
+   node scripts/migrate.mjs --check   # drift detection (dev == prod)
+   ```
+2. Build des images : `docker build` (workflow `.github/workflows/docker.yml`,
+   images `ghcr.io/creche-saas/{api,worker,admin-web}`).
+3. Déploiement des conteneurs (API + worker d'abord, puis admin-web).
+4. Vérification : `GET /api/v1/health` → `{"status":"ok"}` ; `GET /api/v1/metrics`
+   → contient `creche_jobs_pending`.
+
+## 2. Restauration d'une sauvegarde (incident)
+
+```bash
+# Trouver la sauvegarde la plus récente
+ls -lt /var/backups/creche/daily/
+
+# Restaurer (base vide ou écrasée) — voir scripts/backup.sh
+gpg --batch --decrypt --passphrase "$BACKUP_PASSPHRASE" "$BACKUP" \
+  | gunzip | psql "$DATABASE_URL"
+node scripts/migrate.mjs --check   # vérifier la cohérence du schéma
+```
+
+**Objectif** : restauration complète en staging < 30 minutes (exercice à
+programmer mensuellement).
+
+## 3. Incidents connus
+
+| Symptôme | Cause probable | Action |
+|---|---|---|
+| `/api/v1/health` en erreur | API down / DB injoignable | `docker ps` ; `journalctl` ; vérifier `DATABASE_URL` |
+| Jobs bloqués en `pending` | Worker arrêté / erreur | Consulter `GET /support/jobs` (console support) ; `POST /support/jobs/:id/retry` ; redémarrer le worker |
+| Notifications jamais `sent` | FCM/APNs non configurés | Vérifier `failure_reason='PUSH_NOT_CONFIGURED_OR_NO_DEVICE'` ; configurer `FIREBASE_SERVICE_ACCOUNT_JSON` / `APNS_*` |
+| OTP SMS indisponible | Twilio non configuré | Erreur `SMS_UNAVAILABLE` 503 ; configurer `TWILIO_*` |
+| 409 CAPACITY_EXCEEDED | Capacité atteinte | Vérifier `organizations.max_children` (décret 19-253) |
+| Latence fil du jour | Index manquant | `EXPLAIN ANALYZE` ; ajouter un index via migration numérotée |
+
+## 4. Montée de version (expand/contract, zero-downtime)
+
+1. **Expand** : appliquer les migrations additives (nouvelles colonnes/tables).
+2. Déployer la nouvelle version de l'API (compatible ancienne + nouvelle).
+3. **Contract** : dans une migration ultérieure, supprimer les éléments
+   devenus inutiles.
+4. Ne jamais modifier une migration appliquée (ADR-007) — toute évolution =
+   migration suivante.
+
+## 5. Sauvegardes
+
+- Quotidien chiffré (AES256 GPG) : `scripts/backup.sh` (cron).
+- Rétention : 7 jours locaux + copie hebdomadaire hors-site.
+- MinIO/S3 : mirror du bucket `creche-media` (photos) sur un second stockage.
+- Exercice de restauration : mensuel, chronométré (< 30 min en staging).
+
+## 6. Conformité (loi 25-11)
+
+- Violation de données : créer l'événement dans l'API (`POST /privacy/violations`),
+  échéance ANPDP +5 jours automatique ; notifier via `POST /privacy/violations/:id/anpdp-notify`
+  (SMTP configuré requis).
+- Demandes de droits : export JSON via `POST /privacy/requests/:id/export`.
+- Rétention : job `retention_purge` (5 ans) — `RETENTION_DAYS` (défaut 1825).
+- Staging : toujours passer `scripts/anonymize.sql` après import d'un dump réel.
+
+## 7. Surveillance
+
+- `GET /api/v1/metrics` (Prometheus) : `http_requests_total`, `creche_jobs_pending`,
+  `creche_notifications_pending`, `creche_invoices_unpaid`, `process_uptime_seconds`.
+- Alertes recommandées : erreur rate > 1 %, jobs en attente > 50, disque > 80 %,
+  restauration non testée depuis > 30 j.

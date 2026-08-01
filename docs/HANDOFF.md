@@ -37,23 +37,34 @@ cr-cheDZ, branche arena/019fbeff-cr-chedz (branche de travail de la session).
   assertions) verts. E2E Playwright écrit (director-flow) mais NON exécuté.
 
 - Phase 10 (santé, conformité, vie privée, console support) TERMINÉE (API +
-  console) : module health (dossier, allergies, vaccinations, médicaments
-  double saisie, accès parent can_view_health), compliance 19-253 (checks
-  persistés + capacité enforceée 409 création/import), privacy 25-11
-  (demandes de droits + export JSON, violations chrono 5 j ANPDP, DPIA,
-  registre seedé 015), console support (recherche globale, impersonation
-  auditée, jobs retry) — migrations 029-032. Suites phase10 (santé 11,
-  conformité 7, privacy/support 11) vertes.
+  console + écrans web santé/conformité) : module health (dossier, allergies,
+  vaccinations, médicaments double saisie, accès parent can_view_health),
+  compliance 19-253 (checks persistés + capacité enforceée 409), privacy 25-11
+  (demandes + export JSON, violations chrono 5 j ANPDP, DPIA, registre seedé),
+  console support (recherche, impersonation auditée, jobs retry, feature
+  flags) — migrations 029-032, 035.
+- Phase 11 (durcissement) EN COURS/TERMINÉE (API) : /metrics Prometheus public
+  (sans PII), rétention 5 ans (migration 034 + job retention_purge), index
+  Phase 11 (migration 033), idempotence mensuelle testée, healthcheck public
+  corrigé, npm audit durci (@nestjs/config 4, nodemailer 9, overrides), écrans
+  admin-web Santé/Conformité, feature flags console, scripts ops (backup.sh,
+  anonymize.sql), RUNBOOK, k6 script, SECURITY.md. Suite phase11
+  (phase11-hardening.api.test.mjs) verte.
 
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
-- Phase 9 e2e Playwright : spec + config écrits (login → pointage → facture),
-  NON exécutés (navigateur Playwright non installable dans la sandbox) ;
-  exécuter en CI (job e2e) : node scripts/migrate.mjs && seed-e2e.mjs puis
-  npx playwright test dans apps/admin-web.
-- Notification ANPDP : SMTP réel (nodemailer) implémenté mais non testé de
-  bout en bout (pas de SMTP dans la sandbox — chemin 503 testé).
-- Rétention/purge des logs (5 ans) : job non implémenté.
-- Écrans admin-web santé/conformité/violations : non implémentés (API prête).
+- Workflows CI (.github/workflows/ci.yml + docker.yml) : prêts dans le dépôt
+  local, NON commités ni poussés (la GitHub App n'a pas la permission
+  `workflows` — push refusé). Restaurer : git add .github apps/worker/Dockerfile
+  && commit && push (voir docs/CI-RESTORE.md). L'e2e Playwright et CodeQL ne
+  tourneront qu'une fois les workflows poussés.
+- e2e Playwright : spec écrit (phase 9), non exécuté (pas de navigateur).
+- k6 : script écrit (tests/load/sync.k6.js), non exécuté (k6 absent).
+- Notification ANPDP : SMTP (nodemailer 9) implémenté, non testé de bout en
+  bout (pas de SMTP dans la sandbox — chemin 503 testé).
+- Écran admin-web violations/DPIA : non implémenté (API prête).
+- Migration NestJS 11 (résidus npm audit) : planifiée post-MVP (SECURITY.md).
+- Sentry, Grafana, cron de backup, exercice de restauration chronométré : à
+  mettre en place avec l'infrastructure réelle.
 - Messagerie (backend + écran web) : non implémentée.
 - parent-mobile / staff-mobile Flutter : SDK absent → code Dart écrit mais
   `flutter analyze`, widget tests et golden RTL NON exécutés.
@@ -130,6 +141,7 @@ node tests/tenant-isolation/phase9-dashboard.api.test.mjs
 node tests/tenant-isolation/phase10-health.api.test.mjs
 node tests/tenant-isolation/phase10-compliance.api.test.mjs
 node tests/tenant-isolation/phase10-privacy.api.test.mjs
+node tests/tenant-isolation/phase11-hardening.api.test.mjs
 
 # Typechecks
 npm run typecheck --workspace @creche/api
