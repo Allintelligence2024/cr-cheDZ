@@ -20,6 +20,7 @@ export class DevicesController {
       platform: dto.platform,
       appVersion: dto.app_version,
       fcmToken: dto.fcm_token,
+      apnsToken: dto.apns_token,
     });
     return { device_id: result.id };
   }

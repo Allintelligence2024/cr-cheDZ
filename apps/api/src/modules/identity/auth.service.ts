@@ -8,6 +8,7 @@ import { AppError, Errors } from '../../shared/errors';
 import { AuditService } from '../privacy/audit.service';
 import { SessionsService } from './sessions.service';
 import { TotpService } from './totp.service';
+import { SmsService } from '../../shared/sms/sms.service';
 
 interface MembershipRow {
   organization_id: string;
@@ -60,6 +61,7 @@ export class AuthService {
     private readonly sessions: SessionsService,
     private readonly totp: TotpService,
     private readonly audit: AuditService,
+    private readonly sms: SmsService,
   ) {}
 
   // ── Login ────────────────────────────────────────────────────────────────
@@ -164,8 +166,8 @@ export class AuthService {
       `INSERT INTO otp_codes (target, code_hash, purpose, expires_at) VALUES ($1,$2,'parent_login',NOW() + INTERVAL '10 minutes')`,
       [target, await bcrypt.hash(code, this.config.get<number>('BCRYPT_ROUNDS', 12))],
     );
-    // L'adaptateur SMS est volontairement hors du processus API. En dev/test,
-    // le code explicite permet les tests sans exposer un secret en production.
+    await this.sms.sendOtp(target, code);
+    // Le code explicite n'existe qu'en test et ne traverse jamais la production.
     return { expires_in: 600, ...(this.config.get<string>('NODE_ENV') === 'test' ? { development_code: code } : {}) };
   }
 
