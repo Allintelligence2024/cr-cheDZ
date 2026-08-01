@@ -4,7 +4,7 @@
 
 ## État d’implémentation
 
-Le manifeste Flutter, le flux OTP, le stockage sécurisé de session, la sélection d'enfant, le fil du jour et le signalement d'absence en deux gestes sont présents. **Flutter/Dart n’est pas installé dans cette sandbox**, donc `flutter analyze`, tests widgets et golden RTL restent à exécuter dans la CI/mobile locale après `flutter pub get`.
+Le manifeste Flutter, le flux OTP, le stockage sécurisé de session, la sélection d'enfant, le fil du jour, les photos signées, les consentements, les préférences/quiet hours et le signalement d'absence en deux gestes sont présents. **Flutter/Dart n’est pas installé dans cette sandbox**, donc `flutter analyze`, tests widgets et golden RTL restent à exécuter dans la CI/mobile locale après `flutter pub get`.
 
 L’API Phase 7 expose `/parent/*` : enfants liés, fil autorisé par `child_guardians.can_view_journal`, absence, consentements, préférences avec quiet hours, et URL photo signée seulement si visible aux parents.
 
