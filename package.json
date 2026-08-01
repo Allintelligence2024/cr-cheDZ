@@ -1,0 +1,35 @@
+{
+  "name": "creche-saas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Logiciel de gestion de crèche — Algérie (monorepo)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:seed": "node scripts/seed.mjs",
+    "db:check-schema": "node tests/tenant-isolation/schema-check.mjs",
+    "db:check-rls": "node tests/tenant-isolation/rls-behavior-check.mjs",
+    "test:api-isolation": "npm run build --workspace @creche/api && node tests/tenant-isolation/isolation.api.test.mjs",
+    "test:api-phase3": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase3.api.test.mjs",
+    "test:api-phase4": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase4.api.test.mjs",
+    "test:api-phase5": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase5.api.test.mjs",
+    "db:status": "node scripts/migrate.mjs --status",
+    "db:reset": "node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.3",
+    "bcryptjs": "^3.0.3",
+    "pg": "^8.13.1"
+  }
+}

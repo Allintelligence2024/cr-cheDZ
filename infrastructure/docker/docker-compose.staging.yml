@@ -1,0 +1,74 @@
+# ============================================================================
+# docker-compose.staging.yml — Environnement de staging
+# Données ANONYMISÉES uniquement (jamais de données réelles).
+# ============================================================================
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-creche_staging}
+      POSTGRES_USER: ${POSTGRES_USER:-creche_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-creche_app}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD requis}
+    volumes:
+      - minio_staging_data:/data
+
+  migrate:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ../../scripts:/app/scripts
+      - ../../infrastructure/database:/app/infrastructure/database
+      - ../../package.json:/app/package.json
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-creche_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-creche_staging}
+    command: sh -c "npm install --no-audit --no-fund pg >/dev/null 2>&1 && node scripts/migrate.mjs && node scripts/seed.mjs && node tests/tenant-isolation/schema-check.mjs"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: ghcr.io/creche-saas/api:staging
+    environment:
+      NODE_ENV: staging
+      DATABASE_URL: postgresql://${POSTGRES_USER:-creche_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-creche_staging}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET requis}
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: creche-media-staging
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: ghcr.io/creche-saas/worker:staging
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-creche_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-creche_staging}
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_staging_data:
+  minio_staging_data:

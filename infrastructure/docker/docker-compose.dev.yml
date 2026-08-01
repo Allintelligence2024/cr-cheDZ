@@ -1,0 +1,109 @@
+# ============================================================================
+# docker-compose.dev.yml — Environnement de développement local
+# Usage : docker compose -f infrastructure/docker/docker-compose.dev.yml up -d
+# Les migrations sont appliquées par le service « migrate » (runner C05),
+# plus jamais par docker-entrypoint-initdb.d.
+# ============================================================================
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: creche_dev
+      POSTGRES_USER: creche_app
+      POSTGRES_PASSWORD: dev_password_change_in_prod
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U creche_app -d creche_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio_dev
+      MINIO_ROOT_PASSWORD: minio_dev_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_dev_data:/data
+
+  migrate:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ../../scripts:/app/scripts
+      - ../../infrastructure/database:/app/infrastructure/database
+      - ../../package.json:/app/package.json
+    environment:
+      DATABASE_URL: postgresql://creche_app:dev_password_change_in_prod@postgres:5432/creche_dev
+    command: sh -c "npm install --no-audit --no-fund pg >/dev/null 2>&1 && node scripts/migrate.mjs && node scripts/seed.mjs"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      APP_PORT: 3000
+      DATABASE_URL: postgresql://creche_app:dev_password_change_in_prod@postgres:5432/creche_dev
+      JWT_SECRET: dev_jwt_secret_change_in_prod_minimum_32_chars
+      JWT_REFRESH_SECRET: dev_refresh_secret_change_in_prod_min_32
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minio_dev
+      S3_SECRET_KEY: minio_dev_password
+      S3_BUCKET: creche-media-dev
+      CORS_ORIGINS: http://localhost:4000
+    volumes:
+      - ../../apps/api:/app
+      - /app/node_modules
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: npm run start:dev
+
+  worker:
+    build:
+      context: ../../apps/worker
+      dockerfile: Dockerfile.dev
+    environment:
+      DATABASE_URL: postgresql://creche_app:dev_password_change_in_prod@postgres:5432/creche_dev
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minio_dev
+      S3_SECRET_KEY: minio_dev_password
+    volumes:
+      - ../../apps/worker:/app
+      - /app/node_modules
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: npm run start:dev
+
+  admin-web:
+    build:
+      context: ../../apps/admin-web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "4000:4000"
+    environment:
+      VITE_API_URL: http://localhost:3000
+    volumes:
+      - ../../apps/admin-web:/app
+      - /app/node_modules
+    command: npm run dev
+
+volumes:
+  postgres_dev_data:
+  minio_dev_data:

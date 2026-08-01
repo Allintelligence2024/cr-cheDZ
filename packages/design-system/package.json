@@ -1,0 +1,10 @@
+{
+  "name": "@creche/design-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Design tokens + composants React partagés (admin-web, support-console)",
+  "main": "src/index.ts",
+  "peerDependencies": {
+    "react": "^18.3.0"
+  }
+}
