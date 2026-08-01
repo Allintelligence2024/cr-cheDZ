@@ -8,6 +8,7 @@ import { DevicesController } from './devices.controller';
 import { DevicesService } from './devices.service';
 import { SessionsService } from './sessions.service';
 import { TotpService } from './totp.service';
+import { SmsService } from '../../shared/sms/sms.service';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { TotpService } from './totp.service';
     }),
   ],
   controllers: [AuthController, DevicesController],
-  providers: [AuthService, SessionsService, DevicesService, TotpService],
+  providers: [AuthService, SessionsService, DevicesService, TotpService, SmsService],
   exports: [SessionsService, TotpService],
 })
 export class IdentityModule {}

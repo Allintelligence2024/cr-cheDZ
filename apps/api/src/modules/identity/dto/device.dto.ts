@@ -21,4 +21,8 @@ export class RegisterDeviceDto {
   @IsOptional()
   @IsString()
   fcm_token?: string;
+
+  @IsOptional()
+  @IsString()
+  apns_token?: string;
 }

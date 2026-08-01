@@ -4,7 +4,7 @@ import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/cu
 import { Public } from '../../shared/decorators/public.decorator';
 import { RateLimit } from '../../shared/decorators/rate-limit.decorator';
 import { AuthService, type LoginResult } from './auth.service';
-import { AcceptInvitationDto, ChangePasswordDto, LoginDto, RefreshDto, TotpDto } from './dto/auth.dto';
+import { AcceptInvitationDto, ChangePasswordDto, LoginDto, ParentOtpRequestDto, ParentOtpVerifyDto, ParentPinDto, ParentPinLoginDto, RefreshDto, TotpDto } from './dto/auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -23,6 +23,36 @@ export class AuthController {
       req.ip,
       req.headers['user-agent'],
     );
+  }
+
+  @Public()
+  @Post('parent/otp/request')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit(5, 60_000)
+  async requestParentOtp(@Body() dto: ParentOtpRequestDto): Promise<{ expires_in: number; development_code?: string }> {
+    return this.authService.requestParentOtp(dto.phone);
+  }
+
+  @Public()
+  @Post('parent/otp/verify')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit(10, 60_000)
+  async verifyParentOtp(@Body() dto: ParentOtpVerifyDto, @Req() req: Request): Promise<LoginResult> {
+    return this.authService.verifyParentOtp(dto.phone, dto.code, { deviceId: dto.device_id, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+  }
+
+  @Post('parent/pin')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async setParentPin(@Body() dto: ParentPinDto, @CurrentUser() user: CurrentUserPayload): Promise<void> {
+    await this.authService.setParentPin(user.sub, dto.pin);
+  }
+
+  @Public()
+  @Post('parent/pin/login')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit(5, 60_000)
+  async loginParentPin(@Body() dto: ParentPinLoginDto, @Req() req: Request): Promise<LoginResult> {
+    return this.authService.loginParentPin(dto.phone, dto.pin, { deviceId: dto.device_id, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
   }
 
   @Public()

@@ -9,6 +9,7 @@ export interface RegisterDeviceInput {
   platform: string;
   appVersion?: string;
   fcmToken?: string;
+  apnsToken?: string;
 }
 
 /**
@@ -29,10 +30,10 @@ export class DevicesService {
     const result = await this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
         `INSERT INTO devices
-           (organization_id, name, device_fingerprint, platform, app_version, fcm_token, registered_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (organization_id, name, device_fingerprint, platform, app_version, fcm_token, apns_token, registered_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id`,
-        [tenantId, input.name, input.deviceFingerprint, input.platform, input.appVersion ?? null, input.fcmToken ?? null, userId],
+        [tenantId, input.name, input.deviceFingerprint, input.platform, input.appVersion ?? null, input.fcmToken ?? null, input.apnsToken ?? null, userId],
       );
       return res.rows[0] as { id: string };
     });

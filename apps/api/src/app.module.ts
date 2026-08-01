@@ -9,6 +9,7 @@ import { RateLimitService } from './shared/guards/rate-limit.service';
 import { RolesGuard } from './shared/guards/roles.guard';
 import { HealthController } from './health.controller';
 import { AttendanceModule } from './modules/attendance/attendance.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { ChildrenModule } from './modules/children/children.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { JournalModule } from './modules/journal/journal.module';
@@ -16,6 +17,7 @@ import { MediaModule } from './modules/media/media.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
+import { ParentsModule } from './modules/parents/parents.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { UsersModule } from './modules/users/users.module';
@@ -31,10 +33,12 @@ import { UsersModule } from './modules/users/users.module';
     StaffModule,
     ChildrenModule,
     AttendanceModule,
+    BillingModule,
     JournalModule,
     MediaModule,
     NotificationsModule,
     SyncModule,
+    ParentsModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -17,6 +17,8 @@
     "test:api-phase4": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase4.api.test.mjs",
     "test:api-phase5": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase5.api.test.mjs",
     "test:api-phase6": "npm run build --workspace @creche/api && npm run build --workspace @creche/worker && node tests/tenant-isolation/phase6.api.test.mjs",
+    "test:api-phase7": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase7-parent.api.test.mjs",
+    "test:api-phase8": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase8-billing.api.test.mjs",
     "db:status": "node scripts/migrate.mjs --status",
     "db:reset": "node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs",
     "lint": "eslint .",

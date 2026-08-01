@@ -8,6 +8,7 @@ import { AppError, Errors } from '../../shared/errors';
 import { AuditService } from '../privacy/audit.service';
 import { SessionsService } from './sessions.service';
 import { TotpService } from './totp.service';
+import { SmsService } from '../../shared/sms/sms.service';
 
 interface MembershipRow {
   organization_id: string;
@@ -27,6 +28,7 @@ interface UserRow {
   last_name: string;
   locale: string;
   password_hash: string | null;
+  parent_pin_hash: string | null;
   status: string;
   totp_secret: string | null;
   totp_enabled: boolean;
@@ -59,6 +61,7 @@ export class AuthService {
     private readonly sessions: SessionsService,
     private readonly totp: TotpService,
     private readonly audit: AuditService,
+    private readonly sms: SmsService,
   ) {}
 
   // ── Login ────────────────────────────────────────────────────────────────
@@ -150,6 +153,59 @@ export class AuthService {
         is_super_admin: user.is_super_admin,
       },
     };
+  }
+
+  // ── Parent OTP + PIN ───────────────────────────────────────────────────
+
+  async requestParentOtp(phone: string): Promise<{ expires_in: number; development_code?: string }> {
+    const target = phone.trim();
+    // Réponse identique si le numéro est inconnu (anti-énumération).
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await this.pool.query(`UPDATE otp_codes SET used_at = NOW() WHERE target = $1 AND purpose = 'parent_login' AND used_at IS NULL`, [target]);
+    await this.pool.query(
+      `INSERT INTO otp_codes (target, code_hash, purpose, expires_at) VALUES ($1,$2,'parent_login',NOW() + INTERVAL '10 minutes')`,
+      [target, await bcrypt.hash(code, this.config.get<number>('BCRYPT_ROUNDS', 12))],
+    );
+    await this.sms.sendOtp(target, code);
+    // Le code explicite n'existe qu'en test et ne traverse jamais la production.
+    return { expires_in: 600, ...(this.config.get<string>('NODE_ENV') === 'test' ? { development_code: code } : {}) };
+  }
+
+  async verifyParentOtp(phone: string, code: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
+    const target = phone.trim();
+    const otp = await this.pool.query<{ id: string; code_hash: string; attempts: number }>(
+      `SELECT id, code_hash, attempts FROM otp_codes WHERE target=$1 AND purpose='parent_login' AND used_at IS NULL AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1`, [target],
+    );
+    const row = otp.rows[0];
+    if (!row || row.attempts >= 5 || !(await bcrypt.compare(code, row.code_hash))) {
+      if (row) await this.pool.query(`UPDATE otp_codes SET attempts=attempts+1 WHERE id=$1`, [row.id]);
+      throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
+    }
+    await this.pool.query(`UPDATE otp_codes SET used_at=NOW() WHERE id=$1`, [row.id]);
+    const found = await this.pool.query<UserRow>(
+      `SELECT u.* FROM users u WHERE u.phone=$1 AND u.deleted_at IS NULL AND EXISTS (
+         SELECT 1 FROM guardians g WHERE g.user_id=u.id
+       )`, [target],
+    );
+    const user = found.rows[0];
+    if (!user) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
+    return this.issueTokenPair(user, ctx);
+  }
+
+  async setParentPin(userId: string, pin: string): Promise<void> {
+    await this.pool.query(`UPDATE users SET parent_pin_hash=$2, version=version+1 WHERE id=$1`, [userId, await bcrypt.hash(pin, this.config.get<number>('BCRYPT_ROUNDS', 12))]);
+  }
+
+  async loginParentPin(phone: string, pin: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
+    const res = await this.pool.query<UserRow>(
+      `SELECT u.* FROM users u WHERE u.phone=$1 AND u.deleted_at IS NULL AND EXISTS (SELECT 1 FROM guardians g WHERE g.user_id=u.id)`,
+      [phone.trim()],
+    );
+    const user = res.rows[0];
+    if (!user?.parent_pin_hash || !(await bcrypt.compare(pin, user.parent_pin_hash))) {
+      throw new AppError('INVALID_PARENT_PIN', 'PIN incorrect', 'رمز PIN غير صحيح', 401);
+    }
+    return this.issueTokenPair(user, ctx);
   }
 
   // ── Refresh (rotation + détection de réutilisation) ─────────────────────

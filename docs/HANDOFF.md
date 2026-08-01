@@ -53,9 +53,8 @@ PROCHAINE ÉTAPE — PHASE 7 (Application parents + notifications) :
   téléphone + PIN, fil du jour (feed), photos (URLs signées), signalement
   d'absence en 2 taps, consentements (revocation → effet immédiat),
   RTL arabe complet
-- API parents : endpoints isolés (l'utilisateur parent ne voit que les
-  enfants dont il est child_guardians avec can_view_journal — TESTÉ),
-  OTP email/SMS (table otp_codes), préférences de notification + quiet hours
+- Phase 7 : portail `/parent/*` isolé par `child_guardians` (feed, absence, consentements, préférences/quiet hours, liste/téléchargement de photos signées). OTP téléphone (bcrypt, 10 min, usage unique, 5 essais), PIN haché et login PIN sont disponibles. La révocation du consentement coupe immédiatement toute nouvelle URL photo. Worker FCM HTTP v1 (service account `FIREBASE_SERVICE_ACCOUNT_JSON`) est implémenté ; APNs direct et adaptateur SMS fournisseur restent à intégrer. `phase7-parent.api.test.mjs` est vert sur PostgreSQL embedded réel.
+- Phase 8 commencée : `modules/billing` crée les contrats et génère les factures mensuelles ; migration 021 impose l’unicité contrat/période. Paiements, allocations, PDF, caisse et tests API réels restent à faire.
 - FCM réel dans le worker (fcm_token des devices) + APNs
 - Tests : isolation parent (2 parents du même enfant avec permissions
   différentes), notification arrivée < 30s, RTL (golden tests)
