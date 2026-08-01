@@ -307,6 +307,34 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 
 ---
 
+## 8. Phase 9 — ADMINISTRATION WEB COMPLÈTE (API ✅ + écrans web ✅, e2e ⏳)
+
+### Tâches (faites et validées)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 9.1 | **Tableau de bord** : `GET /dashboard/summary` — présences du jour par salle (site/salle/total/présents/départs/absents/attendus) + alertes (enfants non pointés, documents expirant 30 j, factures impayées, incidents 24 h), strictement tenant-scoped | `apps/api/src/modules/dashboard/*`, `DashboardPage.tsx` | ✅ |
+| 9.2 | **Présences web** : vue jour par salle, arrivée/départ/absent/correction tracée (motif obligatoire), statuts colorés | `AttendancePage.tsx` | ✅ |
+| 9.3 | **Journal + modération** : liste par enfant/date, correction append-only signalée, bascule de visibilité parent par la directrice ; note privée jamais visible (422 `NOTE_IS_PRIVATE`) | `PATCH /journal/events/:id/visibility`, `JournalPage.tsx` | ✅ |
+| 9.4 | **Photos** : validation visibilité parents (consentement re-vérifié), téléchargement URL signée | `MediaPage.tsx` | ✅ |
+| 9.5 | **Facturation web** : contrats (création + liste), factures (génération + statuts + PDF), paiements espèces, caisse (ouverture/clôture + registres) | `BillingPage.tsx` | ✅ |
+| 9.6 | **Fiche enfant** : historique `room_moves` + `child_status_history` ajouté à `GET /children/:id` | `children.service.ts`, `ChildrenPage.tsx` | ✅ |
+| 9.7 | **Paramètres org + tarifs** (affichage exigé 19-253) : infos org + contrats actifs affichés | `OrgSettingsPage.tsx` | ✅ |
+| 9.8 | **i18n AR/FR** : ~150 nouvelles clés (dashboard, présences, journal, photos, facturation, fiche, paramètres) ; RTL via `dir` existant | `packages/i18n/src/index.ts` | ✅ |
+| 9.9 | **Performance** : pages Phase 9 en `React.lazy` — bundle principal **63,7 kB gzip** (< 250 kB) | `App.tsx` | ✅ |
+| 9.10 | **E2E Playwright** : config à 2 webServer (API 3000 + Vite 4000), spec `director-flow.spec.ts` (login → pointage → facture), seed-e2e enrichi (site/salle/enfant/contrat, bug ESM `return` corrigé) | `playwright.config.ts`, `e2e/director-flow.spec.ts`, `seed-e2e.mjs` | ⏳ **écrit, non exécuté** (aucun navigateur installable dans la sandbox) |
+| 9.11 | **Test d'isolation Phase 9** : `phase9-dashboard.api.test.mjs` — 7 cas (22 assertions) verts sur PostgreSQL réel NOBYPASSRLS | `tests/tenant-isolation/phase9-dashboard.api.test.mjs` | ✅ |
+
+### DoD Phase 9
+- [x] Tous les flux métier du quotidien réalisables via l'API (dashboard, pointage, journal, photos, facturation, caisse — smoke testé via proxy Vite)
+- [x] Isolation : dashboard/modération/fiche de A invisibles pour B (404/vides, testé)
+- [x] AR RTL : clés complètes + `dir` document-wide (golden RTL ⏳ SDK absent)
+- [x] Correction de présence tracée (motif obligatoire, événements append-only Phase 5)
+- [ ] Playwright e2e exécuté (bloqué : navigateur indisponible)
+- [ ] Messagerie (écran web) : non implémentée (backend non implémenté)
+
+---
+
 ## 6. Phases suivantes (résumé exécutif — détail dans PLAN_IMPLEMENTATION.md §3)
 
 | Phase | S | Livrable clé | Critère de sortie |
@@ -315,6 +343,7 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 | **P6 — Journal + médias** | ✅ FAIT | Événements journal, photos via URL signée MinIO, actions groupées, consentements photo | Repas groupé 12 enfants < 30 s ; 200 événements offline |
 | **P7 — App parents** | ✅ FAIT (API) | Portail `/parent/*` (feed, absence, consentements à révocation immédiate, préférences/quiet hours, photos signées), OTP téléphone + PIN, FCM HTTP v1 + APNs direct (worker) | **11/11 cas verts** sur PostgreSQL réel NOBYPASSRLS ; Flutter parent-mobile + golden RTL non exécutés (SDK absent) ; SMS Twilio déclaré non configuré |
 | **P8 — Facturation** | ✅ FAIT (API + worker) | Contrats, génération mensuelle idempotente (index 021), paiements espèces, allocations bornées (trigger 023), caisse, reçus, webhook signé/idempotent (024), PDF worker (local/S3) | **16/16 cas verts** sur PostgreSQL réel NOBYPASSRLS ; PDF AR (composition arabe) et exports Excel non implémentés |
+| **P9 — Admin web** | ✅ API + écrans web | Dashboard réel (présences/jour + alertes), présences (pointage + corrections), journal (modération directrice), photos (validation visibilité), facturation (contrats/factures/paiements/caisse), fiche enfant (historique), paramètres org (tarifs 19-253) — bundle 63,7 kB gzip (lazy) | **7 cas phase9 verts** sur PostgreSQL réel NOBYPASSRLS ; Playwright e2e écrit mais NON exécuté (navigateur indisponible dans la sandbox) ; messagerie non implémentée |
 
 ---
 

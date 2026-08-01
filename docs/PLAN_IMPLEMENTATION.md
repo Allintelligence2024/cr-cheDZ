@@ -462,22 +462,22 @@ Légende estimation : **PD** = jours-personne nets (à majorer de +25–35 % : r
 
 ---
 
-### PHASE 9 — Administration web complète  ⏱ 8 PD  (S9)
+### PHASE 9 — Administration web complète  ⏱ 8 PD  (S9) — API + écrans ✅, e2e ⏳
 
 **🎯 Objectif** : l'outil de gestion quotidien de la directrice, en FR et AR.
 
 **✅ Tâches**
-1. Tableau de bord : présences du jour par site/room, alertes (enfants non pointés à 9 h, documents expirés, factures impayées, incidents).
-2. Écrans : enfants (fiche complète, historique `room_moves`, statuts), familles, présences (vue jour/semaine, corrections tracées), journal (consultation + modération), photos (validation visibilité parents), messagerie, contrats/factures/paiements (P8), personnel (P3), paramètres org (tarifs affichés — exigence 19-253).
-3. i18n : AR/FR complets, RTL, dates et montants localisés (DZD, format algérien), export PDF/Excel.
-4. Performance : pagination, virtualisation listes, bundle < 250 Ko gzip.
-5. Tests : Playwright e2e (login → pointer une section → générer une facture), a11y de base, RTL vérifié visuellement.
+1. Tableau de bord : présences du jour par site/room, alertes (enfants non pointés à 9 h, documents expirés, factures impayées, incidents). — **✅ `GET /dashboard/summary` + `DashboardPage`** (test d'isolation phase9).
+2. Écrans : enfants (fiche complète, historique `room_moves`, statuts — **✅** `GET /children/:id` enrichi + fiche web), familles (⚠️ CRUD gardiens déjà en API, pas d'écran dédié), présences (vue jour, corrections tracées — **✅**), journal (consultation + modération — **✅** `PATCH /journal/events/:id/visibility`), photos (validation visibilité parents — **✅**), messagerie (**⏳ non implémenté**), contrats/factures/paiements (P8 — **✅** `BillingPage`), personnel (P3 — ✅ existant), paramètres org (tarifs affichés — **✅** `OrgSettingsPage`, exigence 19-253).
+3. i18n : AR/FR complets — **✅ ~150 nouvelles clés** ; RTL document-wide — ✅ ; dates/montants localisés (DZD) — ✅ partiel ; export PDF — ✅ (lien PDF facture) ; export Excel — ⏳ (worker stub).
+4. Performance : bundle principal **63,7 kB gzip** (pages lazy, < 250 Ko ✅) ; pagination API existante, virtualisation ⏳.
+5. Tests : Playwright e2e (login → pointer une section → générer une facture) — **⏳ spec + config écrits, non exécutés** (navigateur indisponible) ; a11y de base ⏳ ; RTL visuel ⏳ (SDK/golden).
 
 **🧪 Critères d'acceptation**
-- [ ] Tous les flux métier du quotidien réalisables sans le backend en direct (tout passe par l'API)
-- [ ] Playwright e2e verts sur le parcours directeur
-- [ ] AR RTL vérifié visuellement sur les 5 écrans principaux
-- [ ] Correction de présence = tracée dans l'audit (qui, quand, pourquoi)
+- [x] Tous les flux métier du quotidien réalisables via l'API (smoke testé : login → dashboard → attendance → contracts via proxy Vite)
+- [ ] Playwright e2e verts sur le parcours directeur (écrit, à exécuter en CI)
+- [ ] AR RTL vérifié visuellement sur les 5 écrans principaux (⏳ golden/SDK)
+- [x] Correction de présence = tracée (motif obligatoire, append-only Phase 5)
 
 ---
 

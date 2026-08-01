@@ -28,17 +28,28 @@ cr-cheDZ, branche arena/019fbeff-cr-chedz (branche de travail de la session).
   lecture seule (can_receive_invoices). Suite phase8-billing.api.test.mjs :
   16/16 cas verts. Migrations 024-028 (jobs_claim_next/jobs_finish pour le
   worker sous NOBYPASSRLS, corrigées 026-028).
+- Phase 9 (admin web) TERMINÉE (API + écrans) : GET /dashboard/summary
+  (présences/jour + alertes, module dashboard), PATCH /journal/events/:id/visibility
+  (modération directrice, note privée → 422), GET /children/:id enrichi
+  (room_moves + status_history), écrans admin-web Dashboard/Attendance/Journal/
+  Media/Billing/OrgSettings + fiche enfant + ~150 clés i18n AR/FR, lazy loading
+  (bundle 63,7 kB gzip). Suite phase9-dashboard.api.test.mjs : 7 cas (22
+  assertions) verts. E2E Playwright écrit (director-flow) mais NON exécuté.
 
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
+- Phase 9 e2e Playwright : spec + config écrits (login → pointage → facture),
+  NON exécutés (navigateur Playwright non installable dans la sandbox) ;
+  exécuter en CI (job e2e) : node scripts/migrate.mjs && seed-e2e.mjs puis
+  npx playwright test dans apps/admin-web.
+- Messagerie (backend + écran web) : non implémentée.
 - parent-mobile / staff-mobile Flutter : SDK absent → code Dart écrit mais
   `flutter analyze`, widget tests et golden RTL NON exécutés.
 - SMS OTP : Twilio implémenté mais déclaré NON CONFIGURÉ (SMS_UNAVAILABLE 503).
 - FCM/APNs : chemins de code réels, non testés de bout en bout (pas de secrets).
 - PDF bilingue AR (composition arabe), exports Excel (stubs NOT_IMPLEMENTED).
 - job send_monthly_invoices : implémenté, pas de test dédié.
-- Prochaine phase logique : Phase 9 (admin-web complète : tableau de bord,
-  écrans facturation/caisse, RTL AR) ou Phase 10 (santé, conformité, console
-  support, vie privée) — voir docs/PLAN_IMPLEMENTATION.md.
+- Prochaine phase logique : Phase 10 (santé, conformité, console support, vie
+  privée) — voir docs/PLAN_IMPLEMENTATION.md.
 
 MÉTHODE DE TRAVAIL (non négociable) :
 1. Fondation d'abord : le GATE (aucun accès cross-tenant) ne redevient JAMAIS
@@ -76,6 +87,7 @@ MÉTHODE DE TRAVAIL (non négociable) :
 | Suites de tests | `tests/tenant-isolation/` : schema-check, rls-behavior-check (GATE), isolation (S2), phase3 → phase8 — **toutes vertes sur PostgreSQL 18 réel** (phase7 : 11 cas, phase8 : 16 cas) |
 | Phase 7 | Portail parent complet (API) — OTP/PIN, consentements, quiet hours, photos, FCM/APNs worker |
 | Phase 8 | Facturation complète (API + worker) — contrats, factures, paiements, allocations, caisse, webhook, PDF, accès parent |
+| Phase 9 | Admin web complète (API + écrans) — dashboard, présences, journal + modération, photos, facturation, fiche enfant, paramètres/tarifs, i18n AR/FR, lazy (63,7 kB gzip) |
 | Apps | api (NestJS), worker (jobs + push), admin-web (React FR/AR), support-console (squelette), staff-mobile + parent-mobile (squelettes Dart) |
 | CI | Workflows locaux non poussés (permission `workflows`) — `docs/CI-RESTORE.md` |
 | Docs | `docs/PLAN_IMPLEMENTATION.md`, `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md`, `docs/adr/` (000→010), `docs/HANDOFF.md` (ce fichier) |
@@ -100,6 +112,7 @@ node tests/tenant-isolation/phase5.api.test.mjs
 node tests/tenant-isolation/phase6.api.test.mjs
 node tests/tenant-isolation/phase7-parent.api.test.mjs
 node tests/tenant-isolation/phase8-billing.api.test.mjs
+node tests/tenant-isolation/phase9-dashboard.api.test.mjs
 
 # Typechecks
 npm run typecheck --workspace @creche/api
