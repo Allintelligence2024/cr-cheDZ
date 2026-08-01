@@ -13,3 +13,8 @@ export class GenerateInvoiceDto {
  @IsInt() @Min(1) @Max(12) period_month!: number;
  @IsDateString() due_date!: string;
 }
+export class RecordCashPaymentDto {
+ @IsUUID() invoice_id!: string;
+ @IsNumber() @Min(0.01) amount!: number;
+ @IsOptional() @IsString() notes?: string;
+}

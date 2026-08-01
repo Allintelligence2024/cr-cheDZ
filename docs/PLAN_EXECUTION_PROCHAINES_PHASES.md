@@ -260,7 +260,7 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 | **P5 — Présences + sync** | ✅ FAIT | Machine à états, push/pull (curseur sync_seq), idempotence, 200 ops offline | 34/34 tests verts |
 | **P6 — Journal + médias** | S6 | Événements journal, photos via URL signée MinIO, actions groupées, consentements photo | Repas groupé 12 enfants < 30 s ; 200 événements offline |
 | **P7 — App parents** | EN COURS | Portail `/parent/*`, OTP + PIN, consentements à révocation immédiate, quiet hours, FCM HTTP v1 et test d’isolation parent vert sur PostgreSQL embedded | Adapter SMS, APNs direct et app Flutter complète/golden RTL restent à finaliser |
-| **P8 — Facturation** | EN COURS | API contrats + génération de facture mensuelle idempotente (unicité contrat/période), migration 021 | Paiements espèces, PDF worker, caisse, webhooks et suite PostgreSQL d’isolation à terminer |
+| **P8 — Facturation** | EN COURS | API contrats, génération mensuelle idempotente et paiement espèces avec allocation bornée en DB (migration 023) | PDF worker, caisse, webhooks et suite PostgreSQL d’isolation complète à terminer |
 
 ---
 
