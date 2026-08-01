@@ -1,0 +1,11 @@
+{
+  "name": "@creche/shared-config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Configuration partagée : ESLint, Prettier, TypeScript",
+  "exports": {
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./eslint.config.js": "./eslint.config.js",
+    "./prettier.config.js": "./prettier.config.js"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@creche/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Traductions partagées AR + FR (web et mobile)",
+  "main": "src/index.ts"
+}

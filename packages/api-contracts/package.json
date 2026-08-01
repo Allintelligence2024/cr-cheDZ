@@ -1,0 +1,12 @@
+{
+  "name": "@creche/api-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Contrats API : spec OpenAPI 3.1 + types générés (web)",
+  "scripts": {
+    "generate": "openapi-typescript openapi.yaml -o dist/client.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.4.0"
+  }
+}

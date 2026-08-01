@@ -1,0 +1,276 @@
+openapi: 3.1.0
+info:
+  title: Crèche SaaS API
+  version: 0.2.0
+  description: >
+    API du logiciel de gestion de crèche (Algérie).
+    Contrat source de vérité — régénéré par le backend NestJS à chaque build
+    (ADR-004 : client TS généré pour le web, clients Dart écrits à la main).
+    Erreurs : toute réponse d'erreur a la forme ErrorBody (code + FR/AR).
+servers:
+  - url: /api/v1
+
+components:
+  schemas:
+    ErrorBody:
+      type: object
+      required: [statusCode, code, message_fr, message_ar, timestamp]
+      properties:
+        statusCode: { type: integer, example: 404 }
+        code: { type: string, example: NOT_FOUND }
+        message_fr: { type: string, example: "Ressource introuvable" }
+        message_ar: { type: string, example: "المورد غير موجود" }
+        details: {}
+        correlation_id: { type: string, format: uuid }
+        timestamp: { type: string, format: date-time }
+        path: { type: string }
+    UserSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        first_name: { type: string }
+        last_name: { type: string }
+        email: { type: string, format: email, nullable: true }
+        organization_id: { type: string, format: uuid, nullable: true }
+        role: { type: string, example: director }
+        is_super_admin: { type: boolean }
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, expires_in, user]
+      properties:
+        access_token: { type: string, description: "JWT, validité 15 min" }
+        refresh_token: { type: string, description: "Jeton opaque, rotation à chaque usage, validité 7 j" }
+        expires_in: { type: integer, example: 900 }
+        user: { $ref: "#/components/schemas/UserSummary" }
+    Membership:
+      type: object
+      properties:
+        organization_id: { type: string, format: uuid }
+        organization_name: { type: string }
+        role_slug: { type: string }
+        role_name: { type: string }
+        site_id: { type: string, format: uuid, nullable: true }
+        room_ids: { type: array, items: { type: string, format: uuid } }
+        permissions: { type: array, items: { type: string, example: "children:read" } }
+
+paths:
+  /auth/login:
+    post:
+      summary: Connexion (email + mot de passe + 2FA optionnelle)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                totp_code: { type: string, pattern: "^\\d{6}$", description: "Requis si 2FA activée" }
+                device_id: { type: string, format: uuid, description: "Session liée à un appareil enregistré" }
+      responses:
+        "200": { description: Connexion réussie, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "401": { description: INVALID_CREDENTIALS / TOTP_INVALID, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+        "423": { description: ACCOUNT_LOCKED, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+        "429": { description: RATE_LIMITED, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+
+  /auth/refresh:
+    post:
+      summary: Rotation du refresh token (usage unique)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+                device_id: { type: string, format: uuid }
+      responses:
+        "200": { description: Nouveau couple de jetons, content: { application/json: { schema: { $ref: "#/components/schemas/TokenPair" } } } }
+        "401":
+          description: SESSION_REUSE_DETECTED (réutilisation = compromission, toutes les sessions révoquées)
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } }
+        "403": { description: DEVICE_REVOKED, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+
+  /auth/logout:
+    post:
+      summary: Révoque la session courante
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "204": { description: Session révoquée }
+
+  /auth/change-password:
+    post:
+      summary: Change le mot de passe et révoque toutes les sessions
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        "204": { description: Mot de passe changé, sessions révoquées }
+
+  /auth/2fa/enable:
+    post:
+      summary: Génère un secret TOTP (Google Authenticator)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Secret + URL otpauth pour le QR code
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string }
+                  otpauth_url: { type: string }
+  /auth/2fa/verify:
+    post:
+      summary: Active la 2FA après vérification d'un premier code
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^\\d{6}$" }
+      responses:
+        "200": { description: 2FA activée }
+  /auth/2fa/disable:
+    post:
+      summary: Désactive la 2FA (code requis)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^\\d{6}$" }
+      responses:
+        "200": { description: 2FA désactivée }
+
+  /devices:
+    post:
+      summary: Enregistre un appareil (fingerprint + FCM token)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, device_fingerprint, platform]
+              properties:
+                name: { type: string }
+                device_fingerprint: { type: string, minLength: 8 }
+                platform: { type: string, enum: [android, ios, web] }
+                app_version: { type: string }
+                fcm_token: { type: string }
+      responses:
+        "201": { description: Appareil enregistré, content: { application/json: { schema: { type: object, properties: { device_id: { type: string, format: uuid } } } } } }
+    get:
+      summary: Liste les appareils de l'utilisateur
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Liste des appareils
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { type: object } }
+
+  /devices/{id}/revoke:
+    post:
+      summary: Révocation distante — appareil + toutes ses sessions
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Appareil révoqué, accès coupé immédiatement }
+        "404": { description: NOT_FOUND, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+
+  /me:
+    get:
+      summary: Profil courant — organisations, rôle, permissions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Profil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  first_name: { type: string }
+                  last_name: { type: string }
+                  email: { type: string, nullable: true }
+                  is_super_admin: { type: boolean }
+                  memberships: { type: array, items: { $ref: "#/components/schemas/Membership" } }
+                  current_organization_id: { type: string, format: uuid, nullable: true }
+
+  /rooms:
+    get:
+      summary: Liste des salles du tenant courant (lecture seule — Phase 2)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: site_id, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Salles du tenant (jamais celles d'un autre tenant)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { type: object } }
+  /rooms/{id}:
+    get:
+      summary: Détail d'une salle — 404 si elle appartient à un autre tenant
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Salle }
+        "404": { description: NOT_FOUND (inexistante ou autre tenant), content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+
+  /health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        "200": { description: OK }
+
+securitySchemes:
+  bearerAuth:
+    type: http
+    scheme: bearer
+    bearerFormat: JWT
