@@ -16,6 +16,7 @@ import { MediaModule } from './modules/media/media.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
+import { ParentsModule } from './modules/parents/parents.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { UsersModule } from './modules/users/users.module';
@@ -35,6 +36,7 @@ import { UsersModule } from './modules/users/users.module';
     MediaModule,
     NotificationsModule,
     SyncModule,
+    ParentsModule,
   ],
   controllers: [HealthController],
   providers: [

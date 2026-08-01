@@ -259,7 +259,7 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 |---|---|---|---|
 | **P5 — Présences + sync** | ✅ FAIT | Machine à états, push/pull (curseur sync_seq), idempotence, 200 ops offline | 34/34 tests verts |
 | **P6 — Journal + médias** | S6 | Événements journal, photos via URL signée MinIO, actions groupées, consentements photo | Repas groupé 12 enfants < 30 s ; 200 événements offline |
-| **P7 — App parents** | S7 | OTP téléphone, fil du jour, absence 2 taps, consentements, push FCM/APNs | Push arrivée < 30 s ; isolation parent testée |
+| **P7 — App parents** | EN COURS | Portail `/parent/*` : fil contrôlé par `child_guardians.can_view_journal`, absence, consentements (révocation immédiate), préférences/quiet hours, URL photo signée ; squelette Flutter FR/AR RTL | OTP téléphone + PIN, FCM/APNs réel et test d’isolation parent complet restent à finaliser |
 | **P8 — Facturation** | S8 | Contrats, factures mensuelles, paiements espèces, PDF worker, caisse | 422 immuable ; webhook ×3 = 1 paiement ; PDF < 5 s → **MVP** |
 
 ---

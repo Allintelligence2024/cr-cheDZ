@@ -53,9 +53,7 @@ PROCHAINE ÉTAPE — PHASE 7 (Application parents + notifications) :
   téléphone + PIN, fil du jour (feed), photos (URLs signées), signalement
   d'absence en 2 taps, consentements (revocation → effet immédiat),
   RTL arabe complet
-- API parents : endpoints isolés (l'utilisateur parent ne voit que les
-  enfants dont il est child_guardians avec can_view_journal — TESTÉ),
-  OTP email/SMS (table otp_codes), préférences de notification + quiet hours
+- API parents : fondation Phase 7 ajoutée dans `modules/parents` : endpoints isolés `/parent/*` (enfants, fil via `child_guardians.can_view_journal`, absence, consentements, préférences/quiet hours, téléchargement photo visible). Il reste à écrire/exécuter la suite d'isolation parent complète, et à finaliser OTP email/SMS + PIN (table `otp_codes`).
 - FCM réel dans le worker (fcm_token des devices) + APNs
 - Tests : isolation parent (2 parents du même enfant avec permissions
   différentes), notification arrivée < 30s, RTL (golden tests)
