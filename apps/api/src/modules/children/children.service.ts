@@ -119,6 +119,8 @@ export class ChildrenService {
   async create(dto: CreateChildDto, actorId: string): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
+      // Capacité maximale (organizations.max_children, décret 19-253) — 409 si atteinte.
+      await this.assertCapacity(client, tenantId);
       // Le site doit appartenir au tenant (RLS) — sinon 404.
       const site = await client.query(
         `SELECT s.id, o.slug FROM sites s JOIN organizations o ON o.id = s.organization_id WHERE s.id = $1`,
@@ -336,5 +338,22 @@ export class ChildrenService {
         newValues: { status: 'departed', deleted_at: new Date().toISOString() },
       });
     });
+  }
+
+  /** Capacité maximale d'enfants actifs (décret 19-253) — 409 CAPACITY_EXCEEDED. */
+  private async assertCapacity(client: import('pg').PoolClient, tenantId: string): Promise<void> {
+    const org = (await client.query(`SELECT max_children FROM organizations WHERE id=$1`, [tenantId])).rows[0];
+    const count = (await client.query(
+      `SELECT COUNT(*)::int AS n FROM children WHERE organization_id=$1 AND deleted_at IS NULL AND status='active'`, [tenantId],
+    )).rows[0].n as number;
+    const max = Number(org?.max_children ?? 150);
+    if (count + 1 > max) {
+      throw new AppError(
+        'CAPACITY_EXCEEDED',
+        `Capacité maximale atteinte (${max} enfants) — décret 19-253`,
+        `تم بلوغ السعة القصوى (${max} طفلاً) — المرسوم 19-253`,
+        409,
+      );
+    }
   }
 }
