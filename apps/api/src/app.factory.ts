@@ -4,6 +4,8 @@ import { INestApplication } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { requestContextMiddleware } from './shared/context/request-context.middleware';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
+import { MetricsService } from './modules/metrics/metrics.service';
+import { metricsMiddleware } from './shared/metrics.middleware';
 
 /**
  * Fabrique d'application — utilisée par main.ts (production) et par les
@@ -21,6 +23,10 @@ export async function createApp(): Promise<INestApplication> {
     credentials: true,
   });
   app.use(requestContextMiddleware);
+  // Phase 11 : comptage HTTP pour /metrics (aucune PII).
+  const metricsService = app.get(MetricsService);
+  app.use(metricsMiddleware(metricsService));
+
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
   );

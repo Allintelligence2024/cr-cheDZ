@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
-    "@nestjs/config": "^3.2.0",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^10.4.0",
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/passport": "^10.0.3",
@@ -20,7 +20,7 @@
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
-    "nodemailer": "^6.10.1",
+    "nodemailer": "^9.0.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.13.1",

@@ -70,6 +70,15 @@ class ImpersonateDto {
   reason!: string;
 }
 
+class SetFlagDto {
+  @IsOptional()
+  @IsUUID()
+  organization_id?: string;
+
+  @IsIn([true, false])
+  is_enabled!: boolean;
+}
+
 const STAFF_ROLES = ['director', 'accountant', 'super_admin'] as const;
 
 @Controller()
@@ -166,5 +175,15 @@ export class PrivacyController {
   @Roles('super_admin')
   retryJob(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.retryJob(p.id, u.sub);
+  }
+
+  @Get('support/flags')
+  @Roles('super_admin')
+  flags() { return this.privacy.listFlags(); }
+
+  @Post('support/flags/:key')
+  @Roles('super_admin')
+  setFlag(@Param('key') key: string, @Body() dto: SetFlagDto, @CurrentUser() u: CurrentUserPayload) {
+    return this.privacy.setFlag(key, dto, u.sub);
   }
 }

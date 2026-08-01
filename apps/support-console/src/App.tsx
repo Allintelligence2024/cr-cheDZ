@@ -74,7 +74,15 @@ const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', b
 const buttonStyle: React.CSSProperties = { marginTop: 16, width: '100%', padding: '10px 12px', borderRadius: 8, border: 'none', background: '#0F172A', color: '#fff', fontWeight: 600, cursor: 'pointer' };
 const tabStyle = (active: boolean): React.CSSProperties => ({ padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, background: active ? '#0F172A' : '#E2E8F0', color: active ? '#fff' : '#0F172A' });
 
-type Tab = 'search' | 'jobs' | 'impersonate';
+type Tab = 'search' | 'jobs' | 'impersonate' | 'flags';
+
+interface FlagRow {
+  flag_key: string;
+  is_enabled: boolean;
+  description: string | null;
+  organization_id: string | null;
+  org_slug: string | null;
+}
 
 export function App(): React.JSX.Element {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
@@ -93,15 +101,69 @@ export function App(): React.JSX.Element {
         <h1 style={{ margin: 0 }}>🛠 Console support</h1>
         <button onClick={logout} style={{ ...buttonStyle, width: 'auto', marginTop: 0, background: '#DC2626' }}>Déconnexion</button>
       </div>
-      <div style={{ display: 'flex', gap: 8, margin: '20px 0' }}>
+      <div style={{ display: 'flex', gap: 8, margin: '20px 0', flexWrap: 'wrap' }}>
         <button style={tabStyle(tab === 'search')} onClick={() => setTab('search')}>Recherche globale</button>
         <button style={tabStyle(tab === 'jobs')} onClick={() => setTab('jobs')}>Jobs</button>
         <button style={tabStyle(tab === 'impersonate')} onClick={() => setTab('impersonate')}>Impersonation</button>
+        <button style={tabStyle(tab === 'flags')} onClick={() => setTab('flags')}>Feature flags</button>
       </div>
       {tab === 'search' && <SearchTab />}
       {tab === 'jobs' && <JobsTab />}
       {tab === 'impersonate' && <ImpersonateTab />}
+      {tab === 'flags' && <FlagsTab />}
     </main>
+  );
+}
+
+function FlagsTab(): React.JSX.Element {
+  const [flags, setFlags] = useState<FlagRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = (): void => {
+    api('GET', '/support/flags').then((r) => setFlags(r as FlagRow[])).catch((e: any) => setError(e.message));
+  };
+  useEffect(load, []);
+
+  const toggle = async (flag: FlagRow, isEnabled: boolean): Promise<void> => {
+    setError(null);
+    try {
+      await api('POST', `/support/flags/${encodeURIComponent(flag.flag_key)}`, {
+        organization_id: flag.organization_id ?? undefined,
+        is_enabled: isEnabled,
+      });
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+
+  return (
+    <section>
+      <button onClick={load} style={{ ...buttonStyle, width: 'auto', marginTop: 0, marginBottom: 12 }}>Actualiser</button>
+      {error && <p style={{ color: '#DC2626' }}>{error}</p>}
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr>
+            <th style={thStyle}>Flag</th><th style={thStyle}>Description</th><th style={thStyle}>Organisation</th><th style={thStyle}>État</th><th style={thStyle}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {flags.map((f) => (
+            <tr key={`${f.flag_key}-${f.organization_id ?? 'global'}`} style={{ borderBottom: '1px solid #E2E8F0' }}>
+              <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{f.flag_key}</td>
+              <td style={tdStyle}>{f.description ?? '—'}</td>
+              <td style={tdStyle}>{f.org_slug ?? '🌐 global'}</td>
+              <td style={{ ...tdStyle, color: f.is_enabled ? '#16A34A' : '#DC2626', fontWeight: 600 }}>{f.is_enabled ? 'ON' : 'OFF'}</td>
+              <td style={tdStyle}>
+                <button onClick={() => void toggle(f, !f.is_enabled)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #CBD5E1', cursor: 'pointer', background: '#fff' }}>
+                  {f.is_enabled ? 'Désactiver' : 'Activer'}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 

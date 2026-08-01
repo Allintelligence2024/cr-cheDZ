@@ -170,9 +170,17 @@ async function sendMonthlyInvoices(job: ClaimedJob): Promise<void> {
   });
 }
 
+/** retention_purge : purge des journaux au-delà de RETENTION_DAYS (défaut 1825 j). */
+async function retentionPurge(): Promise<void> {
+  const days = Number(process.env.RETENTION_DAYS ?? 1825);
+  const r = await pool.query(`SELECT retention_purge_logs(NOW() - ($1::int || ' days')::interval) AS purged`, [days]);
+  console.log(`[worker] retention_purge : ${r.rows[0].purged} ligne(s) purgée(s) (> ${days} j)`);
+}
+
 const JOB_HANDLERS: Record<string, (payload: unknown, orgId: string | null, job: ClaimedJob) => Promise<void>> = {
   generate_invoice_pdf: (_p, _o, job) => generateInvoicePdf(job),
   send_monthly_invoices: (_p, _o, job) => sendMonthlyInvoices(job),
+  retention_purge: () => retentionPurge(),
   // La livraison des notifications passe par notification_queue (drain
   // ci-dessous) : ce job marque la prise en charge, le drain ne passe la file
   // en 'sent' qu'après traitement, avec failure_reason explicite

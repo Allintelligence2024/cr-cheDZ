@@ -17,6 +17,7 @@ import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { JournalModule } from './modules/journal/journal.module';
 import { MediaModule } from './modules/media/media.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
@@ -42,6 +43,7 @@ import { UsersModule } from './modules/users/users.module';
     HealthModule,
     JournalModule,
     MediaModule,
+    MetricsModule,
     NotificationsModule,
     SyncModule,
     ParentsModule,

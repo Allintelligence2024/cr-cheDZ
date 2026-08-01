@@ -389,4 +389,23 @@ export class PrivacyService {
     });
     return { id: jobId, retried: true };
   }
+
+  /** Feature flags (support) : liste complète cross-tenant. */
+  async listFlags(): Promise<Array<Record<string, unknown>>> {
+    const r = await this.pool.query(`SELECT * FROM support_list_flags()`);
+    return r.rows;
+  }
+
+  /** Feature flags (support) : activer/désactiver un flag global ou une surcharge org. */
+  async setFlag(flagKey: string, dto: { organization_id?: string; is_enabled: boolean }, actorId: string): Promise<Record<string, unknown>> {
+    await this.pool.query(`SELECT support_set_flag($1, $2, $3)`, [flagKey, dto.organization_id ?? null, dto.is_enabled]);
+    await this.audit.log({
+      userId: actorId,
+      action: 'update',
+      resourceType: 'feature_flag',
+      resourceLabel: flagKey,
+      newValues: { organization_id: dto.organization_id ?? null, is_enabled: dto.is_enabled },
+    });
+    return { flag_key: flagKey, organization_id: dto.organization_id ?? null, is_enabled: dto.is_enabled };
+  }
 }

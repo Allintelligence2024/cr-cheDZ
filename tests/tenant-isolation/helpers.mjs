@@ -45,6 +45,11 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION support_global_search(text) TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION support_list_jobs(integer) TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION support_retry_job(uuid) TO creche_app_test');
+  // Phase 11 (migration 034) : rétention des journaux (5 ans)
+  await admin.query('GRANT EXECUTE ON FUNCTION retention_purge_logs(timestamptz) TO creche_app_test');
+  // Phase 11 (migration 035) : console support — feature flags
+  await admin.query('GRANT EXECUTE ON FUNCTION support_list_flags() TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON FUNCTION support_set_flag(text, uuid, boolean) TO creche_app_test');
 }
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */
