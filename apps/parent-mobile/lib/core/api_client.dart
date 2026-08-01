@@ -13,6 +13,7 @@ class ParentApiClient {
   }
   Future<Map<String, dynamic>> requestOtp(String phone) async => (await _dio.post('/auth/parent/otp/request', data: {'phone': phone})).data;
   Future<Map<String, dynamic>> verifyOtp(String phone, String code) async => (await _dio.post('/auth/parent/otp/verify', data: {'phone': phone, 'code': code})).data;
+  Future<List<dynamic>> children() async => (await _authedGet('/parent/children')).data as List<dynamic>;
   Future<List<dynamic>> feed(String childId) async => (await _authedGet('/parent/children/$childId/feed')).data as List<dynamic>;
   Future<void> absence(String childId, {String? reason}) async => _authedPost('/parent/absence', {'child_id': childId, if (reason != null) 'reason': reason});
   Future<Response<dynamic>> _authedGet(String path) async => _dio.get(path, options: Options(headers: {'authorization': 'Bearer ${await _storage.read(key: 'access_token')}'}));
