@@ -18,3 +18,11 @@ export class RecordCashPaymentDto {
  @IsNumber() @Min(0.01) amount!: number;
  @IsOptional() @IsString() notes?: string;
 }
+export class OpenCashRegisterDto {
+ @IsUUID() site_id!: string;
+ @IsOptional() @IsNumber() @Min(0) opening_balance?: number;
+}
+export class CloseCashRegisterDto {
+ @IsUUID() site_id!: string;
+ @IsOptional() @IsString() notes?: string;
+}

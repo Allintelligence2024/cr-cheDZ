@@ -24,6 +24,7 @@ export class BillingService {
    const invoice=(await c.query(`INSERT INTO invoices(organization_id,invoice_number,child_id,contract_id,period_year,period_month,subtotal,discount_amount,total_amount,due_date,created_by)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,[org,`FAC-${dto.period_year}${String(dto.period_month).padStart(2,'0')}-${seq}`,contract.child_id,dto.contract_id,dto.period_year,dto.period_month,subtotal,discount,total,dto.due_date,userId])).rows[0];
    await c.query(`INSERT INTO invoice_lines(organization_id,invoice_id,description_fr,description_ar,quantity,unit_price,total_price,line_type) VALUES($1,$2,'Garde mensuelle','الرعاية الشهرية',1,$3,$3,'care')`,[org,invoice.id,subtotal]);
+   await c.query(`INSERT INTO background_jobs(organization_id,job_type,payload,priority) VALUES($1,'generate_invoice_pdf',$2,2)`,[org,JSON.stringify({invoice_id:invoice.id})]);
    return invoice;
   });
  }
@@ -41,6 +42,18 @@ export class BillingService {
    return {...payment,invoice:updated};
   });
  }
+ async openCashRegister(_userId:string,dto:{site_id:string;opening_balance?:number}) { const org=requireTenant(this.tenant); return this.tenant.withTenantConnection(async c=>{
+  const site=await c.query(`SELECT id FROM sites WHERE id=$1`,[dto.site_id]); if(!site.rows[0]) throw Errors.notFound();
+  const date=(await c.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date AS d`)).rows[0].d;
+  const r=await c.query(`INSERT INTO daily_cash_registers(organization_id,site_id,register_date,opening_balance) VALUES($1,$2,$3,$4) ON CONFLICT(site_id,register_date) DO NOTHING RETURNING *`,[org,dto.site_id,date,dto.opening_balance??0]);
+  if(!r.rows[0]) throw new AppError('CASH_REGISTER_ALREADY_OPEN','La caisse est déjà ouverte','الصندوق مفتوح بالفعل',409); return r.rows[0];
+ }); }
+ async closeCashRegister(userId:string,dto:{site_id:string;notes?:string}) { const org=requireTenant(this.tenant); return this.tenant.withTenantConnection(async c=>{
+  const date=(await c.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date AS d`)).rows[0].d;
+  const register=(await c.query(`SELECT * FROM daily_cash_registers WHERE site_id=$1 AND register_date=$2 FOR UPDATE`,[dto.site_id,date])).rows[0]; if(!register) throw new AppError('CASH_REGISTER_NOT_OPEN','La caisse n’est pas ouverte','الصندوق غير مفتوح',409); if(register.closed_at) throw new AppError('CASH_REGISTER_CLOSED','La caisse est déjà clôturée','الصندوق مغلق بالفعل',409);
+  const total=(await c.query(`SELECT COALESCE(SUM(p.amount),0) AS total FROM payments p JOIN children ch ON ch.id=p.child_id WHERE p.organization_id=$1 AND p.method='cash' AND p.status='confirmed' AND ch.site_id=$2 AND (p.confirmed_at AT TIME ZONE 'Africa/Algiers')::date=$3`,[org,dto.site_id,date])).rows[0].total;
+  return (await c.query(`UPDATE daily_cash_registers SET total_cash_in=$1,closing_balance=opening_balance+$1,closed_at=NOW(),closed_by=$2,notes=$3 WHERE id=$4 RETURNING *`,[total,userId,dto.notes??null,register.id])).rows[0];
+ }); }
  async listInvoices(childId?:string) { const org=requireTenant(this.tenant); return this.tenant.withTenantConnection(async c=>{
   const p:unknown[]=[org]; let where=''; if(childId){p.push(childId);where=' AND child_id=$2';} return (await c.query(`SELECT id,invoice_number,child_id,period_year,period_month,total_amount,paid_amount,balance,status,due_date,pdf_url FROM invoices WHERE organization_id=$1${where} ORDER BY created_at DESC`,p)).rows;
  }); }
