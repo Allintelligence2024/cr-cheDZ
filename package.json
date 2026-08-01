@@ -16,6 +16,7 @@
     "test:api-phase3": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase3.api.test.mjs",
     "test:api-phase4": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase4.api.test.mjs",
     "test:api-phase5": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase5.api.test.mjs",
+    "test:api-phase6": "npm run build --workspace @creche/api && npm run build --workspace @creche/worker && node tests/tenant-isolation/phase6.api.test.mjs",
     "db:status": "node scripts/migrate.mjs --status",
     "db:reset": "node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs",
     "lint": "eslint .",
@@ -28,6 +29,8 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1101.0",
+    "@aws-sdk/s3-request-presigner": "^3.1101.0",
     "@types/pg": "^8.20.3",
     "bcryptjs": "^3.0.3",
     "pg": "^8.13.1"

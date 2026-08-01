@@ -91,6 +91,13 @@ jobs:
         run: node tests/tenant-isolation/phase5.api.test.mjs
         env:
           DATABASE_URL: postgresql://creche_app:ci_password@localhost:5432/creche_ci
+      - name: Phase 6 — journal, médias, notifications, worker
+        run: |
+          npm run build --workspace @creche/api
+          npm run build --workspace @creche/worker
+          node tests/tenant-isolation/phase6.api.test.mjs
+        env:
+          DATABASE_URL: postgresql://creche_app:ci_password@localhost:5432/creche_ci
 
   # ── Web (admin + support) : lint + typecheck + build ─────────────────────
   web:

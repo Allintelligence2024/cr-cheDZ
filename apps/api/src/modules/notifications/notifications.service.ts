@@ -1,0 +1,107 @@
+import { Injectable } from '@nestjs/common';
+import { PoolClient } from 'pg';
+import { TenantContextService } from '../../shared/database/tenant-context.service';
+import { requireTenant } from '../../shared/database/tenant-utils';
+
+const EVENT_MESSAGES: Record<string, { fr: string; ar: string; body_fr: string; body_ar: string }> = {
+  check_in: { fr: 'Arrivée', ar: 'وصول', body_fr: 'est arrivé(e) à la crèche', body_ar: 'وصل إلى الحضانة' },
+  check_out: { fr: 'Départ', ar: 'مغادرة', body_fr: 'a quitté la crèche', body_ar: 'غادر الحضانة' },
+  meal: { fr: 'Repas', ar: 'وجبة', body_fr: 'a pris son repas', body_ar: 'تناول وجبته' },
+  nap_end: { fr: 'Sieste', ar: 'قيلولة', body_fr: 'a fini sa sieste', body_ar: 'أنهى قيلولته' },
+  incident: { fr: 'Incident', ar: 'حادث', body_fr: 'un incident a été signalé', body_ar: 'تم تسجيل حادث' },
+};
+
+/**
+ * Notifications — file d'envoi (notification_queue) + boîte de réception
+ * (notification_inbox). Appelé DANS la transaction métier (client fourni).
+ * L'envoi push réel (FCM/APNs) est consommé par le worker (Phase 7).
+ */
+@Injectable()
+export class NotificationsService {
+  constructor(private readonly tenantContext: TenantContextService) {}
+
+  async notifyGuardiansOfEvent(
+    client: PoolClient,
+    tenantId: string,
+    childId: string,
+    eventType: string,
+    logEventId: string,
+  ): Promise<void> {
+    // Responsables autorisés à recevoir des push pour cet enfant.
+    const guardians = await client.query(
+      `SELECT cg.guardian_id, g.user_id, g.first_name_fr, c.first_name_fr AS child_name
+       FROM child_guardians cg
+       JOIN guardians g ON g.id = cg.guardian_id
+       JOIN children c ON c.id = cg.child_id
+       WHERE cg.child_id = $1 AND cg.can_receive_push = true
+         AND g.user_id IS NOT NULL`,
+      [childId],
+    );
+    for (const g of guardians.rows) {
+      await this.enqueue(client, tenantId, {
+        userId: g.user_id,
+        eventType,
+        titleFr: EVENT_MESSAGES[eventType]?.fr ?? 'Crèche',
+        titleAr: EVENT_MESSAGES[eventType]?.ar ?? 'الحضانة',
+        bodyFr: `${g.child_name} ${EVENT_MESSAGES[eventType]?.body_fr ?? '—'}`,
+        bodyAr: `${g.child_name} ${EVENT_MESSAGES[eventType]?.body_ar ?? '—'}`,
+        data: { child_id: childId, event_type: eventType, log_event_id: logEventId },
+      });
+    }
+  }
+
+  /** Insertion file + boîte de réception (in-app), dans la transaction. */
+  async enqueue(
+    client: PoolClient,
+    tenantId: string,
+    params: {
+      userId: string;
+      eventType: string;
+      titleFr: string;
+      titleAr: string;
+      bodyFr: string;
+      bodyAr: string;
+      data: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    await client.query(
+      `INSERT INTO notification_queue
+         (organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data)
+       VALUES ($1, $2, 'push', $3, $4, $5, $6, $7)`,
+      [tenantId, params.userId, params.titleFr, params.titleAr, params.bodyFr, params.bodyAr, JSON.stringify(params.data)],
+    );
+    await client.query(
+      `INSERT INTO notification_inbox
+         (organization_id, user_id, type, title_fr, title_ar, body_fr, body_ar, data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [tenantId, params.userId, params.eventType, params.titleFr, params.titleAr, params.bodyFr, params.bodyAr, JSON.stringify(params.data)],
+    );
+  }
+
+  /** Boîte de réception de l'utilisateur courant (API). */
+  async inbox(userId: string): Promise<Array<Record<string, unknown>>> {
+    const tenantId = requireTenant(this.tenantContext);
+    return this.tenantContext.withTenantConnection(async (client) => {
+      const res = await client.query(
+        `SELECT id, type, title_fr, title_ar, body_fr, body_ar, data, is_read, created_at
+         FROM notification_inbox
+         WHERE user_id = $1 AND organization_id = $2
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        [userId, tenantId],
+      );
+      return res.rows;
+    });
+  }
+
+  async markRead(userId: string, notificationId: string): Promise<void> {
+    requireTenant(this.tenantContext);
+    await this.tenantContext.withTenantConnection(async (client) => {
+      await client.query(
+        `UPDATE notification_inbox SET is_read = true, read_at = NOW()
+         WHERE id = $1 AND user_id = $2`,
+        [notificationId, userId],
+      );
+    });
+  }
+}

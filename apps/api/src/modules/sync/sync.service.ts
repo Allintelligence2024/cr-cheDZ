@@ -3,6 +3,8 @@ import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { AppError } from '../../shared/errors';
 import { AttendanceService } from '../attendance/attendance.service';
+import { JournalService } from '../journal/journal.service';
+import { MediaService } from '../media/media.service';
 import type { SyncOperationDto, SyncPushResult } from './dto/sync.dto';
 
 const MAX_PULL_BATCH = 500;
@@ -33,6 +35,8 @@ export class SyncService {
   constructor(
     private readonly tenantContext: TenantContextService,
     private readonly attendance: AttendanceService,
+    private readonly journal: JournalService,
+    private readonly media: MediaService,
   ) {}
 
   async push(deviceId: string, userId: string, operations: SyncOperationDto[]): Promise<SyncPushResult> {
@@ -227,17 +231,13 @@ export class SyncService {
       case 'log_incident':
         return this.applyDailyLog(client, op, base);
       case 'add_photo':
-        return {
-          status: 'rejected',
-          reason: 'NOT_IMPLEMENTED',
-          message: 'Les photos arrivent en Phase 6',
-        };
+        return this.applyAddPhoto(client, op, base);
       default:
         return { status: 'rejected', reason: 'UNKNOWN_COMMAND', message: `Commande ${op.command} inconnue` };
     }
   }
 
-  /** Événements de journal quotidien (append-only) — mapping type → colonnes. */
+  /** Événements de journal quotidien — délègue à JournalService (append-only). */
   private async applyDailyLog(
     client: PoolClient,
     op: SyncOperationDto,
@@ -248,7 +248,7 @@ export class SyncService {
 
     // L'enfant doit appartenir au tenant (RLS).
     const child = await client.query(
-      `SELECT id, room_id FROM children WHERE id = $1 AND deleted_at IS NULL`,
+      `SELECT id FROM children WHERE id = $1 AND deleted_at IS NULL`,
       [base.childId],
     );
     if (child.rows.length === 0) {
@@ -256,46 +256,67 @@ export class SyncService {
     }
 
     const eventType = op.command.replace('log_', '');
-    const today = await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date AS d`);
-    const day = today.rows[0].d as string;
+    const fields: Record<string, unknown> = {
+      meal_type: p.meal_type, meal_quantity: p.meal_quantity, meal_notes: p.meal_notes,
+      nap_start_at: p.nap_start_at, nap_end_at: p.nap_end_at, nap_quality: p.nap_quality,
+      diaper_type: p.diaper_type, temperature_celsius: p.temperature_celsius,
+      health_observation: p.health_observation,
+      activity_name: p.activity_name, activity_notes: p.activity_notes,
+      note_text: p.note_text,
+      incident_severity: p.incident_severity, incident_description: p.incident_description,
+      incident_action: p.incident_action,
+    };
+    try {
+      await this.journal.insertEvent(client, tenantId, {
+        childId: base.childId,
+        eventType,
+        occurredAt: base.occurredAt,
+        recordedBy: base.recordedBy,
+        deviceId: base.deviceId,
+        syncEventId: base.syncEventId,
+        isOffline: true,
+        fields,
+      });
+      return { status: 'accepted' };
+    } catch {
+      return { status: 'rejected', reason: 'INTERNAL_ERROR', message: 'Erreur lors de l\'écriture du journal' };
+    }
+  }
 
-    const evt = await client.query(
-      `INSERT INTO daily_log_events
-         (organization_id, child_id, room_id, event_date, event_type, occurred_at,
-          recorded_by, device_id, sync_event_id, is_offline,
-          meal_type, meal_quantity, meal_notes,
-          nap_start_at, nap_end_at, nap_quality,
-          diaper_type, temperature_celsius, health_observation,
-          activity_name, activity_notes, note_text, incident_severity,
-          incident_description, incident_action)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-               $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
-       RETURNING id`,
-      [
-        tenantId, base.childId, child.rows[0].room_id, day, eventType, base.occurredAt,
-        base.recordedBy, base.deviceId ?? null, base.syncEventId ?? null, true,
-        p.meal_type ?? null, p.meal_quantity ?? null, p.meal_notes ?? null,
-        p.nap_start_at ?? null, p.nap_end_at ?? null, p.nap_quality ?? null,
-        p.diaper_type ?? null, p.temperature_celsius ?? null, p.health_observation ?? null,
-        p.activity_name ?? null, p.activity_notes ?? null, p.note_text ?? null,
-        p.incident_severity ?? null, p.incident_description ?? null, p.incident_action ?? null,
-      ],
+  /** Photo offline : enregistre l'asset (jamais visible sans consentement). */
+  private async applyAddPhoto(
+    client: PoolClient,
+    op: SyncOperationDto,
+    base: { childId: string; siteId?: string | null; occurredAt: Date; recordedBy: string; deviceId?: string | null; syncEventId?: string | null },
+  ): Promise<CommandOutcome> {
+    const tenantId = this.tenantContext.getTenantId();
+    const p = op.payload as Record<string, unknown>;
+    const child = await client.query(
+      `SELECT id FROM children WHERE id = $1 AND deleted_at IS NULL`,
+      [base.childId],
     );
-
-    await client.query(
-      `INSERT INTO sync_changelog
-         (organization_id, aggregate_type, aggregate_id, event_type, payload, origin_device_id)
-       VALUES ($1, 'daily_log', $2, $3, $4, $5)`,
-      [
-        tenantId, evt.rows[0].id, eventType,
-        JSON.stringify({
-          child_id: base.childId, event_type: eventType, event_date: day,
-          occurred_at: base.occurredAt.toISOString(),
-        }),
-        base.deviceId ?? null,
-      ],
-    );
-    return { status: 'accepted' };
+    if (child.rows.length === 0) {
+      return { status: 'rejected', reason: 'PERMISSION_DENIED', message: 'Enfant introuvable dans cette organisation' };
+    }
+    if (!p.storage_key || !p.mime_type) {
+      return { status: 'rejected', reason: 'MISSING_FIELDS', message: 'storage_key et mime_type requis' };
+    }
+    try {
+      await this.media.registerFromSync(client, tenantId, {
+        childId: base.childId,
+        userId: base.recordedBy,
+        deviceId: base.deviceId,
+        syncEventId: base.syncEventId,
+        storageKey: p.storage_key as string,
+        mimeType: p.mime_type as string,
+        takenAt: (p.taken_at as string | undefined) ?? base.occurredAt.toISOString(),
+        checksum: p.checksum as string | undefined,
+        childrenInPhoto: p.children_in_photo as string[] | undefined,
+      });
+      return { status: 'accepted' };
+    } catch {
+      return { status: 'rejected', reason: 'INTERNAL_ERROR', message: 'Erreur lors de l\'enregistrement de la photo' };
+    }
   }
 
   // ── Pull ─────────────────────────────────────────────────────────────────

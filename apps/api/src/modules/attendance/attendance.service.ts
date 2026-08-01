@@ -3,6 +3,7 @@ import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { CommandResult } from './dto/attendance.dto';
 
 interface ApplyParams {
@@ -29,7 +30,10 @@ interface ApplyParams {
  */
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly tenantContext: TenantContextService) {}
+  constructor(
+    private readonly tenantContext: TenantContextService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   // ── Flows HTTP (contexte tenant du JWT) ──────────────────────────────────
 
@@ -166,12 +170,13 @@ export class AttendanceService {
       child_id: p.childId, session_id: sessionId, session_date: today,
       status: 'present', occurred_at: p.occurredAt.toISOString(),
     }, p.deviceId);
-    // Notification parent — Phase 7 (le worker consommera ce job).
+    // Notification parent : file d'envoi (worker) + file d'envoi push/in-app.
     await client.query(
       `INSERT INTO background_jobs (organization_id, job_type, payload, priority)
        VALUES ($1, 'send_parent_notification', $2, 1)`,
       [tenantId, JSON.stringify({ child_id: p.childId, event_type: 'check_in' })],
     );
+    await this.notifications.notifyGuardiansOfEvent(client, tenantId, p.childId, 'check_in', sessionId);
     return { status: 'accepted' };
   }
 
@@ -199,6 +204,7 @@ export class AttendanceService {
       child_id: p.childId, session_id: session.id, session_date: today,
       status: 'departed', occurred_at: p.occurredAt.toISOString(),
     }, p.deviceId);
+    await this.notifications.notifyGuardiansOfEvent(client, tenantId, p.childId, 'check_out', session.id);
     return { status: 'accepted' };
   }
 

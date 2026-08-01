@@ -260,26 +260,18 @@ async function main() {
     check('Heure appareil dans le futur → DEVICE_TIME_AHEAD',
       futureOp.status === 200 && futureOp.body.rejected[0]?.reason === 'DEVICE_TIME_AHEAD');
 
-    // Commande inconnue + add_photo (Phase 6)
+    // Commande inconnue (l'enum DB rejette — le service attrape avant)
     const unknownCmd = await api('POST', '/sync/push', tokenA, {
       device_id: devA1,
-      operations: [
-        {
-          event_id: randomUUID(), client_sequence: 1, schema_version: 1,
-          command: 'commande_inexistante', entity_type: 'x', payload: {},
-          occurred_at_device: new Date().toISOString(),
-        },
-        {
-          event_id: randomUUID(), client_sequence: 2, schema_version: 1,
-          command: 'add_photo', entity_type: 'media', payload: { child_id: childA1 },
-          occurred_at_device: new Date().toISOString(),
-        },
-      ],
+      operations: [{
+        event_id: randomUUID(), client_sequence: 1, schema_version: 1,
+        command: 'commande_inexistante', entity_type: 'x', payload: {},
+        occurred_at_device: new Date().toISOString(),
+      }],
     });
     check('Commande inconnue → UNKNOWN_COMMAND', unknownCmd.status === 200
       && (unknownCmd.body.rejected ?? []).some((r) => r.reason === 'UNKNOWN_COMMAND'),
       `status=${unknownCmd.status} ${JSON.stringify(unknownCmd.body)?.slice(0, 200)}`);
-    check('add_photo → NOT_IMPLEMENTED (Phase 6)', (unknownCmd.body.rejected ?? []).some((r) => r.reason === 'NOT_IMPLEMENTED'));
 
     // ── 4. Journal offline (log_*) ──────────────────────────────────────────
     console.log('\n4) Journal quotidien offline');

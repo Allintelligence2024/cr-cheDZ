@@ -230,7 +230,30 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 
 ---
 
-## 5. Phases suivantes (résumé exécutif — détail dans PLAN_IMPLEMENTATION.md §3)
+## 5. Phase 6 — JOURNAL QUOTIDIEN + MÉDIAS + NOTIFICATIONS (TERMINÉE ✅)
+
+| # | Tâche | Statut |
+|---|---|---|
+| 6.1 | Journal : `POST /journal/events` (meal, nap_*, diaper, activity, temperature, note privée, incident), corrections append-only (`is_correction` + `corrects_event_id`), `GET /journal/events` (personnel) + `GET /journal/feed` (visible parents), note privée jamais dans le fil | ✅ |
+| 6.2 | Actions groupées : `POST /journal/group-actions` (repas de section 12 enfants → 12 événements, même transaction) | ✅ |
+| 6.3 | Notifications : `NotificationsService` (file `notification_queue` + `notification_inbox`) — incident/repas/fin de sieste/arrivée/départ → parents `can_receive_push` | ✅ |
+| 6.4 | Médias : `POST /media/presign-upload` (URL signée S3/MinIO, signature locale), `POST /media` (register), `PATCH /media/:id/visibility` (**consentement photo obligatoire → 422** `CONSENT_REQUIRED`, révoqué → 422), `GET /media/:id/download` (URL signée + `media_access_logs` + `data_access_logs`), cross-tenant 404 | ✅ |
+| 6.5 | Sync : `add_photo` implémenté (asset non visible par défaut), `log_incident`/`log_temperature` → journal + notifications | ✅ |
+| 6.6 | Worker : boucle `background_jobs` (FOR UPDATE SKIP LOCKED, retry exponentiel) + drain `notification_queue` (stub FCM, réel en Phase 7) | ✅ |
+| 6.7 | **Test Phase 6** : 40+ assertions vertes (agrégats exacts, 12 repas groupés, consentements, worker) | ✅ |
+| 6.8 | Mobile : `JournalFormSheet` (tous types d'événements), `GroupActionSheet` (section), `MediaUploader` (presign → PUT → register) | ✅ (prêt) |
+
+### DoD Phase 6
+- [x] Repas groupé 12 enfants en une requête (testé) ; agrégats exacts après 60 opérations offline
+- [x] Note privée hors fil parent ; incident → notification parent (file + inbox)
+- [x] Photo sans consentement → 422 ; consentement révoqué → 422 ; éducatrice ne publie pas (403)
+- [x] Téléchargement journalisé (media_access_logs) ; cross-tenant 404
+- [x] Worker traite les jobs + draine les notifications (testé en processus réel)
+- [x] Aucune régression (S2, S3, P4, P5 rejoués verts)
+
+---
+
+## 6. Phases suivantes (résumé exécutif — détail dans PLAN_IMPLEMENTATION.md §3)
 
 | Phase | S | Livrable clé | Critère de sortie |
 |---|---|---|---|
