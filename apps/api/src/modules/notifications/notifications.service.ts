@@ -64,18 +64,45 @@ export class NotificationsService {
       data: Record<string, unknown>;
     },
   ): Promise<void> {
-    await client.query(
-      `INSERT INTO notification_queue
-         (organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data)
-       VALUES ($1, $2, 'push', $3, $4, $5, $6, $7)`,
-      [tenantId, params.userId, params.titleFr, params.titleAr, params.bodyFr, params.bodyAr, JSON.stringify(params.data)],
+    const preference = await client.query<{ is_enabled: boolean; quiet_hours_start: string | null; quiet_hours_end: string | null }>(
+      `SELECT is_enabled, quiet_hours_start::text, quiet_hours_end::text
+       FROM notification_preferences WHERE organization_id=$1 AND user_id=$2
+         AND channel='push' AND event_type=$3`,
+      [tenantId, params.userId, params.eventType],
     );
+    const pref = preference.rows[0];
+    // Le centre in-app reste alimenté même si le parent coupe les pushes.
+    if (!pref || pref.is_enabled) {
+      const scheduledAt = this.quietHoursSchedule(pref?.quiet_hours_start ?? null, pref?.quiet_hours_end ?? null);
+      await client.query(
+        `INSERT INTO notification_queue
+           (organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data, scheduled_at)
+         VALUES ($1, $2, 'push', $3, $4, $5, $6, $7, $8)`,
+        [tenantId, params.userId, params.titleFr, params.titleAr, params.bodyFr, params.bodyAr, JSON.stringify(params.data), scheduledAt],
+      );
+    }
     await client.query(
       `INSERT INTO notification_inbox
          (organization_id, user_id, type, title_fr, title_ar, body_fr, body_ar, data)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [tenantId, params.userId, params.eventType, params.titleFr, params.titleAr, params.bodyFr, params.bodyAr, JSON.stringify(params.data)],
     );
+  }
+
+  /** Diffère une notification tombant pendant la plage silencieuse (heure Alger). */
+  private quietHoursSchedule(start: string | null, end: string | null): Date {
+    if (!start || !end) return new Date();
+    const now = new Date();
+    const algiers = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Algiers', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
+    const inQuiet = start <= end ? algiers >= start && algiers < end : algiers >= start || algiers < end;
+    if (!inQuiet) return now;
+    const [h, m] = end.split(':').map(Number);
+    // Convertit l'heure de sortie en délai local ; le décalage Europe/Alger est
+    // constant (UTC+1), ce qui évite de dépendre du fuseau du serveur.
+    const current = Number(algiers.slice(0, 2)) * 60 + Number(algiers.slice(3, 5));
+    const target = h * 60 + m;
+    const delay = ((target - current + 1440) % 1440) || 1440;
+    return new Date(now.getTime() + delay * 60_000);
   }
 
   /** Boîte de réception de l'utilisateur courant (API). */

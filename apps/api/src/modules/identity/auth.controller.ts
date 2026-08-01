@@ -4,7 +4,7 @@ import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/cu
 import { Public } from '../../shared/decorators/public.decorator';
 import { RateLimit } from '../../shared/decorators/rate-limit.decorator';
 import { AuthService, type LoginResult } from './auth.service';
-import { AcceptInvitationDto, ChangePasswordDto, LoginDto, ParentOtpRequestDto, ParentOtpVerifyDto, ParentPinDto, RefreshDto, TotpDto } from './dto/auth.dto';
+import { AcceptInvitationDto, ChangePasswordDto, LoginDto, ParentOtpRequestDto, ParentOtpVerifyDto, ParentPinDto, ParentPinLoginDto, RefreshDto, TotpDto } from './dto/auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -45,6 +45,14 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async setParentPin(@Body() dto: ParentPinDto, @CurrentUser() user: CurrentUserPayload): Promise<void> {
     await this.authService.setParentPin(user.sub, dto.pin);
+  }
+
+  @Public()
+  @Post('parent/pin/login')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit(5, 60_000)
+  async loginParentPin(@Body() dto: ParentPinLoginDto, @Req() req: Request): Promise<LoginResult> {
+    return this.authService.loginParentPin(dto.phone, dto.pin, { deviceId: dto.device_id, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
   }
 
   @Public()

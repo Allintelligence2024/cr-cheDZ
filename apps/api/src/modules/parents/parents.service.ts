@@ -91,11 +91,42 @@ export class ParentsService {
     )).rows[0]);
   }
 
+  async photos(userId: string, childId: string, ip?: string): Promise<Array<Record<string, unknown>>> {
+    await this.assertPermission(userId, childId, 'can_view_journal');
+    const items = await this.media.list(userId, childId);
+    const visible = items.filter((item) => item.is_visible_to_parents === true);
+    const result: Array<Record<string, unknown>> = [];
+    for (const item of visible) {
+      try {
+        result.push({ ...item, ...(await this.photoUrl(userId, childId, String(item.id), ip)) });
+      } catch (error) {
+        // Une révocation entre la liste et la signature ne divulgue jamais l'URL.
+        if (!(error instanceof AppError) || error.code !== 'CONSENT_REVOKED') throw error;
+      }
+    }
+    return result;
+  }
+
   async photoUrl(userId: string, childId: string, mediaId: string, ip?: string): Promise<{ url: string; key: string }> {
     await this.assertPermission(userId, childId, 'can_view_journal');
     await this.tenantContext.withTenantConnection(async (client) => {
-      const r = await client.query(`SELECT id FROM media_assets WHERE id=$1 AND child_id=$2 AND is_visible_to_parents=true AND deleted_at IS NULL`, [mediaId, childId]);
+      // La révocation est effective immédiatement : une ancienne photo déjà
+      // publiée ne peut plus obtenir d'URL si l'un des consentements manque.
+      const r = await client.query(
+        `SELECT children_in_photo FROM media_assets
+         WHERE id=$1 AND child_id=$2 AND is_visible_to_parents=true AND deleted_at IS NULL`,
+        [mediaId, childId],
+      );
       if (!r.rows[0]) throw Errors.notFound();
+      const children = (r.rows[0].children_in_photo as string[] | null) ?? [childId];
+      const valid = await client.query(
+        `SELECT DISTINCT child_id FROM consent_records
+         WHERE child_id = ANY($1::uuid[]) AND consent_type='photo_individual'
+           AND granted=true AND revoked_at IS NULL`, [children],
+      );
+      if (valid.rows.length !== children.length) {
+        throw new AppError('CONSENT_REVOKED', 'Le consentement photo a été retiré', 'تم سحب الموافقة على الصورة', 422);
+      }
     });
     return this.media.downloadUrl(userId, mediaId, ip);
   }

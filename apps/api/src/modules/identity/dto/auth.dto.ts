@@ -64,6 +64,15 @@ export class ParentPinDto {
   pin!: string;
 }
 
+export class ParentPinLoginDto extends ParentOtpRequestDto {
+  @Matches(/^\d{4,6}$/, { message: 'PIN à 4 à 6 chiffres requis' })
+  pin!: string;
+
+  @IsOptional()
+  @IsString()
+  device_id?: string;
+}
+
 export class AcceptInvitationDto {
   @IsString()
   @MinLength(16, { message: 'token d\'invitation invalide' })

@@ -15,6 +15,7 @@ export class ParentsController {
   @Post('consents') consent(@CurrentUser() u: CurrentUserPayload, @Body() dto: SaveConsentDto) { return this.parents.saveConsent(u.sub, dto); }
   @Get('notification-preferences') preferences(@CurrentUser() u: CurrentUserPayload) { return this.parents.preferences(u.sub); }
   @Post('notification-preferences') preference(@CurrentUser() u: CurrentUserPayload, @Body() dto: SaveNotificationPreferenceDto) { return this.parents.savePreference(u.sub, dto); }
+  @Get('children/:childId/media') photos(@CurrentUser() u: CurrentUserPayload, @Param() child: ChildIdParam, @Req() req: Request) { return this.parents.photos(u.sub, child.childId, req.ip); }
   @Get('children/:childId/media/:mediaId/download') photo(@CurrentUser() u: CurrentUserPayload, @Param() child: ChildIdParam, @Param() media: MediaIdParam, @Req() req: Request) {
     return this.parents.photoUrl(u.sub, child.childId, media.mediaId, req.ip);
   }

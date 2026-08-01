@@ -194,6 +194,18 @@ export class AuthService {
     await this.pool.query(`UPDATE users SET parent_pin_hash=$2, version=version+1 WHERE id=$1`, [userId, await bcrypt.hash(pin, this.config.get<number>('BCRYPT_ROUNDS', 12))]);
   }
 
+  async loginParentPin(phone: string, pin: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
+    const res = await this.pool.query<UserRow>(
+      `SELECT u.* FROM users u WHERE u.phone=$1 AND u.deleted_at IS NULL AND EXISTS (SELECT 1 FROM guardians g WHERE g.user_id=u.id)`,
+      [phone.trim()],
+    );
+    const user = res.rows[0];
+    if (!user?.parent_pin_hash || !(await bcrypt.compare(pin, user.parent_pin_hash))) {
+      throw new AppError('INVALID_PARENT_PIN', 'PIN incorrect', 'رمز PIN غير صحيح', 401);
+    }
+    return this.issueTokenPair(user, ctx);
+  }
+
   // ── Refresh (rotation + détection de réutilisation) ─────────────────────
 
   async refresh(
