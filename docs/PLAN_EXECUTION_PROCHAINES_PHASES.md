@@ -335,6 +335,33 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 
 ---
 
+## 9. Phase 10 — SANTÉ, CONFORMITÉ, VIE PRIVÉE, CONSOLE SUPPORT (API ✅ + console ✅)
+
+### Tâches (faites et validées sur PostgreSQL 18 réel, rôle NOBYPASSRLS)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 10.1 | **Santé** : dossier médical (upsert), allergies, vaccinations, autorisations de médicaments (consentement gardien), administrations en double saisie (qui donne / qui confirme — 422 même personne, 409 double confirmation), gardes période (422 `MEDICATION_OUTSIDE_AUTH`) et autorisation active (422) ; lectures journalisées (`data_access_logs`) | `modules/health/*`, `phase10-health.api.test.mjs` | ✅ (11 cas) |
+| 10.2 | **Accès parent santé** : `GET /parent/children/:id/health` verrouillé par `can_view_health` (403 sinon) | `modules/parents/*` | ✅ |
+| 10.3 | **Conformité 19-253** : `GET /compliance/summary` (CAP_150, RATIO_EDUC, AGE_CRECHE, DOC_STAFF, PRICE_DISPLAY) persisté dans `compliance_checks` ; `GET /compliance/checks` ; accusé de réception directrice ; **capacité enforceée** : création + import → 409 `CAPACITY_EXCEEDED` | `modules/compliance/*`, `children.service.ts`, `import.service.ts`, `phase10-compliance.api.test.mjs` | ✅ (7 cas) |
+| 10.4 | **Vie privée 25-11** : demandes de droits (access/rectification/opposition, deadline 30 j), export JSON complet d'un enfant persisté (`privacy_request_exports`), violations (échéance ANPDP +5 j, notification SMTP réelle via nodemailer ou 503 explicite), DPIA liées au registre, registre des traitements seedé (015) avec lignes modèle | `modules/privacy/*`, migrations 029-032, `seeds/015_privacy_registry.sql`, `phase10-privacy.api.test.mjs` | ✅ (11 cas) |
+| 10.5 | **Console support** (API + UI React) : recherche globale cross-tenant (`support_global_search`), impersonation auditée (motif en `audit_logs`), jobs (liste + retry, `support_list_jobs`/`support_retry_job`) ; UI : login super_admin, onglets Recherche/Jobs/Impersonation (48 kB gzip) | `modules/privacy/privacy.service.ts` (support), `apps/support-console/*` | ✅ |
+
+### Migrations ajoutées (immuables, ADR-007)
+- **029** : `privacy_violations`, `privacy_request_exports`, `privacy_dpias` (RLS) + `support_global_search`/`support_list_jobs`/`support_retry_job` (SECURITY DEFINER)
+- **030/031** : registre des traitements — lignes modèle visibles (politique élargie) + colonne `organization_id` nullable
+- **032** : correction `support_list_jobs` (cast enum `job_status` → text)
+
+### DoD Phase 10
+- [x] 29 cas phase10 verts (santé 11, conformité 7, vie privée/support 11) + non-régression S2→P9
+- [x] Impersonation tracée (audit `impersonate` + motif) ; recherche globale restreinte super_admin
+- [x] 151e enfant refusé (409, testé création + import) ; violations chrono 5 j ; DPIA ; export droits testé
+- [ ] Notification ANPDP réelle (SMTP) non testée de bout en bout (pas de serveur SMTP dans la sandbox — chemin 503 testé)
+- [ ] Rétention/purge (job d'archivage 5 ans) non implémentée
+- [ ] Écrans admin-web santé/conformité/violations : non implémentés (API prête)
+
+---
+
 ## 6. Phases suivantes (résumé exécutif — détail dans PLAN_IMPLEMENTATION.md §3)
 
 | Phase | S | Livrable clé | Critère de sortie |
@@ -344,6 +371,7 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 | **P7 — App parents** | ✅ FAIT (API) | Portail `/parent/*` (feed, absence, consentements à révocation immédiate, préférences/quiet hours, photos signées), OTP téléphone + PIN, FCM HTTP v1 + APNs direct (worker) | **11/11 cas verts** sur PostgreSQL réel NOBYPASSRLS ; Flutter parent-mobile + golden RTL non exécutés (SDK absent) ; SMS Twilio déclaré non configuré |
 | **P8 — Facturation** | ✅ FAIT (API + worker) | Contrats, génération mensuelle idempotente (index 021), paiements espèces, allocations bornées (trigger 023), caisse, reçus, webhook signé/idempotent (024), PDF worker (local/S3) | **16/16 cas verts** sur PostgreSQL réel NOBYPASSRLS ; PDF AR (composition arabe) et exports Excel non implémentés |
 | **P9 — Admin web** | ✅ API + écrans web | Dashboard réel (présences/jour + alertes), présences (pointage + corrections), journal (modération directrice), photos (validation visibilité), facturation (contrats/factures/paiements/caisse), fiche enfant (historique), paramètres org (tarifs 19-253) — bundle 63,7 kB gzip (lazy) | **7 cas phase9 verts** sur PostgreSQL réel NOBYPASSRLS ; Playwright e2e écrit mais NON exécuté (navigateur indisponible dans la sandbox) ; messagerie non implémentée |
+| **P10 — Santé, conformité, vie privée, support** | ✅ API + console | Santé (dossier, allergies, vaccinations, médicaments double saisie, accès parent can_view_health), conformité 19-253 (checks + capacité enforceée 409), vie privée 25-11 (demandes de droits + export JSON, violations chrono 5 j ANPDP, DPIA, registre seedé), console support (recherche globale, impersonation auditée, jobs retry) — migrations 029-032 | **3 suites phase10 (29 cas) vertes** sur PostgreSQL réel NOBYPASSRLS ; notification ANPDP réelle (SMTP) non testée de bout en bout (pas de SMTP) ; rétention/purge et écrans admin-web santé/conformité ⏳ |
 
 ---
 

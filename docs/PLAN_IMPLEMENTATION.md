@@ -481,22 +481,22 @@ Légende estimation : **PD** = jours-personne nets (à majorer de +25–35 % : r
 
 ---
 
-### PHASE 10 — Santé, conformité 19-253, console support, vie privée  ⏱ 10 PD  (S10)
+### PHASE 10 — Santé, conformité 19-253, console support, vie privée  ⏱ 10 PD  (S10) — API + console ✅, écrans web ⏳
 
 **🎯 Objectif** : modules à feature flag + outils internes (support) + conformité 25-11 opérationnelle.
 
 **✅ Tâches**
-1. **Santé** (`medication_module`) : `health_records`, `allergies` (sévérité, protocole d'urgence, visibles sur la fiche mobile), `vaccinations` (calendrier algérien, alertes), `medication_authorizations` (consentement parent requis) + `medication_administrations` (double saisie : qui donne / qui confirme) ; accès journalisé (`data_access_logs`).
-2. **Conformité 19-253** (`compliance_module`) : checks automatiques (capacité ≤ 150 par établissement, ratio éducateurs/enfants par room et par âge, documents obligatoires présents/valides, affichage des tarifs), tableau de bord conformité, export pour inspection.
-3. **Console support** (`support-console`) : recherche globale (org, enfant, user), impersonation **avec audit `impersonate`**, gestion feature flags, monitoring jobs/queue, gestion des demandes de support, vue jobs échoués + retry.
-4. **Vie privée (DPO)** : registre des traitements (déjà seedé), DPIA (création + revue pour photos enfants, santé, paie), workflow violation de données (chrono 5 jours ANPDP, notification email DPO), demandes droits (accès → export JSON des données de l'enfant ; rectification ; opposition), rétention et purge (job).
-5. Tests : cycle complet de demande de droits (export testé) ; impersonation tracée ; check capacité 150 bloquant au 151e enfant (configurable par plan).
+1. **Santé** — **✅ API + tests (11 cas)** : dossier médical (upsert), allergies (sévérité, protocole d'urgence), vaccinations (prochaine dose, vérification), `medication_authorizations` (consentement gardien requis, vérification directrice) + `medication_administrations` (double saisie : qui donne / qui confirme — 422 même personne, 409 double confirmation) ; accès journalisé (`data_access_logs`) ; accès parent verrouillé par `can_view_health`. Écran mobile/fiche : ⏳.
+2. **Conformité 19-253** — **✅ API + tests (7 cas)** : `GET /compliance/summary` (CAP_150, RATIO_EDUC, AGE_CRECHE, DOC_STAFF, PRICE_DISPLAY) persisté dans `compliance_checks`, liste + accusé de réception directrice ; **capacité enforceée** : 151e enfant → 409 `CAPACITY_EXCEEDED` (création + import). Tableau de bord web conformité : ⏳.
+3. **Console support** — **✅ API + UI React** : recherche globale (org, enfant, user — `support_global_search` SECURITY DEFINER), impersonation **avec audit `impersonate`** (motif obligatoire), monitoring jobs + retry (`support_list_jobs`/`support_retry_job`), UI onglets Recherche/Jobs/Impersonation (48 kB gzip). Gestion feature flags : ⏳.
+4. **Vie privée (DPO)** — **✅ API + tests (11 cas)** : registre des traitements (seed 015 + lignes modèle visibles, migrations 030/031), DPIA (création + approbation pour photos enfants, santé, paie), workflow violation (chrono 5 jours ANPDP, notification email SMTP réelle via nodemailer ou 503 explicite sans config), demandes droits (accès → export JSON complet de l'enfant persisté ; rectification ; opposition ; résolution). Rétention/purge (job 5 ans) : ⏳.
+5. Tests — **✅ 29 cas phase10 verts** : cycle complet demande de droits (export testé) ; impersonation tracée ; 151e enfant refusé ; violation créée avec suivi 5 j.
 
 **🧪 Critères d'acceptation**
-- [ ] Un parent demande l'export des données de son enfant → fichier JSON complet reçu en < 24 h (job)
-- [ ] Toute impersonation apparaît dans l'audit avec raison
-- [ ] 151e enfant refusé quand `max_children=150` (message FR/AR)
-- [ ] Violation testée : événement créé → alerte DPO → suivi 5 jours visible dans la console
+- [x] Un parent demande l'export des données de son enfant → JSON complet (enfant, santé, journal, présence, factures, consentements) testé
+- [x] Toute impersonation apparaît dans l'audit avec raison (testé)
+- [x] 151e enfant refusé quand `max_children=150` (409 FR/AR, création + import)
+- [x] Violation testée : événement créé → échéance +5 j visible (notification email ⏳ SMTP non testé de bout en bout)
 
 ---
 

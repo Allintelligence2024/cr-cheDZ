@@ -36,14 +36,14 @@ export class HealthController {
 
   @Patch('allergies/:id')
   @Roles('super_admin', 'director')
-  allergyUpdate(@Param() p: AllergyIdParam, @Body() dto: UpdateAllergyDto, @CurrentUser() u: CurrentUserPayload) {
-    return this.health.updateAllergy(p.id, dto, u.sub);
+  allergyUpdate(@Param() p: AllergyIdParam, @Body() dto: UpdateAllergyDto) {
+    return this.health.updateAllergy(p.id, dto);
   }
 
   @Post(':childId/vaccinations')
   @Roles(...CARE_ROLES)
-  vaccination(@Param() p: ChildIdParam, @Body() dto: CreateVaccinationDto, @CurrentUser() u: CurrentUserPayload) {
-    return this.health.createVaccination(p.childId, dto, u.sub);
+  vaccination(@Param() p: ChildIdParam, @Body() dto: CreateVaccinationDto) {
+    return this.health.createVaccination(p.childId, dto);
   }
 
   @Patch('vaccinations/:id')
@@ -54,7 +54,7 @@ export class HealthController {
 
   @Post(':childId/medication-authorizations')
   @Roles('super_admin', 'director', 'educator')
-  medAuth(@Param() p: ChildIdParam, @Body() dto: CreateMedicationAuthorizationDto, @CurrentUser() u: CurrentUserPayload) {
+  medAuth(@Param() p: ChildIdParam, @Body() dto: CreateMedicationAuthorizationDto) {
     return this.health.createMedicationAuthorization(p.childId, dto);
   }
 

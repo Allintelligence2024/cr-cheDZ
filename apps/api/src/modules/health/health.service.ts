@@ -118,7 +118,7 @@ export class HealthService {
     });
   }
 
-  async updateAllergy(allergyId: string, dto: any, actorId: string): Promise<Record<string, unknown>> {
+  async updateAllergy(allergyId: string, dto: any): Promise<Record<string, unknown>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       const existing = (await client.query(`SELECT id FROM allergies WHERE id=$1`, [allergyId])).rows[0];
@@ -136,7 +136,7 @@ export class HealthService {
 
   // ── Vaccinations ──────────────────────────────────────────────────────────
 
-  async createVaccination(childId: string, dto: any, actorId: string): Promise<Record<string, unknown>> {
+  async createVaccination(childId: string, dto: any): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       await this.childOfTenant(client, childId);

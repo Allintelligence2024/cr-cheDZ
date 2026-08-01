@@ -275,7 +275,7 @@ export class ParentsService {
       allergies: full.allergies,
       vaccinations: full.vaccinations,
       medication_authorizations: full.medication_authorizations,
-      medication_administrations: (full.medication_administrations ?? []).map((m: Record<string, unknown>) => ({
+      medication_administrations: ((full.medication_administrations as Array<Record<string, unknown>> | undefined) ?? []).map((m: Record<string, unknown>) => ({
         administered_at: m.administered_at,
         dose_given: m.dose_given,
         observations: m.observations,

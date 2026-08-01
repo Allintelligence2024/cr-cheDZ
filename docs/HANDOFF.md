@@ -36,11 +36,24 @@ cr-cheDZ, branche arena/019fbeff-cr-chedz (branche de travail de la session).
   (bundle 63,7 kB gzip). Suite phase9-dashboard.api.test.mjs : 7 cas (22
   assertions) verts. E2E Playwright écrit (director-flow) mais NON exécuté.
 
+- Phase 10 (santé, conformité, vie privée, console support) TERMINÉE (API +
+  console) : module health (dossier, allergies, vaccinations, médicaments
+  double saisie, accès parent can_view_health), compliance 19-253 (checks
+  persistés + capacité enforceée 409 création/import), privacy 25-11
+  (demandes de droits + export JSON, violations chrono 5 j ANPDP, DPIA,
+  registre seedé 015), console support (recherche globale, impersonation
+  auditée, jobs retry) — migrations 029-032. Suites phase10 (santé 11,
+  conformité 7, privacy/support 11) vertes.
+
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
 - Phase 9 e2e Playwright : spec + config écrits (login → pointage → facture),
   NON exécutés (navigateur Playwright non installable dans la sandbox) ;
   exécuter en CI (job e2e) : node scripts/migrate.mjs && seed-e2e.mjs puis
   npx playwright test dans apps/admin-web.
+- Notification ANPDP : SMTP réel (nodemailer) implémenté mais non testé de
+  bout en bout (pas de SMTP dans la sandbox — chemin 503 testé).
+- Rétention/purge des logs (5 ans) : job non implémenté.
+- Écrans admin-web santé/conformité/violations : non implémentés (API prête).
 - Messagerie (backend + écran web) : non implémentée.
 - parent-mobile / staff-mobile Flutter : SDK absent → code Dart écrit mais
   `flutter analyze`, widget tests et golden RTL NON exécutés.
@@ -88,6 +101,7 @@ MÉTHODE DE TRAVAIL (non négociable) :
 | Phase 7 | Portail parent complet (API) — OTP/PIN, consentements, quiet hours, photos, FCM/APNs worker |
 | Phase 8 | Facturation complète (API + worker) — contrats, factures, paiements, allocations, caisse, webhook, PDF, accès parent |
 | Phase 9 | Admin web complète (API + écrans) — dashboard, présences, journal + modération, photos, facturation, fiche enfant, paramètres/tarifs, i18n AR/FR, lazy (63,7 kB gzip) |
+| Phase 10 | Santé, conformité 19-253, vie privée 25-11, console support (API + UI) — migrations 029-032, seeds 015 |
 | Apps | api (NestJS), worker (jobs + push), admin-web (React FR/AR), support-console (squelette), staff-mobile + parent-mobile (squelettes Dart) |
 | CI | Workflows locaux non poussés (permission `workflows`) — `docs/CI-RESTORE.md` |
 | Docs | `docs/PLAN_IMPLEMENTATION.md`, `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md`, `docs/adr/` (000→010), `docs/HANDOFF.md` (ce fichier) |
@@ -113,6 +127,9 @@ node tests/tenant-isolation/phase6.api.test.mjs
 node tests/tenant-isolation/phase7-parent.api.test.mjs
 node tests/tenant-isolation/phase8-billing.api.test.mjs
 node tests/tenant-isolation/phase9-dashboard.api.test.mjs
+node tests/tenant-isolation/phase10-health.api.test.mjs
+node tests/tenant-isolation/phase10-compliance.api.test.mjs
+node tests/tenant-isolation/phase10-privacy.api.test.mjs
 
 # Typechecks
 npm run typecheck --workspace @creche/api
