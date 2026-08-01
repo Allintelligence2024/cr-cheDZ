@@ -16,6 +16,7 @@ export class ParentsController {
   @Get('notification-preferences') preferences(@CurrentUser() u: CurrentUserPayload) { return this.parents.preferences(u.sub); }
   @Post('notification-preferences') preference(@CurrentUser() u: CurrentUserPayload, @Body() dto: SaveNotificationPreferenceDto) { return this.parents.savePreference(u.sub, dto); }
   @Get('children/:childId/media') photos(@CurrentUser() u: CurrentUserPayload, @Param() child: ChildIdParam, @Req() req: Request) { return this.parents.photos(u.sub, child.childId, req.ip); }
+  @Get('children/:childId/health') health(@CurrentUser() u: CurrentUserPayload, @Param() child: ChildIdParam, @Req() req: Request) { return this.parents.childHealth(u.sub, child.childId, req.ip); }
   @Get('children/:childId/media/:mediaId/download') photo(@CurrentUser() u: CurrentUserPayload, @Param('childId') childId: string, @Param('mediaId') mediaId: string, @Req() req: Request) {
     return this.parents.photoUrl(u.sub, childId, mediaId, req.ip);
   }

@@ -5,6 +5,7 @@ import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
 import { AttendanceService } from '../attendance/attendance.service';
 import { PdfStorageService } from '../billing/pdf-storage.service';
+import { HealthService } from '../health/health.service';
 import { MediaService } from '../media/media.service';
 import { AuditService } from '../privacy/audit.service';
 
@@ -17,6 +18,7 @@ export class ParentsService {
     private readonly media: MediaService,
     private readonly pdfStorage: PdfStorageService,
     private readonly audit: AuditService,
+    private readonly health: HealthService,
   ) {}
 
   async children(userId: string): Promise<Array<Record<string, unknown>>> {
@@ -251,6 +253,35 @@ export class ParentsService {
       if (!allowed) throw new AppError('PARENT_ACCESS_DENIED', 'Vous n’avez pas l’autorisation pour cette facture', 'ليس لديك صلاحية لهذه الفاتورة', 403);
       return invoice;
     });
+  }
+
+  // ── Santé (permission can_view_health) ────────────────────────────────────
+
+  /** Dossier santé visible parent : allergies + vaccinations + autorisations actives. */
+  async childHealth(userId: string, childId: string, ipAddress?: string): Promise<Record<string, unknown>> {
+    requireTenant(this.tenantContext);
+    const allowed = await this.tenantContext.withTenantConnection(async (client) => {
+      const res = await client.query(
+        `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
+         WHERE cg.child_id = $1 AND g.user_id = $2 AND cg.can_view_health = true`,
+        [childId, userId],
+      );
+      return Boolean(res.rows[0]);
+    });
+    if (!allowed) throw new AppError('PARENT_ACCESS_DENIED', 'Vous n’avez pas l’autorisation pour les données santé', 'ليس لديك صلاحية للبيانات الصحية', 403);
+    const full = await this.health.getRecord(childId, userId, ipAddress);
+    // Le parent ne reçoit pas les notes de confirmation internes (confirmed_by…).
+    return {
+      allergies: full.allergies,
+      vaccinations: full.vaccinations,
+      medication_authorizations: full.medication_authorizations,
+      medication_administrations: (full.medication_administrations ?? []).map((m: Record<string, unknown>) => ({
+        administered_at: m.administered_at,
+        dose_given: m.dose_given,
+        observations: m.observations,
+        confirmed: Boolean(m.confirmed_by),
+      })),
+    };
   }
 
   private async assertLinked(userId: string, childId: string): Promise<void> { await this.assertPermission(userId, childId, 'guardian_id'); }

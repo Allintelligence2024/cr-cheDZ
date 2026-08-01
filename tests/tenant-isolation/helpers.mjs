@@ -41,6 +41,10 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION jobs_finish(uuid, boolean, text) TO creche_app_test');
   // Phase 7 (migration 025) : bootstrap login parent (guardians sous RLS)
   await admin.query('GRANT EXECUTE ON FUNCTION auth_parent_lookup_by_phone(text) TO creche_app_test');
+  // Phase 10 (migration 029) : console support (recherche globale, jobs)
+  await admin.query('GRANT EXECUTE ON FUNCTION support_global_search(text) TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON FUNCTION support_list_jobs(integer) TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON FUNCTION support_retry_job(uuid) TO creche_app_test');
 }
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */
