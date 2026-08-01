@@ -27,6 +27,7 @@ interface UserRow {
   last_name: string;
   locale: string;
   password_hash: string | null;
+  parent_pin_hash: string | null;
   status: string;
   totp_secret: string | null;
   totp_enabled: boolean;
@@ -150,6 +151,47 @@ export class AuthService {
         is_super_admin: user.is_super_admin,
       },
     };
+  }
+
+  // ── Parent OTP + PIN ───────────────────────────────────────────────────
+
+  async requestParentOtp(phone: string): Promise<{ expires_in: number; development_code?: string }> {
+    const target = phone.trim();
+    // Réponse identique si le numéro est inconnu (anti-énumération).
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await this.pool.query(`UPDATE otp_codes SET used_at = NOW() WHERE target = $1 AND purpose = 'parent_login' AND used_at IS NULL`, [target]);
+    await this.pool.query(
+      `INSERT INTO otp_codes (target, code_hash, purpose, expires_at) VALUES ($1,$2,'parent_login',NOW() + INTERVAL '10 minutes')`,
+      [target, await bcrypt.hash(code, this.config.get<number>('BCRYPT_ROUNDS', 12))],
+    );
+    // L'adaptateur SMS est volontairement hors du processus API. En dev/test,
+    // le code explicite permet les tests sans exposer un secret en production.
+    return { expires_in: 600, ...(this.config.get<string>('NODE_ENV') === 'test' ? { development_code: code } : {}) };
+  }
+
+  async verifyParentOtp(phone: string, code: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
+    const target = phone.trim();
+    const otp = await this.pool.query<{ id: string; code_hash: string; attempts: number }>(
+      `SELECT id, code_hash, attempts FROM otp_codes WHERE target=$1 AND purpose='parent_login' AND used_at IS NULL AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1`, [target],
+    );
+    const row = otp.rows[0];
+    if (!row || row.attempts >= 5 || !(await bcrypt.compare(code, row.code_hash))) {
+      if (row) await this.pool.query(`UPDATE otp_codes SET attempts=attempts+1 WHERE id=$1`, [row.id]);
+      throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
+    }
+    await this.pool.query(`UPDATE otp_codes SET used_at=NOW() WHERE id=$1`, [row.id]);
+    const found = await this.pool.query<UserRow>(
+      `SELECT u.* FROM users u WHERE u.phone=$1 AND u.deleted_at IS NULL AND EXISTS (
+         SELECT 1 FROM guardians g WHERE g.user_id=u.id
+       )`, [target],
+    );
+    const user = found.rows[0];
+    if (!user) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
+    return this.issueTokenPair(user, ctx);
+  }
+
+  async setParentPin(userId: string, pin: string): Promise<void> {
+    await this.pool.query(`UPDATE users SET parent_pin_hash=$2, version=version+1 WHERE id=$1`, [userId, await bcrypt.hash(pin, this.config.get<number>('BCRYPT_ROUNDS', 12))]);
   }
 
   // ── Refresh (rotation + détection de réutilisation) ─────────────────────

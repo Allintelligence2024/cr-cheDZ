@@ -53,7 +53,8 @@ PROCHAINE ÉTAPE — PHASE 7 (Application parents + notifications) :
   téléphone + PIN, fil du jour (feed), photos (URLs signées), signalement
   d'absence en 2 taps, consentements (revocation → effet immédiat),
   RTL arabe complet
-- API parents : fondation Phase 7 ajoutée dans `modules/parents` : endpoints isolés `/parent/*` (enfants, fil via `child_guardians.can_view_journal`, absence, consentements, préférences/quiet hours, téléchargement photo visible). Il reste à écrire/exécuter la suite d'isolation parent complète, et à finaliser OTP email/SMS + PIN (table `otp_codes`).
+- API parents : fondation Phase 7 ajoutée dans `modules/parents` : endpoints isolés `/parent/*` (enfants, fil via `child_guardians.can_view_journal`, absence, consentements, préférences/quiet hours, téléchargement photo visible). OTP téléphone (hash bcrypt, expiration 10 min, usage unique, limite 5 essais) et PIN haché sont disponibles ; l’adaptateur SMS/FCM/APNs réel et l’exécution de la suite PostgreSQL parent restent à finaliser.
+- Phase 8 commencée : `modules/billing` crée les contrats et génère les factures mensuelles ; migration 021 impose l’unicité contrat/période. Paiements, allocations, PDF, caisse et tests API réels restent à faire.
 - FCM réel dans le worker (fcm_token des devices) + APNs
 - Tests : isolation parent (2 parents du même enfant avec permissions
   différentes), notification arrivée < 30s, RTL (golden tests)

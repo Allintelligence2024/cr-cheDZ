@@ -45,6 +45,25 @@ export class TotpDto {
   code!: string;
 }
 
+export class ParentOtpRequestDto {
+  @Matches(/^\+?[0-9]{8,15}$/, { message: 'numéro de téléphone invalide' })
+  phone!: string;
+}
+
+export class ParentOtpVerifyDto extends ParentOtpRequestDto {
+  @Matches(/^\d{6}$/, { message: 'code à 6 chiffres' })
+  code!: string;
+
+  @IsOptional()
+  @IsString()
+  device_id?: string;
+}
+
+export class ParentPinDto {
+  @Matches(/^\d{4,6}$/, { message: 'PIN à 4 à 6 chiffres requis' })
+  pin!: string;
+}
+
 export class AcceptInvitationDto {
   @IsString()
   @MinLength(16, { message: 'token d\'invitation invalide' })
