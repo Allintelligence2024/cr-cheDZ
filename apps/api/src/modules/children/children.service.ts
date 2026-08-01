@@ -85,7 +85,22 @@ export class ChildrenService {
         [id],
       );
       if (res.rows.length === 0) throw Errors.notFound();
-      return res.rows[0];
+      const moves = await client.query(
+        `SELECT rm.room_id_from, rm.room_id_to, rm.moved_at, rm.moved_by, rm.reason,
+                rf.name_fr AS room_from, rt.name_fr AS room_to
+         FROM room_moves rm
+         LEFT JOIN rooms rf ON rf.id = rm.room_id_from
+         LEFT JOIN rooms rt ON rt.id = rm.room_id_to
+         WHERE rm.child_id = $1 ORDER BY rm.moved_at DESC LIMIT 50`,
+        [id],
+      );
+      const statusHistory = await client.query(
+        `SELECT csh.status_from, csh.status_to, csh.changed_at, csh.changed_by, csh.reason
+         FROM child_status_history csh
+         WHERE csh.child_id = $1 ORDER BY csh.changed_at DESC LIMIT 50`,
+        [id],
+      );
+      return { ...res.rows[0], room_moves: moves.rows, status_history: statusHistory.rows };
     });
 
     await this.audit.logDataAccess({

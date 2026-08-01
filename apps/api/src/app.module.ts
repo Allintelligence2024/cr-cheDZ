@@ -11,6 +11,7 @@ import { HealthController } from './health.controller';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { ChildrenModule } from './modules/children/children.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { JournalModule } from './modules/journal/journal.module';
 import { MediaModule } from './modules/media/media.module';
@@ -34,6 +35,7 @@ import { UsersModule } from './modules/users/users.module';
     ChildrenModule,
     AttendanceModule,
     BillingModule,
+    DashboardModule,
     JournalModule,
     MediaModule,
     NotificationsModule,

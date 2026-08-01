@@ -175,3 +175,8 @@ export class JournalListQuery {
   @IsDateString()
   date?: string;
 }
+
+export class UpdateJournalVisibilityDto {
+  @IsBoolean()
+  visible_to_parents!: boolean;
+}
