@@ -23,6 +23,16 @@ export class OpenCashRegisterDto {
  @IsOptional() @IsNumber() @Min(0) opening_balance?: number;
 }
 export class CloseCashRegisterDto {
- @IsUUID() site_id!: string;
- @IsOptional() @IsString() notes?: string;
+  @IsUUID() site_id!: string;
+  @IsOptional() @IsString() notes?: string;
+}
+export class AllocatePaymentDto {
+  @IsUUID() invoice_id!: string;
+  @IsNumber() @Min(0.01) amount_allocated!: number;
+}
+export class ContractIdParam { @IsUUID() contractId!: string; }
+export class InvoiceIdParam { @IsUUID() invoiceId!: string; }
+export class PaymentIdParam { @IsUUID() paymentId!: string; }
+export class CashRegisterQueryDto {
+  @IsOptional() @IsUUID() site_id?: string;
 }

@@ -253,14 +253,68 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 
 ---
 
+## 6. Phase 7 — APPLICATION PARENTS + NOTIFICATIONS (TERMINÉE ✅ — API + worker)
+
+### Tâches (faites et validées sur PostgreSQL 18 réel, rôle NOBYPASSRLS)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 7.1 | Portail `/parent/*` : enfants (liste filtrée `can_view_journal`), fil du jour (`can_view_journal`, note privée exclue), absence (2 taps → `markAbsent`), consentements (révocation → effet immédiat), préférences notification + quiet hours, photos avec URL signée (consentement re-vérifié à chaque URL) | `apps/api/src/modules/parents/*` | ✅ |
+| 7.2 | OTP téléphone (bcrypt, 10 min, usage unique, 5 essais max) + PIN haché + login PIN | `modules/identity/auth.service.ts`, migration 025 | ✅ |
+| 7.3 | FCM HTTP v1 (service account) + APNs HTTP/2 direct (JWT ES256) dans le worker ; échec explicite `FCM_NOT_CONFIGURED`/`APNS_NOT_CONFIGURED` sans secret ; jamais de faux statut `sent` (`PUSH_NOT_CONFIGURED_OR_NO_DEVICE`) | `apps/worker/src/main.ts` | ✅ |
+| 7.4 | **Suite `phase7-parent.api.test.mjs` : 11 cas obligatoires, tous verts** | `tests/tenant-isolation/phase7-parent.api.test.mjs` | ✅ |
+
+### Corrections réelles faites pendant la Phase 7 (bugs détectés par les tests)
+1. **Liste enfants** : l'API renvoyait les enfants d'un parent même sans `can_view_journal` → filtre ajouté (le plan exige « uniquement les enfants dont le parent est child_guardians avec can_view_journal »).
+2. **Téléchargement photo** : double `@Param()` cassait la validation (400 permanent) → `@Param('childId')`/`@Param('mediaId')`.
+3. **Révocation consentement INEFFECTIVE** : `photoUrl`/`setVisibility` matchaient n'importe quel ancien enregistrement `granted=true` → « dernier consentement gagne » (DISTINCT ON child_id) — une révocation coupe immédiatement les URLs.
+4. **Login OTP/PIN cassé sous NOBYPASSRLS** : la recherche « user + guardian » interrogeait `guardians` (RLS) sans tenant → toujours 401 en production avec le rôle applicatif → fonction SECURITY DEFINER `auth_parent_lookup_by_phone` (migration 025).
+
+### DoD Phase 7
+- [x] 11/11 cas du GATE parent (feed, absence, photos, révocation, org B, préférences, quiet hours, OTP ×3, PIN, NOBYPASSRLS)
+- [x] Aucune régression : S2, S3, P4, P5, P6 rejoués verts
+- [ ] parent-mobile Flutter : squelette à compléter (SDK absent — `flutter analyze`, widget tests, golden RTL non exécutés)
+- [ ] SMS OTP : Twilio implémenté mais **déclaré non configuré** (erreur `SMS_UNAVAILABLE` 503 sans secrets)
+
+---
+
+## 7. Phase 8 — FACTURATION (TERMINÉE ✅ — API + worker)
+
+### Tâches (faites et validées sur PostgreSQL 18 réel, rôle NOBYPASSRLS)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 8.1 | CRUD contrats + GET listes/détails ; génération mensuelle idempotente (409 + index unique partiel 021) ; job `send_monthly_invoices` (worker) idempotent (ON CONFLICT DO NOTHING) | `modules/billing/*`, `apps/worker/src/main.ts` | ✅ |
+| 8.2 | Paiements espèces (statut `partially_paid`/`paid`), allocations API (bornes paiement puis facture, mêmes règles que le trigger 023), reçus (`receipt_number`), détail paiement + allocations | `billing.service.ts` | ✅ |
+| 8.3 | Caisse quotidienne : ouverture (409 si double), clôture (409 si double, total = somme espèces confirmés du jour/site) | `billing.service.ts` | ✅ |
+| 8.4 | Webhook de paiement : HMAC-SHA256 sur corps brut (`PAYMENT_WEBHOOK_SECRET`), idempotent par `external_reference` (3× = 1 paiement), 401 signature invalide, 503 si non configuré — fonction SECURITY DEFINER `billing_webhook_apply` (migration 024) | `billing.controller.ts`, migration 024 | ✅ |
+| 8.5 | PDF facture : généré par le worker (écrivain PDF réel, zéro dépendance lourde), stocké backend explicite (`STORAGE_BACKEND=local` ou `s3`), servi par endpoint autorisé (directeur/comptable + parent `can_receive_invoices`), accès journalisé (data_access_logs) | `apps/worker/src/pdf.ts`, `billing/pdf-storage.service.ts` | ✅ |
+| 8.6 | Worker sous NOBYPASSRLS : claim/fin de jobs via `jobs_claim_next()`/`jobs_finish()` (SECURITY DEFINER 024, corrigées 026-028), accès données via `SET LOCAL app.tenant_id` | `apps/worker/src/main.ts` | ✅ |
+| 8.7 | Accès parent lecture seule : `GET /parent/invoices`, `/parent/invoices/:id`, `/parent/invoices/:id/pdf`, `/parent/receipts`, `/parent/receipts/:id` — permission `can_receive_invoices` | `modules/parents/*` | ✅ |
+| 8.8 | **Suite `phase8-billing.api.test.mjs` : 16 cas obligatoires, tous verts** | `tests/tenant-isolation/phase8-billing.api.test.mjs` | ✅ |
+
+### Migrations ajoutées (immutables, ADR-007)
+- **024** : `billing_webhook_apply` (SECURITY DEFINER), `jobs_claim_next`, `jobs_finish`, index `idx_payments_child`
+- **025** : `auth_parent_lookup_by_phone` (SECURITY DEFINER — bootstrap login parent)
+- **026-028** : corrections `CREATE OR REPLACE` de `jobs_claim_next` (ambiguïtés de colonnes OUT — jamais de modification des migrations déjà appliquées)
+
+### DoD Phase 8
+- [x] 16/16 cas du GATE facturation (isolation A/B, idempotence mensuelle, solde, bornes DB, immuabilité, webhook ×3, caisse ×2, PDF worker, accès parent)
+- [x] Aucune régression : S2, S3, P4, P5, P6, P7 rejoués verts
+- [ ] PDF bilingue AR : la composition arabe exige l'embedding d'une police GSUB (corps FR en Helvetica/WinAnsi — limitation documentée)
+- [ ] Exports Excel (worker) : stub `NOT_IMPLEMENTED`
+- [ ] `send_monthly_invoices` job : implémenté, non couvert par un test dédié (l'idempotence mensuelle est testée via l'API + index 021)
+
+---
+
 ## 6. Phases suivantes (résumé exécutif — détail dans PLAN_IMPLEMENTATION.md §3)
 
 | Phase | S | Livrable clé | Critère de sortie |
 |---|---|---|---|
 | **P5 — Présences + sync** | ✅ FAIT | Machine à états, push/pull (curseur sync_seq), idempotence, 200 ops offline | 34/34 tests verts |
-| **P6 — Journal + médias** | S6 | Événements journal, photos via URL signée MinIO, actions groupées, consentements photo | Repas groupé 12 enfants < 30 s ; 200 événements offline |
-| **P7 — App parents** | EN COURS | Portail `/parent/*`, OTP + PIN, consentements à révocation immédiate, quiet hours, FCM HTTP v1 et test d’isolation parent vert sur PostgreSQL embedded | Adapter SMS, APNs direct et app Flutter complète/golden RTL restent à finaliser |
-| **P8 — Facturation** | EN COURS | API contrats, génération mensuelle idempotente et paiement espèces avec allocation bornée en DB (migration 023) | PDF worker, caisse, webhooks et suite PostgreSQL d’isolation complète à terminer |
+| **P6 — Journal + médias** | ✅ FAIT | Événements journal, photos via URL signée MinIO, actions groupées, consentements photo | Repas groupé 12 enfants < 30 s ; 200 événements offline |
+| **P7 — App parents** | ✅ FAIT (API) | Portail `/parent/*` (feed, absence, consentements à révocation immédiate, préférences/quiet hours, photos signées), OTP téléphone + PIN, FCM HTTP v1 + APNs direct (worker) | **11/11 cas verts** sur PostgreSQL réel NOBYPASSRLS ; Flutter parent-mobile + golden RTL non exécutés (SDK absent) ; SMS Twilio déclaré non configuré |
+| **P8 — Facturation** | ✅ FAIT (API + worker) | Contrats, génération mensuelle idempotente (index 021), paiements espèces, allocations bornées (trigger 023), caisse, reçus, webhook signé/idempotent (024), PDF worker (local/S3) | **16/16 cas verts** sur PostgreSQL réel NOBYPASSRLS ; PDF AR (composition arabe) et exports Excel non implémentés |
 
 ---
 

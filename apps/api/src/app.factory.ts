@@ -10,7 +10,9 @@ import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
  * tests d'intégration (tests/tenant-isolation/isolation.api.test.mjs).
  */
 export async function createApp(): Promise<INestApplication> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // rawBody: conserve le corps brut (req.rawBody) pour la vérification HMAC
+  // du webhook de paiement (apps/api/src/modules/billing/billing.controller.ts).
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
 
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });

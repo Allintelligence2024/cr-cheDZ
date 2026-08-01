@@ -115,13 +115,17 @@ export class MediaService {
         );
       }
       if (visible && m.children_in_photo?.length) {
-        // Chaque enfant présent sur la photo doit avoir un consentement photo_individual actif.
+        // Chaque enfant présent sur la photo doit avoir un consentement
+        // photo_individual actif — seul le DERNIER consentement compte
+        // (append-only) : une révocation rend la publication impossible.
         const consents = await client.query(
-          `SELECT DISTINCT child_id FROM consent_records
-           WHERE child_id = ANY($1::uuid[])
-             AND consent_type = 'photo_individual'
-             AND granted = true
-             AND (revoked_at IS NULL OR revoked_at > NOW())`,
+          `WITH latest AS (
+             SELECT DISTINCT ON (child_id) child_id, granted, revoked_at
+             FROM consent_records
+             WHERE child_id = ANY($1::uuid[]) AND consent_type = 'photo_individual'
+             ORDER BY child_id, created_at DESC
+           )
+           SELECT child_id FROM latest WHERE granted = true AND revoked_at IS NULL`,
           [m.children_in_photo],
         );
         const consented = new Set(consents.rows.map((r: { child_id: string }) => r.child_id));

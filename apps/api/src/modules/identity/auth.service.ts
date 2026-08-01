@@ -182,10 +182,11 @@ export class AuthService {
       throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     }
     await this.pool.query(`UPDATE otp_codes SET used_at=NOW() WHERE id=$1`, [row.id]);
+    // Bootstrap RLS : guardians est une table tenant ; la fonction SECURITY
+    // DEFINER (migration 025) fait la recherche hors contexte tenant.
     const found = await this.pool.query<UserRow>(
-      `SELECT u.* FROM users u WHERE u.phone=$1 AND u.deleted_at IS NULL AND EXISTS (
-         SELECT 1 FROM guardians g WHERE g.user_id=u.id
-       )`, [target],
+      `SELECT * FROM auth_parent_lookup_by_phone($1)`,
+      [target],
     );
     const user = found.rows[0];
     if (!user) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
@@ -197,8 +198,10 @@ export class AuthService {
   }
 
   async loginParentPin(phone: string, pin: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
+    // Bootstrap RLS : guardians est une table tenant ; la fonction SECURITY
+    // DEFINER (migration 025) fait la recherche hors contexte tenant.
     const res = await this.pool.query<UserRow>(
-      `SELECT u.* FROM users u WHERE u.phone=$1 AND u.deleted_at IS NULL AND EXISTS (SELECT 1 FROM guardians g WHERE g.user_id=u.id)`,
+      `SELECT * FROM auth_parent_lookup_by_phone($1)`,
       [phone.trim()],
     );
     const user = res.rows[0];

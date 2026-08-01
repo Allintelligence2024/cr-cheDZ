@@ -20,6 +20,7 @@ export async function ensureAppRole(admin) {
       END IF;
     END $$;
   `);
+  await admin.query('GRANT USAGE ON SCHEMA public TO creche_app_test');
   await admin.query('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO creche_app_test');
   await admin.query('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO creche_app_test');
   // Fonctions SECURITY DEFINER du bootstrap auth (migration 015)
@@ -34,6 +35,12 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION next_org_sequence(uuid) TO creche_app_test');
   // Helper RLS (migration 018) — utilisé par toutes les politiques
   await admin.query('GRANT EXECUTE ON FUNCTION app_tenant_id() TO creche_app_test');
+  // Phase 8 (migration 024) : webhook de paiement + cycle de vie des jobs
+  await admin.query('GRANT EXECUTE ON FUNCTION billing_webhook_apply(uuid, text, numeric, text, timestamptz, text) TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON FUNCTION jobs_claim_next() TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON FUNCTION jobs_finish(uuid, boolean, text) TO creche_app_test');
+  // Phase 7 (migration 025) : bootstrap login parent (guardians sous RLS)
+  await admin.query('GRANT EXECUTE ON FUNCTION auth_parent_lookup_by_phone(text) TO creche_app_test');
 }
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */

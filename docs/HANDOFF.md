@@ -9,27 +9,36 @@
 
 ```
 Continue le développement du logiciel de gestion de crèche (Algérie) dans le repo
-cr-cheDZ, branche arena/019fbde5-cr-chedz (déjà mergée dans main — PR #1).
+cr-cheDZ, branche arena/019fbeff-cr-chedz (branche de travail de la session).
 
-ÉTAT ACTUEL (validé sur PostgreSQL réel) :
-- Phases 0-1 : monorepo, migrations 001-018 (RLS USING+WITH CHECK partout,
-  sync_changelog, contraintes financières, helper app_tenant_id), runner de
-  migrations avec checksums, GATE d'isolation RLS (8/8 tests)
-- Phase 2 : auth JWT (access 15min + refresh rotatif 7j, détection de
-  réutilisation, TOTP RFC6238), contexte tenant AsyncLocalStorage, audit
-  avec masquage PII, migration 015 (fonctions SECURITY DEFINER)
-- Phase 3 : organisations (super_admin), sites/salles, invitations (token
-  signé 7j → acceptation), staff, admin-web React (i18n AR/FR RTL)
-- Phase 4 : enfants/familles (permissions granulaires), import CSV/XLSX
-  (dry-run + rapport FR/AR), reference_number par org (migration 017),
-  staff-mobile (squelette Dart Drift, non compilé : pas de SDK Flutter)
-- Phase 5 : machine à états de présence, /sync/push (idempotence event_id,
-  appareil actif, heure ±5min) + /sync/pull (curseur sync_seq, lot 500),
-  200 opérations offline testées
-- Phase 6 : journal quotidien (actions groupées, corrections append-only),
-  médias (presign S3/MinIO, consentement photo → 422 si absent/révoqué,
-  accès journalisé), notifications (queue + inbox), worker (jobs
-  FOR UPDATE SKIP LOCKED + drain FCM stub)
+ÉTAT ACTUEL (validé sur PostgreSQL 18 réel, rôle applicatif NOBYPASSRLS) :
+- Phases 0-6 : fondations (migrations 001-018 RLS robuste), auth JWT/TOTP,
+  organisations/invitations/staff, enfants/import, présences + sync offline,
+  journal/médias/notifications — toutes suites vertes.
+- Phase 7 (API + worker) TERMINÉE : portail /parent/* (feed, absence,
+  consentements à révocation immédiate, préférences + quiet hours, photos
+  signées), OTP téléphone + PIN (migration 025 : auth_parent_lookup_by_phone
+  SECURITY DEFINER — bug RLS réel corrigé), worker FCM HTTP v1 + APNs direct.
+  Suite phase7-parent.api.test.mjs : 11/11 cas verts.
+- Phase 8 (API + worker) TERMINÉE : contrats, génération mensuelle idempotente
+  (index 021 + job send_monthly_invoices), paiements espèces + allocations
+  (bornes trigger 023), caisse quotidienne, reçus, webhook signé HMAC idempotent
+  (migration 024 billing_webhook_apply SECURITY DEFINER), PDF facture généré par
+  le worker (écrivain PDF réel, backend local ou S3 explicite), accès parent
+  lecture seule (can_receive_invoices). Suite phase8-billing.api.test.mjs :
+  16/16 cas verts. Migrations 024-028 (jobs_claim_next/jobs_finish pour le
+  worker sous NOBYPASSRLS, corrigées 026-028).
+
+RESTE À FAIRE (non fait, à ne pas déclarer fini) :
+- parent-mobile / staff-mobile Flutter : SDK absent → code Dart écrit mais
+  `flutter analyze`, widget tests et golden RTL NON exécutés.
+- SMS OTP : Twilio implémenté mais déclaré NON CONFIGURÉ (SMS_UNAVAILABLE 503).
+- FCM/APNs : chemins de code réels, non testés de bout en bout (pas de secrets).
+- PDF bilingue AR (composition arabe), exports Excel (stubs NOT_IMPLEMENTED).
+- job send_monthly_invoices : implémenté, pas de test dédié.
+- Prochaine phase logique : Phase 9 (admin-web complète : tableau de bord,
+  écrans facturation/caisse, RTL AR) ou Phase 10 (santé, conformité, console
+  support, vie privée) — voir docs/PLAN_IMPLEMENTATION.md.
 
 MÉTHODE DE TRAVAIL (non négociable) :
 1. Fondation d'abord : le GATE (aucun accès cross-tenant) ne redevient JAMAIS
@@ -37,37 +46,23 @@ MÉTHODE DE TRAVAIL (non négociable) :
 2. Migrations SQL numérotées, IMMUABLES après application (runner avec
    checksums, ADR-007). Toute évolution = nouvelle migration.
 3. Tests API dans tests/tenant-isolation/phaseN.api.test.mjs, exécutés contre
-   un vrai PostgreSQL avec le rôle NOBYPASSRLS (creche_app_test).
+   un vrai PostgreSQL avec le rôle NOBYPASSRLS (creche_app_test, ensureAppRole
+   dans helpers.mjs — GRANT USAGE ON SCHEMA public OBLIGATOIRE après reset).
 4. Contexte tenant : toute requête sur une table tenant passe par
    TenantContextService.withTenantConnection() (set_config app.tenant_id).
 5. Messages d'erreur FR/AR partout (AppError + HttpExceptionFilter).
 6. Une fonctionnalité est finie quand : tests verts + isolation testée +
    tsc --noEmit vert sur api/worker/admin-web/support-console + non-régressions.
-7. Env de test : npm install dans /tmp/pgtest (embedded-postgres) — scripts
-   run_generic.mjs / run_pN.mjs (ne pas committer, /tmp est éphémère).
-8. Le SDK Flutter n'existe pas dans la sandbox : les ajouts mobile sont écrits
+7. Env de test : /tmp/pgtest (embedded-postgres, port 54329, base creche_test,
+   postgres:postgres) — scripts temporaires jamais committés.
+   Commandes : DATABASE_URL=postgres://postgres:postgres@127.0.0.1:54329/creche_test
+   RATE_LIMIT_DISABLED=true NODE_ENV=test STORAGE_BACKEND=local
+   STORAGE_LOCAL_DIR=/tmp/pgtest/pdfstore PAYMENT_WEBHOOK_SECRET=phase8-test-secret
+8. Les suites phase7/phase8 font --reset au démarrage et nettoient leurs orgs à
+   la fin (même pattern que phase4-6) : l'ordre canonique de validation est
+   rejouable sur une base propre.
+9. Le SDK Flutter n'existe pas dans la sandbox : les ajouts mobile sont écrits
    en Dart mais non compilés — documenter dans apps/*-mobile/README.md.
-
-PROCHAINE ÉTAPE — PHASE 7 (Application parents + notifications) :
-- parent-mobile Flutter (squelette Dart comme staff-mobile) : auth OTP
-  téléphone + PIN, fil du jour (feed), photos (URLs signées), signalement
-  d'absence en 2 taps, consentements (revocation → effet immédiat),
-  RTL arabe complet
-- Phase 7 : portail `/parent/*` isolé par `child_guardians` (feed, absence, consentements, préférences/quiet hours, liste/téléchargement de photos signées). OTP téléphone (bcrypt, 10 min, usage unique, 5 essais), PIN haché et login PIN sont disponibles. La révocation du consentement coupe immédiatement toute nouvelle URL photo. Worker FCM HTTP v1 (service account `FIREBASE_SERVICE_ACCOUNT_JSON`) est implémenté ; APNs direct et adaptateur SMS fournisseur restent à intégrer. `phase7-parent.api.test.mjs` est vert sur PostgreSQL embedded réel.
-- Phase 8 commencée : `modules/billing` crée les contrats et génère les factures mensuelles ; migration 021 impose l’unicité contrat/période. Paiements, allocations, PDF, caisse et tests API réels restent à faire.
-- FCM réel dans le worker (fcm_token des devices) + APNs
-- Tests : isolation parent (2 parents du même enfant avec permissions
-  différentes), notification arrivée < 30s, RTL (golden tests)
-- Puis Phase 8 (facturation : contrats, factures mensuelles, paiements
-  espèces, PDF Puppeteer, caisse)
-
-À NE PAS OUBLIER :
-- .github/workflows/ existe localement mais n'est PAS poussé (permission
-  GitHub App) → voir docs/CI-RESTORE.md (git add .github && commit && push)
-- Après chaque phase : mettre à jour docs/PLAN_EXECUTION_PROCHAINES_PHASES.md
-  et docs/PLAN_IMPLEMENTATION.md, puis commit + push + PR + merge (gh pr
-  create --base main --head arena/019fbde5-cr-chedz ; gh pr merge --squash
-  --delete-branch=false)
 ```
 
 ---
@@ -76,26 +71,41 @@ PROCHAINE ÉTAPE — PHASE 7 (Application parents + notifications) :
 
 | Élément | État |
 |---|---|
-| Branche de travail | `arena/019fbde5-cr-chedz` (poussée, PR #1 mergé dans `main` — commit `5b9fcba`) |
-| Migrations | 001 → 018 (schéma complet, RLS robuste `app_tenant_id()`) |
-| Suites de tests | `tests/tenant-isolation/` : schema-check, rls-behavior-check (GATE 8/8), isolation.api (S2), phase3, phase4, phase5, phase6 — **toutes vertes** |
+| Branche de travail | `arena/019fbeff-cr-chedz` (session Arena — ne jamais changer) |
+| Migrations | 001 → 028 (schéma complet, RLS robuste `app_tenant_id()`, facturation bornée, webhook + jobs SECURITY DEFINER) |
+| Suites de tests | `tests/tenant-isolation/` : schema-check, rls-behavior-check (GATE), isolation (S2), phase3 → phase8 — **toutes vertes sur PostgreSQL 18 réel** (phase7 : 11 cas, phase8 : 16 cas) |
+| Phase 7 | Portail parent complet (API) — OTP/PIN, consentements, quiet hours, photos, FCM/APNs worker |
+| Phase 8 | Facturation complète (API + worker) — contrats, factures, paiements, allocations, caisse, webhook, PDF, accès parent |
+| Apps | api (NestJS), worker (jobs + push), admin-web (React FR/AR), support-console (squelette), staff-mobile + parent-mobile (squelettes Dart) |
 | CI | Workflows locaux non poussés (permission `workflows`) — `docs/CI-RESTORE.md` |
-| Apps | api (NestJS), worker (boucle jobs), admin-web (React FR/AR), support-console (squelette), staff-mobile + parent-mobile (squelettes Dart) |
-| Docs | `docs/PLAN_IMPLEMENTATION.md` (plan global), `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md` (par phase), `docs/adr/` (ADR-000→010), `docs/HANDOFF.md` (ce fichier) |
+| Docs | `docs/PLAN_IMPLEMENTATION.md`, `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md`, `docs/adr/` (000→010), `docs/HANDOFF.md` (ce fichier) |
 
 ## Commandes utiles
 
 ```bash
-# Installer les dépendances (node_modules absent après restauration de session)
-npm install --no-audit --no-fund
+# Base de test : PostgreSQL embedded (déjà installé dans /tmp/pgtest)
+#   cd /tmp/pgtest && node run_pg.mjs start   (port 54329, base creche_test)
 
-# Valider (avec un PostgreSQL : /tmp/pgtest/embedded-postgres + run_generic.mjs)
-node scripts/migrate.mjs && node scripts/seed.mjs
-node tests/tenant-isolation/schema-check.mjs && node tests/tenant-isolation/rls-behavior-check.mjs
-node tests/tenant-isolation/phase6.api.test.mjs   # dernière suite
+# Valider (dans l'ordre canonique, base propre au préalable)
+export DATABASE_URL="postgres://postgres:postgres@127.0.0.1:54329/creche_test"
+export RATE_LIMIT_DISABLED=true NODE_ENV=test STORAGE_BACKEND=local \
+  STORAGE_LOCAL_DIR=/tmp/pgtest/pdfstore PAYMENT_WEBHOOK_SECRET=phase8-test-secret
+node scripts/migrate.mjs --reset && node scripts/seed.mjs
+node tests/tenant-isolation/schema-check.mjs
+node tests/tenant-isolation/rls-behavior-check.mjs
+node tests/tenant-isolation/isolation.api.test.mjs
+node tests/tenant-isolation/phase3.api.test.mjs
+node tests/tenant-isolation/phase4.api.test.mjs
+node tests/tenant-isolation/phase5.api.test.mjs
+node tests/tenant-isolation/phase6.api.test.mjs
+node tests/tenant-isolation/phase7-parent.api.test.mjs
+node tests/tenant-isolation/phase8-billing.api.test.mjs
 
 # Typechecks
-cd apps/api && ../../node_modules/.bin/tsc --noEmit
+npm run typecheck --workspace @creche/api
+npm run typecheck --workspace @creche/worker
+npm run typecheck --workspace @creche/admin-web
+npm run typecheck --workspace @creche/support-console
 
 # Restaurer la CI
 git add .github && git commit -m "ci: restore workflows" && git push

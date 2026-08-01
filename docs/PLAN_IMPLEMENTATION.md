@@ -416,47 +416,49 @@ Légende estimation : **PD** = jours-personne nets (à majorer de +25–35 % : r
 
 ---
 
-### PHASE 7 — Application parents et notifications  ⏱ 10 PD  (S7)
+### PHASE 7 — Application parents et notifications  ⏱ 10 PD  (S7) — API ✅, mobile ⏳
 
 **🎯 Objectif** : l'app parent (iOS + Android) — fil du jour, photos, consentements, absence en 2 taps, messagerie.
 
 **✅ Tâches**
 1. **parent-mobile** : auth par OTP téléphone (SMS ou whatsapp selon flags) + code PIN ; multi-enfants (si plusieurs) ; fil du jour chronologique (journal + photos + présences) ; consultation photos (URLs signées 1 h) ; gestion des consentements (revocation → effet immédiat côté serveur) ; signalement d'absence en 2 taps ; RTL arabe complet.
-2. **Isolation parent** : l'API parent ne renvoie que les enfants dont le parent est `child_guardians` avec `can_view_journal` — testé.
-3. Notifications : préférences par canal/événement + quiet hours ; FCM (Android) + APNs (iOS) ; inbox dans l'app (`notification_inbox`).
-4. Messagerie : conversations par enfant, participants, messages (texte + pièce jointe média), système de messages, RLS.
-5. Jobs : envoi push via `notification_queue` (worker, tentatives + backoff), nettoyage `otp_codes`/`sessions`/queue.
-6. Tests : isolation parent ; notification push bout-en-bout (émulateur) ; quiet hours respectées ; RTL visuel (golden tests).
+   - **API : ✅ FAIT et testé** (portail `/parent/*` + OTP/PIN — voir PLAN_EXECUTION §6).
+   - **Flutter parent-mobile : ⏳ squelette Dart, non compilé** (SDK absent de la sandbox).
+2. **Isolation parent** : l'API parent ne renvoie que les enfants dont le parent est `child_guardians` avec `can_view_journal` — **✅ testé** (phase7, cas 1-6).
+3. Notifications : préférences par canal/événement + quiet hours ; FCM (Android) + APNs (iOS) ; inbox dans l'app (`notification_inbox`). — **✅ API/worker testés** (phase7 cas 7-8 ; FCM/APNs codés, non testés de bout en bout faute de secrets ; SMS déclaré non configuré).
+4. Messagerie : conversations par enfant, participants, messages (texte + pièce jointe média), système de messages, RLS. — **⏳ non implémenté** (schéma 009 prêt).
+5. Jobs : envoi push via `notification_queue` (worker, tentatives + backoff), nettoyage `otp_codes`/`sessions`/queue. — **✅ worker** (drain + retries) ; nettoyage/rotation des codes : partiel (invalidation à chaque nouvelle demande).
+6. Tests : isolation parent ; notification push bout-en-bout (émulateur) ; quiet hours respectées ; RTL visuel (golden tests). — **✅ isolation/quiet hours** ; push émulateur + golden RTL ⏳ (SDK).
 
 **🧪 Critères d'acceptation**
-- [ ] Le parent ne voit que ses enfants (testé, y compris le partage entre deux parents d'un même enfant avec permissions différentes)
-- [ ] Absence signalée en 2 taps → statut + notification éducatrice
-- [ ] Révocation d'un consentement photo → effet < 1 min côté serveur
-- [ ] L'app fonctionne sur Android 2 Go RAM (test device farm, profil de release)
-- [ ] FR/AR corrects sur tous les écrans (golden tests RTL)
+- [x] Le parent ne voit que ses enfants (testé, y compris le partage entre deux parents d'un même enfant avec permissions différentes) — **11 cas phase7 verts**
+- [x] Absence signalée en 2 taps → statut + notification éducatrice
+- [x] Révocation d'un consentement photo → effet immédiat côté serveur (testé : URLs coupées au 1er appel suivant)
+- [ ] L'app fonctionne sur Android 2 Go RAM (test device farm, profil de release) — ⏳ SDK absent
+- [ ] FR/AR corrects sur tous les écrans (golden tests RTL) — ⏳ SDK absent
 
 ---
 
-### PHASE 8 — Facturation (MVP final)  ⏱ 8 PD  (S8)
+### PHASE 8 — Facturation (MVP final)  ⏱ 8 PD  (S8) — API + worker ✅, web/mobile ⏳
 
 **🎯 Objectif** : contrats, factures mensuelles, paiements espèces, PDF, exports — intègre et immuable.
 
 **✅ Tâches**
-1. Module `billing` : `contracts` (formules : full_time, half_time, daily, custom ; repas, transport, remises, frais d'inscription), génération mensuelle des factures (job `send_monthly_invoices` : lignes par type `care/meal/transport/activity/registration/adjustment/discount`, numérotation par org/année/mois, `due_date`).
-2. `invoices` : CRUD limité (draft → sent), immuabilité C04 (422 `INVOICE_IMMUTABLE`), statuts (`draft, sent, partially_paid, paid, overdue, cancelled`), job de passage `overdue`.
-3. `payments` : espèces (caisse : `daily_cash_registers` ouverture/clôture, `total_cash_in/out`), allocation aux factures (FOR UPDATE, C04), reçus (`receipt_number`), historique.
-4. PDF : worker + Puppeteer, template FR/AR (facture avec en-tête crèche, lignes, totaux, mention loi 25-11) ; génération < 5 s ; `pdf_url` sur S3.
-5. Exports : Excel présences et facturation (worker + URL signée).
-6. **Web** : écrans contrats, factures, paiements, caisse ; **mobile parent** : consultation factures + reçus (lecture seule au MVP, `can_receive_invoices`/`can_pay_invoices`).
-7. Tests financiers (Partie 6.2, réels) : immuabilité, webhook ×2 = 1 paiement (même pour les virements), total = somme des lignes, partiel → `partially_paid`, complet → `paid`, caisse cohérente.
+1. Module `billing` : `contracts` (formules : full_time, half_time, daily, custom ; repas, transport, remises, frais d'inscription), génération mensuelle des factures (job `send_monthly_invoices` : lignes par type `care/meal/transport/activity/registration/adjustment/discount`, numérotation par org/année/mois, `due_date`). — **✅ API + job worker** (idempotence : index 021 + ON CONFLICT DO NOTHING).
+2. `invoices` : CRUD limité (draft → sent), immuabilité C04 (422 `INVOICE_IMMUTABLE`), statuts (`draft, sent, partially_paid, paid, overdue, cancelled`), job de passage `overdue`. — **✅ API/DB** (immuabilité testée API + SQL) ; job `overdue` ⏳.
+3. `payments` : espèces (caisse : `daily_cash_registers` ouverture/clôture, `total_cash_in/out`), allocation aux factures (FOR UPDATE, C04), reçus (`receipt_number`), historique. — **✅ API + trigger 023** (bornes testées en SQL direct).
+4. PDF : worker — **✅ générateur PDF réel intégré** (zéro dépendance lourde ; corps FR Helvetica/WinAnsi — la composition arabe exige une police GSUB, ⏳) ; stockage backend explicite (`STORAGE_BACKEND=local` ou `s3`) ; `pdf_url` renseigné par le worker ; < 5 s ⏳ non mesuré.
+5. Exports : Excel présences et facturation (worker + URL signée). — ⏳ stub `NOT_IMPLEMENTED`.
+6. **Web** : écrans contrats, factures, paiements, caisse ; **mobile parent** : consultation factures + reçus (lecture seule au MVP, `can_receive_invoices`/`can_pay_invoices`). — **✅ API parent** (`/parent/invoices`, `/parent/receipts`, PDF) ; écrans web ⏳ (Phase 9) ; mobile ⏳ (SDK).
+7. Tests financiers (Partie 6.2, réels) : immuabilité, webhook ×2 = 1 paiement (même pour les virements), total = somme des lignes, partiel → `partially_paid`, complet → `paid`, caisse cohérente. — **✅ 16/16 cas phase8 sur PostgreSQL réel NOBYPASSRLS.**
 
 **🧪 Critères d'acceptation**
-- [ ] Facture payée non modifiable (422) ; facture annulée non modifiable
-- [ ] Même webhook/reçu envoyé 3× = 1 paiement confirmé
-- [ ] Total facture = somme des lignes (testé en base et en API)
-- [ ] PDF généré < 5 s ; rapprochement compréhensible par une personne non technique
-- [ ] La directrice génère les factures du mois en 5 min (sans compter la génération PDF)
-- [ ] **MVP complet** : les 9 critères MVP de la Partie 9 sont verts
+- [x] Facture payée non modifiable (422 + trigger C04 en SQL direct)
+- [x] Même webhook/reçu envoyé 3× = 1 paiement confirmé
+- [x] Total facture = somme des lignes (contrôle en base, chk_line_total) ; solde et bornes d'allocation testés API + SQL
+- [ ] PDF généré < 5 s ; rapprochement compréhensible par une personne non technique (⏳ non mesuré)
+- [ ] La directrice génère les factures du mois en 5 min (sans compter la génération PDF) — ⏳ écrans web (Phase 9)
+- [ ] **MVP complet** : les 9 critères MVP de la Partie 9 sont verts — ⏳ (mobile/web/device farm restants)
 
 ---
 
