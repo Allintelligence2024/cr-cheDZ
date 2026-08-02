@@ -328,6 +328,29 @@ async function fcmSend(token: string, notification: { title: string; body: strin
 }
 
 const b64url = (value: string | Buffer) => Buffer.from(value).toString('base64url');
+
+/** WhatsApp Business (roadmap v2) : API Graph Meta — 503 explicite sans config. */
+async function whatsappSend(body: string, data: Record<string, unknown>): Promise<void> {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  if (!token || !phoneId) throw new Error('WHATSAPP_NOT_CONFIGURED');
+  const apiUrl = process.env.WHATSAPP_API_URL ?? 'https://graph.facebook.com/v19.0';
+  const to = data.to ? String(data.to) : null;
+  if (!to) throw new Error('WHATSAPP_NO_RECIPIENT');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(`${apiUrl}/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body } }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`WHATSAPP_${res.status}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 /** APNs HTTP/2 direct, avec JWT ES256 Apple renouvelé à chaque livraison. */
 async function apnsSend(token: string, notification: { title: string; body: string; data: Record<string, string> }): Promise<void> {
   const keyId = process.env.APNS_KEY_ID;
@@ -368,24 +391,30 @@ async function apnsSend(token: string, notification: { title: string; body: stri
   });
 }
 
-/** Drain notification_queue : préférence/quiet-hours déjà appliquées à scheduled_at. */
+/** Drain notification_queue (migration 042) : claim/finish via SECURITY DEFINER
+ *  (sans tenant posé, la RLS rendait la file invisible sous NOBYPASSRLS). */
 async function drainNotificationQueue(): Promise<void> {
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const claimed = await client.query(
-      `SELECT id, organization_id, user_id, title_fr, title_ar, body_fr, body_ar, data
-       FROM notification_queue WHERE status='pending' AND scheduled_at<=NOW()
-       ORDER BY created_at LIMIT 25 FOR UPDATE SKIP LOCKED`,
-    );
+    const claimed = await client.query(`SELECT id, organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data FROM notif_queue_claim(25)`);
     for (const n of claimed.rows) {
-      await client.query(`UPDATE notification_queue SET status='processing',attempts=attempts+1 WHERE id=$1`, [n.id]);
-      const devices = await client.query(
+      // Canal WhatsApp : envoi via l'API Graph — flag vérifié à l'insertion.
+      if (n.channel === 'whatsapp') {
+        try {
+          await whatsappSend(n.body_fr, n.data);
+          await client.query(`SELECT notif_queue_finish($1, true)`, [n.id]);
+        } catch (error) {
+          await client.query(`SELECT notif_queue_finish($1, false, $2)`, [n.id, String((error as Error).message).slice(0, 500)]);
+        }
+        continue;
+      }
+      // Canal push : les appareils sont lus DANS le tenant (RLS).
+      const devices = await withTenant(n.organization_id, async (c) => c.query(
         `SELECT platform, fcm_token, apns_token FROM devices
          WHERE organization_id=$1 AND registered_by=$2 AND is_active=true AND revoked_at IS NULL
            AND (fcm_token IS NOT NULL OR apns_token IS NOT NULL)`,
         [n.organization_id, n.user_id],
-      );
+      ));
       try {
         const message = {
           title: n.title_fr,
@@ -399,29 +428,11 @@ async function drainNotificationQueue(): Promise<void> {
         }
         // Sans jeton/configuration, l'inbox reste la voie fiable ; ne jamais
         // marquer 'sent' si rien n'a été livré, ni journaliser de token.
-        await client.query(
-          `UPDATE notification_queue SET status='sent',sent_at=NOW(),
-             failure_reason=CASE WHEN $2 THEN NULL ELSE 'PUSH_NOT_CONFIGURED_OR_NO_DEVICE' END
-           WHERE id=$1`,
-          [n.id, delivered],
-        );
+        await client.query(`SELECT notif_queue_finish($1, true, $2)`, [n.id, delivered ? null : 'PUSH_NOT_CONFIGURED_OR_NO_DEVICE']);
       } catch (error) {
-        // notification_queue n'a pas de colonne max_attempts : plafond fixe de
-        // 3 tentatives (retry exponentiel), comme background_jobs.
-        await client.query(
-          `UPDATE notification_queue
-             SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'pending' END,
-                 failed_at=NOW(), failure_reason=$1,
-                 scheduled_at=NOW()+(INTERVAL '1 minute'*POWER(2,attempts))
-           WHERE id=$2`,
-          [String((error as Error).message).slice(0, 500), n.id],
-        );
+        await client.query(`SELECT notif_queue_finish($1, false, $2)`, [n.id, String((error as Error).message).slice(0, 500)]);
       }
     }
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
   } finally {
     client.release();
   }

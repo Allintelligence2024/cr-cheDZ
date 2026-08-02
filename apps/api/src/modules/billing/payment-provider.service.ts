@@ -33,10 +33,12 @@ export class PaymentProviderService {
   /** Vérifie le flag online_payment (global ou surcharge org) — sous RLS tenant. */
   async assertFeatureEnabled(orgId: string): Promise<void> {
     const flag = await this.tenantContext.withTenantConnection(async (client) => client.query(
-      `SELECT COALESCE(
-         (SELECT is_enabled FROM feature_flags WHERE flag_key='online_payment' AND organization_id=$1),
-         (SELECT is_enabled FROM feature_flags WHERE flag_key='online_payment' AND organization_id IS NULL),
-         false) AS enabled`,
+      `SELECT COALESCE(f_org.is_enabled, f_global.is_enabled, false) AS enabled
+       FROM (SELECT 1) x
+       LEFT JOIN feature_flags f_org
+         ON f_org.flag_key='online_payment' AND f_org.organization_id=$1
+       LEFT JOIN feature_flags f_global
+         ON f_global.flag_key='online_payment' AND f_global.organization_id IS NULL`,
       [orgId],
     ));
     if (!flag.rows[0]?.enabled) {

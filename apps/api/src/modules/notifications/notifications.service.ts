@@ -29,7 +29,7 @@ export class NotificationsService {
   ): Promise<void> {
     // Responsables autorisés à recevoir des push pour cet enfant.
     const guardians = await client.query(
-      `SELECT cg.guardian_id, g.user_id, g.first_name_fr, c.first_name_fr AS child_name
+      `SELECT cg.guardian_id, g.user_id, g.phone_primary, g.first_name_fr, c.first_name_fr AS child_name
        FROM child_guardians cg
        JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = cg.child_id
@@ -47,7 +47,40 @@ export class NotificationsService {
         bodyAr: `${g.child_name} ${EVENT_MESSAGES[eventType]?.body_ar ?? '—'}`,
         data: { child_id: childId, event_type: eventType, log_event_id: logEventId },
       });
+      // WhatsApp (roadmap v2) : si le flag whatsapp_notifications est actif
+      // pour le tenant et que le gardien a un téléphone, une notification
+      // WhatsApp est mise en file (consommée par le worker).
+      await this.enqueueWhatsApp(client, tenantId, g.user_id, g.phone_primary, EVENT_MESSAGES[eventType], g.child_name);
     }
+  }
+
+  /** Canal WhatsApp : soumis au flag whatsapp_notifications + téléphone présent. */
+  private async enqueueWhatsApp(
+    client: PoolClient,
+    tenantId: string,
+    userId: string,
+    phone: string | null,
+    event: { fr: string; ar: string; body_fr: string; body_ar: string } | undefined,
+    childName: string,
+  ): Promise<void> {
+    if (!phone) return;
+    const flag = await client.query(
+      `SELECT COALESCE(f_org.is_enabled, f_global.is_enabled, false) AS enabled
+       FROM (SELECT 1) x
+       LEFT JOIN feature_flags f_org
+         ON f_org.flag_key='whatsapp_notifications' AND f_org.organization_id=$1
+       LEFT JOIN feature_flags f_global
+         ON f_global.flag_key='whatsapp_notifications' AND f_global.organization_id IS NULL`,
+      [tenantId],
+    );
+    if (!flag.rows[0]?.enabled) return;
+    await client.query(
+      `INSERT INTO notification_queue (organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data)
+       VALUES ($1, $2, 'whatsapp', $3, $4, $5, $6, $7)`,
+      [tenantId, userId, event?.fr ?? 'Crèche', event?.ar ?? 'الحضانة',
+       `${childName} ${event?.body_fr ?? '—'}`, `${childName} ${event?.body_ar ?? '—'}`,
+       JSON.stringify({ to: phone, event_type: 'whatsapp' })],
+    );
   }
 
   /** Insertion file + boîte de réception (in-app), dans la transaction. */

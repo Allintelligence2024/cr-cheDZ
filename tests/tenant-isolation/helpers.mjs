@@ -54,6 +54,9 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION support_pilot_summary() TO creche_app_test');
   // Roadmap v2 (migration 040) : multi-rôles — liste des rôles effectifs
   await admin.query('GRANT EXECUTE ON FUNCTION auth_user_roles(uuid) TO creche_app_test');
+  // Roadmap v2 (migration 042) : drain notification_queue sous NOBYPASSRLS
+  await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_claim(integer) TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_finish(uuid, boolean, text) TO creche_app_test');
 }
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */
