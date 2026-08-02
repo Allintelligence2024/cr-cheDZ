@@ -57,6 +57,8 @@ export async function ensureAppRole(admin) {
   // Roadmap v2 (migration 042) : drain notification_queue sous NOBYPASSRLS
   await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_claim(integer) TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_finish(uuid, boolean, text) TO creche_app_test');
+  // Roadmap v2 (migration 046) : garde-fou DPIA vidéosurveillance
+  await admin.query('GRANT EXECUTE ON FUNCTION privacy_approved_dpia_exists(uuid, text) TO creche_app_test');
 }
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */

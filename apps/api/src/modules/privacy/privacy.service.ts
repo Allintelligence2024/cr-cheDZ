@@ -37,7 +37,7 @@ export class PrivacyService {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => (await client.query(
       `SELECT id, processing_name, purpose_fr, purpose_ar, legal_basis, data_categories,
-              data_subjects, retention_days, third_parties, security_measures, is_active
+              data_subjects, retention_days, third_parties, security_measures, is_active, requires_dpia
        FROM processing_registry
        WHERE organization_id = $1 OR organization_id IS NULL
        ORDER BY organization_id NULLS FIRST, processing_name`, [tenantId],
@@ -398,6 +398,7 @@ export class PrivacyService {
 
   /** Feature flags (support) : activer/désactiver un flag global ou une surcharge org. */
   async setFlag(flagKey: string, dto: { organization_id?: string; is_enabled: boolean }, actorId: string): Promise<Record<string, unknown>> {
+    await this.assertFlagComplianceGate(flagKey, dto);
     await this.pool.query(`SELECT support_set_flag($1, $2, $3)`, [flagKey, dto.organization_id ?? null, dto.is_enabled]);
     await this.audit.log({
       userId: actorId,
@@ -407,6 +408,38 @@ export class PrivacyService {
       newValues: { organization_id: dto.organization_id ?? null, is_enabled: dto.is_enabled },
     });
     return { flag_key: flagKey, organization_id: dto.organization_id ?? null, is_enabled: dto.is_enabled };
+  }
+
+  /**
+   * Garde-fous de conformité sur certains flags (support console) :
+   * - video_surveillance (loi 25-11) : activation GLOBALE interdite (une DPIA
+   *   est propre à chaque organisation) et activation par organisation exige
+   *   une DPIA approuvée sur le modèle « Vidéosurveillance des locaux »
+   *   (docs/regulatory/DPIA-VIDEOSURVEILLANCE.md). La désactivation reste
+   *   toujours possible, sans condition.
+   */
+  private async assertFlagComplianceGate(flagKey: string, dto: { organization_id?: string; is_enabled: boolean }): Promise<void> {
+    if (flagKey !== 'video_surveillance' || dto.is_enabled !== true) return;
+    if (!dto.organization_id) {
+      throw new AppError(
+        'VIDEO_SURVEILLANCE_GLOBAL_FORBIDDEN',
+        'La vidéosurveillance ne peut pas être activée globalement : une DPIA approuvée par organisation est requise (loi 25-11)',
+        'لا يمكن تفعيل المراقبة بالفيديو على مستوى المنصة : يلزم تقييم أثر معتمد لكل مؤسسة (القانون 25-11)',
+        422,
+      );
+    }
+    const r = await this.pool.query<{ ok: boolean }>(
+      `SELECT privacy_approved_dpia_exists($1, 'Vidéosurveillance des locaux') AS ok`,
+      [dto.organization_id],
+    );
+    if (!r.rows[0]?.ok) {
+      throw new AppError(
+        'DPIA_REQUIRED',
+        'DPIA vidéosurveillance approuvée requise avant activation du flag (loi 25-11)',
+        'يلزم تقييم أثر معتمد للمراقبة بالفيديو قبل تفعيل الميزة (القانون 25-11)',
+        422,
+      );
+    }
   }
 
   /** Suivi pilote (Phase 12) : agrégats par organisation (super_admin). */
