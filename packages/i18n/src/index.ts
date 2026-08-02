@@ -289,6 +289,16 @@ export const messages: Record<Locale, Record<string, string>> = {
     'privacy.createViolation': 'Signaler la violation',
     'privacy.violationCreated': 'Violation signalée (échéance +5 j)',
     'privacy.notifyAnpdp': 'Notifier l\'ANPDP',
+    // Roadmap v2 — multi-rôles (page Personnel)
+    'roles.manage': 'Rôles',
+    'roles.title': 'Rôles additionnels',
+    'roles.primary': 'Rôle principal',
+    'roles.additional': 'les rôles additionnels donnent des accès supplémentaires.',
+    'roles.role': 'Rôle',
+    'roles.remove': 'Retirer',
+    'roles.assign': 'Assigner',
+    'roles.assigned': 'Rôle assigné',
+    'roles.removed': 'Rôle retiré',
   },
   ar: {
     'app.title': 'إدارة الحضانات',
@@ -578,6 +588,16 @@ export const messages: Record<Locale, Record<string, string>> = {
     'privacy.createViolation': 'الإبلاغ عن انتهاك',
     'privacy.violationCreated': 'تم الإبلاغ عن الانتهاك (+5 أيام)',
     'privacy.notifyAnpdp': 'إشعار ANPDP',
+    // Roadmap v2 — multi-rôles (page Personnel)
+    'roles.manage': 'الأدوار',
+    'roles.title': 'أدوار إضافية',
+    'roles.primary': 'الدور الأساسي',
+    'roles.additional': 'الأدوار الإضافية تمنح صلاحيات إضافية.',
+    'roles.role': 'الدور',
+    'roles.remove': 'إزالة',
+    'roles.assign': 'تعيين',
+    'roles.assigned': 'تم تعيين الدور',
+    'roles.removed': 'تمت إزالة الدور',
   },
 };
 
