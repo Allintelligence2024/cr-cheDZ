@@ -82,6 +82,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'nav.billing': 'Facturation',
     'nav.health': 'Santé',
     'nav.compliance': 'Conformité',
+    'nav.messaging': 'Messagerie',
     'nav.settings': 'Paramètres',
     // Phase 9 — tableau de bord
     'dash.today': 'Présences du jour',
@@ -222,6 +223,16 @@ export const messages: Record<Locale, Record<string, string>> = {
     'compliance.acknowledge': 'Accuser réception',
     'compliance.acknowledged': 'Accusé',
     'compliance.hint': 'Lancez les vérifications automatiques pour évaluer la conformité de l’établissement.',
+    // Roadmap v2 — messagerie (écran web)
+    'msg.title': 'Messagerie',
+    'msg.subject': 'Sujet',
+    'msg.messages': 'Messages',
+    'msg.create': 'Créer la conversation',
+    'msg.created': 'Conversation créée',
+    'msg.conversation': 'Conversation',
+    'msg.participants': 'Participants',
+    'msg.send': 'Envoyer',
+    'msg.placeholder': 'Votre message…',
   },
   ar: {
     'app.title': 'إدارة الحضانات',
@@ -304,6 +315,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'nav.billing': 'الفواتير',
     'nav.health': 'الصحة',
     'nav.compliance': 'المطابقة',
+    'nav.messaging': 'الرسائل',
     'nav.settings': 'الإعدادات',
     // Phase 9 — tableau de bord
     'dash.today': 'حضور اليوم',
@@ -444,6 +456,16 @@ export const messages: Record<Locale, Record<string, string>> = {
     'compliance.acknowledge': 'إقرار بالاستلام',
     'compliance.acknowledged': 'مقر به',
     'compliance.hint': 'شغّل التدقيقات التلقائية لتقييم مطابقة المؤسسة.',
+    // Roadmap v2 — messagerie (écran web)
+    'msg.title': 'الرسائل',
+    'msg.subject': 'الموضوع',
+    'msg.messages': 'الرسائل',
+    'msg.create': 'إنشاء المحادثة',
+    'msg.created': 'تم إنشاء المحادثة',
+    'msg.conversation': 'محادثة',
+    'msg.participants': 'المشاركون',
+    'msg.send': 'إرسال',
+    'msg.placeholder': 'رسالتك…',
   },
 };
 
