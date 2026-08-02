@@ -9,7 +9,7 @@
 | Priorité | Fonctionnalité | Notes |
 |---|---|---|
 | P1 | **Paiement en ligne CIB/Edahabia (SATIM)** | Feature flag `online_payment` prêt ; webhook signé idempotent déjà en place (billing_webhook_apply) ; intégration SATIM à connecter |
-| P1 | **Messagerie parents ↔ crèche** | Schéma 009 prêt (conversations, messages) ; API + écrans à implémenter |
+| P1 | **Messagerie parents ↔ crèche** | **✅ API faite et testée** (module messaging : conversations par enfant, participants auto (gardiens), garde participant + RLS, phase12-messaging 7 cas) ; écran web ⏳ |
 | P2 | **WhatsApp Business API** | Flag `whatsapp_notifications` ; alternative au SMS pour l'OTP |
 | P2 | **Planning du personnel** (roulements) | Flag `staff_planning` ; table staff_assignments extensible |
 | P2 | **Multi-rôles par utilisateur** | Actuellement 1 rôle/org (ADR-001) ; table role_assignments à introduire |
