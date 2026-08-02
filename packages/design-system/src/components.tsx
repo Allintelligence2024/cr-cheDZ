@@ -98,8 +98,13 @@ export function Card(props: { title?: string; children: ReactNode; style?: CSSPr
   );
 }
 
-export function Table(props: { headers: string[]; rows: Array<Array<ReactNode>> }): React.JSX.Element {
+export function Table(props: {
+  headers: string[];
+  rows: Array<Array<ReactNode>>;
+  onRowClick?: (rowIndex: number) => void;
+}): React.JSX.Element {
   return (
+    <div className="table-scroll">
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: tokens.typography.body }}>
       <thead>
         <tr>
@@ -112,7 +117,14 @@ export function Table(props: { headers: string[]; rows: Array<Array<ReactNode>> 
       </thead>
       <tbody>
         {props.rows.map((row, i) => (
-          <tr key={i} style={{ borderBottom: `1px solid ${tokens.colors.border}` }}>
+          <tr
+            key={i}
+            style={{
+              borderBottom: `1px solid ${tokens.colors.border}`,
+              cursor: props.onRowClick ? 'pointer' : 'default',
+            }}
+            onClick={props.onRowClick ? () => props.onRowClick?.(i) : undefined}
+          >
             {row.map((cell, j) => (
               <td key={j} style={{ padding: '10px 12px' }}>{cell}</td>
             ))}
@@ -120,5 +132,6 @@ export function Table(props: { headers: string[]; rows: Array<Array<ReactNode>> 
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

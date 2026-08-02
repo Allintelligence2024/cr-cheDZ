@@ -1,6 +1,6 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
-import { Card, Table, TextField, tokens } from '@creche/design-system';
+import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
 import { http } from '../api/client';
 import { useI18n } from '../i18n';
 
@@ -14,6 +14,29 @@ interface Child {
   room_id: string | null;
   status: string;
   version: number;
+}
+
+interface RoomMove {
+  room_id_from: string | null;
+  room_id_to: string | null;
+  room_from: string | null;
+  room_to: string | null;
+  moved_at: string;
+  reason: string | null;
+}
+
+interface StatusChange {
+  status_from: string | null;
+  status_to: string;
+  changed_at: string;
+  reason: string | null;
+}
+
+interface ChildFiche extends Child {
+  room_name: string | null;
+  site_name: string | null;
+  room_moves: RoomMove[];
+  status_history: StatusChange[];
 }
 
 /** Petit parseur CSV (RFC 4180) pour l'import sans dépendance. */
@@ -83,6 +106,18 @@ export function ChildrenPage(): React.JSX.Element {
   const [report, setReport] = useState<ImportError[] | null>(null);
   const [imported, setImported] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [fiche, setFiche] = useState<ChildFiche | null>(null);
+  const [ficheError, setFicheError] = useState<string | null>(null);
+
+  const openFiche = async (id: string): Promise<void> => {
+    setFicheError(null);
+    try {
+      const detail = await http.get<ChildFiche>(`/children/${id}`);
+      setFiche(detail);
+    } catch (e: any) {
+      setFicheError(e.messageFr ?? t('common.error'));
+    }
+  };
 
   const load = (): void => {
     const q = search ? `?search=${encodeURIComponent(search)}` : '';
@@ -116,19 +151,34 @@ export function ChildrenPage(): React.JSX.Element {
           return obj;
         });
       } else {
-        // XLSX : parsing côté client (import dynamique pour le poids du bundle)
-        const XLSX = await import('xlsx');
+        // XLSX : parsing côté client via exceljs (import dynamique — le paquet
+        // xlsx est retiré : vulnérabilité prototype pollution sans correctif).
+        const ExcelJS = await import('exceljs');
         const data = await file.arrayBuffer();
-        const wb = XLSX.read(data, { type: 'array' });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
-        rows = json.map((r) => {
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(data);
+        const sheet = wb.worksheets[0];
+        if (!sheet) throw new Error('Fichier Excel vide');
+        const headerRow = sheet.getRow(1);
+        const headers = new Map<number, string>();
+        headerRow.eachCell((cell, col) => {
+          const name = String(cell.text ?? '').trim().toLowerCase();
+          if (name) headers.set(col, name);
+        });
+        rows = [];
+        sheet.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return;
           const obj: Record<string, string> = {};
-          for (const h of HEADERS) {
-            const v = r[h] ?? r[h.toUpperCase()] ?? '';
-            obj[h] = String(v).trim();
-          }
-          return obj;
+          headers.forEach((name, col) => {
+            const cell = row.getCell(col);
+            const raw = cell.value;
+            let value = '';
+            if (raw !== null && raw !== undefined) {
+              value = typeof raw === 'object' && 'text' in raw ? String((raw as { text: unknown }).text) : String(raw);
+            }
+            if (HEADERS.includes(name)) obj[name] = value.trim();
+          });
+          if (Object.keys(obj).length > 0) rows.push(obj);
         });
       }
 
@@ -194,7 +244,7 @@ export function ChildrenPage(): React.JSX.Element {
         </div>
       )}
       <Table
-        headers={[t('children.ref'), t('common.name'), t('children.birth'), 'Genre', t('room.title'), t('invitation.status')]}
+        headers={[t('children.ref'), t('common.name'), t('children.birth'), 'Genre', t('room.title'), t('invitation.status'), t('common.actions')]}
         rows={items.map((c) => [
           c.reference_number,
           `${c.first_name_fr} ${c.last_name_fr}`,
@@ -202,9 +252,45 @@ export function ChildrenPage(): React.JSX.Element {
           c.gender ?? '—',
           c.room_id ? c.room_id.slice(0, 8) : '—',
           c.status,
+          <Button key="d" variant="ghost" onClick={() => void openFiche(c.id)}>{t('child.detail')}</Button>,
         ])}
       />
       {items.length === 0 && <p style={{ color: tokens.colors.textMuted }}>{t('common.empty')}</p>}
+
+      {fiche && (
+        <div style={{ marginTop: tokens.spacing.lg, border: `1px solid ${tokens.colors.border}`, borderRadius: tokens.radius.md, padding: tokens.spacing.lg }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0 }}>{t('child.detail')} — {fiche.first_name_fr} {fiche.last_name_fr}</h3>
+            <Button variant="ghost" onClick={() => setFiche(null)}>{t('common.close')}</Button>
+          </div>
+          {ficheError && <p style={{ color: tokens.colors.danger }}>{ficheError}</p>}
+          <p style={{ color: tokens.colors.textMuted, fontSize: tokens.typography.small }}>
+            {t('children.ref')} : {fiche.reference_number} · {t('common.room')} : {fiche.room_name ?? '—'} · {t('common.site')} : {fiche.site_name ?? '—'} · {t('invitation.status')} : {fiche.status}
+          </p>
+          <h4 style={{ margin: '16px 0 8px' }}>{t('child.roomMoves')}</h4>
+          {(fiche.room_moves ?? []).length === 0 && <p style={{ color: tokens.colors.textMuted }}>{t('common.empty')}</p>}
+          <Table
+            headers={[t('child.from'), t('child.to'), t('child.movedAt'), t('child.reason')]}
+            rows={(fiche.room_moves ?? []).map((m) => [
+              m.room_from ?? m.room_id_from?.slice(0, 8) ?? '—',
+              m.room_to ?? m.room_id_to?.slice(0, 8) ?? '—',
+              new Date(m.moved_at).toLocaleString('fr-FR'),
+              m.reason ?? '—',
+            ])}
+          />
+          <h4 style={{ margin: '16px 0 8px' }}>{t('child.statusHistory')}</h4>
+          {(fiche.status_history ?? []).length === 0 && <p style={{ color: tokens.colors.textMuted }}>{t('common.empty')}</p>}
+          <Table
+            headers={[t('child.from'), t('child.to'), t('child.changedAt'), t('child.reason')]}
+            rows={(fiche.status_history ?? []).map((h) => [
+              h.status_from ?? '—',
+              h.status_to,
+              new Date(h.changed_at).toLocaleString('fr-FR'),
+              h.reason ?? '—',
+            ])}
+          />
+        </div>
+      )}
     </Card>
   );
 }

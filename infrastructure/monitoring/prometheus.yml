@@ -1,18 +1,15 @@
-# Prometheus — collecte des métriques API + worker + PostgreSQL
+# Prometheus — collecte des métriques (Phase 11/12)
+# L'API expose /api/v1/metrics (voir MetricsModule). Le worker n'expose pas
+# encore d'endpoint /metrics (les jobs sont suivis via creche_jobs_pending).
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
 scrape_configs:
   - job_name: 'api'
-    metrics_path: /metrics
+    metrics_path: /api/v1/metrics
     static_configs:
       - targets: ['api:3000']
-
-  - job_name: 'worker'
-    metrics_path: /metrics
-    static_configs:
-      - targets: ['worker:3001']
 
   - job_name: 'postgres'
     static_configs:

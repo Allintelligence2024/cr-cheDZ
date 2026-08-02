@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
-import { CreateJournalEventDto, GroupJournalEventDto, JournalListQuery } from './dto/journal.dto';
+import { CreateJournalEventDto, GroupJournalEventDto, JournalListQuery, UpdateJournalVisibilityDto } from './dto/journal.dto';
 import { JournalService } from './journal.service';
 
 const STAFF_ROLES = ['super_admin', 'director', 'educator', 'receptionist'] as const;
@@ -44,5 +44,15 @@ export class JournalController {
     @Query() query: JournalListQuery,
   ): Promise<{ items: Array<Record<string, unknown>> }> {
     return { items: await this.journalService.feedForChild(query.child_id, query.date) };
+  }
+
+  /** Modération (directrice) : visibilité d'un événement dans le fil parent. */
+  @Patch('events/:id/visibility')
+  @Roles('super_admin', 'director')
+  async setVisibility(
+    @Param('id') id: string,
+    @Body() dto: UpdateJournalVisibilityDto,
+  ): Promise<Record<string, unknown>> {
+    return this.journalService.setVisibility(id, dto.visible_to_parents);
   }
 }

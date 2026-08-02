@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import type { CurrentUserPayload } from '../decorators/current-user.decorator';
 import { Errors } from '../errors';
 
 /** Vérifie @Roles('director', …) contre le rôle embarqué dans le JWT.
@@ -15,8 +16,11 @@ export class RolesGuard implements CanActivate {
     if (!roles || roles.length === 0) return true;
 
     const request = context.switchToHttp().getRequest<Request>();
-    const user = request.user;
-    if (!user || !roles.includes(user.role)) {
+    const user = request.user as (CurrentUserPayload & { roles?: string[] }) | undefined;
+    if (!user) throw Errors.forbidden();
+    // Multi-rôles (migration 040) : roles[] (effectifs) OU rôle principal.
+    const effective = user.roles?.length ? user.roles : [user.role];
+    if (!effective.some((r) => roles.includes(r))) {
       throw Errors.forbidden();
     }
     return true;

@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
-import { AppError } from '../../shared/errors';
+import { AppError, Errors } from '../../shared/errors';
 import { AuditService } from '../privacy/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateJournalEventDto, GroupJournalEventDto } from './dto/journal.dto';
@@ -136,6 +136,35 @@ export class JournalService {
         [childId, day],
       );
       return res.rows;
+    });
+  }
+
+  /**
+   * Modération (directrice) : afficher/masquer un événement dans le fil
+   * parent. Une note privée ne devient JAMAIS visible par les parents (422).
+   */
+  async setVisibility(eventId: string, visible: boolean): Promise<Record<string, unknown>> {
+    requireTenant(this.tenantContext);
+    return this.tenantContext.withTenantConnection(async (client) => {
+      const event = (await client.query(
+        `SELECT id, note_is_private, visible_to_parents FROM daily_log_events WHERE id = $1`,
+        [eventId],
+      )).rows[0];
+      if (!event) throw Errors.notFound();
+      if (visible && event.note_is_private) {
+        throw new AppError(
+          'NOTE_IS_PRIVATE',
+          'Une note privée ne peut pas être visible par les parents',
+          'لا يمكن عرض ملاحظة خاصة على الوالدين',
+          422,
+        );
+      }
+      const updated = (await client.query(
+        `UPDATE daily_log_events SET visible_to_parents = $2 WHERE id = $1
+         RETURNING id, event_type, visible_to_parents`,
+        [eventId, visible],
+      )).rows[0];
+      return updated;
     });
   }
 

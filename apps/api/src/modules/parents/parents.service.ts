@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import type { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
 import { AttendanceService } from '../attendance/attendance.service';
+import { PdfStorageService } from '../billing/pdf-storage.service';
+import { HealthService } from '../health/health.service';
 import { MediaService } from '../media/media.service';
+import { AuditService } from '../privacy/audit.service';
 
 /** Portail parent. Le contrôle est toujours child_guardians, jamais le rôle JWT. */
 @Injectable()
@@ -12,6 +16,9 @@ export class ParentsService {
     private readonly tenantContext: TenantContextService,
     private readonly attendance: AttendanceService,
     private readonly media: MediaService,
+    private readonly pdfStorage: PdfStorageService,
+    private readonly audit: AuditService,
+    private readonly health: HealthService,
   ) {}
 
   async children(userId: string): Promise<Array<Record<string, unknown>>> {
@@ -22,6 +29,7 @@ export class ParentsService {
        FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = cg.child_id
        WHERE g.user_id = $1 AND c.deleted_at IS NULL
+         AND cg.can_view_journal = true
        ORDER BY c.first_name_fr, c.last_name_fr`, [userId],
     )).rows);
   }
@@ -119,16 +127,161 @@ export class ParentsService {
       );
       if (!r.rows[0]) throw Errors.notFound();
       const children = (r.rows[0].children_in_photo as string[] | null) ?? [childId];
+      // Seul le DERNIER consentement par enfant compte (append-only) : une
+      // révocation coupe immédiatement l'accès, même si un ancien
+      // consentement 'granted' existe encore dans l'historique.
       const valid = await client.query(
-        `SELECT DISTINCT child_id FROM consent_records
-         WHERE child_id = ANY($1::uuid[]) AND consent_type='photo_individual'
-           AND granted=true AND revoked_at IS NULL`, [children],
+        `WITH latest AS (
+           SELECT DISTINCT ON (child_id) child_id, granted, revoked_at
+           FROM consent_records
+           WHERE child_id = ANY($1::uuid[]) AND consent_type = 'photo_individual'
+           ORDER BY child_id, created_at DESC
+         )
+         SELECT child_id FROM latest WHERE granted = true AND revoked_at IS NULL`,
+        [children],
       );
       if (valid.rows.length !== children.length) {
         throw new AppError('CONSENT_REVOKED', 'Le consentement photo a été retiré', 'تم سحب الموافقة على الصورة', 422);
       }
     });
     return this.media.downloadUrl(userId, mediaId, ip);
+  }
+
+  // ── Factures et reçus (lecture seule, permission can_receive_invoices) ────
+
+  async invoices(userId: string): Promise<Array<Record<string, unknown>>> {
+    requireTenant(this.tenantContext);
+    return this.tenantContext.withTenantConnection(async (client) => (await client.query(
+      `SELECT i.id, i.invoice_number, i.period_year, i.period_month, i.subtotal,
+              i.discount_amount, i.total_amount, i.paid_amount, i.balance,
+              i.status, i.due_date, i.pdf_url, i.created_at,
+              c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+       FROM invoices i
+       JOIN child_guardians cg ON cg.child_id = i.child_id
+       JOIN guardians g ON g.id = cg.guardian_id
+       JOIN children c ON c.id = i.child_id
+       WHERE g.user_id = $1 AND cg.can_receive_invoices = true
+       ORDER BY i.created_at DESC`, [userId],
+    )).rows);
+  }
+
+  async invoiceDetail(userId: string, invoiceId: string): Promise<Record<string, unknown>> {
+    await this.assertInvoicePermission(userId, invoiceId);
+    return this.tenantContext.withTenantConnection(async (client) => {
+      const invoice = (await client.query(
+        `SELECT i.*, c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+         FROM invoices i JOIN children c ON c.id = i.child_id WHERE i.id = $1`, [invoiceId],
+      )).rows[0];
+      const lines = (await client.query(
+        `SELECT id, description_fr, description_ar, quantity, unit_price, total_price, line_type
+         FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort_order, id`, [invoiceId],
+      )).rows;
+      return { ...invoice, lines };
+    });
+  }
+
+  /** PDF facture pour un parent autorisé (can_receive_invoices). */
+  async invoicePdf(userId: string, invoiceId: string, ipAddress?: string) {
+    const invoice = await this.assertInvoicePermission(userId, invoiceId);
+    await this.audit.logDataAccess({
+      organizationId: invoice.organization_id,
+      userId,
+      dataType: 'invoice_pdf',
+      dataSubjectId: invoiceId,
+      dataSubjectType: 'invoice',
+      accessType: 'view',
+      justification: 'consultation_facture_parent',
+      ipAddress: ipAddress ?? null,
+    });
+    if (!invoice.pdf_url) throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
+    if (this.pdfStorage.isLocal()) {
+      return { kind: 'buffer' as const, buffer: await this.pdfStorage.read(invoice.pdf_url as string), invoice };
+    }
+    return { kind: 'redirect' as const, url: await this.pdfStorage.presign(invoice.pdf_url as string), invoice };
+  }
+
+  async receipts(userId: string): Promise<Array<Record<string, unknown>>> {
+    requireTenant(this.tenantContext);
+    return this.tenantContext.withTenantConnection(async (client) => (await client.query(
+      `SELECT p.id, p.reference_number, p.receipt_number, p.amount, p.method, p.status,
+              p.confirmed_at, p.notes,
+              c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+       FROM payments p
+       JOIN child_guardians cg ON cg.child_id = p.child_id
+       JOIN guardians g ON g.id = cg.guardian_id
+       JOIN children c ON c.id = p.child_id
+       WHERE g.user_id = $1 AND cg.can_receive_invoices = true AND p.status = 'confirmed'
+       ORDER BY p.confirmed_at DESC`, [userId],
+    )).rows);
+  }
+
+  async receiptDetail(userId: string, paymentId: string): Promise<Record<string, unknown>> {
+    requireTenant(this.tenantContext);
+    return this.tenantContext.withTenantConnection(async (client) => {
+      const payment = (await client.query(
+        `SELECT p.*, c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+         FROM payments p JOIN children c ON c.id = p.child_id WHERE p.id = $1`, [paymentId],
+      )).rows[0];
+      if (!payment) throw Errors.notFound();
+      const allowed = await this.canReceiveInvoices(client, userId, payment.child_id);
+      if (!allowed) throw new AppError('PARENT_ACCESS_DENIED', 'Vous n’avez pas l’autorisation pour ce reçu', 'ليس لديك صلاحية لهذا الإيصال', 403);
+      return payment;
+    });
+  }
+
+  private async canReceiveInvoices(client: PoolClient, userId: string, childId: string): Promise<boolean> {
+    const r = await client.query(
+      `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
+       WHERE cg.child_id = $1 AND g.user_id = $2 AND cg.can_receive_invoices = true`,
+      [childId, userId],
+    );
+    return Boolean(r.rows[0]);
+  }
+
+  /** Facture visible ? 404 si absente (RLS tenant), 403 si pas de permission parent. */
+  private async assertInvoicePermission(
+    userId: string,
+    invoiceId: string,
+  ): Promise<{ id: string; organization_id: string; invoice_number: string | null; pdf_url: string | null; child_id: string }> {
+    requireTenant(this.tenantContext);
+    return this.tenantContext.withTenantConnection(async (client) => {
+      const invoice = (await client.query(
+        `SELECT id, organization_id, invoice_number, pdf_url, child_id FROM invoices WHERE id = $1`, [invoiceId],
+      )).rows[0];
+      if (!invoice) throw Errors.notFound();
+      const allowed = await this.canReceiveInvoices(client, userId, invoice.child_id);
+      if (!allowed) throw new AppError('PARENT_ACCESS_DENIED', 'Vous n’avez pas l’autorisation pour cette facture', 'ليس لديك صلاحية لهذه الفاتورة', 403);
+      return invoice;
+    });
+  }
+
+  // ── Santé (permission can_view_health) ────────────────────────────────────
+
+  /** Dossier santé visible parent : allergies + vaccinations + autorisations actives. */
+  async childHealth(userId: string, childId: string, ipAddress?: string): Promise<Record<string, unknown>> {
+    requireTenant(this.tenantContext);
+    const allowed = await this.tenantContext.withTenantConnection(async (client) => {
+      const res = await client.query(
+        `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
+         WHERE cg.child_id = $1 AND g.user_id = $2 AND cg.can_view_health = true`,
+        [childId, userId],
+      );
+      return Boolean(res.rows[0]);
+    });
+    if (!allowed) throw new AppError('PARENT_ACCESS_DENIED', 'Vous n’avez pas l’autorisation pour les données santé', 'ليس لديك صلاحية للبيانات الصحية', 403);
+    const full = await this.health.getRecord(childId, userId, ipAddress);
+    // Le parent ne reçoit pas les notes de confirmation internes (confirmed_by…).
+    return {
+      allergies: full.allergies,
+      vaccinations: full.vaccinations,
+      medication_authorizations: full.medication_authorizations,
+      medication_administrations: ((full.medication_administrations as Array<Record<string, unknown>> | undefined) ?? []).map((m: Record<string, unknown>) => ({
+        administered_at: m.administered_at,
+        dose_given: m.dose_given,
+        observations: m.observations,
+        confirmed: Boolean(m.confirmed_by),
+      })),
+    };
   }
 
   private async assertLinked(userId: string, childId: string): Promise<void> { await this.assertPermission(userId, childId, 'guardian_id'); }

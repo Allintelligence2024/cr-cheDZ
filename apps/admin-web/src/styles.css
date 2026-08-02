@@ -1,0 +1,110 @@
+/* ============================================================================
+ * Responsive admin-web (roadmap v2) — les styles inline existent ; cette
+ * feuille ajoute les MEDIA QUERIES via des classes utilitaires posées par
+ * les composants. Mobile-first : la sidebar devient un tiroir, les tables
+ * défilent horizontalement, les grilles passent en une colonne.
+ * ============================================================================
+
+/* ── Layout : sidebar → tiroir sous 900px ─────────────────────────────────── */
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.layout-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: #0F172A;
+  color: #fff;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-main {
+  flex: 1;
+  padding: 24px;
+  min-width: 0;
+}
+
+/* Bouton burger (mobile uniquement) */
+.layout-burger {
+  display: none;
+  background: transparent;
+  border: 1px solid #334155;
+  color: #E2E8F0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    flex-direction: column;
+  }
+  .layout-sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    flex-wrap: wrap;
+  }
+  .layout-sidebar h1 {
+    margin: 0;
+    font-size: 14px;
+    flex: 1;
+  }
+  .layout-sidebar nav {
+    display: none; /* tiroir : affiché quand .open */
+    width: 100%;
+    order: 10;
+  }
+  .layout-sidebar.open nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .layout-sidebar .sidebar-footer {
+    display: none;
+  }
+  .layout-burger {
+    display: block;
+  }
+  .layout-main {
+    padding: 12px;
+  }
+}
+
+/* ── Tables : scroll horizontal sur petits écrans ─────────────────────────── */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 900px) {
+  .table-scroll table {
+    min-width: 640px;
+  }
+}
+
+/* ── Grilles : une colonne sous 700px ─────────────────────────────────────── */
+.grid-responsive {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 700px) {
+  .grid-responsive {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Cartes : pleine largeur mobile ───────────────────────────────────────── */
+@media (max-width: 700px) {
+  .card-responsive {
+    padding: 12px !important;
+  }
+}

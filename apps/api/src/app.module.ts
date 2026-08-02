@@ -11,16 +11,25 @@ import { HealthController } from './health.controller';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { ChildrenModule } from './modules/children/children.module';
+import { ComplianceModule } from './modules/compliance/compliance.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ExportsModule } from './modules/exports/exports.module';
+import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { JournalModule } from './modules/journal/journal.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { MediaModule } from './modules/media/media.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
 import { ParentsModule } from './modules/parents/parents.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { UsersModule } from './modules/users/users.module';
+import { VideoModule } from './modules/video/video.module';
 
 @Module({
   imports: [
@@ -29,16 +38,25 @@ import { UsersModule } from './modules/users/users.module';
     PrivacyModule,
     IdentityModule,
     UsersModule,
+    VideoModule,
     OrganizationsModule,
     StaffModule,
     ChildrenModule,
     AttendanceModule,
     BillingModule,
+    ComplianceModule,
+    DashboardModule,
+    ExportsModule,
+    HealthModule,
     JournalModule,
+    MarketplaceModule,
     MediaModule,
+    MessagingModule,
+    MetricsModule,
     NotificationsModule,
     SyncModule,
     ParentsModule,
+    PayrollModule,
   ],
   controllers: [HealthController],
   providers: [

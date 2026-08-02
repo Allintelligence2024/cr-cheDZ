@@ -45,3 +45,13 @@ export class SaveNotificationPreferenceDto {
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   quiet_hours_end?: string;
 }
+
+export class InvoiceIdParam {
+  @IsUUID()
+  invoiceId!: string;
+}
+
+export class PaymentIdParam {
+  @IsUUID()
+  paymentId!: string;
+}

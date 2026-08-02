@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class LoginDto {
   @IsEmail({}, { message: 'email invalide' })
@@ -48,6 +48,11 @@ export class TotpDto {
 export class ParentOtpRequestDto {
   @Matches(/^\+?[0-9]{8,15}$/, { message: 'numéro de téléphone invalide' })
   phone!: string;
+
+  /** Canal de livraison de l'OTP (défaut : sms). 'whatsapp' exige le flag global whatsapp_otp. */
+  @IsOptional()
+  @IsIn(['sms', 'whatsapp'], { message: 'canal invalide (sms ou whatsapp)' })
+  channel?: 'sms' | 'whatsapp';
 }
 
 export class ParentOtpVerifyDto extends ParentOtpRequestDto {

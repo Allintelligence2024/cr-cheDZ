@@ -253,14 +253,202 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 
 ---
 
+## 6. Phase 7 — APPLICATION PARENTS + NOTIFICATIONS (TERMINÉE ✅ — API + worker)
+
+### Tâches (faites et validées sur PostgreSQL 18 réel, rôle NOBYPASSRLS)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 7.1 | Portail `/parent/*` : enfants (liste filtrée `can_view_journal`), fil du jour (`can_view_journal`, note privée exclue), absence (2 taps → `markAbsent`), consentements (révocation → effet immédiat), préférences notification + quiet hours, photos avec URL signée (consentement re-vérifié à chaque URL) | `apps/api/src/modules/parents/*` | ✅ |
+| 7.2 | OTP téléphone (bcrypt, 10 min, usage unique, 5 essais max) + PIN haché + login PIN | `modules/identity/auth.service.ts`, migration 025 | ✅ |
+| 7.3 | FCM HTTP v1 (service account) + APNs HTTP/2 direct (JWT ES256) dans le worker ; échec explicite `FCM_NOT_CONFIGURED`/`APNS_NOT_CONFIGURED` sans secret ; jamais de faux statut `sent` (`PUSH_NOT_CONFIGURED_OR_NO_DEVICE`) | `apps/worker/src/main.ts` | ✅ |
+| 7.4 | **Suite `phase7-parent.api.test.mjs` : 11 cas obligatoires, tous verts** | `tests/tenant-isolation/phase7-parent.api.test.mjs` | ✅ |
+
+### Corrections réelles faites pendant la Phase 7 (bugs détectés par les tests)
+1. **Liste enfants** : l'API renvoyait les enfants d'un parent même sans `can_view_journal` → filtre ajouté (le plan exige « uniquement les enfants dont le parent est child_guardians avec can_view_journal »).
+2. **Téléchargement photo** : double `@Param()` cassait la validation (400 permanent) → `@Param('childId')`/`@Param('mediaId')`.
+3. **Révocation consentement INEFFECTIVE** : `photoUrl`/`setVisibility` matchaient n'importe quel ancien enregistrement `granted=true` → « dernier consentement gagne » (DISTINCT ON child_id) — une révocation coupe immédiatement les URLs.
+4. **Login OTP/PIN cassé sous NOBYPASSRLS** : la recherche « user + guardian » interrogeait `guardians` (RLS) sans tenant → toujours 401 en production avec le rôle applicatif → fonction SECURITY DEFINER `auth_parent_lookup_by_phone` (migration 025).
+
+### DoD Phase 7
+- [x] 11/11 cas du GATE parent (feed, absence, photos, révocation, org B, préférences, quiet hours, OTP ×3, PIN, NOBYPASSRLS)
+- [x] Aucune régression : S2, S3, P4, P5, P6 rejoués verts
+- [ ] parent-mobile Flutter : squelette à compléter (SDK absent — `flutter analyze`, widget tests, golden RTL non exécutés)
+- [ ] SMS OTP : Twilio implémenté mais **déclaré non configuré** (erreur `SMS_UNAVAILABLE` 503 sans secrets)
+
+---
+
+## 7. Phase 8 — FACTURATION (TERMINÉE ✅ — API + worker)
+
+### Tâches (faites et validées sur PostgreSQL 18 réel, rôle NOBYPASSRLS)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 8.1 | CRUD contrats + GET listes/détails ; génération mensuelle idempotente (409 + index unique partiel 021) ; job `send_monthly_invoices` (worker) idempotent (ON CONFLICT DO NOTHING) | `modules/billing/*`, `apps/worker/src/main.ts` | ✅ |
+| 8.2 | Paiements espèces (statut `partially_paid`/`paid`), allocations API (bornes paiement puis facture, mêmes règles que le trigger 023), reçus (`receipt_number`), détail paiement + allocations | `billing.service.ts` | ✅ |
+| 8.3 | Caisse quotidienne : ouverture (409 si double), clôture (409 si double, total = somme espèces confirmés du jour/site) | `billing.service.ts` | ✅ |
+| 8.4 | Webhook de paiement : HMAC-SHA256 sur corps brut (`PAYMENT_WEBHOOK_SECRET`), idempotent par `external_reference` (3× = 1 paiement), 401 signature invalide, 503 si non configuré — fonction SECURITY DEFINER `billing_webhook_apply` (migration 024) | `billing.controller.ts`, migration 024 | ✅ |
+| 8.5 | PDF facture : généré par le worker (écrivain PDF réel, zéro dépendance lourde), stocké backend explicite (`STORAGE_BACKEND=local` ou `s3`), servi par endpoint autorisé (directeur/comptable + parent `can_receive_invoices`), accès journalisé (data_access_logs) | `apps/worker/src/pdf.ts`, `billing/pdf-storage.service.ts` | ✅ |
+| 8.6 | Worker sous NOBYPASSRLS : claim/fin de jobs via `jobs_claim_next()`/`jobs_finish()` (SECURITY DEFINER 024, corrigées 026-028), accès données via `SET LOCAL app.tenant_id` | `apps/worker/src/main.ts` | ✅ |
+| 8.7 | Accès parent lecture seule : `GET /parent/invoices`, `/parent/invoices/:id`, `/parent/invoices/:id/pdf`, `/parent/receipts`, `/parent/receipts/:id` — permission `can_receive_invoices` | `modules/parents/*` | ✅ |
+| 8.8 | **Suite `phase8-billing.api.test.mjs` : 16 cas obligatoires, tous verts** | `tests/tenant-isolation/phase8-billing.api.test.mjs` | ✅ |
+
+### Migrations ajoutées (immutables, ADR-007)
+- **024** : `billing_webhook_apply` (SECURITY DEFINER), `jobs_claim_next`, `jobs_finish`, index `idx_payments_child`
+- **025** : `auth_parent_lookup_by_phone` (SECURITY DEFINER — bootstrap login parent)
+- **026-028** : corrections `CREATE OR REPLACE` de `jobs_claim_next` (ambiguïtés de colonnes OUT — jamais de modification des migrations déjà appliquées)
+
+### DoD Phase 8
+- [x] 16/16 cas du GATE facturation (isolation A/B, idempotence mensuelle, solde, bornes DB, immuabilité, webhook ×3, caisse ×2, PDF worker, accès parent)
+- [x] Aucune régression : S2, S3, P4, P5, P6, P7 rejoués verts
+- [ ] PDF bilingue AR : la composition arabe exige l'embedding d'une police GSUB (corps FR en Helvetica/WinAnsi — limitation documentée)
+- [ ] Exports Excel (worker) : stub `NOT_IMPLEMENTED`
+- [ ] `send_monthly_invoices` job : implémenté, non couvert par un test dédié (l'idempotence mensuelle est testée via l'API + index 021)
+
+---
+
+## 8. Phase 9 — ADMINISTRATION WEB COMPLÈTE (API ✅ + écrans web ✅, e2e ⏳)
+
+### Tâches (faites et validées)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 9.1 | **Tableau de bord** : `GET /dashboard/summary` — présences du jour par salle (site/salle/total/présents/départs/absents/attendus) + alertes (enfants non pointés, documents expirant 30 j, factures impayées, incidents 24 h), strictement tenant-scoped | `apps/api/src/modules/dashboard/*`, `DashboardPage.tsx` | ✅ |
+| 9.2 | **Présences web** : vue jour par salle, arrivée/départ/absent/correction tracée (motif obligatoire), statuts colorés | `AttendancePage.tsx` | ✅ |
+| 9.3 | **Journal + modération** : liste par enfant/date, correction append-only signalée, bascule de visibilité parent par la directrice ; note privée jamais visible (422 `NOTE_IS_PRIVATE`) | `PATCH /journal/events/:id/visibility`, `JournalPage.tsx` | ✅ |
+| 9.4 | **Photos** : validation visibilité parents (consentement re-vérifié), téléchargement URL signée | `MediaPage.tsx` | ✅ |
+| 9.5 | **Facturation web** : contrats (création + liste), factures (génération + statuts + PDF), paiements espèces, caisse (ouverture/clôture + registres) | `BillingPage.tsx` | ✅ |
+| 9.6 | **Fiche enfant** : historique `room_moves` + `child_status_history` ajouté à `GET /children/:id` | `children.service.ts`, `ChildrenPage.tsx` | ✅ |
+| 9.7 | **Paramètres org + tarifs** (affichage exigé 19-253) : infos org + contrats actifs affichés | `OrgSettingsPage.tsx` | ✅ |
+| 9.8 | **i18n AR/FR** : ~150 nouvelles clés (dashboard, présences, journal, photos, facturation, fiche, paramètres) ; RTL via `dir` existant | `packages/i18n/src/index.ts` | ✅ |
+| 9.9 | **Performance** : pages Phase 9 en `React.lazy` — bundle principal **63,7 kB gzip** (< 250 kB) | `App.tsx` | ✅ |
+| 9.10 | **E2E Playwright** : config à 2 webServer (API 3000 + Vite 4000), spec `director-flow.spec.ts` (login → pointage → facture), seed-e2e enrichi (site/salle/enfant/contrat, bug ESM `return` corrigé) | `playwright.config.ts`, `e2e/director-flow.spec.ts`, `seed-e2e.mjs` | ⏳ **écrit, non exécuté** (aucun navigateur installable dans la sandbox) |
+| 9.11 | **Test d'isolation Phase 9** : `phase9-dashboard.api.test.mjs` — 7 cas (22 assertions) verts sur PostgreSQL réel NOBYPASSRLS | `tests/tenant-isolation/phase9-dashboard.api.test.mjs` | ✅ |
+
+### DoD Phase 9
+- [x] Tous les flux métier du quotidien réalisables via l'API (dashboard, pointage, journal, photos, facturation, caisse — smoke testé via proxy Vite)
+- [x] Isolation : dashboard/modération/fiche de A invisibles pour B (404/vides, testé)
+- [x] AR RTL : clés complètes + `dir` document-wide (golden RTL ⏳ SDK absent)
+- [x] Correction de présence tracée (motif obligatoire, événements append-only Phase 5)
+- [ ] Playwright e2e exécuté (bloqué : navigateur indisponible)
+- [ ] Messagerie (écran web) : non implémentée (backend non implémenté)
+
+---
+
+## 9. Phase 10 — SANTÉ, CONFORMITÉ, VIE PRIVÉE, CONSOLE SUPPORT (API ✅ + console ✅)
+
+### Tâches (faites et validées sur PostgreSQL 18 réel, rôle NOBYPASSRLS)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 10.1 | **Santé** : dossier médical (upsert), allergies, vaccinations, autorisations de médicaments (consentement gardien), administrations en double saisie (qui donne / qui confirme — 422 même personne, 409 double confirmation), gardes période (422 `MEDICATION_OUTSIDE_AUTH`) et autorisation active (422) ; lectures journalisées (`data_access_logs`) | `modules/health/*`, `phase10-health.api.test.mjs` | ✅ (11 cas) |
+| 10.2 | **Accès parent santé** : `GET /parent/children/:id/health` verrouillé par `can_view_health` (403 sinon) | `modules/parents/*` | ✅ |
+| 10.3 | **Conformité 19-253** : `GET /compliance/summary` (CAP_150, RATIO_EDUC, AGE_CRECHE, DOC_STAFF, PRICE_DISPLAY) persisté dans `compliance_checks` ; `GET /compliance/checks` ; accusé de réception directrice ; **capacité enforceée** : création + import → 409 `CAPACITY_EXCEEDED` | `modules/compliance/*`, `children.service.ts`, `import.service.ts`, `phase10-compliance.api.test.mjs` | ✅ (7 cas) |
+| 10.4 | **Vie privée 25-11** : demandes de droits (access/rectification/opposition, deadline 30 j), export JSON complet d'un enfant persisté (`privacy_request_exports`), violations (échéance ANPDP +5 j, notification SMTP réelle via nodemailer ou 503 explicite), DPIA liées au registre, registre des traitements seedé (015) avec lignes modèle | `modules/privacy/*`, migrations 029-032, `seeds/015_privacy_registry.sql`, `phase10-privacy.api.test.mjs` | ✅ (11 cas) |
+| 10.5 | **Console support** (API + UI React) : recherche globale cross-tenant (`support_global_search`), impersonation auditée (motif en `audit_logs`), jobs (liste + retry, `support_list_jobs`/`support_retry_job`) ; UI : login super_admin, onglets Recherche/Jobs/Impersonation (48 kB gzip) | `modules/privacy/privacy.service.ts` (support), `apps/support-console/*` | ✅ |
+
+### Migrations ajoutées (immuables, ADR-007)
+- **029** : `privacy_violations`, `privacy_request_exports`, `privacy_dpias` (RLS) + `support_global_search`/`support_list_jobs`/`support_retry_job` (SECURITY DEFINER)
+- **030/031** : registre des traitements — lignes modèle visibles (politique élargie) + colonne `organization_id` nullable
+- **032** : correction `support_list_jobs` (cast enum `job_status` → text)
+
+### DoD Phase 10
+- [x] 29 cas phase10 verts (santé 11, conformité 7, vie privée/support 11) + non-régression S2→P9
+- [x] Impersonation tracée (audit `impersonate` + motif) ; recherche globale restreinte super_admin
+- [x] 151e enfant refusé (409, testé création + import) ; violations chrono 5 j ; DPIA ; export droits testé
+- [ ] Notification ANPDP réelle (SMTP) non testée de bout en bout (pas de serveur SMTP dans la sandbox — chemin 503 testé)
+- [ ] Rétention/purge (job d'archivage 5 ans) non implémentée
+- [x] Écrans admin-web santé + conformité (Phase 10 UI) — pages HealthPage/CompliancePage (i18n AR/FR)
+- [ ] Écran admin-web violations/DPIA : non implémenté (API prête)
+
+---
+
+## 10. Phase 11 — DURCISSEMENT, OBSERVABILITÉ, PERFORMANCE (EN COURS ✅)
+
+### Tâches (faites et validées sur PostgreSQL 18 réel, rôle NOBYPASSRLS)
+
+| # | Tâche | Fichiers | Statut |
+|---|---|---|---|
+| 11.1 | **Métriques Prometheus** : `GET /api/v1/metrics` public (format text), compteurs HTTP (méthode/route/statut) via middleware, histogramme de durée, métriques métier (jobs en attente, notifications en file, factures impayées), uptime — **aucune PII** (testé) | `modules/metrics/*`, `shared/metrics.middleware.ts` | ✅ |
+| 11.2 | **Rétention 5 ans** : fonction `retention_purge_logs` SECURITY DEFINER (migration 034) + job worker `retention_purge` (`RETENTION_DAYS`, défaut 1825) ; purge par lots d'audit_logs, data_access_logs, media_access_logs (RLS) | migrations 033-034, `worker/src/main.ts` | ✅ |
+| 11.3 | **Index Phase 11** : revue des requêtes chaudes → 7 index (guardians(user_id), fil du jour, inbox, contrats, caisse, allocations, incidents) | migration 033 | ✅ |
+| 11.4 | **Idempotence mensuelle testée** : job `send_monthly_invoices` — 2 contrats actifs + 1 inactif → 2 factures avec lignes ; seconde exécution → 0 nouvelle | `phase11-hardening.api.test.mjs` | ✅ |
+| 11.5 | **Sécurité dépendances** : @nestjs/config 4.0.4, nodemailer 9.0.3, overrides lodash/body-parser ; `npm audit --omit=dev` ramené à des résidus documentés (migration NestJS 11 planifiée) — `SECURITY.md` | `package.json`, `SECURITY.md` | ✅ |
+| 11.6 | **Healthcheck public** : `GET /api/v1/health` sans JWT (bug préexistant corrigé — healthchecks CI/nginx/Playwright échouaient) | `health.controller.ts` | ✅ |
+| 11.7 | **Feature flags (console)** : `GET/POST /support/flags` (super_admin, fonctions SECURITY DEFINER 035) + onglet Flags de la console support | migration 035, `privacy.service.ts`, support-console | ✅ |
+| 11.8 | **Écrans admin-web santé + conformité** (complétion Phase 10 UI) : dossier/allergies/vaccinations/médicaments + double saisie ; checks 19-253 + accusé de réception ; i18n AR/FR | `HealthPage.tsx`, `CompliancePage.tsx` | ✅ |
+| 11.9 | **Ops** : `scripts/backup.sh` (pg_dump + gzip + GPG AES256, rétention 7 j), `scripts/anonymize.sql` (pseudonymisation staging + garde-fou), `docs/RUNBOOK.md`, `tests/load/sync.k6.js`, `apps/worker/Dockerfile` | scripts/, docs/, tests/load/ | ✅ (k6 non exécuté) |
+| 11.10 | **CI** : workflows restaurés (ci.yml : database/API/web/security/e2e ; docker.yml) — **bloqués par la permission `workflows` de la GitHub App** (voir CI-RESTORE.md) | `.github/workflows/*` | ⏳ locaux uniquement |
+| 11.11 | **Suite `phase11-hardening.api.test.mjs`** : 4 volets verts sur PostgreSQL réel NOBYPASSRLS | `tests/tenant-isolation/phase11-hardening.api.test.mjs` | ✅ |
+
+### Bugs réels corrigés pendant la Phase 11
+1. **/metrics → 401 permanent** : la méthode `metrics()` entrait en conflit avec la propriété injectée `metrics` du contrôleur → renommée `index()` (handler public OK).
+2. **/health → 401** : le healthcheck était protégé par JWT (bug préexistant) → `@Public()`.
+3. **npm audit** : @nestjs/config 3→4 (worker inclus), nodemailer 6→9, overrides lodash 4.18.1/body-parser 1.20.6 (override bloqué par npm pour body-parser — documenté).
+
+### DoD Phase 11
+- [x] /metrics Prometheus public sans PII (testé) ; rétention 5 ans testée (3 journaux, dont RLS)
+- [x] Index chauds ajoutés (033) ; idempotence mensuelle worker testée ; healthcheck public
+- [x] npm audit : résidus documentés + plan NestJS 11 ; SECURITY.md
+- [ ] e2e Playwright : écrit (phase 9), non exécuté (navigateur indisponible) — à exécuter en CI une fois les workflows restaurés
+- [ ] k6 : script écrit, non exécuté (k6 absent de la sandbox)
+- [ ] Sentry, Grafana, backups programmés (cron), exercice de restauration chronométré : à mettre en place avec l'infrastructure réelle
+
+---
+
+## 11. Phase 12 — PILOTES ET MISE EN PRODUCTION (OUTILLAGE ✅ — EXÉCUTION TERRAIN ⏳)
+
+### Livré et testé dans cette session
+
+| # | Élément | Fichiers | Statut |
+|---|---|---|---|
+| 12.1 | **Seed des 5 crèches pilotes** : organisations + site + 3 salles + 15 enfants + directrice/2 éducatrices/comptable + contrats + parents — idempotent ; login réel vérifié (dashboard 3 salles, 15 enfants) | `scripts/pilot/seed-pilot.mjs` | ✅ |
+| 12.2 | **Benchmark MVP** sur PostgreSQL réel + API compilée (NOBYPASSRLS) : pointage 12 enfants 0,09 s (< 180 s), repas groupé 0,04 s (< 30 s), facture 0,008 s (< 5 s), import 50 enfants 0,06 s (< 60 s) — 4/4 | `tests/load/mvp-bench.mjs` | ✅ |
+| 12.3 | **Rapport de préparation** : 19/19 vérifications OK (migrations, schema-check, GATE RLS, 14 suites présentes), checklist MVP 7/10 pass + 3 na (infra réelle) | `scripts/pilot/pilot-report.mjs`, `docs/pilot/RAPPORT-PREPARATION.md` | ✅ |
+| 12.4 | **Jauges de suivi pilote** dans /metrics : `creche_children_active` (75 attendus), `creche_checkins_today`, `creche_sync_ops_24h`, `creche_jobs_failed_24h`, `creche_http_5xx_24h` (fenêtre glissante) | `modules/metrics/metrics.service.ts` | ✅ |
+| 12.5 | **Onboarding** (directrice, éducatrice, parent), comptes de test, canal feedback | `docs/pilot/ONBOARDING.md` | ✅ |
+| 12.6 | **Checklist 2 semaines** (journal quotidien, mesures, go/no-go, journal des irritants) | `docs/pilot/CHECKLIST_PILOTE.md` | ✅ |
+| 12.7 | **QR de partage d'app** (parents + staff) — URL stores à remplacer | `docs/pilot/qr-app-*.png` | ✅ |
+| 12.8 | **Roadmap v2** (paiement en ligne, messagerie, NestJS 11, stores, multi-rôles…) | `docs/ROADMAP_V2.md` | ✅ |
+| 12.9 | **Runbook §8 suivi pilote** + **template de bilan** go/no-go | `docs/RUNBOOK.md`, `docs/pilot/BILAN-PILOTE.md` | ✅ |
+| 12.10 | Non-régression complète : 14/14 suites vertes (S2 → P11) | — | ✅ |
+
+## 12. ROADMAP V2 — PREMIERS LIVRABLES (EN COURS ✅)
+
+| # | Livrable | Fichiers | Statut |
+|---|---|---|---|
+| v2.1 | **Exports Excel** : table `report_exports` (migration 038), job worker `export_report` (exceljs, présences + factures), API `POST/GET /exports` + `GET /exports/:id/download` (buffer local ou URL signée S3), 409 EXPORT_NOT_READY avant traitement | `apps/worker/src/exports.ts`, `modules/exports/*`, migration 038 | ✅ |
+| v2.2 | **Écran web messagerie** : liste des conversations (cliquable), fil de messages, envoi, création (enfant + sujet), marquage lu — `Table` du design-system étendue (onRowClick) ; i18n FR/AR | `MessagingPage.tsx`, `components.tsx`, i18n | ✅ |
+| v2.3 | Test d'isolation **phase13-exports** : 8 cas (done + magic PK + contenu vérifié via exceljs, isolation B 404, EXPORT_NOT_READY, rien écrit croisé) | `phase13-exports.api.test.mjs` | ✅ |
+| v2.4 | **PDF bilingue AR** : pdfkit + police Noto Naskh Arabic EMBARQUÉE (GSUB — ligatures arabes réelles) ; assertion phase8 (police + ToUnicode) | `apps/worker/src/pdf.ts`, phase8 | ✅ |
+| v2.5 | **Paiement en ligne CIB/Edahabia** : adaptateur SATIM (flag 422, non configuré 503, init HTTP HMAC réel, 502 + failed), webhook confirme le pending (migration 039 — bug réel), test phase14 (8 cas, mock HTTP local) | `payment-provider.service.ts`, migration 039 | ✅ |
+| v2.6 | **Écrans web exports + vie privée** (registre, DPIA, demandes, violations) — smoke testé en réel | `ExportsPage.tsx`, `PrivacyPage.tsx` | ✅ |
+| v2.7 | **Multi-rôles + WhatsApp + responsive + paie + marketplace** (phases 15-18 : migrations 040-044, écrans Personnel/Paie, page vitrine) | `modules/users`, `modules/payroll`, `modules/marketplace`, `shared/whatsapp` | ✅ |
+| v2.8 | **OTP parent via WhatsApp** (phase19) : `otp_codes.channel` (migration 045), DTO `channel` (sms défaut), flag global `whatsapp_otp` (422 WHATSAPP_OTP_DISABLED sans flag, bilingue), envoi réel API Graph hors test (503 WHATSAPP_NOT_CONFIGURED sans config — jamais de faux « envoyé »), roundtrip complet | `auth.service.ts`, `auth.dto.ts`, migration 045, `phase19-whatsapp-otp.api.test.mjs` (7 cas) | ✅ |
+| v2.9 | **Verrou DPIA vidéosurveillance (loi 25-11)** (phase20) : DPIA rédigée (`docs/regulatory/DPIA-VIDEOSURVEILLANCE.md`), `processing_registry.requires_dpia` + modèle « Vidéosurveillance des locaux » inactif (migration 046), fonction `privacy_approved_dpia_exists` (SECURITY DEFINER), garde-fou `setFlag` (422 DPIA_REQUIRED / VIDEO_SURVEILLANCE_GLOBAL_FORBIDDEN) | `privacy.service.ts`, migration 046, `phase20-video-dpia-gate.api.test.mjs` (8 cas) | ✅ |
+| v2.10 | **Module vidéosurveillance V1** (phase21) : caméras (zones blanches DPIA + CHECK), clips DVR/NVR (presign S3, backend local explicite), download signé + flux local avec **visionnage journalisé** (read), purge worker 30 j (stockage d'abord — S3 injoignable → job failed, jamais de fausse purge), écran `VideoPage` (flag off → notice conformité), i18n FR/AR. Bug réel corrigé : `jobs_finish` enum cast (migration 048) — le chemin d'échec des jobs + retry étaient cassés depuis 024 | `modules/video/*`, worker, migration 047-048, `phase21-video-surveillance.api.test.mjs` (8 cas) | ✅ |
+
+### Reste (exécution terrain — ne peut pas être fait dans la sandbox)
+- 5 crèches réelles × 2 semaines d'utilisation quotidienne (journal signé).
+- Builds stores (Play Console / App Store), DNS/TLS, device farm Android 2 Go RAM.
+- FCM/APNs/SMS de bout en bout (secrets), notifications < 30 s mesurées sur le terrain.
+- Exercice de restauration chronométré (< 30 min) et rollback testé sur l'infrastructure réelle.
+- Bilan pilote rempli + décision go/no-go.
+
+---
+
 ## 6. Phases suivantes (résumé exécutif — détail dans PLAN_IMPLEMENTATION.md §3)
 
 | Phase | S | Livrable clé | Critère de sortie |
 |---|---|---|---|
 | **P5 — Présences + sync** | ✅ FAIT | Machine à états, push/pull (curseur sync_seq), idempotence, 200 ops offline | 34/34 tests verts |
-| **P6 — Journal + médias** | S6 | Événements journal, photos via URL signée MinIO, actions groupées, consentements photo | Repas groupé 12 enfants < 30 s ; 200 événements offline |
-| **P7 — App parents** | EN COURS | Portail `/parent/*`, OTP + PIN, consentements à révocation immédiate, quiet hours, FCM HTTP v1 et test d’isolation parent vert sur PostgreSQL embedded | Adapter SMS, APNs direct et app Flutter complète/golden RTL restent à finaliser |
-| **P8 — Facturation** | EN COURS | API contrats, génération mensuelle idempotente et paiement espèces avec allocation bornée en DB (migration 023) | PDF worker, caisse, webhooks et suite PostgreSQL d’isolation complète à terminer |
+| **P6 — Journal + médias** | ✅ FAIT | Événements journal, photos via URL signée MinIO, actions groupées, consentements photo | Repas groupé 12 enfants < 30 s ; 200 événements offline |
+| **P7 — App parents** | ✅ FAIT (API) | Portail `/parent/*` (feed, absence, consentements à révocation immédiate, préférences/quiet hours, photos signées), OTP téléphone + PIN, FCM HTTP v1 + APNs direct (worker) | **11/11 cas verts** sur PostgreSQL réel NOBYPASSRLS ; Flutter parent-mobile + golden RTL non exécutés (SDK absent) ; SMS Twilio déclaré non configuré |
+| **P8 — Facturation** | ✅ FAIT (API + worker) | Contrats, génération mensuelle idempotente (index 021), paiements espèces, allocations bornées (trigger 023), caisse, reçus, webhook signé/idempotent (024), PDF worker (local/S3) | **16/16 cas verts** sur PostgreSQL réel NOBYPASSRLS ; PDF AR (composition arabe) et exports Excel non implémentés |
+| **P9 — Admin web** | ✅ API + écrans web | Dashboard réel (présences/jour + alertes), présences (pointage + corrections), journal (modération directrice), photos (validation visibilité), facturation (contrats/factures/paiements/caisse), fiche enfant (historique), paramètres org (tarifs 19-253) — bundle 63,7 kB gzip (lazy) | **7 cas phase9 verts** sur PostgreSQL réel NOBYPASSRLS ; Playwright e2e écrit mais NON exécuté (navigateur indisponible dans la sandbox) ; messagerie non implémentée |
+| **P10 — Santé, conformité, vie privée, support** | ✅ API + console + écrans web | Santé (dossier, allergies, vaccinations, médicaments double saisie, accès parent can_view_health), conformité 19-253 (checks + capacité enforceée 409), vie privée 25-11 (demandes + export JSON, violations chrono 5 j ANPDP, DPIA, registre seedé), console support (recherche, impersonation auditée, jobs retry, feature flags) — migrations 029-032 + écrans admin-web Santé/Conformité | **3 suites phase10 (29 cas) vertes** ; notification ANPDP réelle (SMTP) non testée de bout en bout (pas de SMTP) |
+| **P11 — Durcissement** | ✅ FAIT | /metrics Prometheus (sans PII), rétention 5 ans (job retention_purge), index Phase 11 (033-034), idempotence mensuelle testée (worker), npm audit durci (config 4/nodemailer 9/overrides), health public, backup chiffré, anonymisation staging, runbook, k6 script, SECURITY.md | **suite phase11 verte** ; migration NestJS 11 planifiée ; e2e Playwright et k6 non exécutés (outils absents) |
+| **P12 — Pilotes + production** | ✅ outillage + durcissement, ⏳ terrain | Seed 5 crèches pilotes, rapport de préparation (19/19 checks), benchmark MVP 4/4, jauges pilote /metrics + console « Suivi pilote » (support_pilot_summary), onboarding/checklist/QR/bilan pré-rempli (mesures réelles), **NestJS 11 + React 19 migrés (npm audit 0)**, **messagerie v2 (7 cas)** | **exécution terrain requise** (5 crèches × 2 semaines, stores, DNS/TLS, device farm, FCM/APNs/SMS réels, exercice restauration) — cf. RAPPORT-PREPARATION.md et BILAN-PILOTE.md |
 
 ---
 

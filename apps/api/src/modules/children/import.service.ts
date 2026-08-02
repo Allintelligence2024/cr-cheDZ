@@ -3,6 +3,7 @@ import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AuditService } from '../privacy/audit.service';
+import { AppError } from '../../shared/errors';
 import { ImportChildRowDto, type ImportError, type ImportResult } from './dto/import.dto';
 
 const VALID_GENDERS = new Set(['M', 'F']);
@@ -45,6 +46,9 @@ export class ImportService {
     let inserted = 0;
     if (validRows.length > 0) {
       inserted = await this.tenantContext.withTenantConnection(async (client) => {
+        // Capacité maximale (décret 19-253) : le lot ne doit pas dépasser
+        // organizations.max_children. Sinon refus global (409 CAPACITY_EXCEEDED).
+        await this.assertCapacity(client, tenantId, validRows.length);
         let count = 0;
         for (const { row } of validRows) {
           // Lignes validées par validateRow : les champs requis existent.
@@ -70,6 +74,23 @@ export class ImportService {
     });
 
     return { dry_run: false, inserted, errors };
+  }
+
+  /** Capacité maximale d'enfants actifs (décret 19-253) — 409 CAPACITY_EXCEEDED. */
+  private async assertCapacity(client: PoolClient, tenantId: string, additional: number): Promise<void> {
+    const org = (await client.query(`SELECT max_children FROM organizations WHERE id=$1`, [tenantId])).rows[0];
+    const count = (await client.query(
+      `SELECT COUNT(*)::int AS n FROM children WHERE organization_id=$1 AND deleted_at IS NULL AND status='active'`, [tenantId],
+    )).rows[0].n as number;
+    const max = Number(org?.max_children ?? 150);
+    if (count + additional > max) {
+      throw new AppError(
+        'CAPACITY_EXCEEDED',
+        `Capacité maximale atteinte (${max} enfants) — décret 19-253`,
+        `تم بلوغ السعة القصوى (${max} طفلاً) — المرسوم 19-253`,
+        409,
+      );
+    }
   }
 
   private validateRow(row: ImportChildRowDto): Array<{ field: string; message_fr: string; message_ar: string }> {

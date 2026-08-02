@@ -9,6 +9,7 @@ import { DevicesService } from './devices.service';
 import { SessionsService } from './sessions.service';
 import { TotpService } from './totp.service';
 import { SmsService } from '../../shared/sms/sms.service';
+import { WhatsAppService } from '../../shared/whatsapp/whatsapp.service';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { SmsService } from '../../shared/sms/sms.service';
     }),
   ],
   controllers: [AuthController, DevicesController],
-  providers: [AuthService, SessionsService, DevicesService, TotpService, SmsService],
+  providers: [AuthService, SessionsService, DevicesService, TotpService, SmsService, WhatsAppService],
   exports: [SessionsService, TotpService],
 })
 export class IdentityModule {}

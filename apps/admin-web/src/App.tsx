@@ -1,11 +1,9 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
-import React from 'react';
+import { NavLink, Navigate, Route, Routes } from 'react-router';
+import React, { lazy, Suspense } from 'react';
 import { tokens } from '@creche/design-system';
 import { useAuth } from './auth/AuthContext';
 import { useI18n } from './i18n';
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage';
-import { ChildrenPage } from './pages/ChildrenPage';
-import { DashboardPage } from './pages/DashboardPage';
 import { InvitationsPage } from './pages/InvitationsPage';
 import { LoginPage } from './pages/LoginPage';
 import { OrganizationsPage } from './pages/OrganizationsPage';
@@ -13,30 +11,67 @@ import { RoomsPage } from './pages/RoomsPage';
 import { SitesPage } from './pages/SitesPage';
 import { StaffPage } from './pages/StaffPage';
 
+// Chargement différé des écrans Phase 9 (bundle < 250 Ko gzip, critère perf).
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const AttendancePage = lazy(() => import('./pages/AttendancePage').then((m) => ({ default: m.AttendancePage })));
+const JournalPage = lazy(() => import('./pages/JournalPage').then((m) => ({ default: m.JournalPage })));
+const MediaPage = lazy(() => import('./pages/MediaPage').then((m) => ({ default: m.MediaPage })));
+const MessagingPage = lazy(() => import('./pages/MessagingPage').then((m) => ({ default: m.MessagingPage })));
+const ExportsPage = lazy(() => import('./pages/ExportsPage').then((m) => ({ default: m.ExportsPage })));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then((m) => ({ default: m.PrivacyPage })));
+const PayrollPage = lazy(() => import('./pages/PayrollPage').then((m) => ({ default: m.PayrollPage })));
+const VideoPage = lazy(() => import('./pages/VideoPage').then((m) => ({ default: m.VideoPage })));
+const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then((m) => ({ default: m.MarketplacePage })));
+const BillingPage = lazy(() => import('./pages/BillingPage').then((m) => ({ default: m.BillingPage })));
+const ChildrenPage = lazy(() => import('./pages/ChildrenPage').then((m) => ({ default: m.ChildrenPage })));
+const CompliancePage = lazy(() => import('./pages/CompliancePage').then((m) => ({ default: m.CompliancePage })));
+const HealthPage = lazy(() => import('./pages/HealthPage').then((m) => ({ default: m.HealthPage })));
+const OrgSettingsPage = lazy(() => import('./pages/OrgSettingsPage').then((m) => ({ default: m.OrgSettingsPage })));
+
 function Layout({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { logout, user } = useAuth();
   const { t, locale, setLocale, dir } = useI18n();
+  const [navOpen, setNavOpen] = React.useState(false);
 
   const navItems = [
     { to: '/', label: t('nav.dashboard') },
+    { to: '/attendance', label: t('nav.attendance') },
+    { to: '/journal', label: t('nav.journal') },
+    { to: '/media', label: t('nav.media') },
+    { to: '/messaging', label: t('nav.messaging') },
+    { to: '/exports', label: t('nav.exports') },
+    { to: '/privacy', label: t('nav.privacy') },
+    { to: '/payroll', label: t('nav.payroll') },
+    { to: '/video', label: t('nav.video') },
+    { to: '/marketplace', label: t('nav.marketplace') },
+    { to: '/billing', label: t('nav.billing') },
+    { to: '/health', label: t('nav.health') },
+    { to: '/compliance', label: t('nav.compliance') },
     { to: '/sites', label: t('nav.sites') },
     { to: '/rooms', label: t('nav.rooms') },
     { to: '/children', label: t('nav.children') },
     { to: '/staff', label: t('nav.staff') },
     { to: '/invitations', label: t('nav.invitations') },
+    { to: '/settings', label: t('nav.settings') },
     ...(user?.is_super_admin ? [{ to: '/organizations', label: t('nav.organizations') }] : []),
   ];
 
+  const closeNav = (): void => setNavOpen(false);
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: tokens.typography.fontFamily, background: tokens.colors.background }} dir={dir}>
-      <aside style={{ width: 240, background: '#0F172A', color: '#fff', padding: tokens.spacing.md }}>
-        <h1 style={{ fontSize: 15, margin: '0 0 24px', padding: '8px 4px' }}>🏫 {t('app.title')}</h1>
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div className={`layout ${navOpen ? 'sidebar-open' : ''}`} style={{ fontFamily: tokens.typography.fontFamily, background: tokens.colors.background }} dir={dir}>
+      <aside className={`layout-sidebar ${navOpen ? 'open' : ''}`}>
+        <h1 style={{ fontSize: 15, padding: '8px 4px' }}>🏫 {t('app.title')}</h1>
+        <button className="layout-burger" onClick={() => setNavOpen(!navOpen)} aria-label="Menu">
+          {navOpen ? '✕' : '☰'}
+        </button>
+        <nav>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === '/'}
+              onClick={closeNav}
               style={({ isActive }) => ({
                 color: isActive ? '#fff' : '#94A3B8',
                 textDecoration: 'none',
@@ -50,7 +85,7 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
             </NavLink>
           ))}
         </nav>
-        <div style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="sidebar-footer" style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
             onClick={() => setLocale(locale === 'fr' ? 'ar' : 'fr')}
             style={{ background: 'transparent', border: `1px solid #334155`, color: '#E2E8F0', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}
@@ -65,7 +100,9 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
           </button>
         </div>
       </aside>
-      <main style={{ flex: 1, padding: tokens.spacing.lg }}>{children}</main>
+      <main className="layout-main">
+        <Suspense fallback={<div style={{ padding: 48 }}>{t('common.loading')}</div>}>{children}</Suspense>
+      </main>
     </div>
   );
 }
@@ -91,12 +128,25 @@ export function AppRoutes(): React.JSX.Element {
     <Layout>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/journal" element={<JournalPage />} />
+        <Route path="/media" element={<MediaPage />} />
+        <Route path="/messaging" element={<MessagingPage />} />
+        <Route path="/exports" element={<ExportsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/payroll" element={<PayrollPage />} />
+        <Route path="/video" element={<VideoPage />} />
+        <Route path="/marketplace" element={<MarketplacePage />} />
+        <Route path="/billing" element={<BillingPage />} />
+        <Route path="/health" element={<HealthPage />} />
+        <Route path="/compliance" element={<CompliancePage />} />
         <Route path="/organizations" element={<OrganizationsPage />} />
         <Route path="/sites" element={<SitesPage />} />
         <Route path="/rooms" element={<RoomsPage />} />
         <Route path="/children" element={<ChildrenPage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/invitations" element={<InvitationsPage />} />
+        <Route path="/settings" element={<OrgSettingsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
