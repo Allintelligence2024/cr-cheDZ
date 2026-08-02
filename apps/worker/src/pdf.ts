@@ -1,18 +1,17 @@
 /**
  * Génération de PDF de facture + stockage (backend local ou S3/MinIO).
  *
- * - Le générateur est un écrivain PDF minimal mais RÉEL : fichier PDF 1.4
- *   valide (catalogue, pages, polices WinAnsi, xref, trailer) — vérifié par
- *   les tests (en-tête %PDF, lecture par l'API, contenu texte).
- * - Le corps est en français (Helvetica/WinAnsi) : la composition arabe dans
- *   un PDF exige l'embedding d'une police avec tables GSUB (limitation
- *   documentée — pas de fausse promesse d'un PDF AR).
+ * - PDF BILINGUE FR/AR généré par pdfkit (fontkit) avec la police arabe
+ *   Noto Naskh Arabic EMBARQUÉE (paquet @embedpdf/fonts-arabic) : fontkit
+ *   applique la composition GSUB (ligatures, formes contextuelles) — l'arabe
+ *   s'affiche correctement, pas seulement des glyphes isolés.
  * - Stockage explicitement configuré : STORAGE_BACKEND=local (STORAGE_LOCAL_DIR)
  *   ou STORAGE_BACKEND=s3 (S3/MinIO via S3_*). Jamais d'envoi sans config.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import PDFDocument from 'pdfkit';
 
 export interface InvoiceLineData {
   description: string;
@@ -34,79 +33,92 @@ export interface InvoicePdfData {
   generatedAt: string;
 }
 
-const esc = (s: string): string => s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 const fmt = (n: number): string =>
   n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     .replace(/[\u202f\u00a0]/g, ' ');
 
-const text = (s: string, size: number, x: number, y: number, font = 'F1'): string =>
-  `BT /${font} ${size} Tf ${x} ${y} Td (${esc(s)}) Tj ET`;
-const hrule = (y: number): string => `0.6 w 0.55 0.55 0.55 RG 50 ${y} m 545 ${y} l S 0 0 0 RG`;
+/** Construit un PDF A4 bilingue (FR + AR) avec en-tête, lignes et totaux. */
+export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 48, bufferPages: true });
 
-/** Construit un PDF A4 (595×842 pt) avec en-tête, lignes et totaux. */
-export function buildInvoicePdf(data: InvoicePdfData): Buffer {
-  const c: string[] = [];
-  c.push(text('FACTURE', 20, 50, 800));
-  c.push(text(`N° ${data.invoiceNumber}`, 11, 50, 780));
-  c.push(text(`Période : ${data.periodLabel}`, 10, 50, 766));
-  c.push(text(`Échéance : ${data.dueDate}`, 10, 50, 752));
-  c.push(hrule(742));
-  c.push(text(data.orgName, 11, 50, 726));
-  c.push(text(`Enfant : ${data.childName}`, 10, 50, 710));
+    // Police arabe embarquée (TTF Noto Naskh Arabic — GSUB complet).
+    // Le paquet bloque l'accès direct aux fonts via "exports" → on résout
+    // l'entrée principale puis on navigue vers ../fonts/.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pkgEntry = require.resolve('@embedpdf/fonts-arabic');
+    const fontsDir = join(dirname(pkgEntry), '..', 'fonts');
+    const arabicRegular = join(fontsDir, 'NotoNaskhArabic-Regular.ttf');
+    const arabicBold = join(fontsDir, 'NotoNaskhArabic-Bold.ttf');
+    doc.registerFont('Amiri', arabicRegular);
+    doc.registerFont('Amiri-Bold', arabicBold);
 
-  // Tableau
-  const headerY = 688;
-  c.push(hrule(headerY + 8));
-  c.push(text('Désignation', 9, 50, headerY));
-  c.push(text('Qté', 9, 380, headerY));
-  c.push(text('P.U. (DZD)', 9, 415, headerY));
-  c.push(text('Total (DZD)', 9, 470, headerY));
-  c.push(hrule(headerY - 6));
+    const chunks: Buffer[] = [];
+    doc.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
 
-  let y = headerY - 22;
-  for (const line of data.lines) {
-    if (y < 120) break; // MVP : une page
-    c.push(text(line.description.slice(0, 60), 9, 50, y));
-    c.push(text(String(line.quantity), 9, 380, y));
-    c.push(text(fmt(line.unitPrice), 9, 415, y));
-    c.push(text(fmt(line.total), 9, 470, y));
-    y -= 15;
-  }
-  c.push(hrule(y - 2));
-  y -= 18;
-  c.push(text(`Sous-total : ${fmt(data.subtotal)} DZD`, 10, 400, y));
-  y -= 14;
-  c.push(text(`Remise : ${fmt(data.discount)} DZD`, 10, 400, y));
-  y -= 16;
-  c.push(text(`TOTAL : ${fmt(data.total)} DZD`, 11, 400, y, 'F2'));
-  y -= 34;
-  c.push(text('Merci de régler avant l’échéance.', 9, 50, y));
-  c.push(text(`Générée le ${data.generatedAt} — logiciel de gestion de crèche (DZ)`, 8, 50, y - 14));
+    // En-tête
+    doc.font('Helvetica-Bold').fontSize(20).text('FACTURE', { align: 'left' });
+    doc.font('Amiri-Bold').fontSize(14).text('فاتورة', { align: 'right' });
+    doc.font('Helvetica').fontSize(10).moveDown(0.6)
+      .text(`N° ${data.invoiceNumber}`, { continued: true })
+      .fillColor('#666666')
+      .text(`   الفترة : ${data.periodLabel}    •    Période : ${data.periodLabel}`, { align: 'right' });
+    doc.fillColor('#000000')
+      .text(`Échéance : ${data.dueDate}    •    الاستحقاق : ${data.dueDate}`, { align: 'right' });
+    doc.moveDown(0.5)
+      .font('Helvetica-Bold').fontSize(11).text(data.orgName);
+    doc.font('Helvetica').fontSize(10)
+      .text(`Enfant : ${data.childName}    •    الطفل : ${data.childName}`, { align: 'right' });
+    doc.moveDown(0.5);
+    doc.moveTo(48, doc.y).lineTo(545, doc.y).strokeColor('#8B8B8B').lineWidth(0.6).stroke();
+    doc.moveDown(0.7);
 
-  const stream = `${c.join('\n')}\n`;
-  const contentObj = `<< /Length ${Buffer.byteLength(stream, 'latin1')} >>\nstream\n${stream}endstream`;
+    // Tableau
+    const startY = doc.y;
+    const colX = [48, 350, 415, 470];
+    const colW = [300, 65, 55, 75];
+    const headerY = doc.y;
+    doc.font('Helvetica-Bold').fontSize(9);
+    doc.text('Désignation', colX[0], headerY);
+    doc.text('Qté', colX[1], headerY, { width: colW[1], align: 'right' });
+    doc.text('P.U. (DZD)', colX[2], headerY, { width: colW[2], align: 'right' });
+    doc.text('Total (DZD)', colX[3], headerY, { width: colW[3], align: 'right' });
+    doc.moveTo(48, doc.y + 6).lineTo(545, doc.y + 6).strokeColor('#8B8B8B').lineWidth(0.6).stroke();
+    doc.moveDown(0.5);
 
-  let pdf = '%PDF-1.4\n';
-  const offsets: number[] = [];
-  const add = (obj: string): void => {
-    offsets.push(Buffer.byteLength(pdf, 'latin1'));
-    pdf += `${obj}\n`;
-  };
+    doc.font('Helvetica').fontSize(9);
+    for (const line of data.lines) {
+      if (doc.y > 700) break; // MVP : une page
+      doc.text(line.description.slice(0, 60), colX[0], doc.y);
+      doc.text(String(line.quantity), colX[1], doc.y, { width: colW[1], align: 'right' });
+      doc.text(fmt(line.unitPrice), colX[2], doc.y, { width: colW[2], align: 'right' });
+      doc.text(fmt(line.total), colX[3], doc.y, { width: colW[3], align: 'right' });
+      doc.moveDown(0.5);
+    }
+    doc.moveTo(48, doc.y).lineTo(545, doc.y).strokeColor('#8B8B8B').lineWidth(0.6).stroke();
+    doc.moveDown(0.7);
 
-  add('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj');
-  add('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj');
-  add('3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>\nendobj');
-  add('4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj');
-  add('5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj');
-  add(`6 0 obj\n${contentObj}\nendobj`);
+    // Totaux
+    doc.font('Helvetica').fontSize(10);
+    doc.text(`Sous-total : ${fmt(data.subtotal)} DZD`, { align: 'right' });
+    doc.text(`Remise : ${fmt(data.discount)} DZD`, { align: 'right' });
+    doc.moveDown(0.2);
+    doc.font('Helvetica-Bold').fontSize(11)
+      .text(`TOTAL : ${fmt(data.total)} DZD`, { align: 'right', continued: true })
+      .font('Amiri-Bold')
+      .text(`      المجموع : ${fmt(data.total)} دج`, { align: 'right' });
 
-  const xrefOffset = Buffer.byteLength(pdf, 'latin1');
-  pdf += `xref\n0 ${offsets.length + 1}\n0000000000 65535 f \n`;
-  for (const offset of offsets) {
-    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
-  }
-  pdf += `trailer\n<< /Size ${offsets.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
-  return Buffer.from(pdf, 'latin1');
+    doc.moveDown(1.5);
+    doc.font('Helvetica').fontSize(9).fillColor('#444444')
+      .text('Merci de régler avant l’échéance.   شكراً على التسديد قبل الاستحقاق.')
+      .fontSize(8).fillColor('#666666')
+      .text(`Générée le ${data.generatedAt} — logiciel de gestion de crèche (DZ)`);
+    void startY;
+
+    doc.end();
+  });
 }
 
 // ── Stockage ────────────────────────────────────────────────────────────────

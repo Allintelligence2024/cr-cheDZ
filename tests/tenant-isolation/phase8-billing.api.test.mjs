@@ -342,6 +342,8 @@ const main = async () => {
     const pdfA = await fetch(base + `/billing/invoices/${invoiceAId}/pdf`, { headers: { authorization: `Bearer ${tokenA}` } });
     const pdfBytes = Buffer.from(await pdfA.arrayBuffer());
     ok('Directeur A : PDF facture servi (200, application/pdf, %PDF)', pdfA.status === 200 && (pdfA.headers.get('content-type') ?? '').includes('application/pdf') && pdfBytes.subarray(0, 5).toString() === '%PDF-', `status=${pdfA.status}`);
+    const pdfLatin = pdfBytes.toString('latin1');
+    ok('PDF bilingue : police arabe Noto Naskh embarquée (composition GSUB)', pdfLatin.includes('NotoNaskhArabic') && pdfLatin.includes('ToUnicode'));
     const pdfB = await fetch(base + `/billing/invoices/${invoiceAId}/pdf`, { headers: { authorization: `Bearer ${tokenB}` } });
     ok('Directeur B : PDF de la facture de A → 404', pdfB.status === 404);
     const pdfParentA = await fetch(base + `/parent/invoices/${invoiceAId}/pdf`, { headers: { authorization: `Bearer ${tokenParentA}` } });

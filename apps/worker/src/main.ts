@@ -77,7 +77,7 @@ async function generateInvoicePdf(job: ClaimedJob): Promise<void> {
     return { invoice, lines };
   });
 
-  const pdf = buildInvoicePdf({
+  const pdf = await buildInvoicePdf({
     orgName: data.invoice.org_name ?? 'Crèche',
     invoiceNumber: data.invoice.invoice_number,
     periodLabel: `${String(data.invoice.period_month).padStart(2, '0')}/${data.invoice.period_year}`,
