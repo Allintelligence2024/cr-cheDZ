@@ -16,7 +16,7 @@
 | P2 | **Exports Excel** (présences, facturation) | **✅ FAIT** — worker export_report (exceljs), table report_exports (038), API /exports (phase13 8 cas) + **écran web ExportsPage** |
 | P2 | **PDF bilingue AR** | **✅ FAIT** — pdfkit + Noto Naskh Arabic embarquée (GSUB), vérifié dans phase8 (police + ToUnicode) |
 | P3 | **Marketplace / annuaire public** | Flag `marketplace` ; site vitrine des crèches |
-| P3 | **Application web mobile-responsive** | Admin-web desktop-first ; responsive complet |
+| P3 | **Application web mobile-responsive** | **✅ FAIT** — media queries 900/700px (sidebar → tiroir burger, tables scrollables, grilles 1 colonne) |
 
 ## Conformité & sécurité
 
