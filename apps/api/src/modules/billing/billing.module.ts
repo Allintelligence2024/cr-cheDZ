@@ -10,6 +10,5 @@ import { PdfStorageService } from './pdf-storage.service';
   controllers: [BillingController],
   providers: [BillingService, PaymentProviderService, PdfStorageService],
   exports: [BillingService, PaymentProviderService, PdfStorageService],
-  exports: [BillingService, PdfStorageService],
 })
 export class BillingModule {}
