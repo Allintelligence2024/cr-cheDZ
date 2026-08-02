@@ -75,10 +75,12 @@ MISE À JOUR 2026-08-02 (durcissement + roadmap v2) :
 - Suivi pilote : migration 036+037 support_pilot_summary() + GET /support/
   pilot-summary + onglet « Suivi pilote » console (vérifié : 5 crèches,
   75 enfants).
-- Roadmap v2 : MESSAGERIE API (phase12-messaging 7 cas) + écran web
-  (MessagingPage) ; EXPORTS EXCEL (migration 038 report_exports, worker
-  export_report exceljs, API /exports, phase13-exports 8 cas) — 16 suites
-  vertes au total.
+- Roadmap v2 : MESSAGERIE (API + écran web), EXPORTS EXCEL (API + écran
+  web), VIE PRIVÉE écran web (registre, DPIA, demandes, violations),
+  PDF BILINGUE AR (pdfkit + Noto Naskh embarquée), PAIEMENT EN LIGNE
+  CIB/Edahabia (adaptateur SATIM, migration 039 : le webhook confirme
+  désormais un paiement pending) — phases 12-14 (7+8+8 cas) vertes ;
+  17 suites au total. Production : config SATIM_* requise (non fournie).
 
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
 - PILOTE TERRAIN : 5 crèches réelles × 2 semaines, stores, DNS/TLS, device

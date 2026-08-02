@@ -8,13 +8,13 @@
 
 | Priorité | Fonctionnalité | Notes |
 |---|---|---|
-| P1 | **Paiement en ligne CIB/Edahabia (SATIM)** | Feature flag `online_payment` prêt ; webhook signé idempotent déjà en place (billing_webhook_apply) ; intégration SATIM à connecter |
-| P1 | **Messagerie parents ↔ crèche** | **✅ API + écran web faits et testés** (module messaging, phase12-messaging 7 cas, MessagingPage admin-web) |
+| P1 | **Paiement en ligne CIB/Edahabia (SATIM)** | **✅ Adaptateur implémenté et testé** (phase14, 8 cas : flag 422, non configuré 503, init HMAC + mock HTTP, webhook confirme le pending — migration 039) ; **production : config SATIM_* requise** |
+| P1 | **Messagerie parents ↔ crèche** | **✅ API + écran web faits et testés** (module messaging, phase12-messaging 7 cas, MessagingPage) |
 | P2 | **WhatsApp Business API** | Flag `whatsapp_notifications` ; alternative au SMS pour l'OTP |
 | P2 | **Planning du personnel** (roulements) | Flag `staff_planning` ; table staff_assignments extensible |
 | P2 | **Multi-rôles par utilisateur** | Actuellement 1 rôle/org (ADR-001) ; table role_assignments à introduire |
-| P2 | **Exports Excel** (présences, facturation) | **✅ FAIT** — worker export_report (exceljs), table report_exports (038), POST/GET/DL /exports, test phase13 (8 cas) ; écran web ⏳ |
-| P2 | **PDF bilingue AR** | Composition arabe : embedding d'une police GSUB dans le générateur PDF |
+| P2 | **Exports Excel** (présences, facturation) | **✅ FAIT** — worker export_report (exceljs), table report_exports (038), API /exports (phase13 8 cas) + **écran web ExportsPage** |
+| P2 | **PDF bilingue AR** | **✅ FAIT** — pdfkit + Noto Naskh Arabic embarquée (GSUB), vérifié dans phase8 (police + ToUnicode) |
 | P3 | **Marketplace / annuaire public** | Flag `marketplace` ; site vitrine des crèches |
 | P3 | **Application web mobile-responsive** | Admin-web desktop-first ; responsive complet |
 

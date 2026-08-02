@@ -420,6 +420,9 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 | v2.1 | **Exports Excel** : table `report_exports` (migration 038), job worker `export_report` (exceljs, présences + factures), API `POST/GET /exports` + `GET /exports/:id/download` (buffer local ou URL signée S3), 409 EXPORT_NOT_READY avant traitement | `apps/worker/src/exports.ts`, `modules/exports/*`, migration 038 | ✅ |
 | v2.2 | **Écran web messagerie** : liste des conversations (cliquable), fil de messages, envoi, création (enfant + sujet), marquage lu — `Table` du design-system étendue (onRowClick) ; i18n FR/AR | `MessagingPage.tsx`, `components.tsx`, i18n | ✅ |
 | v2.3 | Test d'isolation **phase13-exports** : 8 cas (done + magic PK + contenu vérifié via exceljs, isolation B 404, EXPORT_NOT_READY, rien écrit croisé) | `phase13-exports.api.test.mjs` | ✅ |
+| v2.4 | **PDF bilingue AR** : pdfkit + police Noto Naskh Arabic EMBARQUÉE (GSUB — ligatures arabes réelles) ; assertion phase8 (police + ToUnicode) | `apps/worker/src/pdf.ts`, phase8 | ✅ |
+| v2.5 | **Paiement en ligne CIB/Edahabia** : adaptateur SATIM (flag 422, non configuré 503, init HTTP HMAC réel, 502 + failed), webhook confirme le pending (migration 039 — bug réel), test phase14 (8 cas, mock HTTP local) | `payment-provider.service.ts`, migration 039 | ✅ |
+| v2.6 | **Écrans web exports + vie privée** (registre, DPIA, demandes, violations) — smoke testé en réel | `ExportsPage.tsx`, `PrivacyPage.tsx` | ✅ |
 
 ### Reste (exécution terrain — ne peut pas être fait dans la sandbox)
 - 5 crèches réelles × 2 semaines d'utilisation quotidienne (journal signé).
