@@ -13,9 +13,13 @@
 > par la console support (garde-fou technique en place — migration 046 +
 > `PrivacyService.assertFlagComplianceGate`).
 >
-> **Périmètre logiciel : AUCUN module de vidéosurveillance n'est développé ni
-> déployé.** Ce document est le préalable obligatoire ; il ne vaut pas
-> implémentation.
+> **Périmètre logiciel (mise à jour phase 21)** : un module V1 existe désormais
+> — registre de caméras (zones limitées à celles de §2, CHECK en base), extraits
+> vidéo exportés du DVR/NVR (pas de flux en direct), visionnage journalisé dans
+> `audit_logs`, purge automatique à 30 jours par le worker (échec explicite si
+> le stockage est injoignable — jamais de fausse purge). L'activation reste
+> conditionnée à l'approbation de la DPIA de l'organisation (verrou migration
+> 046). Le live streaming reste hors périmètre.
 
 | Champ | Valeur |
 |---|---|

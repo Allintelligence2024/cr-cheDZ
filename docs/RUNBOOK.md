@@ -66,6 +66,10 @@ programmer mensuellement).
   (SMTP configuré requis).
 - Demandes de droits : export JSON via `POST /privacy/requests/:id/export`.
 - Rétention : job `retention_purge` (5 ans) — `RETENTION_DAYS` (défaut 1825).
+- Vidéosurveillance (DPIA 25-11) : planifier le job quotidien
+  `video_clips_purge` (INSERT INTO background_jobs …, comme retention_purge)
+  sur chaque org ayant le flag actif — purge stockage + lignes à 30 jours,
+  échec explicite (VIDEO_PURGE_PARTIAL) si le stockage est injoignable.
 - Staging : toujours passer `scripts/anonymize.sql` après import d'un dump réel.
 
 ## 7. Surveillance

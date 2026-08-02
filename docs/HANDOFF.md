@@ -14,9 +14,9 @@ changer ; si le HANDOFF cite une autre branche, importer l'état de la branche
 citée dans la branche de session puis travailler dessus).
 
 ÉTAT ACTUEL (validé sur PostgreSQL 18 réel, rôle applicatif NOBYPASSRLS) :
-- 23/23 suites d'isolation vertes (schema-check, rls-behavior, isolation,
-  phase3 → phase20 inclus) — ordre canonique rejouable.
-- Migrations 001-046 immuables (ADR-007, runner à checksums).
+- 24/24 suites d'isolation vertes (schema-check, rls-behavior, isolation,
+  phase3 → phase21 inclus) — ordre canonique rejouable.
+- Migrations 001-048 immuables (ADR-007, runner à checksums).
 - Phases 0-11 (fondations, auth, orgs, enfants, présences, journal, parents,
   facturation, admin-web, santé/conformité/vie privée/support, durcissement)
   + roadmap v2 phases 12-20 : messagerie, exports Excel, paiement en ligne
@@ -39,18 +39,27 @@ FAIT en dernier (session août 2026) :
   privacy_approved_dpia_exists), garde-fou setFlag (422 DPIA_REQUIRED,
   activation globale interdite VIDEO_SURVEILLANCE_GLOBAL_FORBIDDEN,
   désactivation toujours libre). Suite phase20-video-dpia-gate : 8 cas verts.
-  Le MODULE LOGICIEL reste hors périmètre (à planifier post-pilote) : flux
-  vidéo, purge 30 j, journal des visionnages.
+- Phase 21 — MODULE vidéosurveillance V1 implémenté : caméras (zones
+  blanches DPIA, CHECK base — jamais sanitaires/change/sieste/infirmerie),
+  clips DVR/NVR (presign S3 comme les photos, backend local explicite),
+  download signé + flux local avec VISIONNAGE JOURNALISÉ (audit read),
+  purge worker à 30 j (stockage supprimé AVANT la ligne ; S3 injoignable →
+  job failed VIDEO_PURGE_PARTIAL + réessai — jamais de fausse purge),
+  écran admin-web VideoPage (notice conformité si flag off), i18n FR/AR.
+  PAS de flux en direct (hors périmètre v1, documenté). Suite phase21 :
+  8 cas verts. BUG RÉEL corrigé en route : jobs_finish échouait sur
+  TOUT échec de job depuis la migration 024 (CASE text vs enum job_status)
+  → migration 048 (cast) — le retry/failed des jobs refonctionne.
 - .env.example / .env.prod.example : WHATSAPP_* et SATIM_* documentés.
 
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
 - PILOTE TERRAIN : 5 crèches réelles × 2 semaines, stores, DNS/TLS, device
   farm, FCM/APNs/SMS/WhatsApp réels, exercice de restauration, bilan go/no-go
   (docs/pilot/ — baseline pré-pilote dans docs/pilot/BILAN-PILOTE.md).
+  C'est de l'HUMAIN + du TERRAIN : rien de codable ne manque.
 - Workflows CI (.github/workflows/ci.yml + docker.yml) : prêts, NON poussés
-  (permission `workflows` de la GitHub App manquante — voir docs/CI-RESTORE.md).
-- Vidéosurveillance : module logiciel à planifier (DPIA effectuée — verrou
-  levé au cas par cas par DPIA d'org approuvée).
+  (permission `workflows` de la GitHub App manquante — voir docs/CI-RESTORE.md ;
+  sondes du 2026-08-02 : toujours refusé).
 - e2e Playwright (spec écrit, navigateur absent) ; k6 (script prêt, binaire absent).
 - Notification ANPDP SMTP : implémentée, chemin 503 testé, pas testée de bout
   en bout (pas de SMTP).
@@ -87,14 +96,14 @@ MÉTHODE DE TRAVAIL (non négociable) :
 | Élément | État |
 |---|---|
 | Branche de travail | branche de session Arena active (historiquement `arena/019fbeff-cr-chedz`, puis `arena/019fc32c-cr-chedz`) — ne jamais changer |
-| Migrations | 001 → 046 (schéma complet, RLS robuste `app_tenant_id()`, facturation bornée, webhook + jobs SECURITY DEFINER, paie, otp channel, verrou DPIA) |
-| Suites de tests | `tests/tenant-isolation/` : schema-check, rls-behavior-check (GATE), isolation (S2), phase3 → phase20 — **23/23 vertes sur PostgreSQL 18 réel** |
+| Migrations | 001 → 048 (schéma complet, RLS robuste `app_tenant_id()`, facturation bornée, webhook + jobs SECURITY DEFINER, paie, otp channel, vidéo post-DPIA, fix jobs_finish) |
+| Suites de tests | `tests/tenant-isolation/` : schema-check, rls-behavior-check (GATE), isolation (S2), phase3 → phase21 — **24/24 vertes sur PostgreSQL 18 réel** |
 | Phase 7 | Portail parent complet (API) — OTP/PIN, consentements, quiet hours, photos, FCM/APNs worker |
 | Phase 8 | Facturation complète (API + worker) — contrats, factures, paiements, allocations, caisse, webhook, PDF bilingue AR, accès parent |
 | Phase 9 | Admin web complète (API + écrans) — dashboard, présences, journal + modération, photos, facturation, fiche enfant, paramètres/tarifs, i18n AR/FR, lazy, responsive |
 | Phase 10 | Santé, conformité 19-253, vie privée 25-11, console support (API + UI) — migrations 029-032, seeds 015 |
 | Roadmap v2 | Messagerie, exports Excel, paiement SATIM, multi-rôles, WhatsApp (notif + OTP), paie, marketplace — phases 12-20 vertes |
-| Conformité vidéo | DPIA rédigée (`docs/regulatory/DPIA-VIDEOSURVEILLANCE.md`) + verrou flag `video_surveillance` (migration 046) ; module non implémenté |
+| Conformité vidéo | DPIA rédigée + verrou flag `video_surveillance` (046) + module V1 : caméras/clips/purge 30 j/visionnage journalisé (047-048, phase21) |
 | Apps | api (NestJS), worker (jobs + push + exports + PDF), admin-web (React FR/AR responsive), support-console, staff-mobile + parent-mobile (squelettes Dart) |
 | CI | Workflows locaux non poussés (permission `workflows`) — `docs/CI-RESTORE.md` |
 | Docs | `docs/PLAN_IMPLEMENTATION.md`, `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md`, `docs/ROADMAP_V2.md`, `docs/adr/` (000→010), `docs/HANDOFF.md` (ce fichier) |
@@ -133,6 +142,7 @@ node tests/tenant-isolation/phase17-payroll.api.test.mjs
 node tests/tenant-isolation/phase18-marketplace.api.test.mjs
 node tests/tenant-isolation/phase19-whatsapp-otp.api.test.mjs
 node tests/tenant-isolation/phase20-video-dpia-gate.api.test.mjs
+node tests/tenant-isolation/phase21-video-surveillance.api.test.mjs
 
 # Typechecks
 npm run typecheck --workspace @creche/api
