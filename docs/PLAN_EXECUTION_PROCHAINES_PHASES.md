@@ -413,6 +413,14 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 | 12.9 | **Runbook §8 suivi pilote** + **template de bilan** go/no-go | `docs/RUNBOOK.md`, `docs/pilot/BILAN-PILOTE.md` | ✅ |
 | 12.10 | Non-régression complète : 14/14 suites vertes (S2 → P11) | — | ✅ |
 
+## 12. ROADMAP V2 — PREMIERS LIVRABLES (EN COURS ✅)
+
+| # | Livrable | Fichiers | Statut |
+|---|---|---|---|
+| v2.1 | **Exports Excel** : table `report_exports` (migration 038), job worker `export_report` (exceljs, présences + factures), API `POST/GET /exports` + `GET /exports/:id/download` (buffer local ou URL signée S3), 409 EXPORT_NOT_READY avant traitement | `apps/worker/src/exports.ts`, `modules/exports/*`, migration 038 | ✅ |
+| v2.2 | **Écran web messagerie** : liste des conversations (cliquable), fil de messages, envoi, création (enfant + sujet), marquage lu — `Table` du design-system étendue (onRowClick) ; i18n FR/AR | `MessagingPage.tsx`, `components.tsx`, i18n | ✅ |
+| v2.3 | Test d'isolation **phase13-exports** : 8 cas (done + magic PK + contenu vérifié via exceljs, isolation B 404, EXPORT_NOT_READY, rien écrit croisé) | `phase13-exports.api.test.mjs` | ✅ |
+
 ### Reste (exécution terrain — ne peut pas être fait dans la sandbox)
 - 5 crèches réelles × 2 semaines d'utilisation quotidienne (journal signé).
 - Builds stores (Play Console / App Store), DNS/TLS, device farm Android 2 Go RAM.

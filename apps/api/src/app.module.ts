@@ -13,6 +13,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { ChildrenModule } from './modules/children/children.module';
 import { ComplianceModule } from './modules/compliance/compliance.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ExportsModule } from './modules/exports/exports.module';
 import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { JournalModule } from './modules/journal/journal.module';
@@ -41,6 +42,7 @@ import { UsersModule } from './modules/users/users.module';
     BillingModule,
     ComplianceModule,
     DashboardModule,
+    ExportsModule,
     HealthModule,
     JournalModule,
     MediaModule,

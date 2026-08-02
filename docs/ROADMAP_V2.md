@@ -9,11 +9,11 @@
 | Priorité | Fonctionnalité | Notes |
 |---|---|---|
 | P1 | **Paiement en ligne CIB/Edahabia (SATIM)** | Feature flag `online_payment` prêt ; webhook signé idempotent déjà en place (billing_webhook_apply) ; intégration SATIM à connecter |
-| P1 | **Messagerie parents ↔ crèche** | **✅ API faite et testée** (module messaging : conversations par enfant, participants auto (gardiens), garde participant + RLS, phase12-messaging 7 cas) ; écran web ⏳ |
+| P1 | **Messagerie parents ↔ crèche** | **✅ API + écran web faits et testés** (module messaging, phase12-messaging 7 cas, MessagingPage admin-web) |
 | P2 | **WhatsApp Business API** | Flag `whatsapp_notifications` ; alternative au SMS pour l'OTP |
 | P2 | **Planning du personnel** (roulements) | Flag `staff_planning` ; table staff_assignments extensible |
 | P2 | **Multi-rôles par utilisateur** | Actuellement 1 rôle/org (ADR-001) ; table role_assignments à introduire |
-| P2 | **Exports Excel** (présences, facturation) | Worker : stub `export_report` → implémenter (xlsx) |
+| P2 | **Exports Excel** (présences, facturation) | **✅ FAIT** — worker export_report (exceljs), table report_exports (038), POST/GET/DL /exports, test phase13 (8 cas) ; écran web ⏳ |
 | P2 | **PDF bilingue AR** | Composition arabe : embedding d'une police GSUB dans le générateur PDF |
 | P3 | **Marketplace / annuaire public** | Flag `marketplace` ; site vitrine des crèches |
 | P3 | **Application web mobile-responsive** | Admin-web desktop-first ; responsive complet |

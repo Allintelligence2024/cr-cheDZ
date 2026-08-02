@@ -75,9 +75,10 @@ MISE À JOUR 2026-08-02 (durcissement + roadmap v2) :
 - Suivi pilote : migration 036+037 support_pilot_summary() + GET /support/
   pilot-summary + onglet « Suivi pilote » console (vérifié : 5 crèches,
   75 enfants).
-- Roadmap v2 démarrée : module MESSAGERIE (conversations par enfant,
-  participants, messages, garde participant + RLS) — phase12-messaging
-  (7 cas) vert.
+- Roadmap v2 : MESSAGERIE API (phase12-messaging 7 cas) + écran web
+  (MessagingPage) ; EXPORTS EXCEL (migration 038 report_exports, worker
+  export_report exceljs, API /exports, phase13-exports 8 cas) — 16 suites
+  vertes au total.
 
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
 - PILOTE TERRAIN : 5 crèches réelles × 2 semaines, stores, DNS/TLS, device

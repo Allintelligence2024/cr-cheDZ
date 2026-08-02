@@ -2,6 +2,7 @@ import { GoogleAuth } from 'google-auth-library';
 import { createSign } from 'node:crypto';
 import * as http2 from 'node:http2';
 import { Pool, PoolClient } from 'pg';
+import { buildXlsx, storeExport, type ExportPayload } from './exports';
 import { buildInvoicePdf, storePdf } from './pdf';
 
 /**
@@ -177,6 +178,79 @@ async function retentionPurge(): Promise<void> {
   console.log(`[worker] retention_purge : ${r.rows[0].purged} ligne(s) purgée(s) (> ${days} j)`);
 }
 
+/** export_report : génère le fichier Excel (présences/factures) et enregistre report_exports. */
+async function exportReport(job: ClaimedJob): Promise<void> {
+  const orgId = job.organization_id;
+  if (!orgId) throw new Error('ORGANIZATION_REQUIRED');
+  const payload = job.payload as unknown as ExportPayload;
+  if (!payload?.export_id || !payload.report_type) throw new Error('PAYLOAD_INCOMPLET');
+
+  const rows = await withTenant(orgId, async (client) => {
+    if (payload.report_type === 'attendance') {
+      const [start, end] = payload.range;
+      const res = await client.query(
+        `SELECT c.reference_number, c.first_name_fr, c.last_name_fr,
+                COALESCE(r.name_fr, '—') AS salle, s.session_date AS date,
+                s.status AS statut,
+                to_char((SELECT e.occurred_at FROM attendance_events e
+                   WHERE e.session_id = s.id AND e.event_type='check_in'
+                   ORDER BY e.occurred_at LIMIT 1), 'HH24:MI') AS arrivee,
+                to_char((SELECT e.occurred_at FROM attendance_events e
+                   WHERE e.session_id = s.id AND e.event_type='check_out'
+                   ORDER BY e.occurred_at DESC LIMIT 1), 'HH24:MI') AS depart
+         FROM attendance_sessions s
+         JOIN children c ON c.id = s.child_id
+         LEFT JOIN rooms r ON r.id = c.room_id
+         WHERE s.organization_id = $1 AND s.session_date BETWEEN $2 AND $3
+         ORDER BY s.session_date, c.last_name_fr`,
+        [orgId, start, end],
+      );
+      return res.rows.map((row) => ({
+        reference: row.reference_number,
+        prenom: row.first_name_fr,
+        nom: row.last_name_fr,
+        salle: row.salle,
+        date: String(row.date).slice(0, 10),
+        statut: row.statut,
+        arrivee: row.arrivee ?? '',
+        depart: row.depart ?? '',
+      }));
+    }
+    // invoices
+    const [year, month] = payload.range;
+    const res = await client.query(
+      `SELECT i.invoice_number, c.first_name_fr || ' ' || c.last_name_fr AS enfant,
+              i.period_year || '/' || i.period_month AS periode,
+              i.total_amount, i.paid_amount, i.balance, i.status, i.due_date
+       FROM invoices i JOIN children c ON c.id = i.child_id
+       WHERE i.organization_id = $1 AND i.period_year = $2
+         AND ($3::int IS NULL OR i.period_month = $3)
+       ORDER BY i.period_year, i.period_month, i.invoice_number`,
+      [orgId, Number(year), month ? Number(month) : null],
+    );
+    return res.rows.map((row) => ({
+      n_facture: row.invoice_number,
+      enfant: row.enfant,
+      periode: row.periode,
+      total_dzd: Number(row.total_amount),
+      paye_dzd: Number(row.paid_amount),
+      solde_dzd: Number(row.balance),
+      statut: row.status,
+      echeance: String(row.due_date).slice(0, 10),
+    }));
+  });
+
+  const xlsx = await buildXlsx(payload.report_type, rows);
+  const key = await storeExport(orgId, payload.export_id, xlsx);
+  await withTenant(orgId, async (client) => {
+    await client.query(
+      `UPDATE report_exports SET status='done', storage_key=$2, file_size_bytes=$3, completed_at=NOW()
+       WHERE id=$1`,
+      [payload.export_id, key, xlsx.length],
+    );
+  });
+}
+
 const JOB_HANDLERS: Record<string, (payload: unknown, orgId: string | null, job: ClaimedJob) => Promise<void>> = {
   generate_invoice_pdf: (_p, _o, job) => generateInvoicePdf(job),
   send_monthly_invoices: (_p, _o, job) => sendMonthlyInvoices(job),
@@ -189,10 +263,10 @@ const JOB_HANDLERS: Record<string, (payload: unknown, orgId: string | null, job:
   send_parent_notification: async (_payload, orgId) => {
     if (!orgId) throw new Error('ORGANIZATION_REQUIRED');
   },
-  // Intégrations non configurées dans cette session (stubs explicites, jamais
-  // de faux statut : le job échoue avec un message clair si invoqué).
+  export_report: (_p, _o, job) => exportReport(job),
+  // Intégration non configurée dans cette session (stub explicite, jamais de
+  // faux statut : le job échoue avec un message clair si invoqué).
   compress_media: async () => { throw new Error('NOT_IMPLEMENTED: compression média'); },
-  export_report: async () => { throw new Error('NOT_IMPLEMENTED: export rapport'); },
 };
 
 async function processNextJob(): Promise<boolean> {
