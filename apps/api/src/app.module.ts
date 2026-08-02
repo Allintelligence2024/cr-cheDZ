@@ -24,6 +24,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
 import { ParentsModule } from './modules/parents/parents.module';
+import { PayrollModule } from './modules/payroll/payroll.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { UsersModule } from './modules/users/users.module';
@@ -51,6 +52,7 @@ import { UsersModule } from './modules/users/users.module';
     NotificationsModule,
     SyncModule,
     ParentsModule,
+    PayrollModule,
   ],
   controllers: [HealthController],
   providers: [

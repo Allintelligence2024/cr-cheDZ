@@ -43,5 +43,5 @@
 | Priorité | Élément | Notes |
 |---|---|---|
 | P1 | **Multi-établissements avancé** | Une organisation = plusieurs sites (déjà supporté) ; consolidation multi-org pour groupes |
-| P2 | **Module paie** | Base salaires présente (staff_profiles) ; paie complète à développer |
+| P2 | **Module paie** | **✅ FAIT** — migration 044 (payroll_runs/entries/lines, RLS, net = gross − deductions en base), API generate (idempotente 409)/lignes/finalize (immuable), phase17 (8 cas) ; écran web ⏳ |
 | P2 | **Vidéosurveillance** | Hors périmètre sans DPIA préalable (loi 25-11) |
