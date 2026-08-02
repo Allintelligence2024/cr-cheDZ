@@ -12,7 +12,7 @@
 | P1 | **Messagerie parents ↔ crèche** | **✅ API + écran web faits et testés** (module messaging, phase12-messaging 7 cas, MessagingPage) |
 | P2 | **WhatsApp Business API** | Flag `whatsapp_notifications` ; alternative au SMS pour l'OTP |
 | P2 | **Planning du personnel** (roulements) | Flag `staff_planning` ; table staff_assignments extensible |
-| P2 | **Multi-rôles par utilisateur** | Actuellement 1 rôle/org (ADR-001) ; table role_assignments à introduire |
+| P2 | **Multi-rôles par utilisateur** | **✅ FAIT** — migration 040 (role_assignments, rétrocompatible : memberships = rôle principal), JWT roles[], RolesGuard multi, API assignation/retrait (directeur), ADR-001 évolué, phase15 (8 cas) |
 | P2 | **Exports Excel** (présences, facturation) | **✅ FAIT** — worker export_report (exceljs), table report_exports (038), API /exports (phase13 8 cas) + **écran web ExportsPage** |
 | P2 | **PDF bilingue AR** | **✅ FAIT** — pdfkit + Noto Naskh Arabic embarquée (GSUB), vérifié dans phase8 (police + ToUnicode) |
 | P3 | **Marketplace / annuaire public** | Flag `marketplace` ; site vitrine des crèches |

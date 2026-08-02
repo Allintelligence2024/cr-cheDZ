@@ -126,7 +126,7 @@ export class AuthService {
       userAgent,
     });
 
-    const accessToken = this.signAccessToken(user, membership);
+    const accessToken = await this.signAccessToken(user, membership);
     await this.audit.log({
       organizationId: membership?.organization_id ?? null,
       userId: user.id,
@@ -273,7 +273,7 @@ export class AuthService {
       userAgent,
     });
 
-    const accessToken = this.signAccessToken(user, membership);
+    const accessToken = await this.signAccessToken(user, membership);
     return {
       access_token: accessToken,
       refresh_token: session.refreshToken,
@@ -406,7 +406,7 @@ export class AuthService {
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
-    const accessToken = this.signAccessToken(user, membership);
+    const accessToken = await this.signAccessToken(user, membership);
     return {
       access_token: accessToken,
       refresh_token: session.refreshToken,
@@ -474,12 +474,21 @@ export class AuthService {
     return res.rows[0] ?? null;
   }
 
-  private signAccessToken(user: UserRow, membership: MembershipRow | null): string {
+  /** Rôles effectifs (principal + additions) pour le JWT — multi-rôles (040). */
+  private async effectiveRoles(userId: string, membership: MembershipRow | null): Promise<string[]> {
+    if (!membership) return [];
+    const res = await this.pool.query<{ role_slug: string }>(`SELECT role_slug FROM auth_user_roles($1) WHERE organization_id = $2`, [userId, membership.organization_id]);
+    return res.rows.map((r) => r.role_slug);
+  }
+
+  private async signAccessToken(user: UserRow, membership: MembershipRow | null): Promise<string> {
     const role = user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none');
+    const roles = user.is_super_admin ? ['super_admin'] : await this.effectiveRoles(user.id, membership);
     return this.jwtService.sign({
       sub: user.id,
       organizationId: membership?.organization_id ?? null,
       role,
+      roles,
       isSuperAdmin: user.is_super_admin,
       email: user.email,
     });
