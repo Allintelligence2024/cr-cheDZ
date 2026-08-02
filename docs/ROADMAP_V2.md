@@ -15,7 +15,7 @@
 | P2 | **Multi-rôles par utilisateur** | **✅ FAIT** — migration 040 (role_assignments, rétrocompatible : memberships = rôle principal), JWT roles[], RolesGuard multi, API assignation/retrait (directeur), ADR-001 évolué, phase15 (8 cas) |
 | P2 | **Exports Excel** (présences, facturation) | **✅ FAIT** — worker export_report (exceljs), table report_exports (038), API /exports (phase13 8 cas) + **écran web ExportsPage** |
 | P2 | **PDF bilingue AR** | **✅ FAIT** — pdfkit + Noto Naskh Arabic embarquée (GSUB), vérifié dans phase8 (police + ToUnicode) |
-| P3 | **Marketplace / annuaire public** | Flag `marketplace` ; site vitrine des crèches |
+| P3 | **Marketplace / annuaire public** | **✅ FAIT** — endpoint public /marketplace (flag global, opt-in settings.public_listing, aucune donnée sensible), page vitrine admin-web (route /marketplace), phase18 (6 cas) ; publication par org via settings |
 | P3 | **Application web mobile-responsive** | **✅ FAIT** — media queries 900/700px (sidebar → tiroir burger, tables scrollables, grilles 1 colonne) |
 
 ## Conformité & sécurité

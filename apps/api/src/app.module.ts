@@ -17,6 +17,7 @@ import { ExportsModule } from './modules/exports/exports.module';
 import { HealthModule } from './modules/health/health.module';
 import { IdentityModule } from './modules/identity/identity.module';
 import { JournalModule } from './modules/journal/journal.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { MediaModule } from './modules/media/media.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
@@ -46,6 +47,7 @@ import { UsersModule } from './modules/users/users.module';
     ExportsModule,
     HealthModule,
     JournalModule,
+    MarketplaceModule,
     MediaModule,
     MessagingModule,
     MetricsModule,

@@ -86,6 +86,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'nav.exports': 'Exports',
     'nav.privacy': 'Vie privée',
     'nav.payroll': 'Paie',
+    'nav.marketplace': 'Annuaire public',
     'nav.settings': 'Paramètres',
     // Phase 9 — tableau de bord
     'dash.today': 'Présences du jour',
@@ -319,6 +320,12 @@ export const messages: Record<Locale, Record<string, string>> = {
     'payroll.deduction': 'Retenue',
     'payroll.label': 'Libellé',
     'payroll.lineAdded': 'Ligne ajoutée',
+    // Roadmap v2 — marketplace (annuaire public)
+    'marketplace.title': 'Annuaire des crèches',
+    'marketplace.hint': 'Crèches ayant activé leur visibilité publique (opt-in).',
+    'marketplace.creche': 'Crèche',
+    'marketplace.multi': 'Multi-accueil',
+    'marketplace.jardin': 'Jardin d\'enfants',
   },
   ar: {
     'app.title': 'إدارة الحضانات',
@@ -405,6 +412,7 @@ export const messages: Record<Locale, Record<string, string>> = {
     'nav.exports': 'التصدير',
     'nav.privacy': 'الخصوصية',
     'nav.payroll': 'الرواتب',
+    'nav.marketplace': 'الدليل العام',
     'nav.settings': 'الإعدادات',
     // Phase 9 — tableau de bord
     'dash.today': 'حضور اليوم',
@@ -638,6 +646,12 @@ export const messages: Record<Locale, Record<string, string>> = {
     'payroll.deduction': 'خصم',
     'payroll.label': 'التسمية',
     'payroll.lineAdded': 'تمت إضافة السطر',
+    // Roadmap v2 — marketplace (annuaire public)
+    'marketplace.title': 'دليل الحضانات',
+    'marketplace.hint': 'الحضانات التي فعّلت الظهور العام (اختياري).',
+    'marketplace.creche': 'حضانة',
+    'marketplace.multi': 'مركز متعدد',
+    'marketplace.jardin': 'روضة أطفال',
   },
 };
 
