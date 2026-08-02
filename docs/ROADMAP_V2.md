@@ -10,7 +10,7 @@
 |---|---|---|
 | P1 | **Paiement en ligne CIB/Edahabia (SATIM)** | **✅ Adaptateur implémenté et testé** (phase14, 8 cas : flag 422, non configuré 503, init HMAC + mock HTTP, webhook confirme le pending — migration 039) ; **production : config SATIM_* requise** |
 | P1 | **Messagerie parents ↔ crèche** | **✅ API + écran web faits et testés** (module messaging, phase12-messaging 7 cas, MessagingPage) |
-| P2 | **WhatsApp Business API** | **✅ FAIT** — canal whatsapp (file, flag scoped, gardien avec téléphone), worker notif_queue_claim/finish (042/043 — bug RLS du drain corrigé), jamais de faux sent (503 sans config), phase16 (6 cas) ; production : WHATSAPP_TOKEN/PHONE_ID requis |
+| P2 | **WhatsApp Business API** | **✅ FAIT** — canal whatsapp (file, flag scoped, gardien avec téléphone), worker notif_queue_claim/finish (042/043 — bug RLS du drain corrigé), jamais de faux sent (503 sans config), phase16 (6 cas) ; **+ OTP parent via WhatsApp (phase19, 7 cas : flag whatsapp_otp, otp_codes.channel migration 045, 422 sans flag / 503 sans config, roundtrip complet)** ; production : WHATSAPP_TOKEN/PHONE_ID requis |
 | P2 | **Planning du personnel** (roulements) | Flag `staff_planning` ; table staff_assignments extensible |
 | P2 | **Multi-rôles par utilisateur** | **✅ FAIT** — migration 040 (role_assignments, rétrocompatible : memberships = rôle principal), JWT roles[], RolesGuard multi, API assignation/retrait (directeur), ADR-001 évolué, phase15 (8 cas) |
 | P2 | **Exports Excel** (présences, facturation) | **✅ FAIT** — worker export_report (exceljs), table report_exports (038), API /exports (phase13 8 cas) + **écran web ExportsPage** |
@@ -44,4 +44,4 @@
 |---|---|---|
 | P1 | **Multi-établissements avancé** | Une organisation = plusieurs sites (déjà supporté) ; consolidation multi-org pour groupes |
 | P2 | **Module paie** | **✅ FAIT** — migration 044, API generate/lignes/finalize (phase17 8 cas) + **écran web PayrollPage** (génération mensuelle, détail, lignes, finalisation) |
-| P2 | **Vidéosurveillance** | Hors périmètre sans DPIA préalable (loi 25-11) |
+| P2 | **Vidéosurveillance** | **DPIA RÉDIGÉE + verrou technique en place (phase20, 8 cas)** — docs/regulatory/DPIA-VIDEOSURVEILLANCE.md, modèle registre « Vidéosurveillance des locaux » + `requires_dpia` (migration 046), activation du flag exigeant une DPIA approuvée par org (422 DPIA_REQUIRED, globale interdite) ; **module logiciel toujours HORS périmètre** (à planifier post-pilote) |
