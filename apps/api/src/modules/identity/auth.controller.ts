@@ -29,8 +29,8 @@ export class AuthController {
   @Post('parent/otp/request')
   @HttpCode(HttpStatus.OK)
   @RateLimit(5, 60_000)
-  async requestParentOtp(@Body() dto: ParentOtpRequestDto): Promise<{ expires_in: number; development_code?: string }> {
-    return this.authService.requestParentOtp(dto.phone);
+  async requestParentOtp(@Body() dto: ParentOtpRequestDto): Promise<{ expires_in: number; channel: 'sms' | 'whatsapp'; development_code?: string }> {
+    return this.authService.requestParentOtp(dto.phone, dto.channel ?? 'sms');
   }
 
   @Public()

@@ -10,6 +10,7 @@ import { AuditService } from '../privacy/audit.service';
 import { SessionsService } from './sessions.service';
 import { TotpService } from './totp.service';
 import { SmsService } from '../../shared/sms/sms.service';
+import { WhatsAppService } from '../../shared/whatsapp/whatsapp.service';
 
 interface MembershipRow {
   organization_id: string;
@@ -63,6 +64,7 @@ export class AuthService {
     private readonly totp: TotpService,
     private readonly audit: AuditService,
     private readonly sms: SmsService,
+    private readonly whatsapp: WhatsAppService,
   ) {}
 
   // ── Login ────────────────────────────────────────────────────────────────
@@ -158,19 +160,60 @@ export class AuthService {
 
   // ── Parent OTP + PIN ───────────────────────────────────────────────────
 
-  async requestParentOtp(phone: string): Promise<{ expires_in: number; development_code?: string }> {
+  /**
+   * Demande d'OTP parent. Canal 'sms' (défaut) ou 'whatsapp' (roadmap v2) :
+   * le canal WhatsApp exige le flag global `whatsapp_otp` + une configuration
+   * WHATSAPP_TOKEN/WHATSAPP_PHONE_ID réelle — sans elle le fournisseur répond
+   * 503 WHATSAPP_NOT_CONFIGURED (jamais de faux « envoyé »). En mode test,
+   * l'envoi fournisseur est court-circuité comme pour le SMS.
+   */
+  async requestParentOtp(
+    phone: string,
+    channel: 'sms' | 'whatsapp' = 'sms',
+  ): Promise<{ expires_in: number; channel: 'sms' | 'whatsapp'; development_code?: string }> {
     const target = phone.trim();
+    if (channel === 'whatsapp') await this.assertWhatsappOtpEnabled();
     // Réponse identique si le numéro est inconnu (anti-énumération).
     // Code OTP généré par crypto.randomInt (jamais Math.random — PRNG non sûr).
     const code = String(randomInt(100000, 1000000));
     await this.pool.query(`UPDATE otp_codes SET used_at = NOW() WHERE target = $1 AND purpose = 'parent_login' AND used_at IS NULL`, [target]);
     await this.pool.query(
-      `INSERT INTO otp_codes (target, code_hash, purpose, expires_at) VALUES ($1,$2,'parent_login',NOW() + INTERVAL '10 minutes')`,
-      [target, await bcrypt.hash(code, this.config.get<number>('BCRYPT_ROUNDS', 12))],
+      `INSERT INTO otp_codes (target, code_hash, purpose, channel, expires_at) VALUES ($1,$2,'parent_login',$3,NOW() + INTERVAL '10 minutes')`,
+      [target, await bcrypt.hash(code, this.config.get<number>('BCRYPT_ROUNDS', 12)), channel],
     );
-    await this.sms.sendOtp(target, code);
+    if (channel === 'whatsapp') {
+      await this.sendOTPByWhatsApp(target, code);
+    } else {
+      await this.sms.sendOtp(target, code);
+    }
     // Le code explicite n'existe qu'en test et ne traverse jamais la production.
-    return { expires_in: 600, ...(this.config.get<string>('NODE_ENV') === 'test' ? { development_code: code } : {}) };
+    return { expires_in: 600, channel, ...(this.config.get<string>('NODE_ENV') === 'test' ? { development_code: code } : {}) };
+  }
+
+  /** Flag global whatsapp_otp requis (422 bilingue sinon) — jamais d'envoi sans flag. */
+  private async assertWhatsappOtpEnabled(): Promise<void> {
+    const flag = await this.pool.query<{ is_enabled: boolean }>(
+      `SELECT is_enabled FROM feature_flags
+       WHERE flag_key='whatsapp_otp' AND organization_id IS NULL
+       ORDER BY created_at DESC LIMIT 1`,
+    );
+    if (!flag.rows[0]?.is_enabled) {
+      throw new AppError(
+        'WHATSAPP_OTP_DISABLED',
+        'Le canal WhatsApp pour les codes de connexion n’est pas activé',
+        'قناة واتساب لرموز الدخول غير مفعّلة',
+        422,
+      );
+    }
+  }
+
+  /** Envoi réel via l'API Graph (court-circuit test identique au SMS). */
+  private async sendOTPByWhatsApp(target: string, code: string): Promise<void> {
+    if (this.config.get<string>('NODE_ENV') === 'test') return;
+    await this.whatsapp.send(
+      target,
+      `Crèche DZ — code de connexion : ${code}. Valable 10 minutes.\nرمز الدخول: ${code} (صالح لمدة 10 دقائق).`,
+    );
   }
 
   async verifyParentOtp(phone: string, code: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
