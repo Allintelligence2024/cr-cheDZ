@@ -1,44 +1,51 @@
-# Sécurité — posture et vulnérabilités résiduelles (Phase 11)
+# Sécurité — posture (mise à jour 2026-08-02)
 
 ## Posture
 
 - **Isolation multi-tenant** : RLS PostgreSQL `USING` + `WITH CHECK` sur toutes
   les tables tenant, rôle applicatif `NOBYPASSRLS` (`creche_app`), helper
   `app_tenant_id()` (safe-by-default). Vérifié par les suites
-  `tests/tenant-isolation/*` sur PostgreSQL réel.
-- **Secrets** : exclusivement via variables d'environnement ; aucun token ni
-  secret journalisé (FCM/APNs/SMS) ; audit PII masqué (`[REDACTED]`).
+  `tests/tenant-isolation/*` sur PostgreSQL réel (15 suites vertes).
+- **Secrets** : exclusivement via variables d'environnement (`.env.prod.example`) ;
+  aucun token ni secret journalisé ; audit PII masqué (`[REDACTED]`) ; le lien
+  d'invitation (qui contient le jeton) n'est plus journalisé en mode dev.
+- **OTP** : codes générés par `crypto.randomInt` (Math.random retiré — détecté
+  par analyse statique locale).
 - **Uploads** : URLs signées S3/MinIO courtes (1 h), consentements photo
   re-vérifiés à chaque URL, accès journalisés.
 - **Webhook** : signature HMAC-SHA256 sur le corps brut, idempotence par
   `external_reference`.
 - **Erreurs** : `AppError` FR/AR, jamais de SQL brut ni d'anglais exposé.
 
-## Vulnérabilités résiduelles (npm audit — statut au 2026-08-01)
+## Dépendances — `npm audit --omit=dev` : **0 vulnérabilité** ✅
 
-`npm audit` signale des vulnérabilités **moderate/high** dont le correctif
-exige une migration cassante vers NestJS 11. **Aucune n'est exploitable dans
-la configuration actuelle** (évalué cas par cas ci-dessous). Plan : migration
-NestJS 11 dédiée après le MVP (PR séparée, suites complètes rejouées).
+Corrections appliquées le 2026-08-02 (migration de durcissement) :
 
-| Paquet | Sévérité | Correctif | Exploitabilité actuelle | Plan |
-|---|---|---|---|---|
-| `@nestjs/core` / `@nestjs/platform-express` (≤10.4.x) | moderate | NestJS 11 (cassant) | Injection via sortie non neutralisée (templates) — non utilisé | NestJS 11 post-MVP |
-| `body-parser` (via express) | low/moderate | 1.20.6 (override bloqué par npm) | DoS si `limit` invalide — limit par défaut valide ('100kb') | NestJS 11 (express 5) |
-| `multer` (via platform-express) | high | NestJS 11 | **Upload non utilisé** : les médias passent par URLs signées S3 directes | NestJS 11 |
-| `file-type` (via @nestjs/common) | moderate | non cassant (audit fix) | Parser ASF/ZIP — upload non utilisé | `npm audit fix` au prochain install |
-| `lodash` (transitif @nestjs/config) | high | @nestjs/config ≥4.0.4 **appliqué** | — | — |
-| `glob` (via @nestjs/cli, **dev**) | high | CLI 11 (cassant) | Dev uniquement, jamais en production | CLI 11 avec NestJS 11 |
-| `react-router-dom` (admin-web) | high→moderate | audit fix **appliqué** | — | — |
+| Paquet | Avant | Après |
+|---|---|---|
+| @nestjs/{core,common,platform-express,cli,jwt,passport} | 10.x (advisories moderate/high) | **11.1.x** (advisories corrigées) |
+| @nestjs/config | 4.0.4 | 4.0.4 (inchangé, déjà sûr) |
+| nodemailer | 9.0.3 | 9.0.3 (déjà sûr) |
+| lodash (transitif) | override 4.18.1 | override conservé |
+| react-router / react-router-dom (admin-web) | 6.x (open redirect) | **react-router 8.3.0** + React 19 |
+| xlsx (admin-web, import) | high prototype pollution, SANS correctif | **remplacé par exceljs** (chunk lazy) |
+| uuid (via gaxios/worker) | 9.0.1 | override **^11.1.1** |
 
-**Recommandation** : planifier la migration NestJS 11 + express 5 (avec
-`@nestjs/config` 4 déjà en place) avant la mise en production, puis exiger
-`npm audit --omit=dev` à 0 high/critical en CI (gate de merge).
+Suites complètes rejouées sous NestJS 11 / React 19 : **14/14 vertes** +
+phase12-messaging (7 cas).
 
-## Règles CI (à activer avec .github/workflows)
+## Analyse statique
 
-- `npm audit --omit=dev` : gate sur 0 high/critical (une fois NestJS 11 migré).
-- CodeQL / Semgrep : analyse statique sur chaque PR.
-- Dependabot : mises à jour automatiques des dépendances.
-- Tests d'isolation : base PostgreSQL fraîche (migrations + seeds + suites
-  phase3 → phase11).
+- semgrep local (règles maison, hors ligne) : 5 résultats — 1 vrai bug corrigé
+  (Math.random pour les OTP), 4 faux positifs documentés (logs sans secret).
+- CodeQL : configuré dans `.github/workflows/ci.yml` (à exécuter en CI une fois
+  la permission `workflows` accordée).
+
+## Recommandations restantes
+
+1. **Restaurer les workflows CI** (permission `workflows` de la GitHub App) :
+   e2e Playwright, CodeQL et Docker en CI dépendent de cette permission.
+2. **Gate de merge** : `npm audit --omit=dev --audit-level=high` doit rester à 0
+   (vérifiable désormais sans exception).
+3. Headers de sécurité, TLS et rate limiting : configurés dans
+   `infrastructure/nginx/nginx.conf` (template, à déployer avec le VPS).

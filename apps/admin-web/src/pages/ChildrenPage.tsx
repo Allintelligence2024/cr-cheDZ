@@ -151,19 +151,34 @@ export function ChildrenPage(): React.JSX.Element {
           return obj;
         });
       } else {
-        // XLSX : parsing côté client (import dynamique pour le poids du bundle)
-        const XLSX = await import('xlsx');
+        // XLSX : parsing côté client via exceljs (import dynamique — le paquet
+        // xlsx est retiré : vulnérabilité prototype pollution sans correctif).
+        const ExcelJS = await import('exceljs');
         const data = await file.arrayBuffer();
-        const wb = XLSX.read(data, { type: 'array' });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
-        rows = json.map((r) => {
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(data);
+        const sheet = wb.worksheets[0];
+        if (!sheet) throw new Error('Fichier Excel vide');
+        const headerRow = sheet.getRow(1);
+        const headers = new Map<number, string>();
+        headerRow.eachCell((cell, col) => {
+          const name = String(cell.text ?? '').trim().toLowerCase();
+          if (name) headers.set(col, name);
+        });
+        rows = [];
+        sheet.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return;
           const obj: Record<string, string> = {};
-          for (const h of HEADERS) {
-            const v = r[h] ?? r[h.toUpperCase()] ?? '';
-            obj[h] = String(v).trim();
-          }
-          return obj;
+          headers.forEach((name, col) => {
+            const cell = row.getCell(col);
+            const raw = cell.value;
+            let value = '';
+            if (raw !== null && raw !== undefined) {
+              value = typeof raw === 'object' && 'text' in raw ? String((raw as { text: unknown }).text) : String(raw);
+            }
+            if (HEADERS.includes(name)) obj[name] = value.trim();
+          });
+          if (Object.keys(obj).length > 0) rows.push(obj);
         });
       }
 

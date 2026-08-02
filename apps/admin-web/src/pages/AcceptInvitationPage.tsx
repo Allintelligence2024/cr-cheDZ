@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import React from 'react';
 import { Button, Card, TextField, tokens } from '@creche/design-system';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import { setTokens } from '../api/client';
 import { http } from '../api/client';
 import { useAuth } from '../auth/AuthContext';

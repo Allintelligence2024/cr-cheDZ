@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes } from 'react-router';
 import React, { lazy, Suspense } from 'react';
 import { tokens } from '@creche/design-system';
 import { useAuth } from './auth/AuthContext';

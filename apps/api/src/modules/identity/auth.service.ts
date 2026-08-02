@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { randomInt } from 'node:crypto';
 import { Pool } from 'pg';
 import * as bcrypt from 'bcryptjs';
 import { PG_POOL } from '../../shared/database/database.provider';
@@ -160,7 +161,8 @@ export class AuthService {
   async requestParentOtp(phone: string): Promise<{ expires_in: number; development_code?: string }> {
     const target = phone.trim();
     // Réponse identique si le numéro est inconnu (anti-énumération).
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    // Code OTP généré par crypto.randomInt (jamais Math.random — PRNG non sûr).
+    const code = String(randomInt(100000, 1000000));
     await this.pool.query(`UPDATE otp_codes SET used_at = NOW() WHERE target = $1 AND purpose = 'parent_login' AND used_at IS NULL`, [target]);
     await this.pool.query(
       `INSERT INTO otp_codes (target, code_hash, purpose, expires_at) VALUES ($1,$2,'parent_login',NOW() + INTERVAL '10 minutes')`,
