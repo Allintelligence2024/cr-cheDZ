@@ -192,6 +192,18 @@ function InvoicesTab({ onError, onMessage }: { onError: (m: string) => void; onM
     }
   };
 
+  /** Demande l'export Excel des factures du mois affiché (job worker → ExportsPage). */
+  const exportExcel = async (): Promise<void> => {
+    onError('');
+    try {
+      const period = `${year}-${String(month).padStart(2, '0')}`;
+      await http.post('/exports', { report_type: 'invoices', period });
+      onMessage(`${t('bill.exportRequested')} (${period})`);
+    } catch (e: any) {
+      onError(e.messageFr ?? t('common.error'));
+    }
+  };
+
   return (
     <Card title={t('bill.invoices')}>
       <div style={{ display: 'flex', gap: tokens.spacing.md, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -200,6 +212,7 @@ function InvoicesTab({ onError, onMessage }: { onError: (m: string) => void; onM
         <div style={{ minWidth: 90 }}><TextField label={t('bill.periodMonth')} type="number" value={month} onChange={setMonth} /></div>
         <div style={{ minWidth: 160 }}><TextField label={t('bill.dueDate')} type="date" value={dueDate} onChange={setDueDate} /></div>
         <Button onClick={() => void generate()} disabled={!contractId || !year || !month || !dueDate}>{t('bill.generateInvoice')}</Button>
+        <Button variant="ghost" onClick={() => void exportExcel()} disabled={!year || !month}>{t('bill.exportExcel')}</Button>
       </div>
       <Table
         headers={['N°', t('bill.period'), t('common.total'), t('bill.paidAmount'), t('bill.balance'), t('common.status'), t('bill.dueDate'), 'PDF']}

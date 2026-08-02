@@ -173,6 +173,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'bill.closedAt': 'Clôturée le',
     'bill.balance': 'Solde',
     'bill.pdf': 'PDF',
+    'bill.exportExcel': 'Exporter Excel',
+    'bill.exportRequested': 'Export Excel demandé',
     'bill.period': 'Période',
     'bill.paidAmount': 'Payé',
     // Phase 9 — fiche enfant
@@ -460,6 +462,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'bill.closedAt': 'أغلق في',
     'bill.balance': 'الرصيد',
     'bill.pdf': 'PDF',
+    'bill.exportExcel': 'Exporter Excel',
+    'bill.exportRequested': 'Export Excel demandé',
     'bill.period': 'الفترة',
     'bill.paidAmount': 'المدفوع',
     // Phase 9 — fiche enfant
