@@ -59,6 +59,9 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_finish(uuid, boolean, text) TO creche_app_test');
   // Roadmap v2 (migration 046) : garde-fou DPIA vidéosurveillance
   await admin.query('GRANT EXECUTE ON FUNCTION privacy_approved_dpia_exists(uuid, text) TO creche_app_test');
+  // Roadmap v2 (migration 047) : purge des clips vidéo à 30 jours
+  await admin.query('GRANT EXECUTE ON FUNCTION video_clips_expired(integer) TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON FUNCTION video_clips_delete_purged(uuid[]) TO creche_app_test');
 }
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */

@@ -29,6 +29,7 @@ import { PayrollModule } from './modules/payroll/payroll.module';
 import { StaffModule } from './modules/staff/staff.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { UsersModule } from './modules/users/users.module';
+import { VideoModule } from './modules/video/video.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { UsersModule } from './modules/users/users.module';
     PrivacyModule,
     IdentityModule,
     UsersModule,
+    VideoModule,
     OrganizationsModule,
     StaffModule,
     ChildrenModule,

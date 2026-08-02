@@ -20,6 +20,7 @@ const MessagingPage = lazy(() => import('./pages/MessagingPage').then((m) => ({ 
 const ExportsPage = lazy(() => import('./pages/ExportsPage').then((m) => ({ default: m.ExportsPage })));
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage').then((m) => ({ default: m.PrivacyPage })));
 const PayrollPage = lazy(() => import('./pages/PayrollPage').then((m) => ({ default: m.PayrollPage })));
+const VideoPage = lazy(() => import('./pages/VideoPage').then((m) => ({ default: m.VideoPage })));
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then((m) => ({ default: m.MarketplacePage })));
 const BillingPage = lazy(() => import('./pages/BillingPage').then((m) => ({ default: m.BillingPage })));
 const ChildrenPage = lazy(() => import('./pages/ChildrenPage').then((m) => ({ default: m.ChildrenPage })));
@@ -41,6 +42,7 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
     { to: '/exports', label: t('nav.exports') },
     { to: '/privacy', label: t('nav.privacy') },
     { to: '/payroll', label: t('nav.payroll') },
+    { to: '/video', label: t('nav.video') },
     { to: '/marketplace', label: t('nav.marketplace') },
     { to: '/billing', label: t('nav.billing') },
     { to: '/health', label: t('nav.health') },
@@ -133,6 +135,7 @@ export function AppRoutes(): React.JSX.Element {
         <Route path="/exports" element={<ExportsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/payroll" element={<PayrollPage />} />
+        <Route path="/video" element={<VideoPage />} />
         <Route path="/marketplace" element={<MarketplacePage />} />
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/health" element={<HealthPage />} />

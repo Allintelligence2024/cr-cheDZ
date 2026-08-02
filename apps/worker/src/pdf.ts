@@ -8,9 +8,9 @@
  * - Stockage explicitement configuré : STORAGE_BACKEND=local (STORAGE_LOCAL_DIR)
  *   ou STORAGE_BACKEND=s3 (S3/MinIO via S3_*). Jamais d'envoi sans config.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import PDFDocument from 'pdfkit';
 
 export interface InvoiceLineData {
@@ -151,6 +151,23 @@ export async function storeFile(key: string, data: Buffer, contentType: string):
     return;
   }
   throw new Error(`STORAGE_BACKEND inconnu: ${backend} (attendu: local | s3)`);
+}
+
+/** Supprime un fichier du backend indiqué (purge DPIA des clips vidéo à 30 j).
+ *  ENOENT local = fichier déjà absent (jamais uploadé) : l'invariant « plus
+ *  aucune donnée » est tenu — toléré. Tout autre échec remonte → job failed. */
+export async function deleteFile(key: string, backend: 'local' | 's3'): Promise<void> {
+  if (backend === 'local') {
+    const baseDir = process.env.STORAGE_LOCAL_DIR ?? '/tmp/creche-pdf';
+    try {
+      unlinkSync(join(baseDir, key));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    return;
+  }
+  const bucket = process.env.S3_BUCKET ?? 'creche-media';
+  await s3Client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
 }
 
 /** Stocke le PDF (gardé pour compatibilité — appels existants). */

@@ -3,7 +3,7 @@ import { createSign } from 'node:crypto';
 import * as http2 from 'node:http2';
 import { Pool, PoolClient } from 'pg';
 import { buildXlsx, storeExport, type ExportPayload } from './exports';
-import { buildInvoicePdf, storePdf } from './pdf';
+import { buildInvoicePdf, deleteFile, storePdf } from './pdf';
 
 /**
  * Worker : jobs transactionnels + livraison push (FCM HTTP v1 / APNs).
@@ -171,6 +171,37 @@ async function sendMonthlyInvoices(job: ClaimedJob): Promise<void> {
   });
 }
 
+/** video_clips_purge : purge DPIA à 30 jours (loi 25-11, doc §5). Le stockage
+ *  est supprimé AVANT la ligne de chaque clip ; un clip dont le stockage
+ *  échoue (ex. S3 injoignable) RESTE en base et fait échouer le job après
+ *  purge des autres — jamais de fausse purge complète. */
+async function videoClipsPurge(): Promise<void> {
+  const expired = await pool.query<{ id: string; storage_backend: 'local' | 's3'; storage_key: string }>(
+    `SELECT id, storage_backend, storage_key FROM video_clips_expired(500)`,
+  );
+  if (expired.rows.length === 0) {
+    console.log('[worker] video_clips_purge : rien à purger');
+    return;
+  }
+  const purgedIds: string[] = [];
+  const failures: string[] = [];
+  for (const clip of expired.rows) {
+    try {
+      await deleteFile(clip.storage_key, clip.storage_backend);
+      purgedIds.push(clip.id);
+    } catch (error) {
+      failures.push(`${clip.id}:${error instanceof Error ? error.message : String(error)}`.slice(0, 160));
+    }
+  }
+  if (purgedIds.length > 0) {
+    const r = await pool.query<{ n: number }>(`SELECT video_clips_delete_purged($1::uuid[]) AS n`, [purgedIds]);
+    console.log(`[worker] video_clips_purge : ${r.rows[0].n} clip(s) purgé(s) (> 30 j)`);
+  }
+  if (failures.length > 0) {
+    throw new Error(`VIDEO_PURGE_PARTIAL(${failures.length} échec(s) stockage): ${failures.join(' | ')}`);
+  }
+}
+
 /** retention_purge : purge des journaux au-delà de RETENTION_DAYS (défaut 1825 j). */
 async function retentionPurge(): Promise<void> {
   const days = Number(process.env.RETENTION_DAYS ?? 1825);
@@ -255,6 +286,7 @@ const JOB_HANDLERS: Record<string, (payload: unknown, orgId: string | null, job:
   generate_invoice_pdf: (_p, _o, job) => generateInvoicePdf(job),
   send_monthly_invoices: (_p, _o, job) => sendMonthlyInvoices(job),
   retention_purge: () => retentionPurge(),
+  video_clips_purge: () => videoClipsPurge(),
   // La livraison des notifications passe par notification_queue (drain
   // ci-dessous) : ce job marque la prise en charge, le drain ne passe la file
   // en 'sent' qu'après traitement, avec failure_reason explicite
