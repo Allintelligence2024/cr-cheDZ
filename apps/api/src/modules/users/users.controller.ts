@@ -1,13 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { IsUUID } from 'class-validator';
+import { Errors } from '../../shared/errors';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { UsersService } from './users.service';
-
-class RoleAssignmentDto {
-  @IsUUID() user_id!: string;
-  @IsUUID() role_id!: string;
-}
 
 class AssignmentIdParam {
   @IsUUID() id!: string;
@@ -29,7 +25,7 @@ export class UsersController {
   @Get('members/:userId/roles')
   @Roles('director', 'super_admin')
   memberRoles(@Param('userId') userId: string, @CurrentUser() u: CurrentUserPayload): Promise<Array<Record<string, unknown>>> {
-    if (!u.organizationId) throw new Error('no org');
+    if (!u.organizationId) throw Errors.forbidden();
     return this.usersService.listRoleAssignments(userId, u.organizationId);
   }
 
@@ -37,7 +33,7 @@ export class UsersController {
   @Post('members/:userId/roles')
   @Roles('director', 'super_admin')
   addRole(@Param('userId') userId: string, @Body() dto: { role_id: string }, @CurrentUser() u: CurrentUserPayload): Promise<Record<string, unknown>> {
-    if (!u.organizationId) throw new Error('no org');
+    if (!u.organizationId) throw Errors.forbidden();
     return this.usersService.addRoleAssignment(u.sub, u.organizationId, { user_id: userId, role_id: dto.role_id });
   }
 
@@ -45,7 +41,7 @@ export class UsersController {
   @Delete('role-assignments/:id')
   @Roles('director', 'super_admin')
   async removeRole(@Param() p: AssignmentIdParam, @CurrentUser() u: CurrentUserPayload): Promise<void> {
-    if (!u.organizationId) throw new Error('no org');
+    if (!u.organizationId) throw Errors.forbidden();
     await this.usersService.removeRoleAssignment(u.organizationId, p.id, u.sub);
   }
 }
