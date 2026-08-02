@@ -1,6 +1,12 @@
 # ============================================================================
-# docker-compose.prod.yml — Production (VPS durci + nginx TLS)
-# Toutes les variables sensibles viennent de l'environnement (jamais codées).
+# docker-compose.prod.yml — Production (VPS durci + nginx TLS + monitoring)
+#
+# Prérequis :
+#   cp .env.prod.example .env && <remplir les secrets>
+#   VERSION=staging docker compose -f infrastructure/docker/docker-compose.prod.yml up -d
+#
+# Toutes les variables sensibles viennent de l'environnement (.env) — jamais
+# codées en dur. Les migrations sont appliquées par le service « migrate ».
 # ============================================================================
 version: '3.9'
 
@@ -10,12 +16,15 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN requis}
     volumes:
-      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../nginx/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
-      - admin_web_dist:/usr/share/nginx/html/admin:ro
     depends_on:
       - api
+      - admin-web
+      - support-console
     restart: unless-stopped
 
   postgres:
@@ -23,7 +32,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
     healthcheck:
@@ -37,8 +46,10 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD requis}
+    ports:
+      - "9000:9000"   # interne au VPS — jamais exposé publiquement
     volumes:
       - minio_prod_data:/data
     restart: unless-stopped
@@ -49,6 +60,7 @@ services:
     volumes:
       - ../../scripts:/app/scripts
       - ../../infrastructure/database:/app/infrastructure/database
+      - ../../tests:/app/tests
       - ../../package.json:/app/package.json
     environment:
       DATABASE_URL: ${DATABASE_URL}
@@ -61,15 +73,38 @@ services:
     image: ghcr.io/creche-saas/api:${VERSION}
     environment:
       NODE_ENV: production
+      APP_PORT: "3000"
+      APP_URL: ${APP_URL:-https://${DOMAIN}}
       DATABASE_URL: ${DATABASE_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET: ${S3_BUCKET}
-      SENTRY_DSN: ${SENTRY_DSN}
-      CORS_ORIGINS: ${CORS_ORIGINS}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-s3}
+      STORAGE_LOCAL_DIR: ${STORAGE_LOCAL_DIR:-/tmp/creche-pdf}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?PAYMENT_WEBHOOK_SECRET requis}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
+      APNS_PRIVATE_KEY: ${APNS_PRIVATE_KEY:-}
+      APNS_PRODUCTION: ${APNS_PRODUCTION:-false}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM: ${TWILIO_FROM:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-none}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TO: ${SMTP_TO:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${DOMAIN}}
+      RATE_LIMIT_DISABLED: "false"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -86,31 +121,99 @@ services:
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
-      FCM_SERVER_KEY: ${FCM_SERVER_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-s3}
+      STORAGE_LOCAL_DIR: ${STORAGE_LOCAL_DIR:-/tmp/creche-pdf}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-}
+      APNS_PRIVATE_KEY: ${APNS_PRIVATE_KEY:-}
+      APNS_PRODUCTION: ${APNS_PRODUCTION:-false}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      RETENTION_DAYS: ${RETENTION_DAYS:-1825}
     depends_on:
       migrate:
         condition: service_completed_successfully
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  admin-web:
+    image: ghcr.io/creche-saas/admin-web:${VERSION}
+    restart: unless-stopped
+
+  support-console:
+    image: ghcr.io/creche-saas/support-console:${VERSION}
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD requis}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
     restart: unless-stopped
 
   backup:
     image: postgres:16-alpine
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE requis (GPG symétrique)}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      KEEP_DAYS: "7"
     volumes:
       - backup_data:/backups
     entrypoint: |
       /bin/sh -c "
+      apk add --no-cache gnupg >/dev/null 2>&1
       while true; do
-        pg_dump -h postgres -U ${POSTGRES_USER} ${POSTGRES_DB} \
-          | gzip > /backups/backup_$$(date +%Y%m%d_%H%M%S).sql.gz
-        find /backups -mtime +7 -delete
+        STAMP=\$$(date +%F)
+        pg_dump -h postgres -U \$$POSTGRES_USER \$$POSTGRES_DB \
+          | gzip -9 \
+          | gpg --batch --yes --symmetric --cipher-algo AES256 \
+                --passphrase \$$BACKUP_PASSPHRASE \
+                -o /backups/creche-\$$STAMP.sql.gz.gpg
+        find /backups -name 'creche-*.sql.gz.gpg' -mtime +\$$KEEP_DAYS -delete
+        echo \"[backup] \$$STAMP écrit\"
         sleep 86400
       done
       "
+    depends_on:
+      - postgres
     restart: unless-stopped
 
 volumes:
   postgres_prod_data:
   minio_prod_data:
-  admin_web_dist:
+  prometheus_data:
+  grafana_data:
   backup_data:

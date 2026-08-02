@@ -353,12 +353,31 @@ async function drainNotificationQueue(): Promise<void> {
   }
 }
 
+/** Sentry (Phase 11) : actif uniquement avec SENTRY_DSN. */
+let sentry: typeof import('@sentry/node') | null = null;
+async function initSentry(): Promise<void> {
+  if (!process.env.SENTRY_DSN) return;
+  sentry = await import('@sentry/node');
+  sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? 'development',
+    tracesSampleRate: 0.1,
+  });
+}
+
 async function run(): Promise<void> {
+  await initSentry();
   console.log('[worker] démarré — jobs (024) + FCM HTTP v1 / APNs');
   for (;;) {
-    const had = await processNextJob();
-    await drainNotificationQueue();
-    if (!had) await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const had = await processNextJob();
+      await drainNotificationQueue();
+      if (!had) await new Promise((r) => setTimeout(r, 2000));
+    } catch (error) {
+      sentry?.captureException(error);
+      console.error('[worker] boucle:', error instanceof Error ? error.message : String(error));
+      await new Promise((r) => setTimeout(r, 5000));
+    }
   }
 }
 
