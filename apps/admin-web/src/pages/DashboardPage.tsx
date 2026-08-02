@@ -55,7 +55,7 @@ export function DashboardPage(): React.JSX.Element {
         </div>
         {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
         {data && data.rooms.length === 0 && <p style={{ color: tokens.colors.textMuted }}>{t('dash.noRooms')}</p>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: tokens.spacing.md }}>
+        <div className="grid-responsive">
           {data?.rooms.map((room) => (
             <div key={room.room_id} style={{ border: `1px solid ${tokens.colors.border}`, borderRadius: tokens.radius.md, padding: tokens.spacing.md }}>
               <div style={{ fontWeight: 700, marginBottom: 8 }}>

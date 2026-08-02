@@ -28,6 +28,7 @@ const OrgSettingsPage = lazy(() => import('./pages/OrgSettingsPage').then((m) =>
 function Layout({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { logout, user } = useAuth();
   const { t, locale, setLocale, dir } = useI18n();
+  const [navOpen, setNavOpen] = React.useState(false);
 
   const navItems = [
     { to: '/', label: t('nav.dashboard') },
@@ -49,16 +50,22 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
     ...(user?.is_super_admin ? [{ to: '/organizations', label: t('nav.organizations') }] : []),
   ];
 
+  const closeNav = (): void => setNavOpen(false);
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: tokens.typography.fontFamily, background: tokens.colors.background }} dir={dir}>
-      <aside style={{ width: 240, background: '#0F172A', color: '#fff', padding: tokens.spacing.md, display: 'flex', flexDirection: 'column' }}>
-        <h1 style={{ fontSize: 15, margin: '0 0 24px', padding: '8px 4px' }}>🏫 {t('app.title')}</h1>
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div className={`layout ${navOpen ? 'sidebar-open' : ''}`} style={{ fontFamily: tokens.typography.fontFamily, background: tokens.colors.background }} dir={dir}>
+      <aside className={`layout-sidebar ${navOpen ? 'open' : ''}`}>
+        <h1 style={{ fontSize: 15, padding: '8px 4px' }}>🏫 {t('app.title')}</h1>
+        <button className="layout-burger" onClick={() => setNavOpen(!navOpen)} aria-label="Menu">
+          {navOpen ? '✕' : '☰'}
+        </button>
+        <nav>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === '/'}
+              onClick={closeNav}
               style={({ isActive }) => ({
                 color: isActive ? '#fff' : '#94A3B8',
                 textDecoration: 'none',
@@ -72,7 +79,7 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
             </NavLink>
           ))}
         </nav>
-        <div style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="sidebar-footer" style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
             onClick={() => setLocale(locale === 'fr' ? 'ar' : 'fr')}
             style={{ background: 'transparent', border: `1px solid #334155`, color: '#E2E8F0', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}
@@ -87,7 +94,7 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
           </button>
         </div>
       </aside>
-      <main style={{ flex: 1, padding: tokens.spacing.lg }}>
+      <main className="layout-main">
         <Suspense fallback={<div style={{ padding: 48 }}>{t('common.loading')}</div>}>{children}</Suspense>
       </main>
     </div>

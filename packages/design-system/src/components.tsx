@@ -104,6 +104,7 @@ export function Table(props: {
   onRowClick?: (rowIndex: number) => void;
 }): React.JSX.Element {
   return (
+    <div className="table-scroll">
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: tokens.typography.body }}>
       <thead>
         <tr>
@@ -131,5 +132,6 @@ export function Table(props: {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
