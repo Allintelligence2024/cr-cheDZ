@@ -71,6 +71,21 @@ programmer mensuellement).
 ## 7. Surveillance
 
 - `GET /api/v1/metrics` (Prometheus) : `http_requests_total`, `creche_jobs_pending`,
-  `creche_notifications_pending`, `creche_invoices_unpaid`, `process_uptime_seconds`.
+  `creche_notifications_pending`, `creche_invoices_unpaid`, `process_uptime_seconds`,
+  et jauges pilote : `creche_children_active`, `creche_checkins_today`,
+  `creche_sync_ops_24h`, `creche_jobs_failed_24h`, `creche_http_5xx_24h`.
 - Alertes recommandées : erreur rate > 1 %, jobs en attente > 50, disque > 80 %,
   restauration non testée depuis > 30 j.
+
+## 8. Suivi pilote (Phase 12)
+
+1. Préparer l'environnement : `node scripts/migrate.mjs && node scripts/seed.mjs`,
+   puis `node scripts/pilot/seed-pilot.mjs` (5 crèches de démonstration).
+2. Vérifier la préparation : `node scripts/pilot/pilot-report.mjs --bench`
+   (produit `docs/pilot/RAPPORT-PREPARATION.md` : checks, critères MVP, mesures).
+3. Suivi quotidien : relever les jauges `/metrics` (checkins/jour, sync 24 h,
+   jobs échoués 24 h, 5xx 24 h) — voir `docs/pilot/CHECKLIST_PILOTE.md`.
+4. Incident pilote : ticket support → console support (recherche globale,
+   jobs, impersonation) ; objectif résolution < 24 h (critère go/no-go).
+5. Fin de pilote : bilan `docs/pilot/BILAN-PILOTE.md` + décision go/no-go ;
+   les irritants acceptés rejoignent `docs/ROADMAP_V2.md`.

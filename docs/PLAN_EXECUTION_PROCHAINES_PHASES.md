@@ -396,6 +396,32 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 
 ---
 
+## 11. Phase 12 — PILOTES ET MISE EN PRODUCTION (OUTILLAGE ✅ — EXÉCUTION TERRAIN ⏳)
+
+### Livré et testé dans cette session
+
+| # | Élément | Fichiers | Statut |
+|---|---|---|---|
+| 12.1 | **Seed des 5 crèches pilotes** : organisations + site + 3 salles + 15 enfants + directrice/2 éducatrices/comptable + contrats + parents — idempotent ; login réel vérifié (dashboard 3 salles, 15 enfants) | `scripts/pilot/seed-pilot.mjs` | ✅ |
+| 12.2 | **Benchmark MVP** sur PostgreSQL réel + API compilée (NOBYPASSRLS) : pointage 12 enfants 0,09 s (< 180 s), repas groupé 0,04 s (< 30 s), facture 0,008 s (< 5 s), import 50 enfants 0,06 s (< 60 s) — 4/4 | `tests/load/mvp-bench.mjs` | ✅ |
+| 12.3 | **Rapport de préparation** : 19/19 vérifications OK (migrations, schema-check, GATE RLS, 14 suites présentes), checklist MVP 7/10 pass + 3 na (infra réelle) | `scripts/pilot/pilot-report.mjs`, `docs/pilot/RAPPORT-PREPARATION.md` | ✅ |
+| 12.4 | **Jauges de suivi pilote** dans /metrics : `creche_children_active` (75 attendus), `creche_checkins_today`, `creche_sync_ops_24h`, `creche_jobs_failed_24h`, `creche_http_5xx_24h` (fenêtre glissante) | `modules/metrics/metrics.service.ts` | ✅ |
+| 12.5 | **Onboarding** (directrice, éducatrice, parent), comptes de test, canal feedback | `docs/pilot/ONBOARDING.md` | ✅ |
+| 12.6 | **Checklist 2 semaines** (journal quotidien, mesures, go/no-go, journal des irritants) | `docs/pilot/CHECKLIST_PILOTE.md` | ✅ |
+| 12.7 | **QR de partage d'app** (parents + staff) — URL stores à remplacer | `docs/pilot/qr-app-*.png` | ✅ |
+| 12.8 | **Roadmap v2** (paiement en ligne, messagerie, NestJS 11, stores, multi-rôles…) | `docs/ROADMAP_V2.md` | ✅ |
+| 12.9 | **Runbook §8 suivi pilote** + **template de bilan** go/no-go | `docs/RUNBOOK.md`, `docs/pilot/BILAN-PILOTE.md` | ✅ |
+| 12.10 | Non-régression complète : 14/14 suites vertes (S2 → P11) | — | ✅ |
+
+### Reste (exécution terrain — ne peut pas être fait dans la sandbox)
+- 5 crèches réelles × 2 semaines d'utilisation quotidienne (journal signé).
+- Builds stores (Play Console / App Store), DNS/TLS, device farm Android 2 Go RAM.
+- FCM/APNs/SMS de bout en bout (secrets), notifications < 30 s mesurées sur le terrain.
+- Exercice de restauration chronométré (< 30 min) et rollback testé sur l'infrastructure réelle.
+- Bilan pilote rempli + décision go/no-go.
+
+---
+
 ## 6. Phases suivantes (résumé exécutif — détail dans PLAN_IMPLEMENTATION.md §3)
 
 | Phase | S | Livrable clé | Critère de sortie |
@@ -406,7 +432,8 @@ pas (vérifié) → toutes les politiques utilisent désormais `app_tenant_id()`
 | **P8 — Facturation** | ✅ FAIT (API + worker) | Contrats, génération mensuelle idempotente (index 021), paiements espèces, allocations bornées (trigger 023), caisse, reçus, webhook signé/idempotent (024), PDF worker (local/S3) | **16/16 cas verts** sur PostgreSQL réel NOBYPASSRLS ; PDF AR (composition arabe) et exports Excel non implémentés |
 | **P9 — Admin web** | ✅ API + écrans web | Dashboard réel (présences/jour + alertes), présences (pointage + corrections), journal (modération directrice), photos (validation visibilité), facturation (contrats/factures/paiements/caisse), fiche enfant (historique), paramètres org (tarifs 19-253) — bundle 63,7 kB gzip (lazy) | **7 cas phase9 verts** sur PostgreSQL réel NOBYPASSRLS ; Playwright e2e écrit mais NON exécuté (navigateur indisponible dans la sandbox) ; messagerie non implémentée |
 | **P10 — Santé, conformité, vie privée, support** | ✅ API + console + écrans web | Santé (dossier, allergies, vaccinations, médicaments double saisie, accès parent can_view_health), conformité 19-253 (checks + capacité enforceée 409), vie privée 25-11 (demandes + export JSON, violations chrono 5 j ANPDP, DPIA, registre seedé), console support (recherche, impersonation auditée, jobs retry, feature flags) — migrations 029-032 + écrans admin-web Santé/Conformité | **3 suites phase10 (29 cas) vertes** ; notification ANPDP réelle (SMTP) non testée de bout en bout (pas de SMTP) |
-| **P11 — Durcissement** | ✅ en cours | /metrics Prometheus (sans PII), rétention 5 ans (job retention_purge), index Phase 11 (033-034), idempotence mensuelle testée (worker), npm audit durci (config 4/nodemailer 9/overrides), health public, workflows CI restaurés (locaux), backup chiffré, anonymisation staging, runbook, k6 script | **suite phase11 verte** (4 volets) ; migration NestJS 11 planifiée (résidus audit documentés SECURITY.md) ; e2e Playwright et k6 non exécutés (navigateur/k6 absents) |
+| **P11 — Durcissement** | ✅ FAIT | /metrics Prometheus (sans PII), rétention 5 ans (job retention_purge), index Phase 11 (033-034), idempotence mensuelle testée (worker), npm audit durci (config 4/nodemailer 9/overrides), health public, backup chiffré, anonymisation staging, runbook, k6 script, SECURITY.md | **suite phase11 verte** ; migration NestJS 11 planifiée ; e2e Playwright et k6 non exécutés (outils absents) |
+| **P12 — Pilotes + production** | ✅ outillage, ⏳ terrain | Seed 5 crèches pilotes, rapport de préparation (19/19 checks, 7/10 MVP pass), benchmark MVP 4/4 (pointage 0,09 s, repas groupé 0,04 s, facture 0,008 s, import 50 0,06 s), jauges pilote /metrics, onboarding FR, checklist 2 semaines, QR de partage, roadmap v2, runbook §8, bilan template | **exécution terrain requise** (5 crèches × 2 semaines, stores, DNS/TLS, device farm, FCM/APNs/SMS réels) — cf. RAPPORT-PREPARATION.md |
 
 ---
 

@@ -14,6 +14,8 @@ export class MetricsService {
   private readonly startedAt = Date.now();
   private readonly bucketEdges = [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
   private readonly buckets = new Map<string, number>();
+  /** Fenêtre glissante des erreurs 5xx (timestamp d'entrée) — suivi pilote. */
+  private readonly http5xx: number[] = [];
 
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
@@ -24,6 +26,11 @@ export class MetricsService {
   httpRequest(method: string, route: string, status: number, durationSeconds: number): void {
     const k = this.key(method, route, status);
     this.counters.set(k, (this.counters.get(k) ?? 0) + 1);
+    if (status >= 500) {
+      this.http5xx.push(Date.now());
+      const cutoff = Date.now() - 24 * 3600_000;
+      while (this.http5xx.length && this.http5xx[0] < cutoff) this.http5xx.shift();
+    }
 
     const dk = `${method} ${route}`;
     const d = this.durations.get(dk) ?? { count: 0, sum: 0 };
@@ -70,11 +77,33 @@ export class MetricsService {
     out.push('# HELP creche_invoices_unpaid Factures non soldées.');
     out.push('# TYPE creche_invoices_unpaid gauge');
     out.push(`creche_invoices_unpaid ${await this.count("SELECT COUNT(*)::int AS n FROM invoices WHERE status IN ('sent', 'partially_paid', 'overdue')")}`);
+    // ── Suivi pilote (Phase 12) : usage quotidien agrégé, aucune donnée tenant ──
+    out.push('# HELP creche_children_active Enfants actifs (toutes organisations).');
+    out.push('# TYPE creche_children_active gauge');
+    out.push(`creche_children_active ${await this.count("SELECT COUNT(*)::int AS n FROM children WHERE deleted_at IS NULL AND status = 'active'")}`);
+    out.push('# HELP creche_checkins_today Pointages d\'arrivée du jour (Africa/Algiers).');
+    out.push('# TYPE creche_checkins_today gauge');
+    out.push(`creche_checkins_today ${await this.count("SELECT COUNT(*)::int AS n FROM attendance_events e JOIN attendance_sessions s ON s.id = e.session_id WHERE e.event_type = 'check_in' AND s.session_date = (NOW() AT TIME ZONE 'Africa/Algiers')::date")}`);
+    out.push('# HELP creche_sync_ops_24h Opérations de synchronisation reçues sur 24 h.');
+    out.push('# TYPE creche_sync_ops_24h gauge');
+    out.push(`creche_sync_ops_24h ${await this.count("SELECT COUNT(*)::int AS n FROM sync_operations WHERE created_at >= NOW() - INTERVAL '24 hours'")}`);
+    out.push('# HELP creche_jobs_failed_24h Jobs en échec sur 24 h.');
+    out.push('# TYPE creche_jobs_failed_24h gauge');
+    out.push(`creche_jobs_failed_24h ${await this.count("SELECT COUNT(*)::int AS n FROM background_jobs WHERE status = 'failed' AND failed_at >= NOW() - INTERVAL '24 hours'")}`);
+    out.push('# HELP creche_http_5xx_24h Requêtes HTTP en erreur 5xx sur 24 h (fenêtre glissante en mémoire).');
+    out.push('# TYPE creche_http_5xx_24h gauge');
+    out.push(`creche_http_5xx_24h ${this.http5xx24h}`);
 
     out.push('# HELP process_uptime_seconds Temps de fonctionnement du processus.');
     out.push('# TYPE process_uptime_seconds gauge');
     out.push(`process_uptime_seconds ${((Date.now() - this.startedAt) / 1000).toFixed(1)}`);
     return out.join('\n') + '\n';
+  }
+
+  private get http5xx24h(): number {
+    const cutoff = Date.now() - 24 * 3600_000;
+    while (this.http5xx.length && this.http5xx[0] < cutoff) this.http5xx.shift();
+    return this.http5xx.length;
   }
 
   private async count(sql: string): Promise<number> {

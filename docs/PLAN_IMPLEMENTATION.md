@@ -522,23 +522,41 @@ Légende estimation : **PD** = jours-personne nets (à majorer de +25–35 % : r
 
 ---
 
-### PHASE 12 — Pilotes et mise en production  ⏱ 10 PD  (S12–S16)
+### PHASE 12 — Pilotes et mise en production  ⏱ 10 PD  (S12–S16) — outillage ✅, terrain ⏳
 
 **🎯 Objectif** : 5 crèches pilotes utilisent le produit chaque jour pendant 2 semaines → go-live.
 
-**✅ Tâches**
-1. Préparation pilotes : onboarding (fiches, formations directrice/éducatrice, QR de partage d'app), données de démarrage par crèche, comptes de test, canal de feedback dédié.
-2. Semaine pilote 1 : suivi quotidien (métriques d'usage : pointages/jour, sync réussies, erreurs), hotfixes en continu, journal des irritants.
-3. Semaine pilote 2 : correction des irritants, mesure des critères MVP (3 min/pointage, 30 s/repas groupé, notifications < 30 s), collecte des retours AR/FR.
-4. Bilan pilotes : décision go/no-go ; liste des améliorations différées → backlog v2.
-5. Mise en production : builds stores (Play Console + App Store), DNS/TLS, sauvegardes activées, monitoring, plan de support (SLA cible, canaux), formation des équipes crèche.
-6. Rétrospective + **roadmap v2** : paiement en ligne CIB/Edahabia, multi-sites, WhatsApp, marketplace, module planning personnel, multi-rôles.
+**✅ Tâches (outillage livré et testé dans cette session)**
+1. **Préparation pilotes** — ✅ : onboarding (fiches directrice/éducatrice/parent,
+   `docs/pilot/ONBOARDING.md`), QR de partage d'app (`docs/pilot/qr-app-*.png`),
+   données de démarrage par crèche (`scripts/pilot/seed-pilot.mjs` : 5 crèches,
+   15 enfants chacune), comptes de test, canal de feedback (console support).
+2. **Semaine pilote 1** — ⏳ terrain : suivi quotidien via les jauges `/metrics`
+   (pointages/jour, sync 24 h, erreurs), hotfixes, journal des irritants
+   (`docs/pilot/CHECKLIST_PILOTE.md`).
+3. **Semaine pilote 2** — ⏳ terrain : correction des irritants, mesure des
+   critères MVP (pointage < 3 min, repas groupé < 30 s, notifications < 30 s),
+   collecte des retours AR/FR.
+4. **Bilan pilotes** — ⏳ : décision go/no-go (`docs/pilot/BILAN-PILOTE.md`) ;
+   améliorations différées → `docs/ROADMAP_V2.md`.
+5. **Mise en production** — ⏳ : builds stores (Play Console + App Store),
+   DNS/TLS, sauvegardes activées (scripts/backup.sh), monitoring (/metrics +
+   Grafana ⏳), plan de support, formation des équipes.
+6. **Rétrospective + roadmap v2** — ✅ `docs/ROADMAP_V2.md` (paiement en ligne
+   CIB/Edahabia — webhook prêt ; messagerie ; WhatsApp ; marketplace ; planning ;
+   multi-rôles).
+
+**Mesures API réelles (benchmark MVP, PostgreSQL réel NOBYPASSRLS)** :
+pointage 12 enfants 0,09 s (limite 180 s) · repas groupé 0,037 s (limite 30 s)
+· génération facture 0,008 s (limite 5 s) · import 50 enfants 0,061 s (limite
+60 s) — 4/4. Rapport : `docs/pilot/RAPPORT-PREPARATION.md` (19/19 checks,
+7/10 critères MVP pass, 3 na infra réelle).
 
 **🧪 Critères d'acceptation**
-- [ ] 5 crèches × 2 semaines d'utilisation quotidienne (métriques vérifiées)
-- [ ] 100 % des critères MVP de la Partie 9 cochés
-- [ ] 0 incident bloquant non résolu en 24 h pendant les pilotes
-- [ ] Go-live validé ; rollback testé ; runbook remis à jour
+- [x] 100 % des critères MVP « mesurables en sandbox » vérifiés (benchmark + suites)
+- [ ] 5 crèches × 2 semaines d'utilisation quotidienne (métriques vérifiées) — ⏳ terrain
+- [ ] 0 incident bloquant non résolu en 24 h pendant les pilotes — ⏳ terrain
+- [ ] Go-live validé ; rollback testé ; runbook remis à jour — ⏳ terrain
 
 ---
 

@@ -43,15 +43,27 @@ cr-cheDZ, branche arena/019fbeff-cr-chedz (branche de travail de la session).
   (demandes + export JSON, violations chrono 5 j ANPDP, DPIA, registre seedé),
   console support (recherche, impersonation auditée, jobs retry, feature
   flags) — migrations 029-032, 035.
-- Phase 11 (durcissement) EN COURS/TERMINÉE (API) : /metrics Prometheus public
-  (sans PII), rétention 5 ans (migration 034 + job retention_purge), index
-  Phase 11 (migration 033), idempotence mensuelle testée, healthcheck public
-  corrigé, npm audit durci (@nestjs/config 4, nodemailer 9, overrides), écrans
-  admin-web Santé/Conformité, feature flags console, scripts ops (backup.sh,
-  anonymize.sql), RUNBOOK, k6 script, SECURITY.md. Suite phase11
-  (phase11-hardening.api.test.mjs) verte.
+- Phase 11 (durcissement) TERMINÉE : /metrics Prometheus public (sans PII),
+  rétention 5 ans (migration 034 + job retention_purge), index Phase 11
+  (migration 033), idempotence mensuelle testée, healthcheck public corrigé,
+  npm audit durci, écrans admin-web Santé/Conformité, feature flags console,
+  scripts ops (backup.sh, anonymize.sql), RUNBOOK, k6 script, SECURITY.md.
+- Phase 12 (pilotes) OUTILLAGE TERMINÉ : seed 5 crèches pilotes
+  (scripts/pilot/seed-pilot.mjs), benchmark MVP 4/4 sur PostgreSQL réel
+  (tests/load/mvp-bench.mjs : pointage 12 enfants 0,09 s, repas groupé
+  0,04 s, facture 0,008 s, import 50 enfants 0,06 s), rapport de préparation
+  (scripts/pilot/pilot-report.mjs → docs/pilot/RAPPORT-PREPARATION.md,
+  19/19 checks, 7/10 MVP pass), jauges pilote dans /metrics
+  (creche_children_active, creche_checkins_today, creche_sync_ops_24h,
+  creche_jobs_failed_24h, creche_http_5xx_24h), onboarding + checklist +
+  QR de partage + roadmap v2 + runbook §8 + template de bilan.
+  EXÉCUTION TERRAIN restante : 5 crèches × 2 semaines, stores, DNS/TLS,
+  device farm, FCM/APNs/SMS réels, exercice de restauration chronométré.
 
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
+- PILOTE TERRAIN : 5 crèches réelles × 2 semaines, stores, DNS/TLS, device
+  farm, FCM/APNs/SMS réels, exercice de restauration, bilan go/no-go
+  (tout l'outillage est prêt et testé — cf. docs/pilot/).
 - Workflows CI (.github/workflows/ci.yml + docker.yml) : prêts dans le dépôt
   local, NON commités ni poussés (la GitHub App n'a pas la permission
   `workflows` — push refusé). Restaurer : git add .github apps/worker/Dockerfile
