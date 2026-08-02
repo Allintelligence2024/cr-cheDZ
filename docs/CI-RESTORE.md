@@ -7,12 +7,22 @@ GitHub App to create or update workflow … without workflows permission »).
 
 ## État actuel
 
-- Les workflows **ci.yml** (database → suites phase3→11, api, web, security
-  avec CodeQL, e2e Playwright) et **docker.yml** (api, worker, admin-web →
-  ghcr.io/creche-saas) sont prêts dans `.github/workflows/` du dépôt local,
-  ainsi que `apps/worker/Dockerfile`.
+- Les workflows **ci.yml** (database → 23 suites schema-check…phase20, api,
+  web, security avec CodeQL, e2e Playwright) et **docker.yml** (api, worker,
+  admin-web, support-console → ghcr.io/creche-saas) sont prêts dans
+  `.github/workflows/` du dépôt local, ainsi que les Dockerfiles des 4 apps.
 - Ils sont **non commités** (le commit de restauration a été retiré de la
   branche pour ne pas bloquer les pushs).
+- **2026-08-02** : les versions locales d'origine ont été perdues avec
+  l'espace de travail — les fichiers présents ont été **réécrits** à partir
+  de la description ci-dessus (mêmes jobs). Nouvelle tentative de push :
+  toujours refusé sans la permission `workflows` (« refusing to allow a
+  GitHub App to create or update workflow .github/workflows/ci.yml »).
+  **Action humaine requise** : accorder la permission `workflows` à la
+  GitHub App, puis exécuter la commande de restauration ci-dessous.
+- NB e2e : les specs Playwright (login + director-flow) n'ont JAMAIS été
+  exécutées — le premier run CI du job e2e peut échouer sur la spec elle-même
+  (chemins, sélecteurs) ; corriger la spec, jamais l'application.
 
 ## Restaurer (une seule commande, depuis le dépôt)
 
