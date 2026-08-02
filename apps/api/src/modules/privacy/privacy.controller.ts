@@ -181,6 +181,11 @@ export class PrivacyController {
   @Roles('super_admin')
   flags() { return this.privacy.listFlags(); }
 
+  /** Suivi pilote : agrégats par organisation (super_admin uniquement). */
+  @Get('support/pilot-summary')
+  @Roles('super_admin')
+  pilotSummary() { return this.privacy.pilotSummary(); }
+
   @Post('support/flags/:key')
   @Roles('super_admin')
   setFlag(@Param('key') key: string, @Body() dto: SetFlagDto, @CurrentUser() u: CurrentUserPayload) {

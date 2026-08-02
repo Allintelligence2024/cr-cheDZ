@@ -50,6 +50,8 @@ export async function ensureAppRole(admin) {
   // Phase 11 (migration 035) : console support — feature flags
   await admin.query('GRANT EXECUTE ON FUNCTION support_list_flags() TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION support_set_flag(text, uuid, boolean) TO creche_app_test');
+  // Phase 12 (migration 036) : suivi pilote (agrégats par organisation)
+  await admin.query('GRANT EXECUTE ON FUNCTION support_pilot_summary() TO creche_app_test');
 }
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */

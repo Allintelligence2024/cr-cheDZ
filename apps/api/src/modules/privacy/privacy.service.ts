@@ -408,4 +408,10 @@ export class PrivacyService {
     });
     return { flag_key: flagKey, organization_id: dto.organization_id ?? null, is_enabled: dto.is_enabled };
   }
+
+  /** Suivi pilote (Phase 12) : agrégats par organisation (super_admin). */
+  async pilotSummary(): Promise<Array<Record<string, unknown>>> {
+    const r = await this.pool.query(`SELECT * FROM support_pilot_summary()`);
+    return r.rows;
+  }
 }

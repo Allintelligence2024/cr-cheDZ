@@ -60,10 +60,30 @@ cr-cheDZ, branche arena/019fbeff-cr-chedz (branche de travail de la session).
   EXÉCUTION TERRAIN restante : 5 crèches × 2 semaines, stores, DNS/TLS,
   device farm, FCM/APNs/SMS réels, exercice de restauration chronométré.
 
+MISE À JOUR 2026-08-02 (durcissement + roadmap v2) :
+- NestJS 11.1.28 + React 19 + react-router 8.3.0 + exceljs (xlsx retiré) +
+  uuid 11 (override) → `npm audit --omit=dev` = **0 vulnérabilité** ;
+  15/15 suites vertes sous la nouvelle stack.
+- Sécurité : OTP via crypto.randomInt (Math.random retiré, détecté par
+  semgrep local), lien d'invitation (jeton) non journalisé.
+- Infra provisioning : docker-compose.prod.yml réécrit (prometheus, grafana
+  + dashboard, postgres-exporter, admin-web/support-console, backup GPG),
+  nginx.conf TLS + rate limiting, .env.prod.example complet,
+  infra/monitoring/grafana/dashboards/creche.json, Dockerfile support-console.
+- Sentry : @sentry/node (api+worker) et @sentry/react (admin-web), actifs
+  uniquement avec SENTRY_DSN/VITE_SENTRY_DSN.
+- Suivi pilote : migration 036+037 support_pilot_summary() + GET /support/
+  pilot-summary + onglet « Suivi pilote » console (vérifié : 5 crèches,
+  75 enfants).
+- Roadmap v2 démarrée : module MESSAGERIE (conversations par enfant,
+  participants, messages, garde participant + RLS) — phase12-messaging
+  (7 cas) vert.
+
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
 - PILOTE TERRAIN : 5 crèches réelles × 2 semaines, stores, DNS/TLS, device
   farm, FCM/APNs/SMS réels, exercice de restauration, bilan go/no-go
-  (tout l'outillage est prêt et testé — cf. docs/pilot/).
+  (tout l'outillage est prêt et testé — cf. docs/pilot/ ; baseline pré-pilote
+  consignée dans docs/pilot/BILAN-PILOTE.md).
 - Workflows CI (.github/workflows/ci.yml + docker.yml) : prêts dans le dépôt
   local, NON commités ni poussés (la GitHub App n'a pas la permission
   `workflows` — push refusé). Restaurer : git add .github apps/worker/Dockerfile

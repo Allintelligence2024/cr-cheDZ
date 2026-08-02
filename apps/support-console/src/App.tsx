@@ -74,7 +74,7 @@ const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', b
 const buttonStyle: React.CSSProperties = { marginTop: 16, width: '100%', padding: '10px 12px', borderRadius: 8, border: 'none', background: '#0F172A', color: '#fff', fontWeight: 600, cursor: 'pointer' };
 const tabStyle = (active: boolean): React.CSSProperties => ({ padding: '8px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, background: active ? '#0F172A' : '#E2E8F0', color: active ? '#fff' : '#0F172A' });
 
-type Tab = 'search' | 'jobs' | 'impersonate' | 'flags';
+type Tab = 'search' | 'jobs' | 'impersonate' | 'flags' | 'pilot';
 
 interface FlagRow {
   flag_key: string;
@@ -82,6 +82,17 @@ interface FlagRow {
   description: string | null;
   organization_id: string | null;
   org_slug: string | null;
+}
+
+interface PilotRow {
+  org_slug: string;
+  org_name: string;
+  children_active: number;
+  checkins_today: number;
+  sync_ops_24h: number;
+  journal_events_today: number;
+  invoices_unpaid: number;
+  jobs_failed_24h: number;
 }
 
 export function App(): React.JSX.Element {
@@ -106,12 +117,71 @@ export function App(): React.JSX.Element {
         <button style={tabStyle(tab === 'jobs')} onClick={() => setTab('jobs')}>Jobs</button>
         <button style={tabStyle(tab === 'impersonate')} onClick={() => setTab('impersonate')}>Impersonation</button>
         <button style={tabStyle(tab === 'flags')} onClick={() => setTab('flags')}>Feature flags</button>
+        <button style={tabStyle(tab === 'pilot')} onClick={() => setTab('pilot')}>Suivi pilote</button>
       </div>
       {tab === 'search' && <SearchTab />}
       {tab === 'jobs' && <JobsTab />}
       {tab === 'impersonate' && <ImpersonateTab />}
       {tab === 'flags' && <FlagsTab />}
+      {tab === 'pilot' && <PilotTab />}
     </main>
+  );
+}
+
+function PilotTab(): React.JSX.Element {
+  const [rows, setRows] = useState<PilotRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = (): void => {
+    api('GET', '/support/pilot-summary').then((r) => setRows(r as PilotRow[])).catch((e: any) => setError(e.message));
+  };
+  useEffect(load, []);
+
+  const total = (k: keyof PilotRow): number => rows.reduce((s, r) => s + Number(r[k] ?? 0), 0);
+  const pilots = rows.filter((r) => r.org_slug.startsWith('pilot-'));
+
+  return (
+    <section>
+      <button onClick={load} style={{ ...buttonStyle, width: 'auto', marginTop: 0, marginBottom: 12 }}>Actualiser</button>
+      {error && <p style={{ color: '#DC2626' }}>{error}</p>}
+      {pilots.length > 0 && (
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+          {[
+            ['Pointages aujourd\u2019hui', total('checkins_today')],
+            ['Sync ops 24 h', total('sync_ops_24h')],
+            ['Événements journal aujourd\u2019hui', total('journal_events_today')],
+            ['Enfants actifs', total('children_active')],
+            ['Jobs en échec 24 h', total('jobs_failed_24h')],
+          ].map(([label, value]) => (
+            <div key={String(label)} style={{ border: '1px solid #E2E8F0', borderRadius: 10, padding: '10px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{value}</div>
+              <div style={{ fontSize: 12, color: '#64748B' }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr>
+            <th style={thStyle}>Organisation</th><th style={thStyle}>Enfants actifs</th><th style={thStyle}>Pointages aujourd\u2019hui</th>
+            <th style={thStyle}>Sync 24 h</th><th style={thStyle}>Journal aujourd\u2019hui</th><th style={thStyle}>Factures impayées</th><th style={thStyle}>Jobs échoués 24 h</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.org_slug} style={{ borderBottom: '1px solid #E2E8F0', background: r.org_slug.startsWith('pilot-') ? '#F0FDF4' : undefined }}>
+              <td style={tdStyle}>{r.org_slug} {r.org_slug.startsWith('pilot-') && '🎯'}</td>
+              <td style={tdStyle}>{r.children_active}</td>
+              <td style={tdStyle}>{r.checkins_today}</td>
+              <td style={tdStyle}>{r.sync_ops_24h}</td>
+              <td style={tdStyle}>{r.journal_events_today}</td>
+              <td style={{ ...tdStyle, color: r.invoices_unpaid > 0 ? '#B45309' : '#16A34A' }}>{r.invoices_unpaid}</td>
+              <td style={{ ...tdStyle, color: r.jobs_failed_24h > 0 ? '#DC2626' : '#16A34A' }}>{r.jobs_failed_24h}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 
