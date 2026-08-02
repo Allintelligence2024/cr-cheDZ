@@ -123,8 +123,8 @@ function s3Client(): S3Client {
   });
 }
 
-/** Stocke le PDF : backend local (répertoire) ou S3/MinIO (objet). */
-export async function storePdf(key: string, data: Buffer): Promise<void> {
+/** Stocke un fichier : backend local (répertoire) ou S3/MinIO (objet). */
+export async function storeFile(key: string, data: Buffer, contentType: string): Promise<void> {
   const backend = process.env.STORAGE_BACKEND ?? 's3';
   if (backend === 'local') {
     const baseDir = process.env.STORAGE_LOCAL_DIR ?? '/tmp/creche-pdf';
@@ -135,8 +135,13 @@ export async function storePdf(key: string, data: Buffer): Promise<void> {
   }
   if (backend === 's3') {
     const bucket = process.env.S3_BUCKET ?? 'creche-media';
-    await s3Client().send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: data, ContentType: 'application/pdf' }));
+    await s3Client().send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: data, ContentType: contentType }));
     return;
   }
   throw new Error(`STORAGE_BACKEND inconnu: ${backend} (attendu: local | s3)`);
+}
+
+/** Stocke le PDF (gardé pour compatibilité — appels existants). */
+export async function storePdf(key: string, data: Buffer): Promise<void> {
+  await storeFile(key, data, 'application/pdf');
 }
