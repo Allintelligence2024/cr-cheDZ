@@ -1,4 +1,4 @@
-import { IsDateString, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 export class CreateContractDto {
  @IsUUID() child_id!: string;
  @IsNumber() @Min(0) monthly_base_amount!: number;
@@ -25,6 +25,10 @@ export class OpenCashRegisterDto {
 export class CloseCashRegisterDto {
   @IsUUID() site_id!: string;
   @IsOptional() @IsString() notes?: string;
+}
+export class CreateOnlinePaymentDto {
+  @IsUUID() invoice_id!: string;
+  @IsIn(['cib', 'edahabia']) method!: 'cib' | 'edahabia';
 }
 export class AllocatePaymentDto {
   @IsUUID() invoice_id!: string;

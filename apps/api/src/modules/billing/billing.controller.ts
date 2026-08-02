@@ -7,10 +7,11 @@ import { Roles } from '../../shared/decorators/roles.decorator';
 import { AppError } from '../../shared/errors';
 import {
   AllocatePaymentDto, CloseCashRegisterDto, ContractIdParam, CreateContractDto,
-  GenerateInvoiceDto, InvoiceIdParam, OpenCashRegisterDto, PaymentIdParam,
-  RecordCashPaymentDto,
+  CreateOnlinePaymentDto, GenerateInvoiceDto, InvoiceIdParam, OpenCashRegisterDto,
+  PaymentIdParam, RecordCashPaymentDto,
 } from './dto/billing.dto';
 import { BillingService } from './billing.service';
+import { PaymentProviderService } from './payment-provider.service';
 
 interface WebhookPayload {
   external_reference: string;
@@ -23,7 +24,10 @@ interface WebhookPayload {
 
 @Controller('billing')
 export class BillingController {
-  constructor(private readonly billing: BillingService) {}
+  constructor(
+    private readonly billing: BillingService,
+    private readonly paymentProvider: PaymentProviderService,
+  ) {}
 
   // ── Contrats ──────────────────────────────────────────────────────────────
 
@@ -76,6 +80,13 @@ export class BillingController {
   }
 
   // ── Paiements ─────────────────────────────────────────────────────────────
+
+  /** Paiement en ligne (CIB/Edahabia) : init passerelle SATIM → URL de redirection. */
+  @Post('payments/online')
+  @Roles('director', 'accountant')
+  onlinePayment(@CurrentUser() u: CurrentUserPayload, @Body() dto: CreateOnlinePaymentDto) {
+    return this.paymentProvider.createOnlinePayment(u.sub, dto);
+  }
 
   @Post('payments/cash')
   @Roles('director', 'accountant')
