@@ -1,12 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
-import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
-
 /**
  * Paiement en ligne CIB/Edahabia (roadmap v2) — adaptateur SATIM.
  *
@@ -27,7 +24,6 @@ export class PaymentProviderService {
   constructor(
     private readonly tenantContext: TenantContextService,
     private readonly config: ConfigService,
-    @Inject(PG_POOL) private readonly pool: Pool,
   ) {}
 
   /** Vérifie le flag online_payment (global ou surcharge org) — sous RLS tenant. */
@@ -110,13 +106,17 @@ export class PaymentProviderService {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      const res = await fetch(`${gatewayUrl}/payment/init`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-satim-signature': signature },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
+      let res: Response;
+      try {
+        res = await fetch(`${gatewayUrl}/payment/init`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-satim-signature': signature },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout); // même si fetch jette : pas de timer orphelin
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       gatewayResponse = (await res.json()) as Record<string, unknown>;
     } catch (error) {
@@ -139,10 +139,22 @@ export class PaymentProviderService {
     if (!redirectUrl) {
       throw new AppError('PAYMENT_GATEWAY_ERROR', 'Réponse invalide de la passerelle', 'استجابة غير صالحة من بوابة الدفع', 502);
     }
-    await this.pool.query(
+    // Persistance de la réponse passerelle SOUS RLS (withTenantConnection) —
+    // la pool brute ne pose pas app.tenant_id : l'UPDATE sur payments serait
+    // silencieusement à 0 ligne (défaut majeur d'audit : « réussi » jamais
+    // persisté). Toute mise à jour à 0 ligne est une ERREUR EXPLICITE.
+    const updated = await this.tenantContext.withTenantConnection(async (client) => client.query(
       `UPDATE payments SET gateway_response=$2 WHERE id=$1`,
       [payment.id, JSON.stringify(gatewayResponse)],
-    );
+    ));
+    if (updated.rowCount !== 1) {
+      throw new AppError(
+        'PAYMENT_STATE_ERROR',
+        'Incohérence d’état du paiement : la réponse de la passerelle n’a pas pu être enregistrée. Le paiement n’est PAS confirmé — contactez le support',
+        'حالة الدفع غير متسقة: تعذر تسجيل رد بوابة الدفع. الدفع غير مؤكد — اتصل بالدعم',
+        500,
+      );
+    }
     return { ...payment, redirect_url: redirectUrl, transaction_id: gatewayResponse.transaction_id ?? null };
   }
 }
