@@ -57,8 +57,7 @@ export function buildWorkbook(reportType: ExportPayload['report_type'], rows: Ar
 /** Construit le fichier Excel (Buffer) à partir des lignes. */
 export async function buildXlsx(reportType: ExportPayload['report_type'], rows: Array<Record<string, unknown>>): Promise<Buffer> {
   const wb = buildWorkbook(reportType, rows);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return Buffer.from(await (wb as any).xlsx.writeBuffer());
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
 /** Enregistre l'export sur le backend (clé identique API/worker). */
