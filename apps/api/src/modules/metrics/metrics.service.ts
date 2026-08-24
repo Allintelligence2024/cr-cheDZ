@@ -51,6 +51,8 @@ export class MetricsService {
   /** Sortie au format texte Prometheus. */
   async scrape(): Promise<string> {
     const out: string[] = [];
+    const gauges = await this.dbGauges();
+    const gauge = (name: string): string => (gauges.has(name) ? String(gauges.get(name)) : 'NaN'); // absent = indisponible (jamais de faux 0)
     out.push('# HELP http_requests_total Total des requêtes HTTP traitées.');
     out.push('# TYPE http_requests_total counter');
     for (const [k, v] of [...this.counters.entries()].sort()) {
@@ -70,26 +72,26 @@ export class MetricsService {
 
     out.push('# HELP creche_jobs_pending Jobs en attente dans background_jobs.');
     out.push('# TYPE creche_jobs_pending gauge');
-    out.push(`creche_jobs_pending ${await this.count('SELECT COUNT(*)::int AS n FROM background_jobs WHERE status = \'pending\'')}`);
+    out.push(`creche_jobs_pending ${gauge('jobs_pending')}`);
     out.push('# HELP creche_notifications_pending Notifications push en attente.');
     out.push('# TYPE creche_notifications_pending gauge');
-    out.push(`creche_notifications_pending ${await this.count('SELECT COUNT(*)::int AS n FROM notification_queue WHERE status = \'pending\'')}`);
+    out.push(`creche_notifications_pending ${gauge('notifications_pending')}`);
     out.push('# HELP creche_invoices_unpaid Factures non soldées.');
     out.push('# TYPE creche_invoices_unpaid gauge');
-    out.push(`creche_invoices_unpaid ${await this.count("SELECT COUNT(*)::int AS n FROM invoices WHERE status IN ('sent', 'partially_paid', 'overdue')")}`);
+    out.push(`creche_invoices_unpaid ${gauge('invoices_unpaid')}`);
     // ── Suivi pilote (Phase 12) : usage quotidien agrégé, aucune donnée tenant ──
     out.push('# HELP creche_children_active Enfants actifs (toutes organisations).');
     out.push('# TYPE creche_children_active gauge');
-    out.push(`creche_children_active ${await this.count("SELECT COUNT(*)::int AS n FROM children WHERE deleted_at IS NULL AND status = 'active'")}`);
+    out.push(`creche_children_active ${gauge('children_active')}`);
     out.push('# HELP creche_checkins_today Pointages d\'arrivée du jour (Africa/Algiers).');
     out.push('# TYPE creche_checkins_today gauge');
-    out.push(`creche_checkins_today ${await this.count("SELECT COUNT(*)::int AS n FROM attendance_events e JOIN attendance_sessions s ON s.id = e.session_id WHERE e.event_type = 'check_in' AND s.session_date = (NOW() AT TIME ZONE 'Africa/Algiers')::date")}`);
+    out.push(`creche_checkins_today ${gauge('checkins_today')}`);
     out.push('# HELP creche_sync_ops_24h Opérations de synchronisation reçues sur 24 h.');
     out.push('# TYPE creche_sync_ops_24h gauge');
-    out.push(`creche_sync_ops_24h ${await this.count("SELECT COUNT(*)::int AS n FROM sync_operations WHERE created_at >= NOW() - INTERVAL '24 hours'")}`);
+    out.push(`creche_sync_ops_24h ${gauge('sync_ops_24h')}`);
     out.push('# HELP creche_jobs_failed_24h Jobs en échec sur 24 h.');
     out.push('# TYPE creche_jobs_failed_24h gauge');
-    out.push(`creche_jobs_failed_24h ${await this.count("SELECT COUNT(*)::int AS n FROM background_jobs WHERE status = 'failed' AND failed_at >= NOW() - INTERVAL '24 hours'")}`);
+    out.push(`creche_jobs_failed_24h ${gauge('jobs_failed_24h')}`);
     out.push('# HELP creche_http_5xx_24h Requêtes HTTP en erreur 5xx sur 24 h (fenêtre glissante en mémoire).');
     out.push('# TYPE creche_http_5xx_24h gauge');
     out.push(`creche_http_5xx_24h ${this.http5xx24h}`);
@@ -106,12 +108,21 @@ export class MetricsService {
     return this.http5xx.length;
   }
 
-  private async count(sql: string): Promise<number> {
+  /**
+   * Jauges métier via metrics_global_counts() (migration 050, SECURITY
+   * DEFINER) : les COUNT directs sur tables tenant via pool brute
+   * renvoyaient 0 sous le rôle NOBYPASSRLS (aucun contexte tenant posé) —
+   * même famille de défaut que le P0 paiement. La fonction renvoie des
+   * agrégats globaux (compteurs, aucune ligne ni PII).
+   */
+  private async dbGauges(): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
     try {
-      const r = await this.pool.query(sql);
-      return Number(r.rows[0]?.n ?? 0);
+      const r = await this.pool.query<{ metric: string; n: string }>(`SELECT metric, n FROM metrics_global_counts()`);
+      for (const row of r.rows) out.set(row.metric, Number(row.n));
     } catch {
-      return 0;
+      // Métriques indisponibles → jauges absentes (jamais de faux 0).
     }
+    return out;
   }
 }

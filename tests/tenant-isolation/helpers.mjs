@@ -62,6 +62,8 @@ export async function ensureAppRole(admin) {
   // Roadmap v2 (migration 047) : purge des clips vidéo à 30 jours
   await admin.query('GRANT EXECUTE ON FUNCTION video_clips_expired(integer) TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION video_clips_delete_purged(uuid[]) TO creche_app_test');
+  // Fondations audit (migration 050) : jauges globales /metrics
+  await admin.query('GRANT EXECUTE ON FUNCTION metrics_global_counts() TO creche_app_test');
 }
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */
