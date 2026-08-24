@@ -84,6 +84,44 @@ async function main() {
     check('Toutes les tables RLS sont FORCE ROW LEVEL SECURITY', notForced.rows.length === 0,
       notForced.rows.map((r) => r.table_name).join(', '));
 
+    // 1c. (audit) RLS sans AUCUNE policy = deny-all silencieux : une table
+    // tenant doit avoir une politique explicite (une table « protégée » par
+    // oubli de policy serait muette en production).
+    const noPolicy = await client.query(`
+      SELECT c.relname AS table_name
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind = 'r'
+        AND n.nspname = 'public'
+        AND c.relrowsecurity
+        AND NOT EXISTS (
+          SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid
+        )
+    `);
+    check('Toute table RLS a au moins une politique (pas de deny-all muet)', noPolicy.rows.length === 0,
+      noPolicy.rows.map((r) => r.table_name).join(', '));
+
+    // 1d. (audit) Les policies des tables tenant sont ancrées sur le tenant
+    // (app_tenant_id() ou organization_id) — une policy qui n'y réfère pas
+    // serait une porte ouverte.
+    const unanchored = await client.query(`
+      SELECT c.relname AS table_name, p.polname AS policy_name
+      FROM pg_policy p
+      JOIN pg_class c ON c.oid = p.polrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public'
+        AND EXISTS (
+          SELECT 1 FROM information_schema.columns col
+          WHERE col.table_schema = 'public'
+            AND col.table_name = c.relname
+            AND col.column_name = 'organization_id'
+        )
+        AND COALESCE(pg_get_expr(p.polqual, p.polrelid), '') !~ 'app_tenant_id|organization_id'
+        AND COALESCE(pg_get_expr(p.polwithcheck, p.polrelid), '') !~ 'app_tenant_id|organization_id'
+    `);
+    check('Toute policy d’une table tenant référence le tenant (app_tenant_id/organization_id)', unanchored.rows.length === 0,
+      unanchored.rows.map((r) => `${r.table_name}.${r.policy_name}`).join(', '));
+
     // 2. WITH CHECK sur les politiques d'écriture
     const noWithCheck = await client.query(`
       SELECT tablename, policyname, cmd
