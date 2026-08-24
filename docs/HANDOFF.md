@@ -27,6 +27,15 @@ citée dans la branche de session puis travailler dessus).
   Naskh Arabic embarquée).
 
 FAIT en dernier (session août 2026) :
+- AUDIT EXTERNE CORRIGÉ + PROUVÉ (défaut majeur paiement + stockage vidéo,
+  cf. § « Audit externe » ci-dessous) : fix P0 billing (withTenantConnection
+  + assertion rowCount), politique serveur vidéo (préfixe tenant, anti-..,
+  backend serveur seul, local interdit en prod), gardes resolve/containment
+  (API + worker), migration 049 (CHECK storage_key) + 050 (métriques
+  SECURITY DEFINER), suite phase22 (41 assertions, prouvée PAR MUTATION),
+  garde anti-bypass RLS scripts/check-rls-usage.mjs (le P0 serait mort né),
+  schema-check renforcé (FORCE RLS + policy + ancrage tenant), eslint réel
+  (0 erreur), 3 tests unitaires jest payment-provider.
 - Phase 19 — OTP via WhatsApp : migration 045 (otp_codes.channel), DTO
   channel (sms défaut), flag global whatsapp_otp (seed 014), 422
   WHATSAPP_OTP_DISABLED sans flag (bilingue), envoi réel API Graph hors test
@@ -91,13 +100,68 @@ MÉTHODE DE TRAVAIL (non négociable) :
 
 ---
 
+## Audit externe — correctifs PROUVÉS (session 2026-08-23)
+
+Contexte : un audit statique (docs/PROMPT_AUDIT.md) avait trouvé 1 défaut
+majeur paiement + 2 moyens (stockage vidéo) + 3 faibles. Une première
+session de correction avait produit 7 fichiers modifiés + ci.yml mais SANS
+AUCUNE exécution (npm ci expiré) et son env a été PERDU (jamais poussé) —
+les correctifs ont été réappliqués selon la spécification
+(docs/PROMPT_FIX_AUDIT.md), puis EXÉCUTÉS et PROUVÉS.
+
+### Tableau finding → preuve (mutation ROUGE → VERT) → statut
+
+| # | Finding (audit) | Correctif | Test phase22 (ROUGE prouvé par mutation → VERT) | Statut |
+|---|---|---|---|---|
+| P0 | Init paiement succès : UPDATE payments via pool brute → 0 ligne silencieuse sous NOBYPASSRLS, gateway_response jamais persistée | withTenantConnection + assertion rowCount!==1 → 500 PAYMENT_STATE_ERROR FR/AR ; injection pool brute retirée | « gateway_response PERSISTÉE » + « rowCount=0 → 500 » — ROUGE en révertant payment-provider.service.ts (gateway_response=null, 201 silencieux) | ✅ CORRIGÉ |
+| V1 | storage_key client : `..` accepté (DTO), pas de préfixe tenant, pas de CHECK DB | Regex DTO anti-`..` + politique serveur `${tenantId}/video/` + migration 049 (CHECK 4 tables) | « clés hostiles → 4xx avant disque » (7 tests rouges en M2b dto+service révertés) + « CHECK migration 049 » (rouge sans 049 : 0/3 rejets) | ✅ CORRIGÉ |
+| V2 | storage_backend client pris tel quel ; `local` possible en prod | Backend dérivé UNIQUEMENT de STORAGE_BACKEND serveur (champ DTO @deprecated ignoré) ; local → 422 STORAGE_POLICY si NODE_ENV=production (spawn dédié) | « Colonne = réalité SERVEUR » + « local en production → 422 » — ROUGE en révertant video.service.ts (col=s3, 201 en prod) | ✅ CORRIGÉ |
+| F1 | Aucun resolve/containment avant lecture fichier (API vidéo, exports, worker purge) | resolve() + startsWith(root+sep) partout + préfixe tenant (streamContent, download) + worker localPath() (storeFile/deleteFile) | « Flux du clip empoisonné → 4xx, AUCUN octet lu » (pré-fix : octets du tenant B SERVIS, status 200) + « download export empoisonné » (pré-fix : leaked=true) + §7 worker (pré-fix : écriture hors racine) | ✅ CORRIGÉ |
+| F2 | Commentaire anti-énumération mensonger + login pending non documenté | Commentaires corrigés (message unifié = la protection ; recordFailedAttempt(null)=no-op ; pending = choix produit) | Non comportemental (doc) — revu dans chore(auth,health,exports) | ✅ CORRIGÉ |
+| F3 | 7 dto:any + (wb as any).xlsx + lint mensonger | Typage DTO complet, wb.xlsx.writeBuffer(), eslint flat config RÉEL (0 erreur, warn any) | typecheck 4 apps vert ; `npm run lint` s'exécute réellement | ✅ CORRIGÉ |
+| Bonus | (découvert par la garde RLS) jauges /metrics à 0 sous NOBYPASSRLS + jauge sync_ops sur colonne inexistante | Migration 050 : metrics_global_counts() SECURITY DEFINER ; received_at | Garde RLS échoue sur l'ancien code (comptage tables tenant direct) ; /metrics servi via fonction | ✅ CORRIGÉ |
+
+### Preuves d'exécution (2026-08-23, PostgreSQL 18.4 réel, rôle NOBYPASSRLS)
+
+- `bash scripts/run-isolation-suites.sh` → **26/26 VERTES** (garde RLS +
+  25 suites : schema-check, rls-behavior, isolation, phase3→phase22) —
+  phase22 : 41 assertions. Runner : `scripts/run-isolation-suites.sh`.
+- Mutation : `bash scripts/mutation-proof.sh` — chaque correctif réverté
+  temporairement → tests ROUGES ciblés → restauré → VERT (6 mutations
+  scriptées + M2b/M4/M5 rejouées sur tests durcis).
+- Typecheck EXÉCUTÉ : api, worker, admin-web, support-console — 0 erreur.
+- Builds EXÉCUTÉS : api+worker (tsc), admin-web + support-console (vite).
+- `npm audit --omit=dev` → **0 vulnérabilité**.
+- `node scripts/migrate.mjs --status` → 001→050 appliquées, checksums OK.
+- `npm run test:unit` (jest) → 3/3 (succès persiste ; rowCount=0 → 500 ;
+  échec passerelle → failed) — le P0 aurait été détecté ici.
+- Garde anti-bypass RLS : 61 accès pool.query bruts revus, tous conformes
+  (SECURITY DEFINER ou tables système justifiées, 1 exception inline
+  documentée) ; la garde ÉCHOUE sur le code pré-correctif (détecte
+  précisément `UPDATE payments` via pool brute).
+
+### Méthode (complément au §méthode du prompt de continuation)
+
+8. Garde anti-bypass RLS AVANT tout : `node scripts/check-rls-usage.mjs`
+   (intégré au runner + CI). Tout pool.query brut sur table tenant est un
+   ÉCHEC — seules exemptions : fonctions SECURITY DEFINER whitelistées,
+   tables système justifiées, ou commentaire inline `rls-guard: allow
+   <raison>` adossé à une policy couvrant réellement l'accès.
+9. Toute nouvelle table à clé de stockage fichier reçoit le CHECK 049
+   (pas de `..`, pas de chemin absolu, charset sûr) — cf. migration 049.
+10. CI = postgres:18 (aligné sur le moteur validé, embedded-postgres
+    18.4.0-beta.17) — jamais 16/17 (le bug jobs_finish 024→048 a montré
+    ce qu'un moteur divergent masque).
+
+---
+
 ## État du dépôt (août 2026)
 
 | Élément | État |
 |---|---|
 | Branche de travail | branche de session Arena active (historiquement `arena/019fbeff-cr-chedz`, puis `arena/019fc32c-cr-chedz`) — ne jamais changer |
-| Migrations | 001 → 048 (schéma complet, RLS robuste `app_tenant_id()`, facturation bornée, webhook + jobs SECURITY DEFINER, paie, otp channel, vidéo post-DPIA, fix jobs_finish) |
-| Suites de tests | `tests/tenant-isolation/` : schema-check, rls-behavior-check (GATE), isolation (S2), phase3 → phase21 — **24/24 vertes sur PostgreSQL 18 réel** |
+| Migrations | 001 → 050 (schéma complet, RLS robuste `app_tenant_id()`, facturation bornée, webhook + jobs SECURITY DEFINER, paie, otp channel, vidéo post-DPIA, fix jobs_finish, **049 CHECK storage_key + 050 métriques SECURITY DEFINER — audit**) |
+| Suites de tests | `tests/tenant-isolation/` : schema-check (renforcé FORCE/policy/ancrage), rls-behavior-check (GATE), isolation (S2), phase3 → phase21, **phase22 correctifs d'audit** — **25/25 vertes + garde RLS (26/26 runner) sur PostgreSQL 18 réel** ; + 3 tests unitaires jest (payment-provider) |
 | Phase 7 | Portail parent complet (API) — OTP/PIN, consentements, quiet hours, photos, FCM/APNs worker |
 | Phase 8 | Facturation complète (API + worker) — contrats, factures, paiements, allocations, caisse, webhook, PDF bilingue AR, accès parent |
 | Phase 9 | Admin web complète (API + écrans) — dashboard, présences, journal + modération, photos, facturation, fiche enfant, paramètres/tarifs, i18n AR/FR, lazy, responsive |
@@ -111,8 +175,8 @@ MÉTHODE DE TRAVAIL (non négociable) :
 ## Commandes utiles
 
 ```bash
-# Base de test : PostgreSQL embedded (déjà installé dans /tmp/pgtest)
-#   cd /tmp/pgtest && node run_pg.mjs start   (port 54329, base creche_test)
+# Base de test : PostgreSQL 18 embedded (run_pg.mjs à la racine)
+#   node run_pg.mjs   (port 54329, base creche_test, initialise si purgé)
 
 # Valider (dans l'ordre canonique, base propre au préalable)
 export DATABASE_URL="postgres://postgres:postgres@127.0.0.1:54329/creche_test"
@@ -143,6 +207,15 @@ node tests/tenant-isolation/phase18-marketplace.api.test.mjs
 node tests/tenant-isolation/phase19-whatsapp-otp.api.test.mjs
 node tests/tenant-isolation/phase20-video-dpia-gate.api.test.mjs
 node tests/tenant-isolation/phase21-video-surveillance.api.test.mjs
+node tests/tenant-isolation/phase22-audit-fixes.api.test.mjs
+
+# OU tout l'ordre canonique d'un coup (inclut la garde RLS en tête) :
+bash scripts/run-isolation-suites.sh
+
+# Garde anti-bypass RLS seule / lint réel / tests unitaires
+node scripts/check-rls-usage.mjs --verbose
+npm run lint
+npm run test:unit
 
 # Typechecks
 npm run typecheck --workspace @creche/api

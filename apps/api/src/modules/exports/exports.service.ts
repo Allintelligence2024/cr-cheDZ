@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
@@ -63,10 +63,36 @@ export class ExportsService {
     if (row.status !== 'done' || !row.storage_key) {
       throw new AppError('EXPORT_NOT_READY', "L'export n'est pas encore prêt", 'لم يكتمل التصدير بعد', 409);
     }
+    // Défense croisée (audit) : la clé doit rester sous le préfixe exports DU
+    // TENANT demandeur (la ligne est déjà filtrée par RLS, mais une clé
+    // corrompue ne doit jamais permettre de lire un autre répertoire).
+    const tenantId = requireTenant(this.tenantContext);
+    const key = row.storage_key as string;
+    if (key.includes('..') || !key.startsWith(`${tenantId}/exports/`)) {
+      throw new AppError(
+        'STORAGE_POLICY',
+        'Clé de stockage refusée : elle doit se trouver sous le répertoire d’exports de votre établissement',
+        'مفتاح تخزين مرفوض: يجب أن يكون ضمن مجلد التصديرات الخاص بمؤسستك',
+        422,
+      );
+    }
     const filename = `export-${row.report_type}-${String(row.period_label).replace(/[^0-9-]/g, '_')}.xlsx`;
     if (this.config.get<string>('STORAGE_BACKEND', 's3') === 'local') {
+      // Garde anti path-traversal (audit) : resolve() + containment sous la
+      // racine de stockage, et clé sous le préfixe du tenant demandeur —
+      // aucune lecture disque avant ces contrôles.
       const baseDir = this.config.get<string>('STORAGE_LOCAL_DIR', '/tmp/creche-pdf');
-      return { kind: 'buffer', buffer: await readFile(join(baseDir, row.storage_key as string)), filename };
+      const root = resolve(baseDir);
+      const filePath = resolve(root, row.storage_key as string);
+      if (filePath !== root && !filePath.startsWith(root + sep)) {
+        throw new AppError(
+          'PATH_TRAVERSAL',
+          'Clé de stockage interdite (chemin hors du répertoire de stockage)',
+          'مفتاح تخزين مرفوض (مسار خارج مجلد التخزين)',
+          422,
+        );
+      }
+      return { kind: 'buffer', buffer: await readFile(filePath), filename };
     }
     const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
     const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');

@@ -83,8 +83,11 @@ export class AuthService {
     );
     const user = res.rows[0];
 
-    // Compteur d'échecs partagé : on incrémente même si l'utilisateur n'existe pas
-    // (anti-énumération), mais on ne garde pas de ligne pour un email inconnu.
+    // Anti-énumération (audit — commentaire corrigé) : la protection réelle
+    // est le MESSAGE D'ERREUR UNIFIÉ (INVALID_CREDENTIALS FR/AR identique que
+    // l'email existe ou non — même statut, même code, même durée de réponse).
+    // recordFailedAttempt(null, ·) est un NO-OP : aucun compteur n'est tenu
+    // pour un email inconnu (pas de table dédiée, pas de ligne gardée).
     if (!user) {
       await this.recordFailedAttempt(null, email);
       throw Errors.invalidCredentials();
@@ -93,6 +96,10 @@ export class AuthService {
     if (user.locked_until && user.locked_until > new Date()) {
       throw Errors.accountLocked(this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15));
     }
+    // Choix produit (documenté, volontaire) : les comptes 'pending' (invités
+    // pas encore onboardés) peuvent se connecter — l'onboarding termine
+    // l'activation. Seuls 'suspended' (et les statuts hors active/pending)
+    // sont refusés (ACCOUNT_SUSPENDED).
     if (user.status !== 'active' && user.status !== 'pending') {
       throw Errors.accountSuspended();
     }
@@ -192,6 +199,9 @@ export class AuthService {
 
   /** Flag global whatsapp_otp requis (422 bilingue sinon) — jamais d'envoi sans flag. */
   private async assertWhatsappOtpEnabled(): Promise<void> {
+    // rls-guard: allow lecture du flag GLOBAL uniquement (organization_id IS NULL),
+    // rendu visible sans contexte tenant par la policy feature_flags_tenant
+    // (USING (organization_id IS NULL) OR …) — jamais de ligne d'une org.
     const flag = await this.pool.query<{ is_enabled: boolean }>(
       `SELECT is_enabled FROM feature_flags
        WHERE flag_key='whatsapp_otp' AND organization_id IS NULL

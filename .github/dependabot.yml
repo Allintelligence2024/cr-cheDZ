@@ -1,0 +1,21 @@
+version: 2
+updates:
+  # npm — racine + workspaces (api, worker, admin-web, support-console)
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    # Le lockfile est la référence : pas de bump majeur silencieux.
+    ignore:
+      - update-types: [version-update:semver-major]
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

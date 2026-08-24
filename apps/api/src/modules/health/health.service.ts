@@ -3,6 +3,15 @@ import { TenantContextService } from '../../shared/database/tenant-context.servi
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
 import { AuditService } from '../privacy/audit.service';
+import {
+  CreateAllergyDto,
+  CreateMedicationAuthorizationDto,
+  CreateVaccinationDto,
+  RecordMedicationAdministrationDto,
+  UpdateAllergyDto,
+  UpdateVaccinationDto,
+  UpsertHealthRecordDto,
+} from './dto/health.dto';
 
 /**
  * Santé (Phase 10) — dossier médical, allergies, vaccinations, autorisations
@@ -74,7 +83,7 @@ export class HealthService {
     return data;
   }
 
-  async upsertRecord(childId: string, dto: any, actorId: string): Promise<Record<string, unknown>> {
+  async upsertRecord(childId: string, dto: UpsertHealthRecordDto, actorId: string): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       await this.childOfTenant(client, childId);
@@ -102,7 +111,7 @@ export class HealthService {
 
   // ── Allergies ─────────────────────────────────────────────────────────────
 
-  async createAllergy(childId: string, dto: any, actorId: string): Promise<Record<string, unknown>> {
+  async createAllergy(childId: string, dto: CreateAllergyDto, actorId: string): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       await this.childOfTenant(client, childId);
@@ -118,7 +127,7 @@ export class HealthService {
     });
   }
 
-  async updateAllergy(allergyId: string, dto: any): Promise<Record<string, unknown>> {
+  async updateAllergy(allergyId: string, dto: UpdateAllergyDto): Promise<Record<string, unknown>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       const existing = (await client.query(`SELECT id FROM allergies WHERE id=$1`, [allergyId])).rows[0];
@@ -136,7 +145,7 @@ export class HealthService {
 
   // ── Vaccinations ──────────────────────────────────────────────────────────
 
-  async createVaccination(childId: string, dto: any): Promise<Record<string, unknown>> {
+  async createVaccination(childId: string, dto: CreateVaccinationDto): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       await this.childOfTenant(client, childId);
@@ -153,7 +162,7 @@ export class HealthService {
     });
   }
 
-  async updateVaccination(vaccinationId: string, dto: any, actorId: string): Promise<Record<string, unknown>> {
+  async updateVaccination(vaccinationId: string, dto: UpdateVaccinationDto, actorId: string): Promise<Record<string, unknown>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       const existing = (await client.query(`SELECT id FROM vaccinations WHERE id=$1`, [vaccinationId])).rows[0];
@@ -172,7 +181,7 @@ export class HealthService {
 
   // ── Autorisations de médicaments (consentement gardien) ───────────────────
 
-  async createMedicationAuthorization(childId: string, dto: any): Promise<Record<string, unknown>> {
+  async createMedicationAuthorization(childId: string, dto: CreateMedicationAuthorizationDto): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       await this.childOfTenant(client, childId);
@@ -213,7 +222,7 @@ export class HealthService {
 
   // ── Administrations (double saisie) ───────────────────────────────────────
 
-  async recordAdministration(childId: string, dto: any, actorId: string): Promise<Record<string, unknown>> {
+  async recordAdministration(childId: string, dto: RecordMedicationAdministrationDto, actorId: string): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       await this.childOfTenant(client, childId);

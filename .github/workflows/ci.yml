@@ -1,0 +1,100 @@
+# CI — PostgreSQL 18 (le projet est validé sur PG 18 réel : embedded-postgres
+# 18.4.0-beta.17 en local ; docker-library/postgres:18 en CI — JAMAIS 16/17 :
+# un moteur différent de celui validé masquerait des bugs de compatibilité,
+# cf. bug jobs_finish enum 024→048 découvert sur la seule vraie base).
+# NOTE : ce fichier n'est PAS suivi (permission `workflows` manquante —
+# docs/CI-RESTORE.md pour la restauration manuelle).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: creche_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_test
+      RATE_LIMIT_DISABLED: '1'
+      NODE_ENV: test
+      STORAGE_BACKEND: local
+      STORAGE_LOCAL_DIR: /tmp/creche-storage-ci
+      PAYMENT_WEBHOOK_SECRET: phase8-test-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: npm ci
+        run: npm ci
+      - name: Typecheck (api, worker, admin-web, support-console)
+        run: npm run typecheck
+      - name: Migrations (reset + status 001→049)
+        run: |
+          node scripts/migrate.mjs --reset
+          node scripts/migrate.mjs
+          node scripts/migrate.mjs --status
+      - name: Seeds
+        run: node scripts/seed.mjs
+      - name: schema-check (+ garde RLS anti-bypass)
+        run: node tests/tenant-isolation/schema-check.mjs --verbose
+      - name: rls-behavior-check (rôle NOBYPASSRLS)
+        run: node tests/tenant-isolation/rls-behavior-check.mjs
+      - name: Build api + worker
+        run: |
+          npm run build --workspace @creche/api
+          npm run build --workspace @creche/worker
+      - name: Suites d'isolation (isolation + phase3 → phase22)
+        run: bash scripts/run-isolation-suites.sh
+
+  admin-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace @creche/admin-web
+      - run: npm run build --workspace @creche/admin-web
+
+  support-console:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace @creche/support-console
+      - run: npm run build --workspace @creche/support-console
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: npm audit (production)
+        run: npm audit --omit=dev

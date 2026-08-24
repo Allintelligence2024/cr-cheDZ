@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
@@ -177,7 +177,11 @@ export class VideoService {
   async registerClip(userId: string, dto: RegisterClipDto): Promise<Record<string, unknown>> {
     const tenantId = await this.assertVideoEnabled();
     await this.cameraOfTenant(dto.camera_id);
-    const backend = dto.storage_backend ?? (this.config.get<string>('STORAGE_BACKEND', 's3') === 'local' ? 'local' : 's3');
+    // Politique serveur AVANT toute insertion (audit) : la clé est validée
+    // ici (préfixe tenant + pas de ..) et le backend est dérivé du serveur —
+    // le champ DTO storage_backend est ignoré (déprécié).
+    this.assertStorageKeyPolicy(tenantId, dto.storage_key);
+    const backend = this.resolveStorageBackend();
     return this.tenantContext.withTenantConnection(async (client) => {
       const r = await client.query(
         `INSERT INTO video_clips
@@ -236,6 +240,53 @@ export class VideoService {
     });
   }
 
+  // ── Politique de stockage serveur (audit — jamais confiance au client) ────
+
+  /**
+   * Politique SERVEUR sur storage_key (audit) :
+   * - la clé DOIT être un chemin relatif sous `${tenantId}/video/` (jamais
+   *   de clé d'un autre tenant, jamais de chemin absolu) ;
+   * - aucun `..` (path traversal), même si la regex DTO a déjà filtré ;
+   * - le tout AVANT tout accès disque ou insertion.
+   */
+  private assertStorageKeyPolicy(tenantId: string, storageKey: string): void {
+    if (storageKey.includes('..')) {
+      throw new AppError(
+        'PATH_TRAVERSAL',
+        'Clé de stockage interdite (chemin relatif attendu, sans ..)',
+        'مفتاح تخزين مرفوض (مسار نسبي بدون ..)',
+        422,
+      );
+    }
+    const prefix = `${tenantId}/video/`;
+    if (!storageKey.startsWith(prefix)) {
+      throw new AppError(
+        'STORAGE_POLICY',
+        'Clé de stockage refusée : elle doit se trouver sous le répertoire vidéo de votre établissement',
+        'مفتاح تخزين مرفوض: يجب أن يكون ضمن مجلد الفيديو الخاص بمؤسستك',
+        422,
+      );
+    }
+  }
+
+  /**
+   * Backend RÉEL : dérivé UNIQUEMENT de STORAGE_BACKEND serveur (audit) —
+   * le champ DTO storage_backend est @deprecated et ignoré. `local` est
+   * refusé en production (stockage local = dev/test uniquement).
+   */
+  private resolveStorageBackend(): 'local' | 's3' {
+    const backend = this.config.get<string>('STORAGE_BACKEND', 's3') === 'local' ? 'local' : 's3';
+    if (backend === 'local' && this.config.get<string>('NODE_ENV') === 'production') {
+      throw new AppError(
+        'STORAGE_POLICY',
+        'Le stockage local de clips vidéo est interdit en production (S3/MinIO requis)',
+        'التخزين المحلي لمقاطع الفيديو ممنوع في الإنتاج (يلزم S3/MinIO)',
+        422,
+      );
+    }
+    return backend;
+  }
+
   /** Visionnage journalisé (DPIA §5, action 'read') — commun aux deux modes. */
   private async auditView(clipId: string, organizationId: string, userId: string, ipAddress?: string): Promise<void> {
     await this.audit.log({
@@ -272,10 +323,26 @@ export class VideoService {
       );
     }
     await this.auditView(clipId, tenantId, userId, ipAddress);
+    // Garde anti path-traversal (audit) : la clé doit rester sous le préfixe
+    // vidéo DU TENANT (défense croisée : un clip A ne peut jamais lire le
+    // répertoire d'un autre tenant dans la même racine), PUIS resolve() +
+    // containment sous la racine de stockage — aucune lecture disque avant
+    // ces deux contrôles.
+    this.assertStorageKeyPolicy(tenantId, clip.storage_key);
     const dir = this.config.get<string>('STORAGE_LOCAL_DIR', '/tmp/creche-pdf');
+    const root = resolve(dir);
+    const filePath = resolve(root, clip.storage_key);
+    if (filePath !== root && !filePath.startsWith(root + sep)) {
+      throw new AppError(
+        'PATH_TRAVERSAL',
+        'Clé de stockage interdite (chemin hors du répertoire de stockage)',
+        'مفتاح تخزين مرفوض (مسار خارج مجلد التخزين)',
+        422,
+      );
+    }
     let buffer: Buffer;
     try {
-      buffer = await readFile(join(dir, clip.storage_key));
+      buffer = await readFile(filePath);
     } catch {
       throw new AppError(
         'CLIP_FILE_MISSING',

@@ -116,7 +116,7 @@ export function VideoPage(): React.JSX.Element {
             t(`video.zone.${c.zone}`),
             c.is_active ? t('video.active') : t('video.inactive'),
             String(c.clips_count),
-            <Button key={c.id} variant="ghost" onClick={() => toggleCamera(c)}>{c.is_active ? t('video.deactivate') : t('video.activate')}</Button>,,
+            <Button key={c.id} variant="ghost" onClick={() => toggleCamera(c)}>{c.is_active ? t('video.deactivate') : t('video.activate')}</Button>,
           ])}
         />
         <p style={{ color: tokens.colors.textMuted, fontSize: tokens.typography.small }}>{t('video.noLiveNote')}</p>
@@ -137,7 +137,7 @@ export function VideoPage(): React.JSX.Element {
             new Date(c.captured_at).toLocaleString(),
             c.size_bytes ? `${Math.round(c.size_bytes / 1024 / 102.4) / 10} Mo` : '—',
             new Date(c.purge_at).toLocaleDateString(),
-            <Button key={c.id} variant="ghost" onClick={() => void viewClip(c)}>{t('video.view')}</Button>,,
+            <Button key={c.id} variant="ghost" onClick={() => void viewClip(c)}>{t('video.view')}</Button>,
           ])}
         />
         <p style={{ color: tokens.colors.textMuted, fontSize: tokens.typography.small }}>{t('video.purgeNote')}</p>

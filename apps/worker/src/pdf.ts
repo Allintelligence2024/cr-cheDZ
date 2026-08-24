@@ -9,7 +9,7 @@
  *   ou STORAGE_BACKEND=s3 (S3/MinIO via S3_*). Jamais d'envoi sans config.
  */
 import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import PDFDocument from 'pdfkit';
 
@@ -45,7 +45,6 @@ export function buildInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
     // Police arabe embarquée (TTF Noto Naskh Arabic — GSUB complet).
     // Le paquet bloque l'accès direct aux fonts via "exports" → on résout
     // l'entrée principale puis on navigue vers ../fonts/.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const pkgEntry = require.resolve('@embedpdf/fonts-arabic');
     const fontsDir = join(dirname(pkgEntry), '..', 'fonts');
     const arabicRegular = join(fontsDir, 'NotoNaskhArabic-Regular.ttf');
@@ -135,12 +134,28 @@ function s3Client(): S3Client {
   });
 }
 
+/**
+ * Chemin local ABSOLU d'une clé de stockage, avec garde anti path-traversal
+ * (audit) : resolve() + containment sous STORAGE_LOCAL_DIR. Toute clé qui
+ * s'échappe de la racine (.., absolu) lève — utilisé par storeFile ET
+ * deleteFile (purge vidéo DPIA) : l'échec remonte → job failed (jamais de
+ * fausse purge ni d'écriture hors racine).
+ */
+export function localPath(key: string): string {
+  const baseDir = process.env.STORAGE_LOCAL_DIR ?? '/tmp/creche-pdf';
+  const root = resolve(baseDir);
+  const full = resolve(root, key);
+  if (full !== root && !full.startsWith(root + sep)) {
+    throw new Error(`STORAGE_KEY_ESCAPE: clé hors de la racine de stockage (${key})`);
+  }
+  return full;
+}
+
 /** Stocke un fichier : backend local (répertoire) ou S3/MinIO (objet). */
 export async function storeFile(key: string, data: Buffer, contentType: string): Promise<void> {
   const backend = process.env.STORAGE_BACKEND ?? 's3';
   if (backend === 'local') {
-    const baseDir = process.env.STORAGE_LOCAL_DIR ?? '/tmp/creche-pdf';
-    const filePath = join(baseDir, key);
+    const filePath = localPath(key);
     mkdirSync(dirname(filePath), { recursive: true });
     writeFileSync(filePath, data);
     return;
@@ -158,9 +173,8 @@ export async function storeFile(key: string, data: Buffer, contentType: string):
  *  aucune donnée » est tenu — toléré. Tout autre échec remonte → job failed. */
 export async function deleteFile(key: string, backend: 'local' | 's3'): Promise<void> {
   if (backend === 'local') {
-    const baseDir = process.env.STORAGE_LOCAL_DIR ?? '/tmp/creche-pdf';
     try {
-      unlinkSync(join(baseDir, key));
+      unlinkSync(localPath(key));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }

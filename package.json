@@ -25,7 +25,9 @@
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "db:check-rls-usage": "node scripts/check-rls-usage.mjs",
+    "test:unit": "npm run test --workspace @creche/api"
   },
   "engines": {
     "node": ">=20"
@@ -33,9 +35,14 @@
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
     "@aws-sdk/s3-request-presigner": "^3.1101.0",
+    "@eslint/js": "^10.0.1",
     "@types/pg": "^8.20.3",
     "bcryptjs": "^3.0.3",
-    "pg": "^8.13.1"
+    "embedded-postgres": "^18.4.0-beta.17",
+    "eslint": "^10.9.0",
+    "globals": "^17.11.0",
+    "pg": "^8.13.1",
+    "typescript-eslint": "^8.67.0"
   },
   "overrides": {
     "lodash": "4.18.1",
