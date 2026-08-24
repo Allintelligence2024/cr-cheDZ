@@ -44,3 +44,17 @@ git push origin arena/019fbeff-cr-chedz
 |---|---|
 | `.github/workflows/ci.yml` | Jobs : **database** (migrations + seeds + schema-check + GATE RLS + isolation + phases 3→11), **api** (typecheck + build), **web** (admin + support), **security** (npm audit + CodeQL), **e2e** (Playwright parcours directeur) |
 | `.github/workflows/docker.yml` | Build des images `ghcr.io/creche-saas/{api,worker,admin-web}` (dev/staging/tags v*) |
+
+## Alignement PostgreSQL 18 (audit 2026-08-23)
+
+Le ci.yml réécrit utilise **postgres:18** (et non 16/17) : toute la
+validation projet tourne sur PostgreSQL 18 réel (embedded-postgres
+18.4.0-beta.17 en local) — lancer la CI sur un moteur différent masquerait
+des bugs de compatibilité (exemple historique : jobs_finish 024→048, CASE
+text vs enum, invisible sur un moteur non validé). Le fichier local
+(`.github/workflows/ci.yml`) reste NON TRACKÉ tant que la permission
+`workflows` manque ; il exécute : npm ci → typecheck → migrate+status
+(001→050) → seeds → schema-check (+ garde RLS) → rls-behavior-check →
+build api+worker → suites isolation+phase3→phase22 via
+`scripts/run-isolation-suites.sh`, plus jobs admin-web/support-console
+(typecheck+build) et security (npm audit --omit=dev).
