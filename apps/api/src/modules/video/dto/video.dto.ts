@@ -49,10 +49,16 @@ export class RegisterClipDto {
   @IsISO8601({}, { message: 'captured_at ISO 8601 requis' })
   captured_at!: string;
 
-  @Matches(/^[\w\-./]{1,200}$/, { message: 'storage_key invalide' })
+  // Anti path-traversal (audit) : aucun `..` nulle part dans la clé
+  // (lookahead négatif) ; caractères sûrs uniquement, longueur ≤ 200.
+  @Matches(/^(?!.*\.\.)[\w\-./]{1,200}$/, { message: 'storage_key invalide (chemin relatif sans ..)' })
   storage_key!: string;
 
-  /** Backend réel du fichier (défaut : STORAGE_BACKEND de l'API). */
+  /**
+   * @deprecated Ignoré côté serveur : le backend réel est dérivé UNIQUEMENT
+   * de STORAGE_BACKEND de l'API (politique serveur — audit). Le champ reste
+   * accepté pour ne pas casser forbidNonWhitelisted chez les clients existants.
+   */
   @IsOptional()
   @IsIn(['local', 's3'])
   storage_backend?: 'local' | 's3';
