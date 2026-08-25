@@ -61,6 +61,37 @@ FAIT en dernier (session août 2026) :
   → migration 048 (cast) — le retry/failed des jobs refonctionne.
 - .env.example / .env.prod.example : WHATSAPP_* et SATIM_* documentés.
 
+— MISSION P1 (session août 2026, cr-cheDZ) : expiration pending + garde config —
+- Paiement en ligne : un pending SATIM > 72 h passe en 'failed' avec
+  gateway_response || {"expired":true,"reason":"PENDING_EXPIRED_72H"} via le
+  job GLOBAL `payments_expire` (worker, pattern video_clips_purge) — JAMAIS de
+  suppression (traçabilité compta), idempotent, échec SQL → job failed.
+  À l'init (createOnlinePayment), les pending SATIM antérieurs de la MÊME
+  facture passent en 'failed' (SUPERSEDED_BY_NEW_INIT) AVANT l'INSERT → un
+  seul pending actif par facture, facture jamais « payée » par ce biais.
+- Migration 051 : payments.invoice_id (FK ON DELETE SET NULL, nécessaire car
+  les payments n'avaient AUCUN lien facture — un pending d'init n'a pas
+  d'allocation) + index partiels (status,created_at / invoice_id,status)
+  WHERE pending+satim + fonction SECURITY DEFINER payments_expire_pending().
+- Garde de config au boot (module partagé @creche/prod-config, API + worker,
+  uniquement NODE_ENV=production) : PAYMENT_WEBHOOK_SECRET <32 ou absent ;
+  JWT_SECRET <32/absent/égal au défaut dev (l'auth JwtModule retombait sur
+  `dev_jwt_secret_change_in_prod_minimum_32_chars` — inspection confirmée,
+  JWT_REFRESH_SECRET non utilisé) ; S3 minio_dev/minio_dev_password ;
+  local /tmp/creche-pdf ; SATIM partiel. Message explicite par variable.
+  Inactive en test/dev. 8 tests unitaires jest dédiés (12 au total).
+- Phase 23 — tests/tenant-isolation/phase23-pending-expiry.api.test.mjs
+  (23 assertions : worker 72 h + idempotence + supersede init + isolation B ;
+  preuve PAR MUTATION : script scripts/mutation-phase23-proof.sh — M1 worker
+  réverté → 6 assertions ROUGES, M2 supersede réverté → 3 ROUGES, M3 051
+  retirée → ROUGE (colonne/fonction absentes), restaurations VERTES).
+- phase22 modifié UNIQUEMENT pour fournir secrets ≥ 32 au spawn production de
+  la garde (test 5b isolé sur STORAGE_POLICY — justification commentée, aucun
+  affaiblissement, 41 assertions inchangées) ; helpers.mjs : GRANT conditionnel
+  de payments_expire_pending (pour la mutation M3) ; ci.yml inchangé : le
+  build de @creche/prod-config est enchaîné comme PREBUILD des builds
+  api/worker (la GitHub App n'a pas la permission workflows — docs/CI-RESTORE.md).
+
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
 - PILOTE TERRAIN : 5 crèches réelles × 2 semaines, stores, DNS/TLS, device
   farm, FCM/APNs/SMS/WhatsApp réels, exercice de restauration, bilan go/no-go
@@ -160,8 +191,8 @@ les correctifs ont été réappliqués selon la spécification
 | Élément | État |
 |---|---|
 | Branche de travail | branche de session Arena active (historiquement `arena/019fbeff-cr-chedz`, puis `arena/019fc32c-cr-chedz`) — ne jamais changer |
-| Migrations | 001 → 050 (schéma complet, RLS robuste `app_tenant_id()`, facturation bornée, webhook + jobs SECURITY DEFINER, paie, otp channel, vidéo post-DPIA, fix jobs_finish, **049 CHECK storage_key + 050 métriques SECURITY DEFINER — audit**) |
-| Suites de tests | `tests/tenant-isolation/` : schema-check (renforcé FORCE/policy/ancrage), rls-behavior-check (GATE), isolation (S2), phase3 → phase21, **phase22 correctifs d'audit** — **25/25 vertes + garde RLS (26/26 runner) sur PostgreSQL 18 réel** ; + 3 tests unitaires jest (payment-provider) |
+| Migrations | 001 → 051 (schéma complet, RLS robuste `app_tenant_id()`, facturation bornée, webhook + jobs SECURITY DEFINER, paie, otp channel, vidéo post-DPIA, fix jobs_finish, 049 CHECK storage_key + 050 métriques SECURITY DEFINER — audit, **051 expiry pending SATIM + invoice_id + payments_expire_pending()** — MISSION P1) |
+| Suites de tests | `tests/tenant-isolation/` : schema-check (renforcé FORCE/policy/ancrage), rls-behavior-check (GATE), isolation (S2), phase3 → phase21, **phase22 correctifs d'audit**, **phase23 expiration pending (MISSION P1)** — **26/26 vertes + garde RLS (27/27 runner) sur PostgreSQL 18 réel** ; + 12 tests unitaires jest (payment-provider 4 + garde config 8) |
 | Phase 7 | Portail parent complet (API) — OTP/PIN, consentements, quiet hours, photos, FCM/APNs worker |
 | Phase 8 | Facturation complète (API + worker) — contrats, factures, paiements, allocations, caisse, webhook, PDF bilingue AR, accès parent |
 | Phase 9 | Admin web complète (API + écrans) — dashboard, présences, journal + modération, photos, facturation, fiche enfant, paramètres/tarifs, i18n AR/FR, lazy, responsive |
@@ -208,9 +239,14 @@ node tests/tenant-isolation/phase19-whatsapp-otp.api.test.mjs
 node tests/tenant-isolation/phase20-video-dpia-gate.api.test.mjs
 node tests/tenant-isolation/phase21-video-surveillance.api.test.mjs
 node tests/tenant-isolation/phase22-audit-fixes.api.test.mjs
+node tests/tenant-isolation/phase23-pending-expiry.api.test.mjs
 
 # OU tout l'ordre canonique d'un coup (inclut la garde RLS en tête) :
 bash scripts/run-isolation-suites.sh
+
+# Preuve par mutation MISSION P1 (worker réverté → ROUGE, supersede réverté →
+# ROUGE, 051 retirée → ROUGE, restaurations → VERT) :
+bash scripts/mutation-phase23-proof.sh
 
 # Garde anti-bypass RLS seule / lint réel / tests unitaires
 node scripts/check-rls-usage.mjs --verbose

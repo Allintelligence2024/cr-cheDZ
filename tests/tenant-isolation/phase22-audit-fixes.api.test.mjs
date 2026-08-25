@@ -274,6 +274,13 @@ const main = async () => {
     ok('Colonne = réalité SERVEUR (local)', regClientS3.body.storage_backend === 'local', `col=${regClientS3.body.storage_backend}`);
 
     console.log('\n5b) NODE_ENV=production + STORAGE_BACKEND=local → refus (spawn dédié)');
+    // MISSION P1 (feat(config)) : une garde de config au boot (module partagé
+    // @creche/prod-config) refuse en production tout secret par défaut/court
+    // (PAYMENT_WEBHOOK_SECRET, JWT_SECRET) afin que ce test isole TOUJOURS le
+    // comportement STORAGE_POLICY testé ici — le spawn fournit donc une config
+    // production complète et valide (secrets >= 32 caractères). Ce n'est PAS un
+    // affaiblissement : le test 5b vérifie toujours le refus de `local` en
+    // production, qui reste le seul écart volontaire de l'environnement.
     const prodPort = 20000 + Math.floor(Math.random() * 20000);
     prodApi = spawn('node', ['apps/api/dist/main.js'], {
       cwd: repo,
@@ -282,6 +289,8 @@ const main = async () => {
         NODE_ENV: 'production',
         STORAGE_BACKEND: 'local',
         STORAGE_LOCAL_DIR: storeDir,
+        PAYMENT_WEBHOOK_SECRET: 'phase22-prod-webhook-0123456789abcdef0123456789',
+        JWT_SECRET: 'phase22-prod-jwt-0123456789abcdef0123456789',
         APP_PORT: String(prodPort),
         SENTRY_DSN: '',
       },

@@ -2,8 +2,19 @@ import { GoogleAuth } from 'google-auth-library';
 import { createSign } from 'node:crypto';
 import * as http2 from 'node:http2';
 import { Pool, PoolClient } from 'pg';
+import { assertProductionConfig } from '@creche/prod-config';
 import { buildXlsx, storeExport, type ExportPayload } from './exports';
 import { buildInvoicePdf, deleteFile, storePdf } from './pdf';
+
+// MISSION P1 (feat(config)) : garde de config au boot — en production, un
+// secret par défaut / une config partielle empêche le démarrage (message
+// explicite listant chaque variable fautive). Inactive en test/dev.
+try {
+  assertProductionConfig();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 /**
  * Worker : jobs transactionnels + livraison push (FCM HTTP v1 / APNs).
@@ -202,6 +213,18 @@ async function videoClipsPurge(): Promise<void> {
   }
 }
 
+/** payments_expire : expiration des paiements en ligne SATIM restés 'pending'
+ *  depuis plus de 72 h (job GLOBAL organization_id NULL, pattern
+ *  video_clips_purge). La fonction payments_expire_pending (051) est SECURITY
+ *  DEFINER : le worker tourne NOBYPASSRLS sans contexte tenant. JAMAIS de
+ *  suppression de ligne (traçabilité compta) ; idempotent (status !==
+ *  'pending' après traitement) ; toute erreur SQL fait échouer le job avec sa
+ *  raison — jamais de faux « expiré ». */
+async function paymentsExpire(): Promise<void> {
+  const r = await pool.query<{ n: number }>(`SELECT payments_expire_pending() AS n`);
+  console.log(`[worker] payments_expire : ${r.rows[0].n} paiement(s) pending SATIM expiré(s) (> 72 h)`);
+}
+
 /** retention_purge : purge des journaux au-delà de RETENTION_DAYS (défaut 1825 j). */
 async function retentionPurge(): Promise<void> {
   const days = Number(process.env.RETENTION_DAYS ?? 1825);
@@ -287,6 +310,7 @@ const JOB_HANDLERS: Record<string, (payload: unknown, orgId: string | null, job:
   send_monthly_invoices: (_p, _o, job) => sendMonthlyInvoices(job),
   retention_purge: () => retentionPurge(),
   video_clips_purge: () => videoClipsPurge(),
+  payments_expire: () => paymentsExpire(),
   // La livraison des notifications passe par notification_queue (drain
   // ci-dessous) : ce job marque la prise en charge, le drain ne passe la file
   // en 'sent' qu'après traitement, avec failure_reason explicite

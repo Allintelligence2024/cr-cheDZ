@@ -51,6 +51,8 @@ describe('PaymentProviderService.createOnlinePayment', () => {
         if (compact.startsWith('UPDATE payments SET gateway_response')) {
           return { rows: [], rowCount: overrides.updateRowCount ?? 1 };
         }
+        // P1 : supersede des pending SATIM de la même facture (avant INSERT).
+        if (compact.includes('SUPERSEDED_BY_NEW_INIT')) return { rows: [], rowCount: 1 };
         if (compact.startsWith('UPDATE payments SET status=')) return { rows: [], rowCount: 1 };
         throw new Error(`SQL inattendue dans le mock : ${compact.slice(0, 80)}`);
       },
@@ -123,10 +125,30 @@ describe('PaymentProviderService.createOnlinePayment', () => {
       await expect(
         service.createOnlinePayment(USER, { invoice_id: INVOICE, method: 'cib' }),
       ).rejects.toMatchObject({ code: 'PAYMENT_GATEWAY_ERROR', status: 502 });
-      const failed = clientQueries.find((q) => q.sql.startsWith('UPDATE payments SET status='));
+      // Le marquage d'échec passerelle est le UPDATE portant l'erreur JSON en
+      // paramètre ('ECONNREFUSED') — distinct du supersede P1 (SUPERSEDED).
+      const failed = clientQueries.find((q) => q.sql.startsWith('UPDATE payments SET status=') && String(q.params?.[1] ?? '').includes('ECONNREFUSED'));
       expect(failed).toBeDefined();
       expect(failed!.sql).toContain("'failed'");
       expect(String(failed!.params[1])).toContain('ECONNREFUSED');
+    } finally {
+      restoreFetch(originalFetch);
+    }
+  });
+
+  test('P1 : pending SATIM de la même facture → failed SUPERSEDED_BY_NEW_INIT AVANT l’INSERT', async () => {
+    const { originalFetch } = await setup({ fetchImpl: gatewayOk });
+    try {
+      await service.createOnlinePayment(USER, { invoice_id: INVOICE, method: 'cib' });
+      const supersede = clientQueries.find((q) => q.sql.includes('SUPERSEDED_BY_NEW_INIT'));
+      expect(supersede).toBeDefined();
+      expect(supersede!.sql).toContain("'failed'");
+      expect(supersede!.sql).toContain("payment_gateway = 'satim'");
+      expect(supersede!.sql).toContain("status = 'pending'");
+      const insertIndex = clientQueries.findIndex((q) => q.sql.startsWith('INSERT INTO payments'));
+      const supersedeIndex = clientQueries.indexOf(supersede!);
+      expect(supersedeIndex).toBeGreaterThanOrEqual(0);
+      expect(supersedeIndex).toBeLessThan(insertIndex);
     } finally {
       restoreFetch(originalFetch);
     }

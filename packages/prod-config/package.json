@@ -1,0 +1,15 @@
+{
+  "name": "@creche/prod-config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Garde de configuration de production — API + worker : démarrage refusé si secrets par défaut / variables partielles",
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

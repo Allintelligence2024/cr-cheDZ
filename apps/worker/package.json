@@ -4,12 +4,13 @@
   "private": true,
   "description": "Worker asynchrone NestJS standalone (jobs background_jobs + outbox)",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "npm run build --workspace @creche/prod-config --prefix ../.. && tsc -p tsconfig.json",
     "start:dev": "ts-node src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
+    "@creche/prod-config": "*",
     "@embedpdf/fonts-arabic": "^1.0.0",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.4",

@@ -62,6 +62,14 @@ export async function ensureAppRole(admin) {
   // Roadmap v2 (migration 047) : purge des clips vidéo à 30 jours
   await admin.query('GRANT EXECUTE ON FUNCTION video_clips_expired(integer) TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION video_clips_delete_purged(uuid[]) TO creche_app_test');
+  // Mission P1 (migration 051) : expiration des paiements pending SATIM.
+  // GRANT conditionnel : la preuve par mutation retire 051 temporairement —
+  // la suite doit alors échouer sur le COMPORTEMENT (fonction absente), pas
+  // sur le GRANT lui-même.
+  const expiryFn = await admin.query(`SELECT 1 FROM pg_proc WHERE proname='payments_expire_pending'`);
+  if (expiryFn.rows.length > 0) {
+    await admin.query('GRANT EXECUTE ON FUNCTION payments_expire_pending(integer, integer) TO creche_app_test');
+  }
   // Fondations audit (migration 050) : jauges globales /metrics
   await admin.query('GRANT EXECUTE ON FUNCTION metrics_global_counts() TO creche_app_test');
 }

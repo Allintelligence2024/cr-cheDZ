@@ -53,6 +53,8 @@ const SECURITY_DEFINER_FUNCTIONS = new Set([
   'video_clips_expired', 'video_clips_delete_purged',
   // 050 métriques globales /metrics
   'metrics_global_counts',
+  // 051 expiration paiements pending SATIM (worker, job global)
+  'payments_expire_pending',
 ]);
 
 /**

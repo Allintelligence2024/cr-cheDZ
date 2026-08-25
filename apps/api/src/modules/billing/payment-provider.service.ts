@@ -78,15 +78,28 @@ export class PaymentProviderService {
       )).rows[0];
       if (!invoice) throw Errors.notFound();
       if (invoice.status === 'paid' || invoice.status === 'cancelled') throw Errors.invoiceImmutable();
+      // P1 — un seul pending actif par facture : tout pending SATIM déjà
+      // attaché à cette facture (payments.invoice_id, migration 051) est
+      // invalidé AVANT l'insertion du nouveau. La facture n'est PAS modifiée
+      // ici : pas d'allocation, pas de paid_amount — jamais de faux « payé ».
+      await client.query(
+        `UPDATE payments
+            SET status = 'failed',
+                gateway_response =
+                  COALESCE(gateway_response, '{}'::jsonb)
+                  || jsonb_build_object('superseded', true, 'reason', 'SUPERSEDED_BY_NEW_INIT')
+          WHERE invoice_id = $1 AND payment_gateway = 'satim' AND status = 'pending'`,
+        [dto.invoice_id],
+      );
       const due = Number(invoice.total_amount) - Number(invoice.paid_amount);
       const seq = (await client.query(`SELECT next_org_sequence($1) AS n`, [orgId])).rows[0].n;
       const method = dto.method === 'cib' ? 'cib' : 'edahabia';
       const row = (await client.query(
         `INSERT INTO payments (organization_id, reference_number, child_id, amount, method, status,
-           external_reference, payment_gateway, created_by)
-         VALUES ($1,$2,$3,$4,$5,'pending',$6,'satim',$7)
+           external_reference, payment_gateway, created_by, invoice_id)
+         VALUES ($1,$2,$3,$4,$5,'pending',$6,'satim',$7,$8)
          RETURNING id, reference_number, amount, method, status, external_reference`,
-        [orgId, `ONL-${seq}`, invoice.child_id, due, method, externalReference, userId],
+        [orgId, `ONL-${seq}`, invoice.child_id, due, method, externalReference, userId, dto.invoice_id],
       )).rows[0];
       return row;
     });
