@@ -21,7 +21,7 @@
     "test:api-phase8": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase8-billing.api.test.mjs",
     "db:status": "node scripts/migrate.mjs --status",
     "db:reset": "node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings=72",
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
