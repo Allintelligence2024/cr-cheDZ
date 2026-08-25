@@ -375,6 +375,17 @@ export class BillingService {
     if (message.includes('PAYMENT_EXCEEDS_BALANCE')) {
       return new AppError('PAYMENT_EXCEEDS_BALANCE', 'Le paiement dépasse le solde de la facture', 'الدفعة تتجاوز رصيد الفاتورة', 422);
     }
+    if (message.includes('PAYMENT_AMOUNT_MISMATCH')) {
+      // P2 — montant du webhook ≠ montant du paiement : refus explicite
+      // (migration 052). Jamais de « correction » silencieuse du montant :
+      // le paiement reste tel quel, un humain rapproche.
+      return new AppError(
+        'PAYMENT_AMOUNT_MISMATCH',
+        'Le montant du webhook ne correspond pas au montant du paiement — le paiement n’est PAS confirmé, contactez le support',
+        'مبلغ الـ webhook غير مطابق لمبلغ الدفع — الدفع غير مؤكد، اتصل بالدعم',
+        422,
+      );
+    }
     throw error;
   }
 
