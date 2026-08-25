@@ -70,6 +70,12 @@ programmer mensuellement).
   `video_clips_purge` (INSERT INTO background_jobs …, comme retention_purge)
   sur chaque org ayant le flag actif — purge stockage + lignes à 30 jours,
   échec explicite (VIDEO_PURGE_PARTIAL) si le stockage est injoignable.
+- Paiements en ligne SATIM : planifier le job quotidien `payments_expire`
+  (INSERT INTO background_jobs …, comme retention_purge — job GLOBAL,
+  organization_id NULL) ; les pending SATIM de plus de 72 h passent en
+  `failed` (gateway_response reason PENDING_EXPIRED_72H), aucune ligne
+  supprimée (traçabilité compta), job idempotent. Un initiateur de paiement
+  est TOUJOURS planifié — jamais de pending éternel.
 - Staging : toujours passer `scripts/anonymize.sql` après import d'un dump réel.
 
 ## 7. Surveillance
