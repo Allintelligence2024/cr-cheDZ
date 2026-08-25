@@ -76,6 +76,15 @@ programmer mensuellement).
   `failed` (gateway_response reason PENDING_EXPIRED_72H), aucune ligne
   supprimée (traçabilité compta), job idempotent. Un initiateur de paiement
   est TOUJOURS planifié — jamais de pending éternel.
+- **Webhook tardif (MISSION P2)** : un paiement expiré (PENDING_EXPIRED_72H)
+  ou supersédé (SUPERSEDED_BY_NEW_INIT) qui reçoit PUIS le webhook signé de
+  son fournisseur est confirmé honnêtement (paiement 'confirmed', allocation
+  créée, facture soldée — l'argent est réellement arrivé ; jamais de rejet
+  silencieux). Le webhook du MAUVAIS paiement (supersédé, facture déjà
+  soldée) → 422 INVOICE_IMMUTABLE (pas de double paiement). Si le MONTANT du
+  webhook ≠ du montant du paiement → 422 PAYMENT_AMOUNT_MISMATCH explicite
+  (jamais de « correction » silencieuse) : le paiement reste tel quel, un
+  humain rapproche (support).
 - Staging : toujours passer `scripts/anonymize.sql` après import d'un dump réel.
 
 ## 7. Surveillance
