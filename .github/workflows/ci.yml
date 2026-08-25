@@ -60,7 +60,7 @@ jobs:
         run: |
           npm run build --workspace @creche/api
           npm run build --workspace @creche/worker
-      - name: Suites d'isolation (isolation + phase3 → phase22)
+      - name: Suites d'isolation (isolation + phase3 → phase24 (auto))
         run: bash scripts/run-isolation-suites.sh
 
   admin-web:
