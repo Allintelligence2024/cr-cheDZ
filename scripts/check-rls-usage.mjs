@@ -1,33 +1,49 @@
 #!/usr/bin/env node
 /**
- * GARDE ANTI-BYPASS RLS (audit, étape 4.1) — le bug P0 (UPDATE payments via
- * pool brute : 0 ligne silencieuse sous NOBYPASSRLS) serait mort né si ce
- * contrôle avait existé.
+ * GARDE ANTI-BYPASS RLS (audit, étape 4.1 — MISSION P2 : catalogue réel).
+ * Le bug P0 (UPDATE payments via pool brute : 0 ligne silencieuse sous
+ * NOBYPASSRLS) serait mort né si ce contrôle avait existé.
  *
  * Principe : dans apps/api/src, TOUT accès `pool.query` / `this.pool.query`
  * BRUT (hors withTenantConnection, qui pose app.tenant_id) ne peut porter QUE
  * sur :
- *   1. une FONCTION SECURITY DEFINER de la liste blanche ci-dessous (elle
- *      résout le tenant côté serveur — même pattern que le bootstrap auth) ;
- *   2. des TABLES SYSTÈME sans RLS, explicitement listées et justifiées.
- * Tout autre accès (table tenant directe : payments, video_clips, invoices,
- * children…) est une VIOLATION → le script ÉCHOUE (exit 1).
+ *   1. une FONCTION SECURITY DEFINER — la liste n'est PLUS codée en dur :
+ *      elle est DÉRIVÉE du CATALOGUE réel (pg_proc WHERE prosecdef, schéma
+ *      public) au moment du check. Toute fonction appelée par un pool.query
+ *      doit y être ; une fonction qui existe dans le catalogue sans être
+ *      SECURITY DEFINER est une DIVERGENCE explicite (échec) ;
+ *   2. des TABLES SYSTÈME sans RLS, explicitement listées et CROISÉES avec
+ *      le catalogue (pg_class : la table doit exister AVEC relrowsecurity =
+ *      false — une table figée qui a désormais la RLS active est une
+ *      DIVERGENCE explicite, échec).
  *
- * Usage : node scripts/check-rls-usage.mjs   (exécuté par la CI et par
- * scripts/run-isolation-suites.sh avant les suites).
+ * Modes :
+ *   - DATABASE_URL défini  → vérification contre le catalogue réel (CI job
+ *     database, runner d'isolation) ;
+ *   - DATABASE_URL absent  → MODE FALLBACK : listes figées + AVERTISSEMENT
+ *     explicite (aucune vérification catalogue possible sans base).
+ *
+ * Les listes figées (FROZEN_*) servent de fallback et de documentation ; en
+ * mode catalogue, elles sont VÉRIFIÉES contre pg_proc/pg_class (dérive
+ * interdite : tout écart = échec explicite).
+ *
+ * Usage : node scripts/check-rls-usage.mjs [--verbose]
+ * (exécuté par la CI et par scripts/run-isolation-suites.sh avant les suites)
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import pg from 'pg';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const API_SRC = join(ROOT, 'apps/api/src');
 
 /**
- * Fonctions SECURITY DEFINER autorisées via pool brute (la fonction résout
- * le tenant serveur ; références = migrations / helpers de test).
+ * Fonctions SECURITY DEFINER (documentation + fallback sans base). EN MODE
+ * CATALOGUE, la liste effective est pg_proc WHERE prosecdef (schéma public) —
+ * ces entrées doivent y EXISTER (sinon : échec explicite « dérive »).
  */
-const SECURITY_DEFINER_FUNCTIONS = new Set([
+const FROZEN_SECURITY_DEFINER_FUNCTIONS = new Set([
   // 015 bootstrap auth
   'auth_get_memberships', 'auth_refresh_lookup', 'auth_get_device',
   // 016 invitations
@@ -54,13 +70,14 @@ const SECURITY_DEFINER_FUNCTIONS = new Set([
   // 050 métriques globales /metrics
   'metrics_global_counts',
   // 051 expiration paiements pending SATIM (worker, job global)
+  // 052 (CREATE OR REPLACE de 024/039 : billing_webhook_apply inchangée de nom)
   'payments_expire_pending',
 ]);
 
 /**
- * Tables SYSTÈME (SANS RLS — vérifié sur le schéma : SELECT relname FROM
- * pg_class WHERE relrowsecurity = false) autorisées via pool brute, avec
- * justification :
+ * Tables SYSTÈME (SANS RLS — CROISÉ avec pg_class en mode catalogue : chaque
+ * entrée doit exister avec relrowsecurity = false) autorisées via pool brute,
+ * avec justification :
  * - users / sessions / otp_codes : bootstrap auth AVANT pose du contexte
  *   tenant (login, refresh, OTP) — RLS absente par conception, l'isolation
  *   est assurée par les clauses WHERE (email, id de session…) ;
@@ -71,7 +88,7 @@ const SECURITY_DEFINER_FUNCTIONS = new Set([
  *   tenant via pool brute) — l'audit ne doit pas faire échouer le métier ;
  * - schema_migrations : infra.
  */
-const SYSTEM_TABLES = new Set([
+const FROZEN_SYSTEM_TABLES = new Set([
   'users', 'sessions', 'otp_codes',
   'organizations', 'roles', 'permissions', 'role_permissions',
   'compliance_rules', 'compliance_rule_sets',
@@ -85,11 +102,6 @@ function extractSql(source, fromIndex) {
   if (tick === -1) return null;
   const end = source.indexOf('`', tick + 1);
   if (end === -1) return null;
-  // Le littéral doit commencer juste après la parenthèse (espaces/génériques tolérés).
-  const between = source.slice(fromIndex, tick);
-  if (!/^\s*[^`]*?\(\s*$/.test(between.replace(/<[^(]*>/, ''))) {
-    // entre la parenthèse et le backtick il peut y avoir des sauts de ligne — ok
-  }
   return source.slice(tick + 1, end);
 }
 
@@ -106,7 +118,7 @@ function referencedTables(sql) {
   return tables;
 }
 
-/** Fonctions SECURITY DEFINER appelées (SELECT fn(…) / SELECT * FROM fn(…)). */
+/** Fonctions appelées (SELECT fn(…) / SELECT * FROM fn(…) / FROM fn(…)). */
 function calledFunctions(sql) {
   const fns = new Set();
   const re = /(?:SELECT\s+(?:\*|(?:[a-z_][a-z0-9_.]*))\s+FROM\s+)?([a-z_][a-z0-9_]*)\s*\(/gi;
@@ -124,9 +136,6 @@ function walk(dir) {
   }
   return out;
 }
-
-const violations = [];
-const reviewed = [];
 
 /**
  * Exceptions inline justifiées : un accès pool.query brut précédé (2 lignes
@@ -149,52 +158,147 @@ function inlineAllow(source, index) {
   return null;
 }
 
-for (const file of walk(API_SRC)) {
-  const rel = relative(ROOT, file);
-  const source = readFileSync(file, 'utf8');
-  const poolRe = /(?:this\.)?pool\.query\s*(?:<[^>(]*>)?\s*\(/g;
-  let m;
-  while ((m = poolRe.exec(source)) !== null) {
-    const line = source.slice(0, m.index).split('\n').length;
-    // Client sous withTenantConnection : client.query, jamais pool.query —
-    // tout pool.query EST hors contexte tenant par construction.
-    const allowReason = inlineAllow(source, m.index);
-    const sql = extractSql(source, m.index + m[0].length - 1);
-    if (sql === null) {
-      violations.push(`${rel}:${line} — pool.query SANS littéral SQL statique (SQL dynamique interdit : non auditable)`);
-      continue;
+/**
+ * MISSION P2 — dérive la whitelist du CATALOGUE réel :
+ * - sdFunctions : fonctions SECURITY DEFINER du schéma public (pg_proc) ;
+ * - catalogFunctions : TOUTES les fonctions du schéma public (pour détecter
+ *   un appel pool.query à une fonction qui EXISTE mais n'est PAS SECURITY
+ *   DEFINER — divergence explicite) ;
+ * - croisement des listes figées contre le catalogue (dérive = échec).
+ */
+async function loadCatalog(verbose) {
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  try {
+    await client.connect();
+    const procs = await client.query(`
+      SELECT p.proname
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+    `);
+    const sdRows = await client.query(`
+      SELECT p.proname
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.prosecdef
+    `);
+    const tables = await client.query(`
+      SELECT c.relname, c.relrowsecurity
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')
+    `);
+    const divergences = [];
+    for (const name of FROZEN_SECURITY_DEFINER_FUNCTIONS) {
+      if (!sdRows.rows.some((r) => r.proname === name)) {
+        divergences.push(`fonction figée « ${name} » absente du catalogue SECURITY DEFINER (pg_proc, public) — liste en dérive`);
+      }
     }
-    const tables = referencedTables(sql);
-    const fns = [...calledFunctions(sql)].filter((f) => SECURITY_DEFINER_FUNCTIONS.has(f));
-    // Autorisé si : uniquement des tables système, OU au moins une fonction
-    // SECURITY DEFINER et AUCUNE table tenant directe hors fonction,
-    // OU exception inline justifiée (rls-guard: allow <raison>).
-    const nonSystem = [...tables].filter((t) => !SYSTEM_TABLES.has(t));
-    const fnCallsOnly = fns.length > 0 && nonSystem.every((t) => fns.includes(t) || sql.includes(`FROM ${t}(`));
-    if (allowReason !== null) {
-      reviewed.push(`${rel}:${line} — OK (EXCEPTION inline : ${allowReason})`);
-    } else if (nonSystem.length === 0 || fnCallsOnly) {
-      const why = fns.length ? `SECURITY DEFINER ${fns.join(',')}` : `table(s) système ${[...tables].join(',')} (aucune table tenant)`;
-      reviewed.push(`${rel}:${line} — OK (${why})`);
-    } else {
-      violations.push(
-        `${rel}:${line} — pool.query brut sur table(s) TENANT hors withTenantConnection : ${nonSystem.join(', ')} ` +
-        `(SQL: ${sql.replace(/\s+/g, ' ').slice(0, 90)}…)`,
-      );
+    const tableRLS = new Map(tables.rows.map((r) => [r.relname, r.relrowsecurity]));
+    for (const name of FROZEN_SYSTEM_TABLES) {
+      if (!tableRLS.has(name)) {
+        divergences.push(`table système figée « ${name} » absente de pg_class (schéma public) — liste en dérive`);
+      } else if (tableRLS.get(name)) {
+        divergences.push(`table système figée « ${name} » a désormais la RLS ACTIVE (relrowsecurity=true) — l'accès pool brute n'est plus légitime`);
+      }
     }
+    if (divergences.length) {
+      console.error('\n✗ GARDE ANTI-BYPASS RLS — DIVERGENCE catalogue/listes figées :');
+      for (const d of divergences) console.error(`  ✗ ${d}`);
+      console.error('Mettre à jour scripts/check-rls-usage.mjs (ou réparer le schéma) — jamais de dérive silencieuse.');
+      process.exit(1);
+    }
+    if (verbose) {
+      console.log(`  Catalogue : ${sdRows.rows.length} fonction(s) SECURITY DEFINER (public) ; ${tableRLS.size} table(s) vérifiée(s) contre pg_class.`);
+      console.log('  Croisement listes figées ↔ catalogue : OK (aucune dérive).');
+    }
+    return {
+      sdFunctions: new Set(sdRows.rows.map((r) => r.proname.toLowerCase())),
+      catalogFunctions: new Set(procs.rows.map((r) => r.proname.toLowerCase())),
+    };
+  } finally {
+    await client.end();
   }
 }
 
-if (process.argv.includes('--verbose')) {
-  console.log(`Accès pool.query bruts revus : ${reviewed.length}`);
-  for (const r of reviewed) console.log(`  ✓ ${r}`);
-}
+const main = async () => {
+  const verbose = process.argv.includes('--verbose');
+  let sdFunctions = FROZEN_SECURITY_DEFINER_FUNCTIONS;
+  let catalogFunctions = null;
+  let mode = 'fallback';
+  if (process.env.DATABASE_URL) {
+    const catalog = await loadCatalog(verbose);
+    sdFunctions = catalog.sdFunctions;
+    catalogFunctions = catalog.catalogFunctions;
+    mode = 'catalogue';
+  } else {
+    console.warn('⚠ GARDE ANTI-BYPASS RLS — MODE FALLBACK : DATABASE_URL absent.');
+    console.warn('  Listes figées utilisées SANS vérification du catalogue réel (pg_proc/pg_class).');
+    console.warn('  Configurer DATABASE_URL (job CI « database », runner d\'isolation) pour la vérification complète.');
+  }
 
-if (violations.length) {
-  console.error(`\n✗ GARDE ANTI-BYPASS RLS : ${violations.length} accès(s) pool.query brut(s) ILLÉGAL(AUX) :`);
-  for (const v of violations) console.error(`  ✗ ${v}`);
-  console.error('\nTout accès à une table tenant DOIT passer par TenantContextService.withTenantConnection,');
-  console.error('ou par une fonction SECURITY DEFINER whitelistée (voir scripts/check-rls-usage.mjs).');
+  const violations = [];
+  const reviewed = [];
+
+  for (const file of walk(API_SRC)) {
+    const rel = relative(ROOT, file);
+    const source = readFileSync(file, 'utf8');
+    const poolRe = /(?:this\.)?pool\.query\s*(?:<[^>(]*>)?\s*\(/g;
+    let m;
+    while ((m = poolRe.exec(source)) !== null) {
+      const line = source.slice(0, m.index).split('\n').length;
+      // Client sous withTenantConnection : client.query, jamais pool.query —
+      // tout pool.query EST hors contexte tenant par construction.
+      const allowReason = inlineAllow(source, m.index);
+      const sql = extractSql(source, m.index + m[0].length - 1);
+      if (sql === null) {
+        violations.push(`${rel}:${line} — pool.query SANS littéral SQL statique (SQL dynamique interdit : non auditable)`);
+        continue;
+      }
+      const tables = referencedTables(sql);
+      const allCalled = [...calledFunctions(sql)];
+      const fns = allCalled.filter((f) => sdFunctions.has(f));
+      // MISSION P2 : fonction appelée via pool brute qui EXISTE dans le
+      // catalogue public SANS être SECURITY DEFINER → divergence explicite.
+      const nonSdRealFns = catalogFunctions
+        ? allCalled.filter((f) => catalogFunctions.has(f) && !sdFunctions.has(f))
+        : [];
+      const nonSystem = [...tables].filter((t) => !FROZEN_SYSTEM_TABLES.has(t));
+      const fnCallsOnly = fns.length > 0 && nonSystem.every((t) => fns.includes(t) || sql.includes(`FROM ${t}(`));
+      if (allowReason !== null) {
+        reviewed.push(`${rel}:${line} — OK (EXCEPTION inline : ${allowReason})`);
+      } else if (nonSdRealFns.length > 0) {
+        violations.push(
+          `${rel}:${line} — DIVERGENCE : fonction(s) ${nonSdRealFns.join(', ')} appelée(s) via pool brute EXISTENT dans le catalogue (pg_proc public) SANS être SECURITY DEFINER — vérifier le mode de sécurité (dérive catalogue)`,
+        );
+      } else if (nonSystem.length === 0 || fnCallsOnly) {
+        const why = fns.length ? `SECURITY DEFINER ${fns.join(',')} (catalogue=${mode})` : `table(s) système ${[...tables].join(',')} (aucune table tenant)`;
+        reviewed.push(`${rel}:${line} — OK (${why})`);
+      } else {
+        violations.push(
+          `${rel}:${line} — pool.query brut sur table(s) TENANT hors withTenantConnection : ${nonSystem.join(', ')} ` +
+          `(SQL: ${sql.replace(/\s+/g, ' ').slice(0, 90)}…)`,
+        );
+      }
+    }
+  }
+
+  if (verbose) {
+    console.log(`Mode : ${mode === 'catalogue' ? 'CATALOGUE (pg_proc/pg_class, DATABASE_URL)' : 'FALLBACK (listes figées)'} — accès pool.query bruts revus : ${reviewed.length}`);
+    for (const r of reviewed) console.log(`  ✓ ${r}`);
+  }
+
+  if (violations.length) {
+    console.error(`\n✗ GARDE ANTI-BYPASS RLS : ${violations.length} accès(s) pool.query brut(s) ILLÉGAL(AUX) :`);
+    for (const v of violations) console.error(`  ✗ ${v}`);
+    console.error('\nTout accès à une table tenant DOIT passer par TenantContextService.withTenantConnection,');
+    console.error('ou par une fonction SECURITY DEFINER du catalogue (pg_proc WHERE prosecdef, schéma public).');
+    process.exit(1);
+  }
+  console.log(`✓ Garde anti-bypass RLS (${mode}) : ${reviewed.length} accès pool.query brut(s) tous conformes (SECURITY DEFINER du catalogue ou tables système justifiées).`);
+};
+
+main().catch((error) => {
+  console.error('✗ GARDE ANTI-BYPASS RLS — erreur interne :', error);
   process.exit(1);
-}
-console.log(`✓ Garde anti-bypass RLS : ${reviewed.length} accès pool.query brut(s) tous conformes (SECURITY DEFINER ou tables système justifiées).`);
+});

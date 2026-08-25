@@ -61,6 +61,55 @@ FAIT en dernier (session août 2026) :
   → migration 048 (cast) — le retry/failed des jobs refonctionne.
 - .env.example / .env.prod.example : WHATSAPP_* et SATIM_* documentés.
 
+— MISSION P2 (session août 2026, cr-cheDZ) : webhook tardif + garde RLS catalogue + ratchet lint —
+- **Webhook tardif (le point le plus important) — suite phase24 (21 assertions,
+  TDD + preuve PAR MUTATION scripts/mutation-phase24-proof.sh)** :
+  vérifié sur PostgreSQL 18 réel NOBYPASSRLS —
+  1) un paiement en ligne passé 'failed' par EXPIRATION (backdate 73 h +
+     worker payments_expire) qui reçoit PUIS son webhook signé valide est
+     confirmé honnêtement : paiement 'confirmed', ALLOCATION créée, facture
+     SOLDÉE (l'argent est réellement arrivé — jamais de rejet silencieux) ;
+     le rejeu du webhook reste idempotent (1 paiement, 1 allocation) ;
+  2) un paiement SUPERSEDED_BY_NEW_INIT (deux external_references distinctes
+     R1/R2) : le webhook tardif de R1 (le BON paiement, celui sur lequel
+     l'argent est tombé) confirme R1 et alloue sur la facture via R1 — R2
+     reste intact (pending, aucune allocation : pas de double paiement) ;
+     le webhook tardif de R2 (le mauvais) est REFUSÉ explicitement (422
+     INVOICE_IMMUTABLE, facture déjà soldée) ;
+  3) **défaut réel corrigé — migration 052** (CREATE OR REPLACE de
+     billing_webhook_apply, 001-051 immuables) : avant, un webhook dont le
+     MONTANT ≠ du montant du paiement confirmait SILENCIEUSEMENT au montant
+     du paiement (webhook 9999 → facture de 10000 soldée, aucun écrit) ;
+     désormais REFUS explicite 422 PAYMENT_AMOUNT_MISMATCH (mapping FR/AR
+     dans billing.service.ts) — le paiement reste tel quel, un humain
+     rapproche. Avant/après : « que fait un webhook tardif aujourd'hui ? »
+     → AVANT : confirmation honnête du paiement expiré/supersédé (déjà le cas
+     via 039 qui couvre le statut 'failed') MAIS montant du webhook ignoré
+     silencieusement ; APRÈS : idem + refus explicite du montant incohérent.
+- **Garde RLS auto-synchronisée (scripts/check-rls-usage.mjs)** : la
+  whitelist SECURITY DEFINER n'est PLUS codée en dur — en mode CATALOGUE
+  (DATABASE_URL défini : CI job database + runner d'isolation), elle est
+  DÉRIVÉE de pg_proc WHERE prosecdef (schéma public) au moment du check ;
+  les tables système restent une liste EXPLICITE mais CROISÉE avec pg_class
+  (relrowsecurity=false) : tout écart catalogue/listes = ÉCHEC explicite
+  (fonction figée disparue, table figée désormais RLS, fonction appelée via
+  pool brute qui existe sans être SECURITY DEFINER). Mode sans base = listes
+  figées + AVERTISSEMENT. Preuves rejouées : garde verte sur main (61 accès)
+  + 3 tests négatifs (fonction inconnue → violation ; fonction non-SD
+  (app_tenant_id) → divergence ; table figée à RLS active → divergence,
+  rc=1).
+- **Ratchet lint** : `npm run lint` = `eslint . --max-warnings=72` (compte
+  du 2026-08-25 : 0 erreur / 72 warnings — le compte ne peut plus
+  AUGMENTER). BURN-DOWN : éteindre des warnings puis BAISSER le seuil dans
+  package.json — `npm run lint 2>&1 | grep -oE '[0-9]+ problems'` (ou la
+  ligne « N problems ») donne le compte courant ; mettre
+  `--max-warnings=<nouveau compte>` dans package.json ; le seuil est
+  MONOTONE DÉCROISSANT (0 nouvelle erreur, 0 nouveau warning).
+- Validation ÉTAPE 4 : `bash scripts/run-isolation-suites.sh` → 28/28
+  (garde RLS + 27 suites dont phase24), npm run test:unit, npm run lint
+  (72 ≤ 72), typecheck 4 apps, npm audit --omit=dev = 0, migrate --status
+  001→052 — cf. rapport de mission (à rejouer avant tout merge).
+
 — MISSION P1 (session août 2026, cr-cheDZ) : expiration pending + garde config —
 - Paiement en ligne : un pending SATIM > 72 h passe en 'failed' avec
   gateway_response || {"expired":true,"reason":"PENDING_EXPIRED_72H"} via le
@@ -191,8 +240,8 @@ les correctifs ont été réappliqués selon la spécification
 | Élément | État |
 |---|---|
 | Branche de travail | branche de session Arena active (historiquement `arena/019fbeff-cr-chedz`, puis `arena/019fc32c-cr-chedz`) — ne jamais changer |
-| Migrations | 001 → 051 (schéma complet, RLS robuste `app_tenant_id()`, facturation bornée, webhook + jobs SECURITY DEFINER, paie, otp channel, vidéo post-DPIA, fix jobs_finish, 049 CHECK storage_key + 050 métriques SECURITY DEFINER — audit, **051 expiry pending SATIM + invoice_id + payments_expire_pending()** — MISSION P1) |
-| Suites de tests | `tests/tenant-isolation/` : schema-check (renforcé FORCE/policy/ancrage), rls-behavior-check (GATE), isolation (S2), phase3 → phase21, **phase22 correctifs d'audit**, **phase23 expiration pending (MISSION P1)** — **26/26 vertes + garde RLS (27/27 runner) sur PostgreSQL 18 réel** ; + 12 tests unitaires jest (payment-provider 4 + garde config 8) |
+| Migrations | 001 → 052 (schéma complet, RLS robuste `app_tenant_id()`, facturation bornée, webhook + jobs SECURITY DEFINER, paie, otp channel, vidéo post-DPIA, fix jobs_finish, 049 CHECK storage_key + 050 métriques SECURITY DEFINER — audit, **051 expiry pending SATIM + invoice_id + payments_expire_pending()** — MISSION P1, **052 garde de montant dans billing_webhook_apply (CREATE OR REPLACE 024/039, refus explicite PAYMENT_AMOUNT_MISMATCH)** — MISSION P2) |
+| Suites de tests | `tests/tenant-isolation/` : schema-check (renforcé FORCE/policy/ancrage), rls-behavior-check (GATE), isolation (S2), phase3 → phase21, **phase22 correctifs d'audit**, **phase23 expiration pending (MISSION P1)**, **phase24 webhook tardif (MISSION P2 : expiré/supersédé confirmé honnêtement + montant ≠ refusé explicitement, prouvé par mutation)** — **27/27 vertes + garde RLS auto-synchronisée au catalogue (28/28 runner) sur PostgreSQL 18 réel** ; + 12 tests unitaires jest (payment-provider 4 + garde config 8) |
 | Phase 7 | Portail parent complet (API) — OTP/PIN, consentements, quiet hours, photos, FCM/APNs worker |
 | Phase 8 | Facturation complète (API + worker) — contrats, factures, paiements, allocations, caisse, webhook, PDF bilingue AR, accès parent |
 | Phase 9 | Admin web complète (API + écrans) — dashboard, présences, journal + modération, photos, facturation, fiche enfant, paramètres/tarifs, i18n AR/FR, lazy, responsive |
@@ -240,6 +289,7 @@ node tests/tenant-isolation/phase20-video-dpia-gate.api.test.mjs
 node tests/tenant-isolation/phase21-video-surveillance.api.test.mjs
 node tests/tenant-isolation/phase22-audit-fixes.api.test.mjs
 node tests/tenant-isolation/phase23-pending-expiry.api.test.mjs
+node tests/tenant-isolation/phase24-late-webhook.api.test.mjs
 
 # OU tout l'ordre canonique d'un coup (inclut la garde RLS en tête) :
 bash scripts/run-isolation-suites.sh
@@ -247,6 +297,10 @@ bash scripts/run-isolation-suites.sh
 # Preuve par mutation MISSION P1 (worker réverté → ROUGE, supersede réverté →
 # ROUGE, 051 retirée → ROUGE, restaurations → VERT) :
 bash scripts/mutation-phase23-proof.sh
+
+# Preuve par mutation MISSION P2 (052 retirée → ROUGE montant ignoré,
+# mapping API réverté → ROUGE 500, restaurations → VERT) :
+bash scripts/mutation-phase24-proof.sh
 
 # Garde anti-bypass RLS seule / lint réel / tests unitaires
 node scripts/check-rls-usage.mjs --verbose
