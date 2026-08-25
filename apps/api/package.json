@@ -4,13 +4,14 @@
   "private": true,
   "description": "Backend NestJS — monolithe modulaire",
   "scripts": {
-    "build": "nest build",
+    "build": "npm run build --workspace @creche/prod-config --prefix ../.. && nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "typecheck": "tsc --noEmit",
     "test": "jest"
   },
   "dependencies": {
+    "@creche/prod-config": "*",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.0",

@@ -2,8 +2,19 @@ import { GoogleAuth } from 'google-auth-library';
 import { createSign } from 'node:crypto';
 import * as http2 from 'node:http2';
 import { Pool, PoolClient } from 'pg';
+import { assertProductionConfig } from '@creche/prod-config';
 import { buildXlsx, storeExport, type ExportPayload } from './exports';
 import { buildInvoicePdf, deleteFile, storePdf } from './pdf';
+
+// MISSION P1 (feat(config)) : garde de config au boot — en production, un
+// secret par défaut / une config partielle empêche le démarrage (message
+// explicite listant chaque variable fautive). Inactive en test/dev.
+try {
+  assertProductionConfig();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 /**
  * Worker : jobs transactionnels + livraison push (FCM HTTP v1 / APNs).
