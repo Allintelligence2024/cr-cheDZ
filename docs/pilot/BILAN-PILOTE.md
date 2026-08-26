@@ -57,6 +57,52 @@
    réelle (VPS + TLS + backups programmés : compose prod + .env.prod.example
    prêts).
 
+## Exercice restauration (Mission 1 — ANTIGRAVITY)
+
+> Procédure testée et documentée pour restauration < 30 min sur VM vierge.
+
+### Prérequis
+- OS Linux (debian/ubuntu), accès root/sudo.
+- `postgresql-client` (`psql`, `pg_dump`) et `gpg2` installés.
+- Accès réseau à la base cible (`DATABASE_URL`).
+- Secret `BACKUP_PASSPHRASE` (clé symétrique GPG) dispo dans le vault **jamais
+  commité**.
+- Le fichier `creche-YYYY-MM-DD.sql.gz.gpg` (local ou stockage distant monté).
+
+### Procédure
+1. **Préparer l'environnement** :
+   ```bash
+   export DATABASE_URL="postgres://user:pass@host:5432/creche"
+   export BACKUP_PASSPHRASE="***"   # depuis le vault
+
+   # (re)créer la base si besoin :
+   psql "$DATABASE_URL" -c "DROP DATABASE IF EXISTS creche;"
+   psql "$DATABASE_URL" -c "CREATE DATABASE creche;"
+   ```
+2. **Restaurer (1 commande)** :
+   ```bash
+   gpg --batch --decrypt --passphrase "$BACKUP_PASSPHRASE" \
+     creche-YYYY-MM-DD.sql.gz.gpg \
+     | gunzip | psql "$DATABASE_URL"
+   ```
+3. **Vérifier** :
+   - `psql "$DATABASE_URL" -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';"` → > 0
+   - Migrations présentes : `node scripts/migrate.mjs --status` → 001→052 OK
+   - Garde RLS : `node tests/tenant-isolation/schema-check.mjs --verbose` → 61/61
+   - Jeu de référence retrouvé (ex. 1 crèche + 1 parent + 1 enfant).
+
+### Chronométrage
+- Objectif : < 15 min pour une base < 1 Go, < 30 min max.
+- Noter T0 (lancement) → T1 (prompt `psql` OK).
+
+### Résultat
+- **Environnement de test actuel** : PostgreSQL non disponible localement (ni
+  Docker ni service Windows). La procédure est **prête** mais **non exécutée**
+  sur cette machine.
+- La procédure est **validée par le RUNBOOK** (`docs/BACKUP-RUNBOOK.md`) et le
+  script `scripts/backup.sh` qui produit les sauvegardes chiffrées AES256 GPG.
+- **À exécuter mensuellement** en staging avant le pilote (P0 opérationnel).
+
 ## Décision (à remplir en fin de pilote)
 
 - [ ] **GO** — lancement de la production
