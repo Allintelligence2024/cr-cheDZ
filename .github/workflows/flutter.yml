@@ -1,14 +1,15 @@
 # Dette assumée — issue #8 : les apps Flutter n'ont JAMAIS été compilées.
-# HISTORIQUE (corrigé 2026-08-26) : la CI utilisait
-# `container: cirruslabs/flutter:stable`, image Docker Hub indisponible
-# (`docker pull` → "pull access denied ... repository does not exist") → le
-# conteneur ne démarrait jamais, `flutter pub get`/`analyze` n'ont JAMAIS
-# tourné, et `continue-on-error: true` masquait cet échec en "vert" : un
-# FAUX vert. CORRECTIF : subosito/flutter-action (Flutter réel, avec cache)
-# et RETRAIT de `continue-on-error` → le statut reflète la vraie
-# compilation. Non bloquant (seul le check `database` est requis par la
-# branch protection) : un rouge honnête ne bloque pas les merges, contrairement
-# au vert mensonger. Suivi / rescope "build + run" dans l'issue #8.
+# HISTORIQUE (corrigé 2026-08-26) :
+#   v1 : `container: cirruslabs/flutter:stable` indisponible (pull denied) →
+#        le job échouait au démarrage, masqué en vert par `continue-on-error`
+#        (faux vert).
+#   v2 : `subosito/flutter-action@v2` + retrait de `continue-on-error`, mais
+#        `flutter-version: stable` est invalide (stable = channel, pas
+#        version) → échec à l'install de Flutter ("Unable to determine
+#        Flutter version"). Corrigé en `channel: stable`.
+# Le statut reflète maintenant la VRAIE compilation. Non bloquant (seul le
+# check `database` est requis par la branch protection) : un rouge honnête ne
+# bloque pas les merges. Suivi / rescope "build + run" dans l'issue #8.
 name: flutter
 
 on:
@@ -23,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: stable
+          channel: stable
           cache: true
       - name: parent-mobile — pub get + analyze
         working-directory: apps/parent-mobile
