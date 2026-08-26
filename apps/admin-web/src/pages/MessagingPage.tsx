@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface Conversation {
@@ -49,7 +49,7 @@ export function MessagingPage(): React.JSX.Element {
         setConversations(r);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, []);
 
@@ -62,8 +62,8 @@ export function MessagingPage(): React.JSX.Element {
         const me = await http.get<{ id: string }>('/me');
         setMeId(me.id);
       }
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 
@@ -80,8 +80,8 @@ export function MessagingPage(): React.JSX.Element {
       setSubject('');
       load();
       await open(conv.id);
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 
@@ -92,8 +92,8 @@ export function MessagingPage(): React.JSX.Element {
       await http.post(`/messaging/conversations/${selected.id}/messages`, { body: draft.trim() });
       setDraft('');
       await open(selected.id);
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 

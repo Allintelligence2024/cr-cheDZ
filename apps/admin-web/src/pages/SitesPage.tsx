@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import React from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface Site {
@@ -35,8 +35,8 @@ export function SitesPage(): React.JSX.Element {
       setName('');
       setWilaya('');
       load();
-    } catch (err: any) {
-      setError(err.messageFr);
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.messageFr : '');
     }
   };
 

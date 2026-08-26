@@ -2,7 +2,7 @@ import { useState } from 'react';
 import React from 'react';
 import { Button, Card, TextField, tokens } from '@creche/design-system';
 import { useNavigate, useSearchParams } from 'react-router';
-import { setTokens } from '../api/client';
+import { ApiError, setTokens } from '../api/client';
 import { http } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n';
@@ -35,8 +35,8 @@ export function AcceptInvitationPage(): React.JSX.Element {
       setTokens(res.access_token, res.refresh_token);
       await login('', '').catch(() => undefined); // force reload du profil
       navigate('/');
-    } catch (err: any) {
-      setError(err.messageFr);
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.messageFr : '');
       setBusy(false);
     }
   };
