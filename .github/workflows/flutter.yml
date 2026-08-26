@@ -1,0 +1,27 @@
+# Dette assumée — issue #8 : les apps Flutter n'ont JAMAIS été compilées.
+# continue-on-error = on MESURE la dérive à chaque PR sans bloquer les
+# merges. RETIRER ce flag quand l'issue #8 est traitée (jamais avant).
+name: flutter
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  flutter-check:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    container: cirruslabs/flutter:stable
+    steps:
+      - uses: actions/checkout@v4
+      - name: parent-mobile — pub get + analyze
+        working-directory: apps/parent-mobile
+        run: |
+          flutter pub get
+          flutter analyze
+      - name: staff-mobile — pub get + analyze
+        working-directory: apps/staff-mobile
+        run: |
+          flutter pub get
+          flutter analyze
