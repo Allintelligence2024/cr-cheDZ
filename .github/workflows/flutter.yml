@@ -1,6 +1,14 @@
 # Dette assumée — issue #8 : les apps Flutter n'ont JAMAIS été compilées.
-# continue-on-error = on MESURE la dérive à chaque PR sans bloquer les
-# merges. RETIRER ce flag quand l'issue #8 est traitée (jamais avant).
+# HISTORIQUE (corrigé 2026-08-26) : la CI utilisait
+# `container: cirruslabs/flutter:stable`, image Docker Hub indisponible
+# (`docker pull` → "pull access denied ... repository does not exist") → le
+# conteneur ne démarrait jamais, `flutter pub get`/`analyze` n'ont JAMAIS
+# tourné, et `continue-on-error: true` masquait cet échec en "vert" : un
+# FAUX vert. CORRECTIF : subosito/flutter-action (Flutter réel, avec cache)
+# et RETRAIT de `continue-on-error` → le statut reflète la vraie
+# compilation. Non bloquant (seul le check `database` est requis par la
+# branch protection) : un rouge honnête ne bloque pas les merges, contrairement
+# au vert mensonger. Suivi / rescope "build + run" dans l'issue #8.
 name: flutter
 
 on:
@@ -11,10 +19,12 @@ on:
 jobs:
   flutter-check:
     runs-on: ubuntu-latest
-    continue-on-error: true
-    container: cirruslabs/flutter:stable
     steps:
       - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: stable
+          cache: true
       - name: parent-mobile — pub get + analyze
         working-directory: apps/parent-mobile
         run: |
