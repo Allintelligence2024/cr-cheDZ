@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface Camera {
@@ -43,9 +43,9 @@ export function VideoPage(): React.JSX.Element {
   const [zone, setZone] = useState<string>(ZONES[0]);
   const [filter, setFilter] = useState('');
 
-  const handleError = (e: any): void => {
-    if (e?.code === 'VIDEO_FEATURE_DISABLED') setDisabled(true);
-    setError(e?.messageFr ?? String(e));
+  const handleError = (e: unknown): void => {
+    if (e && typeof e === 'object' && 'code' in e && (e as { code: string }).code === 'VIDEO_FEATURE_DISABLED') setDisabled(true);
+    setError(e instanceof ApiError ? e.messageFr : String(e));
   };
 
   const load = (): void => {

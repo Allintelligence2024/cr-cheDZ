@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface JournalEvent {
@@ -43,7 +43,7 @@ export function JournalPage(): React.JSX.Element {
         setItems(r.items);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, [childId, date]);
 
@@ -53,8 +53,8 @@ export function JournalPage(): React.JSX.Element {
     try {
       await http.patch(`/journal/events/${event.id}/visibility`, { visible_to_parents: !event.visible_to_parents });
       load();
-    } catch (e: any) {
-      setError(e.messageFr ?? t('journal.toggleError'));
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr ?? t('journal.toggleError') : t('journal.toggleError'));
     }
   };
 

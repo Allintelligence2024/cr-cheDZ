@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface CheckResult {
@@ -37,7 +37,7 @@ export function CompliancePage(): React.JSX.Element {
     http
       .get<PersistedCheck[]>('/compliance/checks')
       .then(setHistory)
-      .catch((e: any) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(loadHistory, []);
 
@@ -48,8 +48,8 @@ export function CompliancePage(): React.JSX.Element {
       const r = await http.get<{ checked_at: string; results: CheckResult[] }>('/compliance/summary');
       setResults(r.results);
       loadHistory();
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : '');
     } finally {
       setBusy(false);
     }
@@ -60,8 +60,8 @@ export function CompliancePage(): React.JSX.Element {
     try {
       await http.post(`/compliance/checks/${id}/acknowledge`, {});
       loadHistory();
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 

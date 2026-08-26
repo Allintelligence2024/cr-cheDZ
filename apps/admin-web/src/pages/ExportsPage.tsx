@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface ExportRow {
@@ -35,7 +35,7 @@ export function ExportsPage(): React.JSX.Element {
         setItems(r);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, []);
 
@@ -48,8 +48,8 @@ export function ExportsPage(): React.JSX.Element {
       await http.post('/exports', { report_type: reportType, period: periodValue });
       setMessage(t('exports.requested'));
       load();
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : '');
     } finally {
       setBusy(false);
     }

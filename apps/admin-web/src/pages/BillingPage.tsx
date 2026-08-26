@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface Contract {
@@ -96,7 +96,7 @@ function ContractsTab({ onError, onMessage }: { onError: (m: string) => void; on
   const [discount, setDiscount] = useState('');
 
   const load = (): void => {
-    http.get<Contract[]>('/billing/contracts').then(setItems).catch((e: any) => onError(e.messageFr ?? ""));
+    http.get<Contract[]>('/billing/contracts').then(setItems).catch((e: unknown) => onError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, []);
 
@@ -112,8 +112,8 @@ function ContractsTab({ onError, onMessage }: { onError: (m: string) => void; on
       onMessage(t('bill.contractCreated'));
       setChildId(''); setAmount(''); setStartDate(''); setDiscount('');
       load();
-    } catch (e: any) {
-      onError(e.messageFr);
+    } catch (e: unknown) {
+      onError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 
@@ -152,7 +152,7 @@ function InvoicesTab({ onError, onMessage }: { onError: (m: string) => void; onM
   const [dueDate, setDueDate] = useState('');
 
   const load = (): void => {
-    http.get<Invoice[]>('/billing/invoices').then(setItems).catch((e: any) => onError(e.messageFr ?? ""));
+    http.get<Invoice[]>('/billing/invoices').then(setItems).catch((e: unknown) => onError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, []);
 
@@ -168,8 +168,8 @@ function InvoicesTab({ onError, onMessage }: { onError: (m: string) => void; onM
       onMessage(t('bill.invoiceCreated'));
       setContractId(''); setDueDate('');
       load();
-    } catch (e: any) {
-      onError(e.messageFr);
+    } catch (e: unknown) {
+      onError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 
@@ -199,8 +199,8 @@ function InvoicesTab({ onError, onMessage }: { onError: (m: string) => void; onM
       const period = `${year}-${String(month).padStart(2, '0')}`;
       await http.post('/exports', { report_type: 'invoices', period });
       onMessage(`${t('bill.exportRequested')} (${period})`);
-    } catch (e: any) {
-      onError(e.messageFr ?? t('common.error'));
+    } catch (e: unknown) {
+      onError(e instanceof ApiError ? e.messageFr : t('common.error'));
     }
   };
 
@@ -240,7 +240,7 @@ function PaymentsTab({ onError, onMessage }: { onError: (m: string) => void; onM
   const [amount, setAmount] = useState('');
 
   const load = (): void => {
-    http.get<Payment[]>('/billing/payments').then(setItems).catch((e: any) => onError(e.messageFr ?? ""));
+    http.get<Payment[]>('/billing/payments').then(setItems).catch((e: unknown) => onError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, []);
 
@@ -251,8 +251,8 @@ function PaymentsTab({ onError, onMessage }: { onError: (m: string) => void; onM
       onMessage(t('bill.paymentMade'));
       setInvoiceId(''); setAmount('');
       load();
-    } catch (e: any) {
-      onError(e.messageFr);
+    } catch (e: unknown) {
+      onError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 
@@ -287,7 +287,7 @@ function CashTab({ onError, onMessage }: { onError: (m: string) => void; onMessa
   const [opening, setOpening] = useState('0');
 
   const load = (): void => {
-    http.get<CashRegister[]>('/billing/cash-registers').then(setItems).catch((e: any) => onError(e.messageFr ?? ""));
+    http.get<CashRegister[]>('/billing/cash-registers').then(setItems).catch((e: unknown) => onError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, []);
 
@@ -297,8 +297,8 @@ function CashTab({ onError, onMessage }: { onError: (m: string) => void; onMessa
       await http.post('/billing/cash-register/open', { site_id: siteId, opening_balance: Number(opening) });
       onMessage(t('bill.registerOpened'));
       load();
-    } catch (e: any) {
-      onError(e.messageFr);
+    } catch (e: unknown) {
+      onError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 
@@ -308,8 +308,8 @@ function CashTab({ onError, onMessage }: { onError: (m: string) => void; onMessa
       await http.post('/billing/cash-register/close', { site_id: siteId });
       onMessage(t('bill.registerClosed'));
       load();
-    } catch (e: any) {
-      onError(e.messageFr);
+    } catch (e: unknown) {
+      onError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 
