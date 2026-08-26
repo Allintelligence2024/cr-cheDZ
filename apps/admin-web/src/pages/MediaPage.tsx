@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface MediaItem {
@@ -33,7 +33,7 @@ export function MediaPage(): React.JSX.Element {
         setItems(r.items);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, [childId]);
 
@@ -44,8 +44,8 @@ export function MediaPage(): React.JSX.Element {
     try {
       await http.patch(`/media/${id}/visibility`, { is_visible_to_parents: visible });
       load();
-    } catch (e: any) {
-      setError(e.messageFr ?? (visible ? t('media.consentRequired') : t('common.error')));
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : (visible ? t('media.consentRequired') : t('common.error')));
     } finally {
       setBusy(null);
     }
@@ -56,8 +56,8 @@ export function MediaPage(): React.JSX.Element {
     try {
       const { url } = await http.get<{ url: string; key: string }>(`/media/${id}/download`);
       window.open(url, '_blank', 'noopener');
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : '');
     }
   };
 

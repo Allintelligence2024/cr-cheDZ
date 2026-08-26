@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface Child {
@@ -114,8 +114,8 @@ export function ChildrenPage(): React.JSX.Element {
     try {
       const detail = await http.get<ChildFiche>(`/children/${id}`);
       setFiche(detail);
-    } catch (e: any) {
-      setFicheError(e.messageFr ?? t('common.error'));
+    } catch (e: unknown) {
+      setFicheError(e instanceof ApiError ? e.messageFr ?? t('common.error') : t('common.error'));
     }
   };
 
@@ -199,8 +199,8 @@ export function ChildrenPage(): React.JSX.Element {
       setReport(res.errors);
       setImported(res.inserted);
       load();
-    } catch (e: any) {
-      setError(e.messageFr ?? 'Erreur lors de l\'import');
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : 'Erreur lors de l\'import');
     } finally {
       setBusy(false);
     }

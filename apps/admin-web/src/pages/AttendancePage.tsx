@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface SummaryItem {
@@ -57,7 +57,7 @@ export function AttendancePage(): React.JSX.Element {
         setItems(r.items);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ""));
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, [roomId, date]);
 
@@ -68,8 +68,8 @@ export function AttendancePage(): React.JSX.Element {
       await http.post(`/attendance/${action}`, { child_id: childId });
       setMessage(t(labelKey));
       load();
-    } catch (e: any) {
-      setError(e.messageFr);
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : '');
     } finally {
       setBusyChild(null);
     }
@@ -85,8 +85,8 @@ export function AttendancePage(): React.JSX.Element {
       setCorrecting(null);
       setReason('');
       load();
-    } catch (e: any) {
-      setError(e.messageFr);
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr : '');
     } finally {
       setBusyChild(null);
     }

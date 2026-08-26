@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import React from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface Staff {
@@ -63,8 +63,8 @@ export function StaffPage(): React.JSX.Element {
       await http.post('/staff', { user_id: userId, qualification, hire_date: hireDate });
       setUserId('');
       load();
-    } catch (err: any) {
-      setError(err.messageFr);
+    } catch (err: unknown) {
+      setError(err instanceof ApiError ? err.messageFr : '');
     }
   };
 
@@ -76,8 +76,8 @@ export function StaffPage(): React.JSX.Element {
     try {
       const r = await http.get<RoleAssignment[]>(`/members/${s.user_id}/roles`);
       setRoleAssignments(r);
-    } catch (e: any) {
-      setError(e.messageFr ?? t('common.error'));
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr ?? t('common.error') : t('common.error'));
     } finally {
       setRoleLoading(false);
     }
@@ -91,8 +91,8 @@ export function StaffPage(): React.JSX.Element {
       await http.post(`/members/${roleTarget.user_id}/roles`, { role_id: selectedRole });
       setMessage(t('roles.assigned'));
       await openRoles(roleTarget);
-    } catch (e: any) {
-      setError(e.messageFr ?? t('common.error'));
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr ?? t('common.error') : t('common.error'));
     }
   };
 
@@ -104,8 +104,8 @@ export function StaffPage(): React.JSX.Element {
       await http.del(`/role-assignments/${assignmentId}`);
       setMessage(t('roles.removed'));
       await openRoles(roleTarget);
-    } catch (e: any) {
-      setError(e.messageFr ?? t('common.error'));
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr ?? t('common.error') : t('common.error'));
     }
   };
 

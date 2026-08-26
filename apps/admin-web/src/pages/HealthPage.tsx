@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface HealthRecord {
@@ -90,7 +90,7 @@ export function HealthPage(): React.JSX.Element {
         setData(r);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.messageFr : ''));
   };
   useEffect(load, [childId]);
 
@@ -101,8 +101,8 @@ export function HealthPage(): React.JSX.Element {
       await fn();
       setMessage(t(okKey));
       load();
-    } catch (e: any) {
-      setError(e.messageFr ?? t('common.error'));
+    } catch (e: unknown) {
+      setError(e instanceof ApiError ? e.messageFr ?? t('common.error') : t('common.error'));
     }
   };
 
