@@ -26,7 +26,7 @@ export function OrganizationsPage(): React.JSX.Element {
     http
       .get<{ items: Org[] }>('/organizations')
       .then((r) => setItems(r.items))
-      .catch((e) => setError(e.messageFr));
+      .catch((e: unknown) => setError(e.messageFr));
   };
   useEffect(load, []);
 
@@ -39,7 +39,7 @@ export function OrganizationsPage(): React.JSX.Element {
       setNameFr('');
       setWilaya('');
       load();
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.messageFr);
     }
   };

@@ -49,7 +49,7 @@ export function MessagingPage(): React.JSX.Element {
         setConversations(r);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError(e.messageFr ?? ''));
   };
   useEffect(load, []);
 
@@ -62,7 +62,7 @@ export function MessagingPage(): React.JSX.Element {
         const me = await http.get<{ id: string }>('/me');
         setMeId(me.id);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(e.messageFr ?? '');
     }
   };
@@ -80,7 +80,7 @@ export function MessagingPage(): React.JSX.Element {
       setSubject('');
       load();
       await open(conv.id);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(e.messageFr ?? '');
     }
   };
@@ -92,7 +92,7 @@ export function MessagingPage(): React.JSX.Element {
       await http.post(`/messaging/conversations/${selected.id}/messages`, { body: draft.trim() });
       setDraft('');
       await open(selected.id);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(e.messageFr ?? '');
     }
   };

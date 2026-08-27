@@ -43,7 +43,7 @@ export function VideoPage(): React.JSX.Element {
   const [zone, setZone] = useState<string>(ZONES[0]);
   const [filter, setFilter] = useState('');
 
-  const handleError = (e: any): void => {
+  const handleError = (e: unknown): void => {
     if (e?.code === 'VIDEO_FEATURE_DISABLED') setDisabled(true);
     setError(e?.messageFr ?? String(e));
   };

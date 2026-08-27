@@ -35,7 +35,7 @@ export function AcceptInvitationPage(): React.JSX.Element {
       setTokens(res.access_token, res.refresh_token);
       await login('', '').catch(() => undefined); // force reload du profil
       navigate('/');
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.messageFr);
       setBusy(false);
     }

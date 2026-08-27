@@ -59,7 +59,7 @@ export function PrivacyPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const showError = (e: any): void => { setError(e?.messageFr ?? t('common.error')); };
+  const showError = (e: unknown): void => { setError(e?.messageFr ?? t('common.error')); };
   const showMessage = (m: string): void => { setMessage(m); setError(null); };
 
   const tabs: Array<{ id: Tab; label: string }> = [
@@ -90,7 +90,7 @@ export function PrivacyPage(): React.JSX.Element {
 
 // ── Registre des traitements ─────────────────────────────────────────────────
 
-function RegistryTab({ onError }: { onError: (e: any) => void }): React.JSX.Element {
+function RegistryTab({ onError }: { onError: (e: unknown) => void }): React.JSX.Element {
   const { t } = useI18n();
   const [rows, setRows] = useState<RegistryRow[]>([]);
 
@@ -117,7 +117,7 @@ function RegistryTab({ onError }: { onError: (e: any) => void }): React.JSX.Elem
 
 // ── DPIA ─────────────────────────────────────────────────────────────────────
 
-function DpiasTab({ onError, onMessage }: { onError: (e: any) => void; onMessage: (m: string) => void }): React.JSX.Element {
+function DpiasTab({ onError, onMessage }: { onError: (e: unknown) => void; onMessage: (m: string) => void }): React.JSX.Element {
   const { t } = useI18n();
   const [rows, setRows] = useState<DpiaRow[]>([]);
   const [registry, setRegistry] = useState<RegistryRow[]>([]);
@@ -137,7 +137,7 @@ function DpiasTab({ onError, onMessage }: { onError: (e: any) => void; onMessage
       onMessage(t('privacy.dpiaCreated'));
       setProcId('');
       load();
-    } catch (e: any) { onError(e); }
+    } catch (e: unknown) { onError(e); }
   };
 
   const approve = async (id: string): Promise<void> => {
@@ -145,7 +145,7 @@ function DpiasTab({ onError, onMessage }: { onError: (e: any) => void; onMessage
       await http.post(`/privacy/dpias/${id}/approve`, {});
       onMessage(t('privacy.dpiaApproved'));
       load();
-    } catch (e: any) { onError(e); }
+    } catch (e: unknown) { onError(e); }
   };
 
   return (
@@ -182,7 +182,7 @@ function DpiasTab({ onError, onMessage }: { onError: (e: any) => void; onMessage
 
 // ── Demandes de droits ───────────────────────────────────────────────────────
 
-function RequestsTab({ onError, onMessage }: { onError: (e: any) => void; onMessage: (m: string) => void }): React.JSX.Element {
+function RequestsTab({ onError, onMessage }: { onError: (e: unknown) => void; onMessage: (m: string) => void }): React.JSX.Element {
   const { t } = useI18n();
   const [rows, setRows] = useState<RequestRow[]>([]);
   const [type, setType] = useState('access');
@@ -201,14 +201,14 @@ function RequestsTab({ onError, onMessage }: { onError: (e: any) => void; onMess
       setSubjectId('');
       setNotes('');
       load();
-    } catch (e: any) { onError(e); }
+    } catch (e: unknown) { onError(e); }
   };
 
   const doExport = async (id: string): Promise<void> => {
     try {
       const r = await http.post<{ payload?: Record<string, unknown> }>(`/privacy/requests/${id}/export`, {});
       onMessage(`${t('privacy.exportDone')} — ${Object.keys(r.payload ?? {}).length} sections`);
-    } catch (e: any) { onError(e); }
+    } catch (e: unknown) { onError(e); }
   };
 
   const resolve = async (id: string): Promise<void> => {
@@ -216,7 +216,7 @@ function RequestsTab({ onError, onMessage }: { onError: (e: any) => void; onMess
       await http.post(`/privacy/requests/${id}/resolve`, {});
       onMessage(t('privacy.resolved'));
       load();
-    } catch (e: any) { onError(e); }
+    } catch (e: unknown) { onError(e); }
   };
 
   return (
@@ -255,7 +255,7 @@ function RequestsTab({ onError, onMessage }: { onError: (e: any) => void; onMess
 
 // ── Violations ───────────────────────────────────────────────────────────────
 
-function ViolationsTab({ onError, onMessage }: { onError: (e: any) => void; onMessage: (m: string) => void }): React.JSX.Element {
+function ViolationsTab({ onError, onMessage }: { onError: (e: unknown) => void; onMessage: (m: string) => void }): React.JSX.Element {
   const { t } = useI18n();
   const [rows, setRows] = useState<ViolationRow[]>([]);
   const [description, setDescription] = useState('');
@@ -278,7 +278,7 @@ function ViolationsTab({ onError, onMessage }: { onError: (e: any) => void; onMe
       onMessage(t('privacy.violationCreated'));
       setDescription('');
       load();
-    } catch (e: any) { onError(e); }
+    } catch (e: unknown) { onError(e); }
   };
 
   const notify = async (id: string): Promise<void> => {
@@ -286,7 +286,7 @@ function ViolationsTab({ onError, onMessage }: { onError: (e: any) => void; onMe
       await http.post(`/privacy/violations/${id}/anpdp-notify`, {});
       onMessage(t('privacy.notified'));
       load();
-    } catch (e: any) { onError(e); }
+    } catch (e: unknown) { onError(e); }
   };
 
   const sevColor = (s: string): string => (s === 'high' || s === 'critical' ? '#DC2626' : s === 'moderate' ? '#B45309' : '#16A34A');
