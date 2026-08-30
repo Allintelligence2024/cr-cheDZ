@@ -43,7 +43,7 @@ export function JournalPage(): React.JSX.Element {
         setItems(r.items);
         setError(null);
       })
-      .catch((e: unknown) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? ''));
   };
   useEffect(load, [childId, date]);
 
@@ -54,7 +54,7 @@ export function JournalPage(): React.JSX.Element {
       await http.patch(`/journal/events/${event.id}/visibility`, { visible_to_parents: !event.visible_to_parents });
       load();
     } catch (e: unknown) {
-      setError(e.messageFr ?? t('journal.toggleError'));
+      setError((e as { messageFr?: string }).messageFr ?? t('journal.toggleError'));
     }
   };
 

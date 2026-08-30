@@ -35,7 +35,7 @@ export function InvitationsPage(): React.JSX.Element {
     http
       .get<{ items: Member[] }>('/invitations')
       .then((r) => setItems(r.items))
-      .catch((e: unknown) => setError(e.messageFr));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? 'Erreur'));
   };
   useEffect(load, []);
 
@@ -56,7 +56,7 @@ export function InvitationsPage(): React.JSX.Element {
       setEmail('');
       load();
     } catch (err: unknown) {
-      setError(err.messageFr);
+      setError((err as { messageFr?: string }).messageFr ?? 'Erreur');
     }
   };
 

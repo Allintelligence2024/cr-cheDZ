@@ -49,7 +49,7 @@ export function MessagingPage(): React.JSX.Element {
         setConversations(r);
         setError(null);
       })
-      .catch((e: unknown) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? ''));
   };
   useEffect(load, []);
 
@@ -63,7 +63,7 @@ export function MessagingPage(): React.JSX.Element {
         setMeId(me.id);
       }
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 
@@ -81,7 +81,7 @@ export function MessagingPage(): React.JSX.Element {
       load();
       await open(conv.id);
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 
@@ -93,7 +93,7 @@ export function MessagingPage(): React.JSX.Element {
       setDraft('');
       await open(selected.id);
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 

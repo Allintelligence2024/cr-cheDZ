@@ -59,7 +59,7 @@ export function PrivacyPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const showError = (e: unknown): void => { setError(e?.messageFr ?? t('common.error')); };
+  const showError = (e: unknown): void => { setError((e as { messageFr?: string })?.messageFr ?? t('common.error')); };
   const showMessage = (m: string): void => { setMessage(m); setError(null); };
 
   const tabs: Array<{ id: Tab; label: string }> = [

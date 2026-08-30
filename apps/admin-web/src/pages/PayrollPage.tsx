@@ -54,7 +54,7 @@ export function PayrollPage(): React.JSX.Element {
         setRuns(r);
         setError(null);
       })
-      .catch((e: unknown) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? ''));
   };
   useEffect(load, []);
 
@@ -64,7 +64,7 @@ export function PayrollPage(): React.JSX.Element {
       const detail = await http.get<RunDetail>(`/payroll/runs/${id}`);
       setSelected(detail);
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 
@@ -81,7 +81,7 @@ export function PayrollPage(): React.JSX.Element {
       load();
       await openRun(run.id);
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     } finally {
       setBusy(false);
     }
@@ -97,7 +97,7 @@ export function PayrollPage(): React.JSX.Element {
       await openRun(selected.id);
       load();
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 
@@ -115,7 +115,7 @@ export function PayrollPage(): React.JSX.Element {
       setLineAmount('');
       if (selected) await openRun(selected.id);
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 

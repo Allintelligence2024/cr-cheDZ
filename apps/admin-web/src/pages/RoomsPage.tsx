@@ -27,7 +27,7 @@ export function RoomsPage(): React.JSX.Element {
     http
       .get<{ items: Room[] }>('/rooms')
       .then((r) => setItems(r.items))
-      .catch((e: unknown) => setError(e.messageFr));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? 'Erreur'));
     http
       .get<{ items: Array<{ id: string; name_fr: string }> }>('/sites')
       .then((r) => {
@@ -50,7 +50,7 @@ export function RoomsPage(): React.JSX.Element {
       setName('');
       load();
     } catch (err: unknown) {
-      setError(err.messageFr);
+      setError((err as { messageFr?: string }).messageFr ?? 'Erreur');
     }
   };
 

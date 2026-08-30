@@ -90,7 +90,7 @@ export function HealthPage(): React.JSX.Element {
         setData(r);
         setError(null);
       })
-      .catch((e: unknown) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? ''));
   };
   useEffect(load, [childId]);
 
@@ -102,7 +102,7 @@ export function HealthPage(): React.JSX.Element {
       setMessage(t(okKey));
       load();
     } catch (e: unknown) {
-      setError(e.messageFr ?? t('common.error'));
+      setError((e as { messageFr?: string }).messageFr ?? t('common.error'));
     }
   };
 

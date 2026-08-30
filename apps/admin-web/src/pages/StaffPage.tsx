@@ -52,7 +52,7 @@ export function StaffPage(): React.JSX.Element {
     http
       .get<{ items: Staff[] }>('/staff')
       .then((r) => setItems(r.items))
-      .catch((e: unknown) => setError(e.messageFr));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? 'Erreur'));
   };
   useEffect(load, []);
 
@@ -64,7 +64,7 @@ export function StaffPage(): React.JSX.Element {
       setUserId('');
       load();
     } catch (err: unknown) {
-      setError(err.messageFr);
+      setError((err as { messageFr?: string }).messageFr ?? 'Erreur');
     }
   };
 
@@ -77,7 +77,7 @@ export function StaffPage(): React.JSX.Element {
       const r = await http.get<RoleAssignment[]>(`/members/${s.user_id}/roles`);
       setRoleAssignments(r);
     } catch (e: unknown) {
-      setError(e.messageFr ?? t('common.error'));
+      setError((e as { messageFr?: string }).messageFr ?? t('common.error'));
     } finally {
       setRoleLoading(false);
     }
@@ -92,7 +92,7 @@ export function StaffPage(): React.JSX.Element {
       setMessage(t('roles.assigned'));
       await openRoles(roleTarget);
     } catch (e: unknown) {
-      setError(e.messageFr ?? t('common.error'));
+      setError((e as { messageFr?: string }).messageFr ?? t('common.error'));
     }
   };
 
@@ -105,7 +105,7 @@ export function StaffPage(): React.JSX.Element {
       setMessage(t('roles.removed'));
       await openRoles(roleTarget);
     } catch (e: unknown) {
-      setError(e.messageFr ?? t('common.error'));
+      setError((e as { messageFr?: string }).messageFr ?? t('common.error'));
     }
   };
 

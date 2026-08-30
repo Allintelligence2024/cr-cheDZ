@@ -33,7 +33,7 @@ export function MediaPage(): React.JSX.Element {
         setItems(r.items);
         setError(null);
       })
-      .catch((e: unknown) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? ''));
   };
   useEffect(load, [childId]);
 
@@ -45,7 +45,7 @@ export function MediaPage(): React.JSX.Element {
       await http.patch(`/media/${id}/visibility`, { is_visible_to_parents: visible });
       load();
     } catch (e: unknown) {
-      setError(e.messageFr ?? (visible ? t('media.consentRequired') : t('common.error')));
+      setError((e as { messageFr?: string }).messageFr ?? (visible ? t('media.consentRequired') : t('common.error')));
     } finally {
       setBusy(null);
     }
@@ -57,7 +57,7 @@ export function MediaPage(): React.JSX.Element {
       const { url } = await http.get<{ url: string; key: string }>(`/media/${id}/download`);
       window.open(url, '_blank', 'noopener');
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 

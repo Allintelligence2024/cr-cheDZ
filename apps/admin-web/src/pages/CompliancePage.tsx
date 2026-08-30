@@ -37,7 +37,7 @@ export function CompliancePage(): React.JSX.Element {
     http
       .get<PersistedCheck[]>('/compliance/checks')
       .then(setHistory)
-      .catch((e: unknown) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? ''));
   };
   useEffect(loadHistory, []);
 
@@ -49,7 +49,7 @@ export function CompliancePage(): React.JSX.Element {
       setResults(r.results);
       loadHistory();
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     } finally {
       setBusy(false);
     }
@@ -61,7 +61,7 @@ export function CompliancePage(): React.JSX.Element {
       await http.post(`/compliance/checks/${id}/acknowledge`, {});
       loadHistory();
     } catch (e: unknown) {
-      setError(e.messageFr ?? '');
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 

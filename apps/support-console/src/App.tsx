@@ -52,7 +52,7 @@ function Login({ onLogin }: { onLogin: (token: string) => void }): React.JSX.Ele
       localStorage.setItem(TOKEN_KEY, r.access_token);
       onLogin(r.access_token);
     } catch (e: unknown) {
-      setError(e.message ?? 'Connexion refusée');
+      setError((e as { message?: string }).message ?? 'Connexion refusée');
     }
   };
 
@@ -133,7 +133,7 @@ function PilotTab(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const load = (): void => {
-    api('GET', '/support/pilot-summary').then((r) => setRows(r as PilotRow[])).catch((e: unknown) => setError(e.message));
+    api('GET', '/support/pilot-summary').then((r) => setRows(r as PilotRow[])).catch((e: unknown) => setError((e as { message?: string }).message ?? 'Error'));
   };
   useEffect(load, []);
 
@@ -190,7 +190,7 @@ function FlagsTab(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const load = (): void => {
-    api('GET', '/support/flags').then((r) => setFlags(r as FlagRow[])).catch((e: unknown) => setError(e.message));
+    api('GET', '/support/flags').then((r) => setFlags(r as FlagRow[])).catch((e: unknown) => setError((e as { message?: string }).message ?? 'Error'));
   };
   useEffect(load, []);
 
@@ -203,7 +203,7 @@ function FlagsTab(): React.JSX.Element {
       });
       load();
     } catch (e: unknown) {
-      setError(e.message);
+      setError((e as { message?: string }).message ?? 'Error');
     }
   };
 
@@ -247,7 +247,7 @@ function SearchTab(): React.JSX.Element {
     try {
       setRows((await api('GET', `/support/search?q=${encodeURIComponent(q)}`)) as SearchRow[]);
     } catch (e: unknown) {
-      setError(e.message);
+      setError((e as { message?: string }).message ?? 'Error');
     }
   };
 
@@ -284,7 +284,7 @@ function JobsTab(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
 
   const load = (): void => {
-    api('GET', '/support/jobs').then((r) => setJobs(r as JobRow[])).catch((e: unknown) => setError(e.message));
+    api('GET', '/support/jobs').then((r) => setJobs(r as JobRow[])).catch((e: unknown) => setError((e as { message?: string }).message ?? 'Error'));
   };
   useEffect(load, []);
 
@@ -294,7 +294,7 @@ function JobsTab(): React.JSX.Element {
       await api('POST', `/support/jobs/${id}/retry`, {});
       load();
     } catch (e: unknown) {
-      setError(e.message);
+      setError((e as { message?: string }).message ?? 'Error');
     }
   };
 
@@ -345,7 +345,7 @@ function ImpersonateTab(): React.JSX.Element {
       const r = (await api('POST', '/support/impersonate', { user_id: userId, reason })) as { access_token: string };
       setResult(r.access_token);
     } catch (e: unknown) {
-      setError(e.message);
+      setError((e as { message?: string }).message ?? 'Error');
     }
   };
 
