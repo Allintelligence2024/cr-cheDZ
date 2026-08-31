@@ -2,30 +2,13 @@ name: staff_mobile
 description: Application personnel de crèche (offline-first) — Algérie.
 publish_to: 'none'
 version: 0.1.0
-
 environment:
   sdk: '>=3.3.0 <4.0.0'
-
 dependencies:
   flutter:
     sdk: flutter
-  drift: ^2.20.0
-  sqlite3_flutter_libs: ^0.5.24
-  path_provider: ^2.1.4
-  path: ^1.9.0
-  dio: ^5.5.0
-  flutter_secure_storage: ^9.2.2
-  connectivity_plus: ^6.0.3
-  shared_preferences: ^2.2.3
-  uuid: ^4.4.0
-  intl: ^0.20.3
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  drift_dev: ^2.20.0
-  build_runner: ^2.4.11
-  flutter_lints: ^4.0.0
-
 flutter:
   uses-material-design: true
