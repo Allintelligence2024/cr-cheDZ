@@ -54,7 +54,7 @@ export function PayrollPage(): React.JSX.Element {
         setRuns(r);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? ''));
   };
   useEffect(load, []);
 
@@ -63,8 +63,8 @@ export function PayrollPage(): React.JSX.Element {
     try {
       const detail = await http.get<RunDetail>(`/payroll/runs/${id}`);
       setSelected(detail);
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 
@@ -80,8 +80,8 @@ export function PayrollPage(): React.JSX.Element {
       setMessage(t('payroll.generated'));
       load();
       await openRun(run.id);
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError((e as { messageFr?: string }).messageFr ?? '');
     } finally {
       setBusy(false);
     }
@@ -96,8 +96,8 @@ export function PayrollPage(): React.JSX.Element {
       setMessage(t('payroll.finalized'));
       await openRun(selected.id);
       load();
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 
@@ -114,8 +114,8 @@ export function PayrollPage(): React.JSX.Element {
       setLineLabel('');
       setLineAmount('');
       if (selected) await openRun(selected.id);
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError((e as { messageFr?: string }).messageFr ?? '');
     }
   };
 

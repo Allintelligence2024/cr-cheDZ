@@ -57,7 +57,7 @@ export function AttendancePage(): React.JSX.Element {
         setItems(r.items);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ""));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? ""));
   };
   useEffect(load, [roomId, date]);
 
@@ -68,8 +68,8 @@ export function AttendancePage(): React.JSX.Element {
       await http.post(`/attendance/${action}`, { child_id: childId });
       setMessage(t(labelKey));
       load();
-    } catch (e: any) {
-      setError(e.messageFr);
+    } catch (e: unknown) {
+      setError((e as { messageFr?: string }).messageFr ?? 'Erreur');
     } finally {
       setBusyChild(null);
     }
@@ -85,8 +85,8 @@ export function AttendancePage(): React.JSX.Element {
       setCorrecting(null);
       setReason('');
       load();
-    } catch (e: any) {
-      setError(e.messageFr);
+    } catch (e: unknown) {
+      setError((e as { messageFr?: string }).messageFr ?? 'Erreur');
     } finally {
       setBusyChild(null);
     }
