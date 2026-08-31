@@ -3,20 +3,12 @@ description: Portail parents Crèche DZ — Phase 7
 publish_to: none
 version: 0.1.0+1
 environment:
-  sdk: '>=3.2.0 <4.0.0'
+  sdk: '>=3.0.0 <4.0.0'
 dependencies:
   flutter:
     sdk: flutter
-  flutter_localizations:
-    sdk: flutter
-  flutter_riverpod: ^2.5.1
-  dio: ^5.4.3
-  flutter_secure_storage: ^9.2.2
-  intl: ^0.19.0
-  firebase_messaging: ^15.0.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
 flutter:
   uses-material-design: true
