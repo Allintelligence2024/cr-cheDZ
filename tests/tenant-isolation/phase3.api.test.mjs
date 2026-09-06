@@ -280,11 +280,15 @@ async function main() {
     const staffListB = await api('GET', '/staff', dirBToken);
     check('Director B ne voit aucun staff de A', staffListB.status === 200 && staffListB.body.items.length === 0);
 
+    // Date relative : /staff/documents/expiring filtre sur
+    // `expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + days` — une date en
+    // dur ('2026-09-01') a fait rougir la CI dès le 01/09/2026 (déjà expirée).
+    const docExpiryDate = new Date(Date.now() + 60 * 86400_000).toISOString().slice(0, 10);
     const docA = await api('POST', `/staff/${staffA.body.id}/documents`, dirAToken, {
       document_type: 'diploma',
       title: 'Diplôme éducatrice',
       storage_key: 'staff/diplome-a.pdf',
-      expiry_date: '2026-09-01',
+      expiry_date: docExpiryDate,
       alert_days_before: 30,
     });
     check('Création document staff → 201', docA.status === 201, `status=${docA.status}`);
