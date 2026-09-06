@@ -29,10 +29,26 @@ jobs:
       - name: parent-mobile — pub get + analyze
         working-directory: apps/parent-mobile
         run: |
-          flutter pub get
-          flutter analyze
+          flutter pub get -v | tee parent-pub-get.log
+          flutter analyze -v | tee parent-analyze.log
+      - name: Upload parent-mobile logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parent-mobile-logs
+          path: |
+            apps/parent-mobile/parent-pub-get.log
+            apps/parent-mobile/parent-analyze.log
       - name: staff-mobile — pub get + analyze
         working-directory: apps/staff-mobile
         run: |
-          flutter pub get
-          flutter analyze
+          flutter pub get -v | tee staff-pub-get.log
+          flutter analyze -v | tee staff-analyze.log
+      - name: Upload staff-mobile logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staff-mobile-logs
+          path: |
+            apps/staff-mobile/staff-pub-get.log
+            apps/staff-mobile/staff-analyze.log
