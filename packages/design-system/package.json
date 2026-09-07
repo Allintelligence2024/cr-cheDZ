@@ -5,6 +5,6 @@
   "description": "Design tokens + composants React partagés (admin-web, support-console)",
   "main": "src/index.ts",
   "peerDependencies": {
-    "react": "^18.3.0"
+    "react": "^18 || ^19"
   }
 }
