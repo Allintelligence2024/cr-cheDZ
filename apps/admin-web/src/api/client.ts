@@ -54,7 +54,7 @@ async function refreshAccess(): Promise<string | null> {
   return body.access_token as string;
 }
 
-export async function api<T = any>(
+export async function api<T = unknown>(
   method: string,
   path: string,
   body?: unknown,
@@ -91,8 +91,8 @@ export async function api<T = any>(
 }
 
 export const http = {
-  get: <T = any>(path: string) => api<T>('GET', path),
-  post: <T = any>(path: string, body?: unknown) => api<T>('POST', path, body),
-  patch: <T = any>(path: string, body?: unknown) => api<T>('PATCH', path, body),
-  del: <T = any>(path: string) => api<T>('DELETE', path),
+  get: <T = unknown>(path: string) => api<T>('GET', path),
+  post: <T = unknown>(path: string, body?: unknown) => api<T>('POST', path, body),
+  patch: <T = unknown>(path: string, body?: unknown) => api<T>('PATCH', path, body),
+  del: <T = unknown>(path: string) => api<T>('DELETE', path),
 };

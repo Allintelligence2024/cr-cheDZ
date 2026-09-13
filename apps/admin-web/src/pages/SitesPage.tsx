@@ -23,7 +23,7 @@ export function SitesPage(): React.JSX.Element {
     http
       .get<{ items: Site[] }>('/sites')
       .then((r) => setItems(r.items))
-      .catch((e) => setError(e.messageFr));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? 'Erreur'));
   };
   useEffect(load, []);
 
@@ -35,8 +35,8 @@ export function SitesPage(): React.JSX.Element {
       setName('');
       setWilaya('');
       load();
-    } catch (err: any) {
-      setError(err.messageFr);
+    } catch (err: unknown) {
+      setError((err as { messageFr?: string }).messageFr ?? 'Erreur');
     }
   };
 

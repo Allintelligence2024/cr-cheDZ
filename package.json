@@ -21,7 +21,7 @@
     "test:api-phase8": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase8-billing.api.test.mjs",
     "db:status": "node scripts/migrate.mjs --status",
     "db:reset": "node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs",
-    "lint": "eslint . --max-warnings=72",
+    "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
@@ -42,7 +42,12 @@
     "eslint": "^10.9.0",
     "globals": "^17.11.0",
     "pg": "^8.13.1",
-    "typescript-eslint": "^8.67.0"
+    "typescript-eslint": "^8.67.0",
+    "typescript": "6.0.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0"
   },
   "overrides": {
     "lodash": "4.18.1",

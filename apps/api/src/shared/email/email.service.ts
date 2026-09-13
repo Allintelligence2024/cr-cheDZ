@@ -18,7 +18,6 @@ export class EmailService {
     if (provider === 'none') {
       // Mode dev : le jeton est retourné par l'API (invitation_token) —
       // JAMAIS journalisé (le lien contient le jeton signé).
-      // eslint-disable-next-line no-console
       console.log(`[email-dev] Invitation envoyée à ${to} (${orgName}) — jeton non journalisé`);
       return;
     }
