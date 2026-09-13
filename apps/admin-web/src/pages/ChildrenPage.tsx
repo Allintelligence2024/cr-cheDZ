@@ -114,8 +114,8 @@ export function ChildrenPage(): React.JSX.Element {
     try {
       const detail = await http.get<ChildFiche>(`/children/${id}`);
       setFiche(detail);
-    } catch (e: any) {
-      setFicheError(e.messageFr ?? t('common.error'));
+    } catch (e: unknown) {
+      setFicheError((e as { messageFr?: string }).messageFr ?? t('common.error'));
     }
   };
 
@@ -127,7 +127,7 @@ export function ChildrenPage(): React.JSX.Element {
         setItems(r.items);
         setTotal(r.total);
       })
-      .catch((e) => setError(e.messageFr));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? 'Erreur'));
   };
   useEffect(load, [search]);
 
@@ -199,8 +199,8 @@ export function ChildrenPage(): React.JSX.Element {
       setReport(res.errors);
       setImported(res.inserted);
       load();
-    } catch (e: any) {
-      setError(e.messageFr ?? 'Erreur lors de l\'import');
+    } catch (e: unknown) {
+      setError((e as { messageFr?: string }).messageFr ?? 'Erreur lors de l\'import');
     } finally {
       setBusy(false);
     }

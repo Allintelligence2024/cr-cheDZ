@@ -29,6 +29,6 @@
     "@types/pdfkit": "^0.17.6",
     "@types/pdfmake": "^0.3.3",
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.0"
+    "typescript": "6.0.3"
   }
 }

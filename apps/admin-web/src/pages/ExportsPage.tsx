@@ -35,7 +35,7 @@ export function ExportsPage(): React.JSX.Element {
         setItems(r);
         setError(null);
       })
-      .catch((e: any) => setError(e.messageFr ?? ''));
+      .catch((e: unknown) => setError((e as { messageFr?: string }).messageFr ?? ''));
   };
   useEffect(load, []);
 
@@ -48,8 +48,8 @@ export function ExportsPage(): React.JSX.Element {
       await http.post('/exports', { report_type: reportType, period: periodValue });
       setMessage(t('exports.requested'));
       load();
-    } catch (e: any) {
-      setError(e.messageFr ?? '');
+    } catch (e: unknown) {
+      setError((e as { messageFr?: string }).messageFr ?? '');
     } finally {
       setBusy(false);
     }
