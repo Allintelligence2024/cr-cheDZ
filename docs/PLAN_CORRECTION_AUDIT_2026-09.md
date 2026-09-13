@@ -307,12 +307,12 @@ PUT /repos/Allintelligence2024/cr-cheDZ/branches/main/protection/required-status
 
 **Objectif** : qu'un `flutter build apk --release` produise un APK qui parle à l'API.
 
-> **Statut : B1 FAIT le 2026-09-13** (commits `083c0b6` + `4463110` sur
-> `feat/mobile-android-scaffolding`, donc dans la PR #34).
-> **B2 partiellement fait** : le garde existe et est validé, son câblage CI est bloqué
-> (permission `workflows`). Détails en §B3.
+> **Statut : B1 FAIT le 2026-09-13, mais perdu au merge puis réappliqué** — voir §B3.3,
+> c'est le point le plus important de cette phase.
+> **B2 partiellement fait** : le garde existe, est validé, et **a effectivement attrapé le bug
+> dans `main`** ; son câblage CI est bloqué (permission `workflows`). Détails en §B3.
 
-### B1. Permission INTERNET en release — PR #34 ✅ FAIT
+### B1. Permission INTERNET en release ✅ FAIT (réappliqué sur `main`)
 
 État vérifié : `main/AndroidManifest.xml` n'avait **aucune** permission ; `debug/` et `profile/`
 ont INTERNET. C'est le défaut du template `flutter create`. La CI ne peut pas le voir :
@@ -323,6 +323,7 @@ ont INTERNET. C'est le défaut du template `flutter create`. La CI ne peut pas l
       ```xml
       <uses-permission android:name="android.permission.INTERNET"/>
       ```
+      Commit `a9275ba` sur `arena/01a09b26-cr-chedz` (PR #36) — **c'est celui-ci qui compte**
 - [x] Les déclarations dans `debug/` et `profile/` **laissées en place** : le manifest merger
       déduplique, et elles restent utiles si `main/` venait à régresser
 - [x] `ACCESS_NETWORK_STATE` et `POST_NOTIFICATIONS` **évaluées** → signalées en avertissement
@@ -389,16 +390,47 @@ Dans `.github/workflows/flutter.yml`, après l'étape `analyze` :
 > ⚠️ Ordre de merge : **après** la PR #34. Et ce garde ne sera effectif que si `flutter.yml`
 > peut être poussé — sinon il reste disponible en `npm run check:android-manifest` (local/pré-merge).
 
-#### B3.3 La contrainte de session a été contournée proprement
+#### B3.3 ⚠️ Le correctif B1 a été PERDU au merge — puis réappliqué
 
-Le plan indiquait qu'une session Arena ne peut pas pousser sur `feat/mobile-android-scaffolding`.
-C'est vrai pour `git push` (la session est verrouillée sur sa branche), mais **les manifests
-n'existent que sur cette branche** — absents de `main` — donc le correctif devait y atterrir.
+**Ce qui s'est passé.** Le plan prévoyait que B1 atterrisse dans la PR #34 via
+`feat/mobile-android-scaffolding`. Le correctif y a bien été poussé (API GitHub Contents,
+commits côté serveur, branche de travail locale inchangée) :
 
-Solution retenue : API GitHub Contents (`PUT /repos/.../contents/{path}` avec le `sha` du fichier),
-qui crée un commit **côté serveur** sur la branche cible sans modifier la branche de travail
-locale. Les deux commits (`083c0b6` parent-mobile, `4463110` staff-mobile) portent un message
-complet et `Refs #8`. La PR #34 est passée à 3 commits, son diff reste 38 fichiers +496/−0.
+```
+22:22:32 → 22:23:19  merges de main dans la branche (PR #24, puis update-branch)
+22:23:29             ★ PR #34 MERGÉE dans main (d7e222b)
+22:28:33 / 22:28:35  ★ commits B1 (083c0b6, 4463110) — 5 minutes APRÈS le merge
+```
+
+Les deux commits B1 sont donc **orphelins sur une branche déjà mergée**. Vérifié par les blobs :
+
+| Réf | Blob du manifest parent | Taille | INTERNET |
+|---|---|---|---|
+| `main` @ `d7e222b` | `3c32c11f` | 2206 o | ❌ **absent** |
+| branche (après mes commits) | `91822760` | 2272 o | ✅ présent |
+
+**`main` contient donc le scaffolding Android SANS la permission INTERNET** : un
+`flutter build apk --release` depuis `main` produit un APK sans accès réseau.
+
+**Correction.** `main` contenant désormais les manifests, le correctif a pu être appliqué
+**sur la branche de session** (plus besoin de pousser sur une branche tierce) :
+
+1. `git merge origin/main` → les 38 fichiers `android/` arrivent sur `arena/01a09b26-cr-chedz`
+2. **Le garde B2 exécuté contre l'état réel de `main` → exit 1**, INTERNET manquant signalé pour
+   les deux apps. C'est la validation la plus forte possible du garde : il a attrapé un bug
+   **effectivement présent dans `main`**, pas un cas synthétique
+3. Application du correctif (1 ligne par app), garde → **exit 0**, les 6 XML reparsés
+4. Commit `a9275ba`, livré par la PR #36
+
+**Leçon à retenir pour les phases suivantes** : pousser un correctif sur une branche de PR
+ouverte est **course contre le merge**. Vérifier l'état de la PR *après* chaque push distant,
+et préférer corriger sur sa propre branche dès que le contenu visé existe dans `main`.
+Les deux commits orphelins `083c0b6`/`4463110` peuvent être ignorés (la branche
+`feat/mobile-android-scaffolding` peut être supprimée).
+
+> 🔒 **Rappel de la contrainte de session** : une session Arena est verrouillée sur sa branche.
+> `git push` vers une autre branche est exclu ; l'API Contents permet un commit côté serveur,
+> mais comme on le voit ici cela ne protège pas d'un merge concurrent.
 
 ---
 
@@ -849,7 +881,7 @@ Staging est l'environnement qui permet de valider tout ce qui précède. Il ne d
 | Phase | Livrable principal | GATE de sortie | Dépend de |
 |---|---|---|---|
 | **A** | `security` vert + requis | **A1 ✅ atteint le 2026-09-13** : `npm audit --omit=dev` = 0 + 28/28 suites vertes. **A2 ⚠️ bloqué** (permissions `administration` + `workflows`) — voir §A3.4 | — |
-| **B** | APK release réseau-fonctionnel | **B1 ✅** manifests corrigés (PR #34). **B2 ⚠️** garde écrit + validé 3 états, câblage CI bloqué (`workflows`). GATE `aapt` restant : pas de SDK ici | A |
+| **B** | APK release réseau-fonctionnel | **B1 ✅** commit `a9275ba` (réappliqué après perte au merge — §B3.3). **B2 ✅ garde validé : il a attrapé le bug dans `main` réel** ; câblage CI bloqué (`workflows`). GATE `aapt` restant : pas de SDK ici | A |
 | **C** | C1/C2/C4 corrigés | tests 403/401 **rouges avant**, verts après | A |
 | **D** | RLS effective en prod | `tests/tenant-isolation` vert **avec les rôles de prod** ; l'API refuse de booter en superuser | A, C |
 | **E** | Aucun job perdu, aucun faux statut, 4 jobs planifiés | kill -9 du worker → job repris ; chaque job planifié s'exécute réellement | D |
@@ -894,9 +926,9 @@ Les migrations 001-052 sont **immuables** (ADR-007). Tout correctif SQL passe pa
 | Issue | Objet | Phase |
 |---|---|---|
 | **#35** | Régression `npm audit` (multer 2.3.0 + nodemailer 9.1.1) — **ouverte**. Correctif A1 ✅ appliqué et validé le 2026-09-13 ; à fermer au merge. **Débordement découvert** : `body-parser` 1.20.6 → 1.20.8 également nécessaire (§A3.2) | A1 |
-| **PR #36** | Correctif A1 + garde B2 + ce plan. **`security` ✅ vert en CI réelle** (28 s) — confirme le correctif hors de l'environnement local. 3 commits volontairement séparés : `docs(audit)` le plan, `fix(security)` le bump, `feat(ci)` le garde — pour que chacun reste isolé et revertable | A1, B2 |
+| **PR #36** | Correctif A1 + garde B2 + correctif B1 + ce plan. **9/9 checks verts en CI réelle**, dont `security` ✅ (20 s) et `database` ✅ (14m31 : npm ci, 52 migrations, schema-check, **rls-behavior-check 9/9**, 28 suites d'isolation). Commits séparés pour rester revertables : `docs(audit)`, `fix(security)`, `feat(ci)` garde, `fix(mobile)` B1 | A1, B1, B2 |
 | **#8** | Flutter build + run — B1 (scaffolding, PR #34) → B5. Le commentaire de recadrage y est déjà, **posté deux fois** le 08/09 (IDs `5584413192`, `5584414851`) — le doublon mal rendu est à supprimer manuellement (403 pour le bot) | B |
-| **PR #34** | Scaffolding Android — **B1 appliqué** (commits `083c0b6`, `4463110`), 3 commits, 38 fichiers +496/−0. **Mergeable.** Quatre commentaires y documentent : le rouge `security` (sans rapport), son rectificatif, C7, puis la résolution de C7 | B |
+| **PR #34** | ⚠️ **MERGÉE dans `main` le 2026-09-13 à 22:23:29** (`d7e222b`) — **5 min avant** que B1 n'atterrisse sur sa branche. Les commits `083c0b6`/`4463110` sont donc **orphelins** et `main` a reçu le scaffolding **sans** INTERNET. Corrigé par `a9275ba` (PR #36). La branche `feat/mobile-android-scaffolding` peut être supprimée. Cinq commentaires y documentent la chronologie | B |
 | à créer | Une issue par phase C→H, avec le gate de sortie comme critère d'acceptation | — |
 
 ### Annexe 3 — Vérifications effectuées pour ce plan
