@@ -460,9 +460,19 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 
 ### H2. MEDIUM (par grappes homogènes)
 
-- [ ] **Confidentialité** : push sans check `can_view_journal` ; exports privacy incluant les notes
-      privées du journal ; accountant exportant des dossiers médicaux → appliquer la **matrice
-      d'autorisation** aux modules `journal`, `exports`, `privacy`, `notifications` (un seul chantier).
+- [ ] **Confidentialité — grappe commune en cours**, pas clôturée :
+  - [x] **H2a** : publication journal/push/WhatsApp/inbox et exports de droits corrigés
+        après reproduction réelle HTTP + PostgreSQL : **5/21 → 21/21** scénarios.
+        Opérateurs privacy limités à director/super_admin ; autres utilisateurs scopés
+        à leurs demandes et liens actuels. Notes privées/masquées exclues, projection
+        enfant explicite, droits journal/santé/factures recalculés à chaque export.
+        Le finding Excel médical est précisé : déjà refusé par `/exports`, fuite réelle
+        via `/privacy/requests/:id/export`. Exports financiers du comptable conservés.
+        [Matrice](architecture/authorization-matrix.md) et [runbook H2](PHASE_H2_CONFIDENTIALITY_RUNBOOK.md).
+  - [ ] **H2b** : revalidation entre mise en file et livraison, lecture d'anciennes
+        inbox après révocation, anciennes queues WhatsApp sans identité enfant/événement,
+        autres projections/contrôles de gardien. Pas de purge masquante ni de preuve
+        d'envoi réel déduite des tests d'insertion en base. G reste ouvert.
 - [ ] **`anonymize.sql`** : laisse `guardians`/`staff`/`messages`/`sessions` intacts (RGPD/loi 25-11).
 - [ ] **`/metrics` public** + totaux cross-tenant + format Prometheus invalide → authentifier (ou
       restreindre au réseau interne) et valider le format avec un parseur Prometheus réel.

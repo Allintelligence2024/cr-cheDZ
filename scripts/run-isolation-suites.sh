@@ -61,6 +61,7 @@ SUITES=(
   phase32-sync-children.api.test.mjs
   phase33-sync-publication.api.test.mjs
   phase34-sync-completion.api.test.mjs
+  phase35-confidentiality.api.test.mjs
   phase28-worker-reliability.test.mjs
 )
 

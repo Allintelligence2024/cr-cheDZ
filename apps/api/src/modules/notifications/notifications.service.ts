@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { JOURNAL_NOTIFICATION_TYPES } from '../../shared/authorization/disclosure-policy';
 import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -34,8 +35,9 @@ export class NotificationsService {
        JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = cg.child_id
        WHERE cg.child_id = $1 AND cg.can_receive_push = true
-         AND g.user_id IS NOT NULL`,
-      [childId],
+         AND g.user_id IS NOT NULL AND g.deleted_at IS NULL AND c.deleted_at IS NULL
+         AND (NOT $2::boolean OR cg.can_view_journal = true)`,
+      [childId, JOURNAL_NOTIFICATION_TYPES.has(eventType)],
     );
     for (const g of guardians.rows) {
       await this.enqueue(client, tenantId, {

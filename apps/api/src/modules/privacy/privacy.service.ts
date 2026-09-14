@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
+import { canManagePrivacyRequests } from '../../shared/authorization/disclosure-policy';
 import { ConfigService } from '@nestjs/config';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
@@ -55,10 +56,10 @@ export class PrivacyService {
       if (dto.subject_id) {
         const linked = await client.query(
           `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
-           WHERE cg.child_id = $1 AND g.user_id = $2`,
+           WHERE cg.child_id = $1 AND g.user_id = $2 AND g.deleted_at IS NULL`,
           [dto.subject_id, userId],
         );
-        const isStaff = role === 'director' || role === 'super_admin' || role === 'accountant';
+        const isStaff = canManagePrivacyRequests(role);
         if (!linked.rows[0] && !isStaff) {
           throw new AppError('PARENT_ACCESS_DENIED', 'Vous n’êtes pas responsable de cet enfant', 'لست ولي أمر هذا الطفل', 403);
         }
@@ -84,7 +85,7 @@ export class PrivacyService {
 
   async listRequests(userId: string, role: string): Promise<Array<Record<string, unknown>>> {
     const tenantId = requireTenant(this.tenantContext);
-    const isStaff = role === 'director' || role === 'super_admin' || role === 'accountant';
+    const isStaff = canManagePrivacyRequests(role);
     return this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
         `SELECT pr.id, pr.requester_id, pr.request_type, pr.subject_id, pr.status, pr.notes,
@@ -100,7 +101,7 @@ export class PrivacyService {
 
   async getRequest(requestId: string, userId: string, role: string): Promise<Record<string, unknown>> {
     requireTenant(this.tenantContext);
-    const isStaff = role === 'director' || role === 'super_admin' || role === 'accountant';
+    const isStaff = canManagePrivacyRequests(role);
     return this.tenantContext.withTenantConnection(async (client) => {
       const r = await client.query(
         `SELECT * FROM privacy_requests WHERE id=$1 ${isStaff ? '' : 'AND requester_id=$2'}`,
@@ -111,10 +112,10 @@ export class PrivacyService {
     });
   }
 
-  /** Droit d'accès : génère l'export JSON complet des données de l'enfant. */
+  /** Droit d'accès : projection minimisée, recalculée selon les droits actuels. */
   async exportRequest(requestId: string, userId: string, role: string): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
-    const isStaff = role === 'director' || role === 'super_admin' || role === 'accountant';
+    const isStaff = canManagePrivacyRequests(role);
     const exportRow = await this.tenantContext.withTenantConnection(async (client) => {
       const request = (await client.query(
         `SELECT * FROM privacy_requests WHERE id=$1 ${isStaff ? '' : 'AND requester_id=$2'}`,
@@ -124,41 +125,57 @@ export class PrivacyService {
       if (!request.subject_id) throw new AppError('EXPORT_NO_SUBJECT', 'La demande ne cible aucun enfant', 'الطلب لا يخص أي طفل', 422);
       const childId = request.subject_id as string;
 
-      const child = (await client.query(`SELECT * FROM children WHERE id=$1`, [childId])).rows[0] ?? null;
-      const health = (await client.query(`SELECT * FROM health_records WHERE child_id=$1`, [childId])).rows[0] ?? null;
-      const allergies = (await client.query(
+      const access = isStaff
+        ? { journal: true, health: true, invoices: true }
+        : await this.subjectAccess(client, childId, userId);
+      const child = (await client.query(
+        `SELECT id, reference_number, first_name_fr, first_name_ar, last_name_fr, last_name_ar,
+                date_of_birth, gender, status, enrollment_date, departure_date, schedule_type
+         FROM children WHERE id=$1 AND deleted_at IS NULL`, [childId],
+      )).rows[0];
+      if (!child) throw Errors.notFound();
+      const health = access.health ? (await client.query(
+        `SELECT blood_type, family_doctor, doctor_phone, health_insurance, chronic_conditions, general_notes
+         FROM health_records WHERE child_id=$1`, [childId],
+      )).rows[0] ?? null : null;
+      const allergies = access.health ? (await client.query(
         `SELECT allergen, allergen_type, severity, reaction, treatment, emergency_protocol, confirmed_by_doctor, diagnosed_date, notes, is_active
          FROM allergies WHERE child_id=$1 ORDER BY created_at`, [childId],
-      )).rows;
-      const vaccinations = (await client.query(
+      )).rows : [];
+      const vaccinations = access.health ? (await client.query(
         `SELECT vaccine_name, dose_number, administered_date, next_dose_date, lot_number, verified
          FROM vaccinations WHERE child_id=$1 ORDER BY administered_date NULLS LAST`, [childId],
-      )).rows;
-      const medAuths = (await client.query(
+      )).rows : [];
+      const medAuths = access.health ? (await client.query(
         `SELECT medication_name, dosage, frequency, start_date, end_date, is_active FROM medication_authorizations WHERE child_id=$1`, [childId],
-      )).rows;
-      const medAdmins = (await client.query(
+      )).rows : [];
+      const medAdmins = access.health ? (await client.query(
         `SELECT administered_at, dose_given, observations, (confirmed_by IS NOT NULL) AS confirmed FROM medication_administrations WHERE child_id=$1 ORDER BY administered_at`, [childId],
-      )).rows;
-      const journal = (await client.query(
+      )).rows : [];
+      const journal = access.journal ? (await client.query(
         `SELECT event_type, occurred_at, meal_type, meal_quantity, meal_notes, nap_start_at, nap_end_at,
-                nap_quality, diaper_type, temperature_celsius, health_observation, activity_name,
+                nap_quality, diaper_type,
+                CASE WHEN $2::boolean THEN temperature_celsius END AS temperature_celsius,
+                CASE WHEN $2::boolean THEN health_observation END AS health_observation, activity_name,
                 activity_notes, note_text, note_is_private, incident_severity, incident_description,
                 is_correction, visible_to_parents
-         FROM daily_log_events WHERE child_id=$1 ORDER BY occurred_at`, [childId],
-      )).rows;
+         FROM daily_log_events WHERE child_id=$1 AND visible_to_parents = true
+           AND note_is_private IS NOT TRUE
+           AND ($2::boolean OR event_type <> 'health_observation')
+         ORDER BY occurred_at`, [childId, access.health],
+      )).rows : [];
       const attendance = (await client.query(
         `SELECT s.session_date, s.status, e.event_type, e.occurred_at
          FROM attendance_sessions s LEFT JOIN attendance_events e ON e.session_id = s.id
          WHERE s.child_id=$1 ORDER BY s.session_date, e.occurred_at`, [childId],
       )).rows;
-      const invoices = (await client.query(
+      const invoices = access.invoices ? (await client.query(
         `SELECT invoice_number, period_year, period_month, subtotal, discount_amount, total_amount, paid_amount, status, due_date, created_at
          FROM invoices WHERE child_id=$1 ORDER BY created_at`, [childId],
-      )).rows;
-      const payments = (await client.query(
+      )).rows : [];
+      const payments = access.invoices ? (await client.query(
         `SELECT reference_number, amount, method, status, received_at, confirmed_at FROM payments WHERE child_id=$1 ORDER BY created_at`, [childId],
-      )).rows;
+      )).rows : [];
       const consents = (await client.query(
         `SELECT consent_type, granted, granted_at, revoked_at, collection_method, created_at
          FROM consent_records WHERE child_id=$1 ORDER BY created_at`, [childId],
@@ -194,6 +211,20 @@ export class PrivacyService {
       return { export_id: inserted.id, created_at: inserted.created_at, payload };
     });
     return exportRow;
+  }
+
+  /** Same guardian capabilities as the parent portal; an old request grants no access. */
+  private async subjectAccess(client: PoolClient, childId: string, userId: string): Promise<{ journal: boolean; health: boolean; invoices: boolean }> {
+    const row = (await client.query(
+      `SELECT bool_or(cg.can_view_journal) AS journal, bool_or(cg.can_view_health) AS health,
+              bool_or(cg.can_receive_invoices) AS invoices
+       FROM child_guardians cg JOIN guardians g ON g.id=cg.guardian_id
+       JOIN children c ON c.id=cg.child_id
+       WHERE cg.child_id=$1 AND g.user_id=$2 AND g.deleted_at IS NULL AND c.deleted_at IS NULL
+       GROUP BY cg.child_id`, [childId, userId],
+    )).rows[0];
+    if (!row) throw new AppError('PARENT_ACCESS_DENIED', 'Vous n’avez pas l’autorisation pour cet enfant', 'ليس لديك صلاحية لهذا الطفل', 403);
+    return row;
   }
 
   async resolveRequest(requestId: string, actorId: string): Promise<Record<string, unknown>> {

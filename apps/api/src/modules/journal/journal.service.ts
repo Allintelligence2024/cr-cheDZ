@@ -7,8 +7,7 @@ import { AuditService } from '../privacy/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateJournalEventDto, GroupJournalEventDto } from './dto/journal.dto';
 
-/** Types déclenchant une notification push parent. */
-const NOTIFY_PARENT_TYPES = new Set(['meal', 'nap_end', 'incident']);
+import { JOURNAL_NOTIFICATION_TYPES } from '../../shared/authorization/disclosure-policy';
 
 export interface JournalEventInput {
   childId: string;
@@ -181,9 +180,9 @@ export class JournalService {
     }
     const f = input.fields;
 
-    // Un événement 'note' privé n'est jamais visible aux parents.
+    // Même un DTO mixte ne doit pas publier un contenu marqué privé.
     const visible = input.visibleToParents ?? true;
-    const isPrivateNote = input.eventType === 'note' && (f.note_is_private as boolean) === true;
+    const isPrivateNote = f.note_is_private === true;
 
     const day = await this.todayAlgiers(client);
     const res = await client.query(
@@ -231,7 +230,7 @@ export class JournalService {
     );
 
     // Notification parent pour les événements visibles notifiables.
-    if (!isPrivateNote && visible && NOTIFY_PARENT_TYPES.has(input.eventType)) {
+    if (!isPrivateNote && visible && JOURNAL_NOTIFICATION_TYPES.has(input.eventType)) {
       await this.notifications.notifyGuardiansOfEvent(client, tenantId, input.childId, input.eventType, evt.id);
     }
 

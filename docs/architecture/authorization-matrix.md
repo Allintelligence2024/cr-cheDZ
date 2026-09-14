@@ -1,7 +1,8 @@
-# Matrice d'autorisation par module (v1 — audit 2026-09, Phase C)
+# Matrice d'autorisation par module (v2 — audit 2026-09, Phases C/H2a)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
-> Source de vérité : les constantes `@Roles(...)` des contrôleurs de `apps/api/src/modules/`.
+> Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
+> H2a : `shared/authorization/disclosure-policy.ts` centralise opérateurs privacy et types journal notifiables.
 > Outil de contrôle : `npm run check:routes-inventory` (liste les routes sans `@Roles` ni `@Public`).
 
 ## Principes
@@ -38,3 +39,32 @@
   écrite pour chaque route self-service conservée sans `@Roles`.
 - `staff_documents.storage_key` (création) : même défaut de préfixe tenant que C3 — à corriger
   avec la dette H2.
+
+## H2a — demandes de droits et publication de journal
+
+| Chemin / action | Autorisation et projection |
+|---|---|
+| `GET /privacy/requests`, `GET /privacy/requests/:id` | director/super_admin : tenant courant ; tous les autres (dont accountant) : requester_id courant uniquement |
+| `POST /privacy/requests` | Pour un enfant : opérateur director/super_admin ou gardien lié non supprimé ; sans sujet : demande personnelle |
+| `POST /privacy/requests/:id/export` | Même portée de demande ; non-opérateur : lien enfant/gardien non supprimé, revalidé à chaque génération |
+| Journal dans l'export | can_view_journal pour le self-service ; seulement visible_to_parents et non privé, y compris pour l'opérateur |
+| Santé dans l'export | can_view_health pour le self-service ; ce droit couvre aussi les observations médicales du journal |
+| Factures/paiements dans l'export | can_receive_invoices pour le self-service ; métier paie inchangé |
+| Notification repas/nap_end/incident (création) | can_receive_push ET can_view_journal ; gardien/enfant non supprimés ; toutes les destinations : push, WhatsApp, inbox |
+| Notification arrivée/départ (création) | can_receive_push, politique distincte conservée |
+| `/exports` Excel | attendance/invoices seulement, rôles existants inchangés ; type médical déjà refusé |
+
+Les quatre routes de demandes sont volontairement sans `@Roles` : elles sont
+**authentifiées**, chaque service vérifie la portée du demandeur. Un comptable qui
+est aussi gardien peut exercer ses droits personnels ; son rôle comptable ne lui
+accorde plus d'accès aux demandes ou dossiers des autres familles. Une ancienne
+demande dont il est l'auteur ne remplace pas un lien actuel à l'enfant.
+
+L'export destiné au sujet exclut les notes internes enfant et privées du journal,
+pas la vue interne de travail des éducateurs. Il s'agit d'une projection minimisée,
+pas d'une validation juridique de toutes les catégories du droit d'accès.
+
+**Non couvert par H2a** : revalidation à la livraison externe et lecture des inbox
+historiques après révocation, permissions des autres routes privacy/parent. Le
+registre, les DPIA et les violations conservent leurs rôles antérieurs, à revoir
+avec H2b/G. Cette section ne clôture pas l'inventaire global des routes.
