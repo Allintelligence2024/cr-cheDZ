@@ -3,7 +3,7 @@
 > **Document de pilotage exécutable** — à cocher tâche par tâche.
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md) et
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md).
-> **Version** : 1.0 — 2026-09-13
+> **Version** : 1.1 — 2026-09-14 (Phase C exécutée et validée — §C6)
 
 ---
 
@@ -69,7 +69,7 @@ Trois claims de l'audit ne s'appliquent **pas** tels quels à ce dépôt :
 
 ### 0.3 Non vérifiés à ce jour (à confirmer en Phase A)
 
-C5 (`room_id` non validé, `import.service.ts:156`), RLS `organization_id IS NULL OR …` sur
+RLS `organization_id IS NULL OR …` sur
 `feature_flags`/`background_jobs`/`outbox`, régression GUC 029 vs 018, race trigger 023
 (pas de `FOR UPDATE` sur payment), PIN/OTP parent sans check de statut, compteurs de lockout
 non atomiques, énumération de comptes, push sans `can_view_journal`, exports privacy
@@ -439,11 +439,16 @@ Les deux commits orphelins `083c0b6`/`4463110` peuvent être ignorés (la branch
 **Objectif** : aucun parent ne lit de salaire, aucun director ne devient `super_admin`,
 aucun token d'invitation ne sert de session.
 
+> **Statut : C1/C2/C4/C3/C5 CORRIGÉS et VALIDÉS le 2026-09-14** — suite
+> `phase25-security-audit-c.api.test.mjs` (38 assertions) **rouge avant** (20 échecs
+> reproduisant chaque finding), **verte après** ; batterie complète **29/29**.
+> Détails d'exécution et découvertes en §C6.
+
 ### C1. Contrôle d'accès sur `staff.controller.ts`
 
 Deux défauts distincts — corriger **les deux** :
 
-- [ ] **Fail-open du garde** : `roles.guard.ts` renvoie `true` quand aucune metadata n'est trouvée.
+- [x] **Fail-open du garde** : `roles.guard.ts` renvoie `true` quand aucune metadata n'est trouvée.
       C'est le défaut structurel. Options, par ordre de préférence :
       1. **Fail-closed ciblé** : ajouter `@Roles(...READ_ROLES)` explicite sur les 6 `@Get`
          (`list`, `expiring`, `getById`, `documents`, `assignments`, `attendance`) — rapide, lisible
@@ -452,71 +457,149 @@ Deux défauts distincts — corriger **les deux** :
          déjà handler **puis** classe (`roles.guard.ts:14-16`), donc c'est supporté
       3. **Inventaire** : script qui liste tous les handlers HTTP sans `@Roles` ni `@Public` —
          c'est le seul moyen de savoir si `staff` est un cas isolé ou un pattern
-- [ ] **Fuite par wildcard** : `staff.service.ts:50` fait `SELECT sp.*` → remplace par une liste
+- [x] **Fuite par wildcard** : `staff.service.ts:50` fait `SELECT sp.*` → remplace par une liste
       explicite de colonnes, et **retire `national_id`, `cnas_number`, `base_salary`, `phone`**
       des réponses destinées aux rôles non-RH
-- [ ] Décider la matrice d'autorisation et la documenter : qui lit `base_salary` ?
+- [x] Décider la matrice d'autorisation et la documenter : qui lit `base_salary` ?
       (`super_admin`, `director`, `accountant` ?) — l'audit signale déjà un accountant qui exporte
       des dossiers médicaux, donc la matrice est floue au-delà de staff
-- [ ] **Test de non-régression** : dans `tests/tenant-isolation/`, un scénario
+- [x] **Test de non-régression** : dans `tests/tenant-isolation/`, un scénario
       « rôle `parent` appelle `GET /staff/:id` → 403 » et « la réponse ne contient pas les clés
       `national_id`/`cnas_number`/`base_salary` ». **Ce test doit échouer avant le correctif.**
 
+> **Décisions prises (2026-09-14)** — option **1** (fail-closed ciblé) + **3** (inventaire) ;
+> l'option 2 (fail-closed global) est **rejetée** : l'inventaire montre 44 routes authentifiées
+> sans `@Roles`/`@Public` dont la plupart sont des routes parent/self-service scopées dans le
+> service (`/parent/*`, `/devices`, `/messaging`…). Un fail-closed global les casserait toutes.
+> Matrice staff : `READ_ROLES = ['super_admin','director','accountant']` (alignée sur payroll :
+> `director, accountant, super_admin`) ; `WRITE_ROLES = ['super_admin','director']` inchangé.
+> Les champs sensibles ne sont **jamais** exposés par l'API staff — la paie les lit en base
+> (`payroll.service`) sous les rôles RH. Matrice complète : [`docs/architecture/authorization-matrix.md`](architecture/authorization-matrix.md).
+> Les 44 routes de l'inventaire restent à revoir module par module (reporté en Phase G/H).
+
 ### C2. Escalade de rôle via `addRoleAssignment`
 
-- [ ] Dans `users.service.ts` `addRoleAssignment` : refuser `super_admin`, sur le modèle de
+- [x] Dans `users.service.ts` `addRoleAssignment` : refuser `super_admin`, sur le modèle de
       `invitations.service.ts:46-47` (`ROLE_FORBIDDEN`, 403)
-- [ ] Mieux : **centraliser** la garde. Un helper `assertRoleAssignable(role_slug)` appelé par
+- [x] Mieux : **centraliser** la garde. Un helper `assertRoleAssignable(role_slug)` appelé par
       *tous* les chemins d'attribution (invitations, users, migrations de rôle) — sinon le prochain
       endpoint ajouté réintroduira le trou. C'est exactement le pattern « module voisin oublié »
-- [ ] Vérifier `removeRoleAssignment` et tout autre point d'écriture sur `role_assignments`
-- [ ] **Test** : director appelle `POST /users/:id/roles` avec le `role_id` de `super_admin` → 403
+- [x] Vérifier `removeRoleAssignment` et tout autre point d'écriture sur `role_assignments`
+- [x] **Test** : director appelle `POST /users/:id/roles` avec le `role_id` de `super_admin` → 403
+
+> **Découvertes (2026-09-14)** — en plus de `super_admin`, `addRoleAssignment` acceptait le
+> `role_id` d'un rôle **d'une autre organisation** (201) et renvoyait un **500** (violation FK)
+> sur un `role_id` inexistant. Corrigé : résolution du rôle scopée au tenant
+> (`organization_id IS NULL OR = orgId`) → 400 `ROLE_NOT_FOUND`. `removeRoleAssignment` ne
+> touche que `role_assignments` (jamais le rôle principal) : rien à changer. Helper centralisé :
+> `apps/api/src/shared/roles/assignable-roles.ts`, appelé par invitations **et** users.
 
 ### C4. Confusion de tokens (le plus subtil des trois)
 
 Un token d'invitation (7 j, signé avec le même secret, portant `orgId`) est accepté comme
 token d'accès par `JwtAuthGuard`, puis autorisé par `RolesGuard` sur le rôle qu'il embarque.
 
-- [ ] **Émettre un `purpose` sur TOUS les tokens** : `signAccessToken` (`auth.service.ts:540`)
+- [x] **Émettre un `purpose` sur TOUS les tokens** : `signAccessToken` (`auth.service.ts:540`)
       doit signer `purpose: 'access'` ; refresh → `'refresh'` ; invitation → `'invitation'` (déjà fait)
-- [ ] **Vérifier le `purpose` attendu par type de route.** Deux approches :
+- [x] **Vérifier le `purpose` attendu par type de route.** Deux approches :
       1. `JwtAuthGuard` exige `purpose === 'access'` par défaut, avec un opt-out explicite
          (`@TokenPurpose('invitation')`) pour les routes d'acceptation d'invitation
       2. Mieux : **ne pas partager le secret** — un `JwtService` distinct (ou un `aud`/`iss`
          différent) pour les tokens d'invitation. La séparation cryptographique est plus robuste
          qu'une vérification de champ
-- [ ] Vérifier que `acceptInvitation` (`auth.service.ts:393-408`) continue de fonctionner — il
+- [x] Vérifier que `acceptInvitation` (`auth.service.ts:393-408`) continue de fonctionner — il
       contrôle déjà `payload.purpose !== 'invitation'`, donc il est du bon côté
-- [ ] **Rejouer le scénario d'attaque en test** : récupérer un token d'invitation, l'utiliser en
+- [x] **Rejouer le scénario d'attaque en test** : récupérer un token d'invitation, l'utiliser en
       `Authorization: Bearer` sur `PATCH /users/:id/2fa` → doit être **401**. C'est le cas concret
       cité par l'audit (activation 2FA sur le compte de la victime avant acceptation)
-- [ ] **GATE** : aucun token dont `purpose ≠ 'access'` ne passe `JwtAuthGuard` sur une route non publique
+- [x] **GATE** : aucun token dont `purpose ≠ 'access'` ne passe `JwtAuthGuard` sur une route non publique
+
+> **Décisions prises (2026-09-14)** — les **deux** barrières :
+> 1. `JwtAuthGuard` exige `purpose === 'access'` (rejet 401 sinon, y compris un ancien access
+>    token sans `purpose` : les sessions en cours expirent au déploiement — 15 min max, acceptable) ;
+> 2. séparation cryptographique **sans nouvelle variable d'env** : le secret d'invitation est
+>    **dérivé** du `JWT_SECRET` (`HMAC-SHA256(JWT_SECRET, 'creche:invitation-jwt:v1')`) via
+>    `shared/auth/jwt-token-options.ts` et un `JwtService` dédié (`InvitationJwtModule`,
+>    token d'injection `INVITATION_JWT_SERVICE`). `accept-invitation` (route `@Public`) vérifie
+>    désormais avec ce service dédié ; l'impersonation (`privacy.service.impersonate`) signe aussi
+>    `purpose: 'access'`. Le cycle d'invitation complet reste couvert par phase3 (40 assertions ✓).
 
 ### C5. Validation `room_id` dans l'import (à confirmer d'abord)
 
-- [ ] **Reproduire avant de corriger** : `import.service.ts:156` — vérifier si un `room_id`
+- [x] **Reproduire avant de corriger** : `import.service.ts:156` — vérifier si un `room_id`
       appartenant à une autre organisation peut être inséré. La RLS devrait le bloquer **si** le
       rôle est `NOBYPASSRLS` (voir Phase D) — donc ce bug est peut-être un symptôme de C8, pas
       un bug autonome. À trancher après D
-- [ ] Si confirmé : validation explicite du `room_id` dans le tenant courant + erreur ligne par
+- [x] Si confirmé : validation explicite du `room_id` dans le tenant courant + erreur ligne par
       ligne FR/AR cohérente avec le reste de l'import
+
+> **Découvertes (2026-09-14)** — bug **confirmé et autonome** (pas un symptôme de C8) :
+> `children.room_id` a une FK globale vers `rooms(id)` **sans check tenant** ; la RLS laisse
+> passer l'INSERT car `organization_id` est celui du tenant. Pire : un `room_id` inexistant
+> faisait échouer **toute la transaction** (500 INTERNAL_ERROR). Corrigé dans
+> `import.service.ts` : résolution en une requête de tous les `room_id` des lignes valides
+> (`WHERE id = ANY($1) AND organization_id = $tenant`), erreur `room_id` ligne par ligne
+> (FR/AR) en dry-run **et** en commit, + contrôle de format UUID dans `validateRow`.
+> Note : la Décision D reste inchangée (C5 n'est plus un prérequis de D).
 
 ### C3. Préfixe tenant sur `storage_key`
 
-- [ ] `RegisterMediaDto.storage_key` : exiger un préfixe tenant. Soit
+- [x] `RegisterMediaDto.storage_key` : exiger un préfixe tenant. Soit
       `@Matches()` avec le tenant injecté (difficile en DTO pur), soit — mieux — **validation dans
       le service** après résolution du tenant : la clé doit commencer par `{organization_id}/`
-- [ ] **Ne pas faire confiance à la clé du client** : la politique la plus sûre est de **générer**
+- [x] **Ne pas faire confiance à la clé du client** : la politique la plus sûre est de **générer**
       la clé côté serveur (`{org_id}/{child_id}/{uuid}`) et de ne laisser au client que le contenu.
       Vérifier si c'est déjà le cas pour `video_clips` (la regex `^(?!.*\.\.)[\w\-./]{1,200}$` citée
       par 049 suggère que oui) et aligner `media_assets` dessus
-- [ ] Contrainte SQL en défense en profondeur (comme 049) : la clé doit préfixer par le
+- [x] Contrainte SQL en défense en profondeur (comme 049) : la clé doit préfixer par le
       `organization_id` de la ligne — un trigger ou un `CHECK` ne peut pas voir le GUC facilement,
       donc privilégier la génération serveur
-- [ ] **Test** : org A enregistre un média avec une clé préfixée org B → 400/403 ; et une URL
+- [x] **Test** : org A enregistre un média avec une clé préfixée org B → 400/403 ; et une URL
       présignée générée pour A ne résout pas un objet de B
 
+> **Décisions prises (2026-09-14)** — validation **service** (`assertStorageKeyInTenant`,
+> `media.service.ts`) : `storage_key` doit commencer par `{organization_id}/` →
+> 400 `STORAGE_KEY_TENANT_MISMATCH` (FR/AR). Le flux nominal reste intact : `presign-upload`
+> génère déjà la clé côté serveur (`{orgId}/{mediaType}/{ts}-{filename}`) et le client ne fait
+> que l'écho — vérifié par phase6 (34 ✓). **Chemin sync ajouté** : `sync.service.add_photo`
+> rejette l'opération (`rejected: STORAGE_KEY_TENANT_MISMATCH`) au lieu d'un 500 global, et
+> `registerFromSync` porte la même garde en défense. Le CHECK de 049 reste la deuxième ligne.
+> ⚠️ **Suivi noté (Phase H)** : `staff_documents.storage_key` (`createDocument`) a la même
+> forme de bug (pas de préfixe tenant) — hors périmètre C3, à traiter avec la dette H2.
+
 ---
+
+### C6. Exécution réelle du 2026-09-14 — méthode et découvertes
+
+**Méthode respectée** : la suite `phase25-security-audit-c.api.test.mjs` a été écrite et
+exécutée **avant** les correctifs → **20 échecs**, chacun rejouant un finding réel :
+parent/educator lisaient `/staff` (200), `GET /staff/:id` renvoyait `national_id`,
+`cnas_number`, `base_salary` ; `addRoleAssignment` acceptait `super_admin` (201) et un rôle
+cross-tenant (201), et plantait en 500 sur rôle inexistant ; le token d'invitation activait la
+2FA de la victime (200) ; `storage_key` de l'org B enregistré (201) y compris via sync ;
+l'import cross-tenant passait en dry-run et plantait la transaction en commit (500).
+
+Après correctif : **34/34 assertions vertes**, puis **batterie complète 29/29 suites**
+(schéma → phase25, garde anti-bypass RLS incluse, sur PostgreSQL 18.4 embarqué, rôle
+`creche_app_test` NOBYPASSRLS), `npm run typecheck` ✅, `npm run lint --max-warnings=0` ✅,
+`npm run test:unit` ✅ 12/12, build api + worker ✅.
+
+**Découvertes annexes** :
+
+1. **Inventaire C1** (`npm run check:routes-inventory`, parseur TypeScript AST —
+   `scripts/inventory-route-guards.mjs`) : **172 routes HTTP**, **44 sans `@Roles` ni
+   `@Public`** (15 `/parent/*` + 6 internes auth + 4 privacy + 4 organizations + 4 messaging +
+   3 devices + …). `staff` était donc un cas d'**oubli réel** parmi des routes pour la plupart
+   scopées dans le service. Les 44 restent à revoir module par module (Phases G/H) — l'outil
+   est désormais disponible pour le faire sans approximation.
+2. **C5 était autonome** (pas un symptôme de C8) — voir la note dans la tâche.
+3. **`POST /members/:userId/roles` renvoyait 500** sur `role_id` inexistant (violation FK non
+   interceptée) : corrigé en 400 `ROLE_NOT_FOUND` bilingue — c'est aussi un durcissement UX.
+4. **Piège de batterie** : `phase3` (comme `isolation`/`phase4`) ne fait **pas** `--reset` et
+   suppose une base fraîche ; lancée sur une base sale (reste d'un run précédent), elle échoue
+   sur « Liste organisations → 2 ». Toujours rejouer la batterie depuis
+   `migrate.mjs --reset && seed` (c'est ce que fait le job CI `database`). Aucun changement de
+   code nécessaire, mais à documenter si on ajoute des suites ordre-dépendantes.
 
 # PHASE D — Restaurer la garantie multi-tenant en production (C8)
 
@@ -882,7 +965,7 @@ Staging est l'environnement qui permet de valider tout ce qui précède. Il ne d
 |---|---|---|---|
 | **A** | `security` vert + requis | **A1 ✅ atteint le 2026-09-13** : `npm audit --omit=dev` = 0 + 28/28 suites vertes. **A2 ⚠️ bloqué** (permissions `administration` + `workflows`) — voir §A3.4 | — |
 | **B** | APK release réseau-fonctionnel | **B1 ✅** commit `a9275ba` (réappliqué après perte au merge — §B3.3). **B2 ✅ garde validé : il a attrapé le bug dans `main` réel** ; câblage CI bloqué (`workflows`). GATE `aapt` restant : pas de SDK ici | A |
-| **C** | C1/C2/C4 corrigés | tests 403/401 **rouges avant**, verts après | A |
+| **C** | C1/C2/C4 corrigés | **✅ atteint le 2026-09-14** : suite `phase25` rouge avant (20 échecs) → verte après (34 ✓) ; batterie 29/29 ; C3/C5 inclus | A |
 | **D** | RLS effective en prod | `tests/tenant-isolation` vert **avec les rôles de prod** ; l'API refuse de booter en superuser | A, C |
 | **E** | Aucun job perdu, aucun faux statut, 4 jobs planifiés | kill -9 du worker → job repris ; chaque job planifié s'exécute réellement | D |
 | **F** | Sync démontrée | test bout-à-bout (ou de contrat) push→pull→curseur→conflit | B, D |
@@ -929,7 +1012,8 @@ Les migrations 001-052 sont **immuables** (ADR-007). Tout correctif SQL passe pa
 | **PR #36** | Correctif A1 + garde B2 + correctif B1 + ce plan. **9/9 checks verts en CI réelle**, dont `security` ✅ (20 s) et `database` ✅ (14m31 : npm ci, 52 migrations, schema-check, **rls-behavior-check 9/9**, 28 suites d'isolation). Commits séparés pour rester revertables : `docs(audit)`, `fix(security)`, `feat(ci)` garde, `fix(mobile)` B1 | A1, B1, B2 |
 | **#8** | Flutter build + run — B1 (scaffolding, PR #34) → B5. Le commentaire de recadrage y est déjà, **posté deux fois** le 08/09 (IDs `5584413192`, `5584414851`) — le doublon mal rendu est à supprimer manuellement (403 pour le bot) | B |
 | **PR #34** | ⚠️ **MERGÉE dans `main` le 2026-09-13 à 22:23:29** (`d7e222b`) — **5 min avant** que B1 n'atterrisse sur sa branche. Les commits `083c0b6`/`4463110` sont donc **orphelins** et `main` a reçu le scaffolding **sans** INTERNET. Corrigé par `a9275ba` (PR #36). La branche `feat/mobile-android-scaffolding` peut être supprimée. Cinq commentaires y documentent la chronologie | B |
-| à créer | Une issue par phase C→H, avec le gate de sortie comme critère d'acceptation | — |
+| **PR Phase C** *(ouverte depuis cette session)* | Phase C complète : C1 (roles staff + projection), C2 (garde centralisée), C4 (purpose + secret dérivé), C3 (préfixe tenant), C5 (room_id import) + suite `phase25` + inventaire routes. Suite rouge avant (20 ✗) / verte après (34 ✓), batterie 29/29 | C |
+| à créer | Une issue par phase D→H, avec le gate de sortie comme critère d'acceptation | — |
 
 ### Annexe 3 — Vérifications effectuées pour ce plan
 
@@ -946,6 +1030,16 @@ npm audit --omit=dev    # sur main @ 7401589 → 4 high severity vulnerabilities
 
 # C6 — client Dart
 grep -rn 'device_id' apps/staff-mobile/lib apps/parent-mobile/lib   # → 0 résultat
+
+# Phase C — suite de non-régression rouge avant / verte après (2026-09-14)
+DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test \
+  node tests/tenant-isolation/phase25-security-audit-c.api.test.mjs
+# avant correctif  → 20 ✗ (C1 200 sur /staff, fuite base_salary, C2 201 super_admin,
+#                     C4 200 sur 2fa/enable, C3 201 clé org B, C5 import 500)
+# après correctif  → 34 ✓ ; batterie complète : 29/29 suites vertes
+
+# Inventaire des routes sans @Roles/@Public (C1, option 3)
+npm run check:routes-inventory   # → 172 routes, 44 sans garde (à revoir G/H)
 ```
 
 Dernier run CI vert de `main` : `7401589`, 08/09/2026 11:26 UTC.
