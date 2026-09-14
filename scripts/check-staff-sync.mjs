@@ -22,8 +22,9 @@ flutter --version
 cp -a /source/apps/staff-mobile /tmp/staff
 cd /tmp/staff
 flutter pub get --enforce-lockfile
-flutter test --reporter expanded
-flutter analyze --no-fatal-infos`;
+flutter test --no-pub --reporter expanded
+flutter analyze --no-pub --no-fatal-infos
+cmp /source/apps/staff-mobile/pubspec.lock pubspec.lock`;
 const result = spawnSync(docker ? 'docker' : 'flutter', docker ? [
   'run', '--rm', '-v', `${root}:/source:ro`, '--entrypoint', 'bash',
   'ghcr.io/cirruslabs/flutter:3.44.0@sha256:46691e311715845de03a3ba4753a475476936805b29431b1f00f1816981033f8', '-c', script,
@@ -34,7 +35,11 @@ const result = spawnSync(docker ? 'docker' : 'flutter', docker ? [
 process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? '');
 if (result.error || result.status !== 0) {
   const details = `${result.error ?? ''}\n${result.stdout ?? ''}\n${result.stderr ?? ''}`.slice(-14000);
-  console.error('::error title=F2 Flutter gate::' + details.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A'));
+  // GitHub truncates individual annotations: keep every chunk below 4 KiB.
+  for (let offset = 0; offset < details.length; offset += 2500) {
+    const chunk = details.slice(offset, offset + 2500);
+    console.error(`::error title=F2 Flutter gate ${offset / 2500 + 1}::` + chunk.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A'));
+  }
   process.exit(result.status || 1);
 }
 console.log('::notice title=F2 Flutter passed::Real Flutter tests and analysis passed with the enforced lockfile. Not an Android release or F4 gate.');

@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+import 'package:staff_mobile/features/children/children_list_page.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:drift/native.dart';
@@ -91,6 +93,24 @@ DioException failure(int status) => DioException(requestOptions: RequestOptions(
 
 void main() {
   wireTests();
+  testWidgets('child screen renders Drift rows, refreshes after sync and exposes logout', (tester) async {
+    final h = Harness(); addTearDown(h.close); var logout = false;
+    await tester.runAsync(() async { await h.db.syncState(); });
+    await tester.pumpWidget(MaterialApp(home: ChildrenListPage(syncEngine: h.engine, onLogout: () => logout = true)));
+    await tester.pumpAndSettle();
+    expect(find.text('Test Enfant'), findsNothing);
+    h.api.handlePull = (q) async => {'events': q['cursor'] == '0' ? [{
+      'sync_seq': '1', 'type': 'child', 'aggregate_id': child, 'event_type': 'created',
+      'created_at': '2026-09-14T08:00:00Z', 'payload': {
+        'id': child, 'organization_id': org, 'site_id': org, 'first_name_fr': 'Test',
+        'last_name_fr': 'Enfant', 'date_of_birth': '2024-01-01', 'status': 'active',
+      },
+    }] : [], 'next_cursor': '1'};
+    h.online = true; await tester.runAsync(h.engine.sync);
+    await tester.pumpAndSettle(); expect(find.text('Test Enfant'), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.logout)); expect(logout, true);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   test('register precedes push/pull; device sent every time; push cursor ignored', () async {
     final h = Harness(); addTearDown(h.close);
     await h.enqueue(); h.online = true; await h.engine.sync();

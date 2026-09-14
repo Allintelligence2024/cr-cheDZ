@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/database/app_database.dart';
@@ -21,11 +22,22 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
   List<Child> _children = [];
   Map<String, String> _statusByChild = {};
   bool _loading = true;
+  StreamSubscription<SyncStatus>? _syncSubscription;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _syncSubscription = widget.syncEngine.statusStream.listen((status) {
+      if (mounted && status == SyncStatus.idle) unawaited(_load());
+    });
+  }
+
+  @override
+  void dispose() {
+    final subscription = _syncSubscription;
+    if (subscription != null) unawaited(subscription.cancel());
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -126,9 +138,10 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(actions: [if (widget.onLogout != null) IconButton(onPressed: widget.onLogout, icon: const Icon(Icons.logout), tooltip: 'Se déconnecter')],
+      appBar: AppBar(
         title: const Text('Enfants de la section'),
         actions: [
+          if (widget.onLogout != null) IconButton(onPressed: widget.onLogout, icon: const Icon(Icons.logout), tooltip: 'Se déconnecter'),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Synchroniser',
