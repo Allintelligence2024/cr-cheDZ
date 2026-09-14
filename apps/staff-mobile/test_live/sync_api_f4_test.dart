@@ -25,7 +25,7 @@ class Device {
   Future<void> sync() async { online = true; await engine.sync(); expect(engine.currentStatus, SyncStatus.idle); }
   Future<String> enqueue(String command, String child, {int? baseVersion, Map<String, dynamic> extra = const {}}) async {
     online = false;
-    final id = await engine.enqueue(command: command, entityType: 'attendance', payload: {'child_id': child, ...extra}, baseVersion: baseVersion);
+    final id = await engine.enqueue(command: command, entityType: command.startsWith('log_') ? 'daily_log' : command == 'add_photo' ? 'media' : 'attendance', payload: {'child_id': child, ...extra}, baseVersion: baseVersion);
     await engine.sync(); return id;
   }
   Future<void> replay(String event) async {
@@ -97,14 +97,58 @@ void main() {
     expect((await b!.db.select(b!.db.localAttendanceSessions).get()).single.status, 'present');
     report['conflict_event'] = conflictEvent;
   });
+  test('eight journal commands -> second device mirror -> replay without duplicate', () async {
+    final ids = <String>[];
+    for (final kind in ['meal', 'nap_start', 'nap_end', 'diaper', 'activity', 'temperature', 'note', 'incident']) {
+      ids.add(await a!.enqueue('log_$kind', child, extra: {
+        'meal_quantity': 'all', 'diaper_type': 'wet', 'temperature_celsius': 37.2,
+        'note_text': 'Synthetic F4', 'activity_name': 'Synthetic F4',
+      }));
+    }
+    report['journal_events'] = ids;
+    await a!.sync(); await b!.sync();
+    final rows = await b!.db.select(b!.db.localDailyEvents).get();
+    expect(rows, hasLength(8));
+    final today = DateTime.now().toUtc().add(const Duration(hours: 1)).toIso8601String().substring(0, 10);
+    for (final row in rows) { expect(row.childId, child); expect(row.eventDate, today); expect(row.isSynced, true); }
+    final cursor = (await b!.db.syncState())['cursor'];
+    for (final id in ids) { await a!.replay(id); }
+    await b!.sync();
+    expect((await b!.db.syncState())['cursor'], cursor);
+    expect(await b!.db.select(b!.db.localDailyEvents).get(), hasLength(8));
+  });
+  test('media metadata from real HTTP and offline add_photo survives engine pull/replay', () async {
+    final org = a!.db.scope.organizationId;
+    final registered = await auth.post<Map<String, dynamic>>('/media', {
+      'child_id': child, 'storage_key': '$org/photos/f4-http.jpg', 'mime_type': 'image/jpeg',
+    });
+    // Independent red proof for media, even when the preceding journal projection fails.
+    final response = await b!.client.pull('0', deviceId: (await b!.db.syncState())['device_id'] as String);
+    final event = (response['events'] as List).cast<Map<String, dynamic>>().singleWhere((e) => e['aggregate_id'] == registered['id']);
+    await b!.client.applyRemoteEvent(b!.db, event);
+    final id = await a!.enqueue('add_photo', child, extra: {'storage_key': '$org/photos/f4-offline.jpg', 'mime_type': 'image/jpeg'});
+    report['photo_event'] = id;
+    await a!.sync(); await b!.sync();
+    final rows = await b!.db.customSelect('SELECT * FROM local_media').get();
+    expect(rows, hasLength(2));
+    for (final row in rows) { expect(row.data['child_id'], child); expect(row.data['media_type'], 'photo'); expect(row.data['organization_id'], org); }
+    final cursor = (await b!.db.syncState())['cursor'];
+    await a!.replay(id); await b!.sync();
+    expect((await b!.db.syncState())['cursor'], cursor);
+    expect(await b!.db.customSelect('SELECT * FROM local_media').get(), hasLength(2));
+  });
   test('device restart restores identity/cursor and tenant switch cannot reuse the mirror', () async {
     savedB = await b!.db.syncState(); await b!.close(); b = null;
     b = Device(base, token, File('${dir.path}/b.db')); await b!.sync();
     final restored = await b!.db.syncState();
+    expect(await b!.db.select(b!.db.localDailyEvents).get(), hasLength(8));
+    expect(await b!.db.customSelect('SELECT * FROM local_media').get(), hasLength(2));
     for (final field in ['device_id', 'fingerprint', 'cursor']) { expect(restored[field], savedB![field]); }
     final login = await auth.post<Map<String, dynamic>>('/auth/login', {'email': config['other_email'], 'password': config['password']});
     other = Device(base, login['access_token'] as String, File('${dir.path}/other.db')); await other!.sync();
     expect(await other!.db.select(other!.db.localChildren).get(), isEmpty);
+    expect(await other!.db.select(other!.db.localDailyEvents).get(), isEmpty);
+    expect(await other!.db.customSelect('SELECT * FROM local_media').get(), isEmpty);
     expect(await other!.db.select(other!.db.pendingOperations).get(), isEmpty);
     expect((await other!.db.syncState())['cursor'], '0');
     // A real HTTP request cannot borrow an old tenant's registered device.

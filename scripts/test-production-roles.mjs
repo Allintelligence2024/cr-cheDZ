@@ -40,6 +40,10 @@ function run(command, args, overrides = {}) {
     process.exit(result.status || 1);
   }
 }
+// H1 is an independent disposable stack, never the API test cluster.
+if (env.GITHUB_ACTIONS === 'true' || env.RUN_STAGING_STACK === '1') {
+  run(process.execPath, ['scripts/test-staging-stack.mjs']);
+} else { console.log('H1 staging NOT EXECUTED locally (Docker required).'); }
 // F2 first: compile/run the real Flutter client, not just the wire fixture.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_STAFF_SYNC === '1') {
   run(process.execPath, ['scripts/check-staff-sync.mjs']);
