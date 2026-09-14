@@ -13,7 +13,11 @@ import 'features/login/login_page.dart';
 void main() { WidgetsFlutterBinding.ensureInitialized(); runApp(const StaffApp()); }
 
 class StaffApp extends StatefulWidget {
-  const StaffApp({super.key});
+  const StaffApp({super.key, this.authApi, this.databaseFactory, this.syncApiFactory, this.engineFactory});
+  final ApiClient? authApi;
+  final AppDatabase Function(SyncScope)? databaseFactory;
+  final ApiClient Function()? syncApiFactory;
+  final SyncEngine Function(AppDatabase, SyncClient)? engineFactory;
   @override
   State<StaffApp> createState() => _StaffAppState();
 }
@@ -30,7 +34,7 @@ class _StaffAppState extends State<StaffApp> {
   @override
   void initState() {
     super.initState();
-    _authApi = ApiClient();
+    _authApi = widget.authApi ?? ApiClient();
     _auth = AuthService(_authApi, const FlutterSecureStorage());
     unawaited(_bootstrap());
   }
@@ -61,13 +65,13 @@ class _StaffAppState extends State<StaffApp> {
     try {
       final token = _auth.accessToken!;
       final scope = SyncScope.fromAccessToken(token);
-      opening = AppDatabase.forScope(scope);
+      opening = widget.databaseFactory?.call(scope) ?? AppDatabase.forScope(scope);
       await opening.syncState(); // Validate owner BEFORE rendering any mirror.
       if (!mounted || epoch != _epoch) { await opening.close(); return; }
       // Token is pinned to this engine. Login/other scopes never mutate this API.
-      api = ApiClient()..accessToken = token;
+      api = (widget.syncApiFactory?.call() ?? ApiClient())..accessToken = token;
       _db = opening;
-      _engine = SyncEngine(opening, SyncClient(api));
+      _engine = widget.engineFactory?.call(opening, SyncClient(api)) ?? SyncEngine(opening, SyncClient(api));
       _engine!.startPeriodicSync();
       unawaited(_engine!.sync());
       setState(() => _ready = true);

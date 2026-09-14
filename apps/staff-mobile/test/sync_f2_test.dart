@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:staff_mobile/main.dart';
 import 'package:flutter/material.dart';
 import 'package:staff_mobile/features/children/children_list_page.dart';
 import 'dart:async';
@@ -93,6 +96,24 @@ DioException failure(int status) => DioException(requestOptions: RequestOptions(
 
 void main() {
   wireTests();
+  testWidgets('logout clears private modal routes before showing the next session', (tester) async {
+    final token = 'header.${base64Url.encode(utf8.encode(jsonEncode({'purpose': 'access', 'organizationId': org, 'sub': user})))}.signature';
+    FlutterSecureStorage.setMockInitialValues({'staff_access_token': token, 'staff_refresh_token': 'fixture'});
+    await tester.pumpWidget(StaffApp(authApi: FakeApi(),
+      databaseFactory: (scope) => AppDatabase.testing(scope, NativeDatabase.memory()),
+      syncApiFactory: FakeApi.new,
+      engineFactory: (db, client) => SyncEngine(db, client, isOnline: () async => false, connectionChanges: const Stream.empty()),
+    ));
+    await tester.pumpAndSettle();
+    final page = tester.widget<ChildrenListPage>(find.byType(ChildrenListPage));
+    unawaited(showDialog<void>(context: tester.element(find.byType(ChildrenListPage)),
+      builder: (_) => const AlertDialog(content: Text('Private child from session A'))));
+    await tester.pumpAndSettle(); expect(find.text('Private child from session A'), findsOneWidget);
+    page.onLogout!(); await tester.pumpAndSettle();
+    expect(find.text('Private child from session A'), findsNothing);
+    expect(find.text('Se connecter'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   testWidgets('child screen renders Drift rows, refreshes after sync and exposes logout', (tester) async {
     final h = Harness(); addTearDown(h.close); var logout = false;
     await tester.runAsync(() async { await h.db.syncState(); });
