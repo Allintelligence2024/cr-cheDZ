@@ -91,7 +91,9 @@ sont documentés dans F0. Aucun merge autorisé par ces tests.
 ## Gate
 
 `node scripts/check-staff-sync.mjs` : Flutter réel, pas un mock du moteur/Drift.
-Sur GitHub, Docker `ghcr.io/cirruslabs/flutter:3.47.1` (SDK dont les dépendances flutter_test correspondent au lockfile :
+Sur GitHub, Docker : image de base Cirrus 3.44.0 épinglée par digest, puis **SDK officiel
+Flutter 3.47.1 au commit `6655482ec06e547f90abf8ae7590466f4415978d`**
+(dépendances flutter_test correspondant au lockfile :
 test_api 0.7.12, matcher 0.12.20) copie l'app dans un répertoire éphémère, fait `pub get
 --enforce-lockfile`, exécute les tests et analyse l'app. Aucun SDK/fichier généré
 par pub n'est committé, aucun workflow modifié. Le gate ne masque pas un exit non nul.
@@ -107,3 +109,10 @@ le SDK aurait modifié 15 dépendances. Le minimum SDK indiqué au pied du lockf
 ne suffit pas à désigner son SDK de résolution. Les pubspec Flutter/Flutter_test
 au tag 3.47.1 ont été vérifiés via GitHub ; ce SDK est épinglé sans modifier le
 lockfile. Ni ce refus ni les reproductions rouges ne sont des validations F2.
+
+
+L'image Cirrus 3.47.1 n'existe pas (`manifest unknown` reproduit). Le gate ne
+revient pas à un SDK incompatible : il récupère le tag officiel 3.47.1 **dans
+le SDK éphémère du conteneur**, vérifie son commit, puis l'utilise sur une copie
+de l'app. Le dépôt applicatif est monté read-only, jamais checkout/reset par
+cette opération. L'image de base est fixée au digest constaté lors du premier run.

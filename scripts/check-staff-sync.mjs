@@ -8,10 +8,25 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const docker = process.env.GITHUB_ACTIONS === 'true' || process.env.FLUTTER_USE_DOCKER === '1';
-const script = 'set -eu; cp -a /source/apps/staff-mobile /tmp/staff; cd /tmp/staff; flutter pub get --enforce-lockfile; flutter test --reporter expanded; flutter analyze --no-fatal-infos';
+// Cirrus has no 3.47.1 image. Bootstrap the exact official tag inside a known,
+// digest-pinned tool image; NEVER checkout/reset the application repository.
+const flutterCommit = '6655482ec06e547f90abf8ae7590466f4415978d';
+const script = `set -eu
+sdk="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
+case "$sdk" in /sdks/flutter|/opt/flutter) ;; *) echo "Unexpected SDK path: $sdk"; exit 1;; esac
+git config --global --add safe.directory "$sdk"
+git -C "$sdk" fetch --depth 1 origin tag 3.47.1
+test "$(git -C "$sdk" rev-parse '3.47.1^{commit}')" = '${flutterCommit}'
+git -C "$sdk" checkout --force --detach '${flutterCommit}'
+flutter --version
+cp -a /source/apps/staff-mobile /tmp/staff
+cd /tmp/staff
+flutter pub get --enforce-lockfile
+flutter test --reporter expanded
+flutter analyze --no-fatal-infos`;
 const result = spawnSync(docker ? 'docker' : 'flutter', docker ? [
   'run', '--rm', '-v', `${root}:/source:ro`, '--entrypoint', 'bash',
-  'ghcr.io/cirruslabs/flutter:3.47.1', '-c', script,
+  'ghcr.io/cirruslabs/flutter:3.44.0@sha256:46691e311715845de03a3ba4753a475476936805b29431b1f00f1816981033f8', '-c', script,
 ] : ['test', 'test/sync_f2_test.dart', '--reporter', 'expanded'], {
   cwd: docker ? root : resolve(root, 'apps/staff-mobile'),
   encoding: 'utf8', timeout: 900000, maxBuffer: 8 * 1024 * 1024,
