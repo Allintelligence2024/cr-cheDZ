@@ -1,4 +1,4 @@
-# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.8)
+# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.9)
 
 > **Document de pilotage pour la prochaine session agent.**
 > Remplace la v1.x du même fichier (historique : voir `git log -- docs/PLAN_CORRECTION_AUDIT_2026-09.md`).
@@ -36,7 +36,7 @@
   schéma/DTO locaux ; gate Dart obligatoire en CI (voir `architecture/sync-contract.md`).
   **F3 curseurs corrigés** : 5/23 avant → 23/23 après, suite enrichie **26/26**.
   Intégration **F2 maintenant livrée** (voir runbook F2), gate Flutter réel requis ;
-  toujours pas de gate F4 complet. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
+  gate F4 réel désormais branché (résultat CI du dernier HEAD), pas de couverture toutes projections/release. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
   du choix « mois partiels non facturés » des contrats de garde.
 - **Réserves D** : Docker non démarré ici, écart Compose PostgreSQL 16 / tests 18.4,
   gate CI strict désormais raccordé via le runner existant (validé en PR #44 sur 955b9cd). Ne pas confondre preuve locale et déploiement.
@@ -332,7 +332,10 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       Flutter : 23/31 avant correction (8 vrais rouges), gate strict du dernier HEAD requis.
       Voir [runbook F3b](PHASE_F3B_CHILDREN_RUNBOOK.md), limites et rollback.
       La batterie contient désormais 35 suites/contrôles.
-- [ ] Ordre de commit/pagination sûre : reproduire A lente/B rapide, puis corriger.
+- [x] **F3c publication** : 2/8 avant → 8/8 après ; migration 060, allocation après
+      verrou transactionnel par tenant (default BIGSERIAL retiré), journal append-only
+      pour les écrivains applicatifs. Suite enrichie 10/10 avec les projections présence.
+      [Runbook F3c/F4](PHASE_F3C_F4_RUNBOOK.md) ; batterie portée à 36 suites/contrôles.
 - [x] Scope utilisateur du device vérifié côté API en F2 ; FK simples depuis 006.
 - [ ] Intégrité composite SQL pour écritures directes, si nécessaire après reproduction.
 - [x] **F3a conflits/résultats** : 0/15 avant correction → 18/18 ciblés après ;
@@ -344,11 +347,16 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 
 ### F4. GATE — test bout-à-bout (le vrai livrable)
 
-- [ ] Intégration avec le **vrai client Dart contre la vraie API** : enregistrement device → push →
-      pull depuis un 2e appareil → curseur rejoué sans doublon → conflit conforme à la spec.
-- [ ] À défaut de Dart en CI : **test de contrat** (fixtures JSON réelles du client Dart validées
-      contre les DTO TypeScript).
-- [ ] **GATE** : la sync est démontrée fonctionnelle, pas seulement compilée.
+- [x] Gate réel implémenté et obligatoire en CI : **Flutter/SyncEngine/Drift/Dio → API**,
+      deux appareils, push/pull, rejeu, conflit, reprise disque et changement de tenant.
+      Pas de FakeApi ni de fixtures réseau reconstituées en Node. Inspection PG indépendante.
+- **Preuve avant correction** : 3/5 tests réels passent ; date de présence timestamp
+      au lieu de DATE, version miroir 0 au lieu de 1. Projections corrigées ; résultat
+      final des cinq tests/annotations `F4 Flutter API passed` à consulter dans la PR #44.
+- Le fallback de contrat F1 est conservé mais n'est **plus substitué** au parcours réel.
+- [ ] Couverture de **toutes** les projections / qualification de déploiement :
+      journal/media et autres types restent ouverts ; APK Android release distinct.
+      F4 démontre ici le parcours enfants/présences, pas une sync globale prête à déployer.
 
 ---
 

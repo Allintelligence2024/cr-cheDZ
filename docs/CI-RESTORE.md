@@ -201,3 +201,22 @@ car leur suppression physique produit désormais un tombstone. Le premier essai
 a réellement échoué sur les FK de nettoyage (RLS/phase4/phase5/phase6), sans défaut
 dans les assertions métier. Ne jamais désactiver le trigger/RLS pour contourner
 ce nettoyage. Voir `PHASE_F3B_CHILDREN_RUNBOOK.md` ; F3/F4 restent ouverts.
+
+
+### F3c / F4 — publication ordonnée et vraie API
+
+Batterie désormais **36 suites/contrôles** avec phase33 (10 contrôles). Migration
+060 : allocation sous verrou par tenant, append-only applicatif. Reproduction
+A lente/B rapide effective avant correction, pages de 500 comprises.
+
+Après rôle/migration/seed, `test-production-roles.mjs` lance obligatoirement
+`test-sync-api-flutter.mjs` sur GitHub : vraie API asynchrone, rôle creche_app,
+vrai Flutter/Drift/Dio, cinq tests + assertions PG. Puis reset/migrate/seed avant
+les suites historiques. SDK éphémère/lock imposé via le bootstrap commun F2 ;
+aucun workflow modifié. `RUN_SYNC_E2E=1` local, avec SDK ou Docker ; absence locale
+annoncée explicitement, jamais un gate F4 simulé.
+
+Preuve rouge 7d0b520 : 3/5, date et version de présence incorrectes. Validation
+finale : annotation **F4 Flutter API passed** du dernier HEAD de la PR #44.
+Ce gate réel enfants/présences ne qualifie pas les autres projections ou l'APK
+release. Voir `PHASE_F3C_F4_RUNBOOK.md` pour sécurité des fixtures et rollback.

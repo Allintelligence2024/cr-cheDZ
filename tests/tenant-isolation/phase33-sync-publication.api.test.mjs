@@ -93,6 +93,20 @@ try {
       finally { await c.query('ROLLBACK'); }
     });
   }
+  const site = (await admin.query("INSERT INTO sites(organization_id,name_fr) VALUES($1,'Projection site') RETURNING id", [org])).rows[0].id;
+  const child = (await req('POST', '/children', { site_id: site, first_name_fr: 'Projection', last_name_fr: 'Synthetic', date_of_birth: '2024-01-01' })).id;
+  const beforeProjection = await watermark();
+  await req('POST', '/sync/push', { device_id: device, operations: [{ event_id: randomUUID(), client_sequence: 1, schema_version: 1, command: 'check_in', entity_type: 'attendance', payload: { child_id: child }, occurred_at_device: new Date().toISOString() }] });
+  const event = (await pull(beforeProjection)).events.find(e => e.type === 'attendance');
+  await check('attendance wire session_date is an Algiers calendar date, not a JS timestamp', async () => {
+    assert.ok(event); const today = (await admin.query("SELECT to_char(NOW() AT TIME ZONE 'Africa/Algiers','YYYY-MM-DD') AS d")).rows[0].d;
+    assert.equal(event.payload.session_date, today);
+  });
+  await check('attendance wire version matches the committed session version', async () => {
+    assert.ok(event); const current = (await admin.query('SELECT version FROM attendance_sessions WHERE child_id=$1', [child])).rows[0].version;
+    assert.equal(event.payload.version, current);
+  });
+
 } finally {
   for (const c of connections) { await c.query('ROLLBACK').catch(() => {}); await c.end(); }
   if (app) await app.close(); if (pool) await pool.end(); await admin.end();

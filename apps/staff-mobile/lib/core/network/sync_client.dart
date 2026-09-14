@@ -48,6 +48,7 @@ class SyncClient {
             sessionDate: sessionDate,
             status: status,
             updatedAt: DateTime.now().toIso8601String(),
+            serverVersion: Value(payload['version'] as int? ?? 0),
           ),
         );
       }

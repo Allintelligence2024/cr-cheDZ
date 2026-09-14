@@ -1,7 +1,7 @@
 # Contrat de transport sync v1 — F1
 
 Date : 2026-09-14. **Artefact livré, pas une déclaration de sync Flutter fonctionnelle.**
-Le contrat décrit les enveloppes réseau ; les projections métier, la garantie de pagination sous transactions concurrentes restent F3.
+Le contrat décrit les enveloppes réseau ; les autres projections métier restent ouvertes ; ordre de publication F3c et gate réel F4 documentés ci-dessous.
 Le stockage Drift et le raccordement au moteur sont livrés en F2, voir
 [runbook F2](../PHASE_F2_CLIENT_RUNBOOK.md).
 
@@ -140,8 +140,8 @@ Réponse obligatoire, même avec un lot vide :
 - Ancien résultat non accepté sans détail durable : `LEGACY_RESULT_UNAVAILABLE`,
   vérification manuelle, aucune version historique inventée ni réexécution automatique.
   Les anciens ACK acceptés restent reconnus. Preuves : [runbook F3a](../PHASE_F3A_OUTCOMES_RUNBOOK.md).
-- F4 reste à démontrer avec le vrai client Dart contre l'API ; pagination/projections
-  restent ouvertes en F3, indépendamment de ce résultat sur les conflits.
+- F4 exécute désormais le vrai moteur Flutter/Drift contre l'API (voir runbook),
+  sur le parcours enfants/présences. Les autres projections restent ouvertes.
 
 ## Pull et curseur int64
 
@@ -170,10 +170,14 @@ est un **400**, pas une erreur SQL 500. Les valeurs HTTP query sont textuelles.
   d'application/acquittement du miroir local**. Le client reste responsable de
   conserver sa page et son curseur dans une même transaction Drift (livré F2).
 - Le `next_cursor` d'un **push ne doit jamais remplacer le curseur de pull**.
-- **Réserve critique F3 : BIGSERIAL n'est pas un ordre de commit.** Un écrivain A
-  lent peut réserver un ID inférieur à celui de B déjà committé. Cette correction
-  de type n'empêche pas de sauter A après avoir lu B. Aucune garantie de livraison
-  complète/concurrente tant que le scénario n'est pas reproduit puis corrigé.
+- **F3c / migration 060** : le scénario A lente/B rapide a reproduit le saut de A.
+  Le default BIGSERIAL est retiré : un trigger prend un verrou par tenant avant
+  nextval, conservé jusqu'au COMMIT/ROLLBACK. Les lecteurs voient un préfixe committé.
+  L'application ne peut ni fournir une séquence ni modifier/supprimer une publication.
+  Les trous après rollback/autres tenants sont normaux ; le curseur reste opaque.
+- Les écritures explicites d'un opérateur BYPASSRLS demandent une maintenance et une
+  reprise contrôlée. Pas de réparation automatique d'un curseur déjà avancé avant 060.
+  Détails/limites : [runbook F3c/F4](../PHASE_F3C_F4_RUNBOOK.md).
 
 ## Erreurs HTTP
 
@@ -206,14 +210,14 @@ ajouté au changelog. Les autres projections restent ouvertes.
 
 Les FK `sync_operations.device_id` et `sync_cursors.device_id` existent déjà depuis
 006 ; cela ne prouve pas l'intégrité composite tenant/device/utilisateur. Pas de
-correction composite SQL dans ce lot ; migrations additives 058/059 pour F3a/F3b,
+correction composite SQL dans ce lot ; migrations additives 058/059/060 pour F3a/F3b/F3c,
 001–052 inchangées, 055 réservée à G.
 
 **Preuves locales :** phase29 = 26/26 après correction (première reproduction :
 5/23 avant), corpus schéma/DTO = 49/49. Le diagnostic historique F0 est conservé
 avec sa fixture, mais retiré du runner : ne pas exiger que les anciens défauts
 restent présents. Sa couverture API positive (push/pull/deux devices/idempotence)
-est reprise dans phase29. Le gate F4 complet reste ouvert.
+est reprise dans phase29. Le gate F4 réel enfants/présences est obligatoire ; autres projections/release restent ouvertes.
 
 
 La première correction a également exposé une régression : `ORDER BY sync_seq`
@@ -221,3 +225,13 @@ résolvait l'alias de projection texte et triait lexicalement. Le stress phase5
 l'a détectée ; un nouveau test dédié était rouge (**25/26**) avant de qualifier
 `ORDER BY sync_changelog.sync_seq` (tri BIGINT), puis vert (**26/26**).
 Cette correction de tri ne résout **pas** le risque d'ordre de commit cité plus haut.
+
+
+### Projection présence et gate F4
+
+Les nouvelles publications `attendance` contiennent une `session_date` DATE texte
+à Alger et la `version` résultant de la commande, lues dans sa transaction. Drift
+conserve la version au lieu de laisser zéro. Les anciens événements ne sont pas
+backfillés en inventant une version historique à partir de l'état courant.
+Le gate `scripts/test-sync-api-flutter.mjs` exécute cinq tests du vrai moteur,
+puis vérifie les opérations, événements, sessions et appareils dans PostgreSQL.

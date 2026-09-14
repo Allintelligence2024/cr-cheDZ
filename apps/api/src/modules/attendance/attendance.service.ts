@@ -365,18 +365,25 @@ export class AttendanceService {
     payload: Record<string, unknown>,
     originDeviceId?: string | null,
   ): Promise<void> {
+    // Publish the version resulting from THIS command, inside its transaction.
+    // The mobile must not guess an optimistic base_version from a default zero.
+    const session = await client.query<{ version: number }>(
+      'SELECT version FROM attendance_sessions WHERE id = $1', [payload.session_id],
+    );
+    if (!session.rows[0]) throw new Error('Attendance projection requires a session');
+    const projection = { ...payload, version: session.rows[0].version };
     await client.query(
       `INSERT INTO sync_changelog
          (organization_id, aggregate_type, aggregate_id, event_type, payload, origin_device_id)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [tenantId, aggregateType, aggregateId, eventType, JSON.stringify(payload), originDeviceId ?? null],
+      [tenantId, aggregateType, aggregateId, eventType, JSON.stringify(projection), originDeviceId ?? null],
     );
   }
 
   private async todayInAlgiers(client?: PoolClient): Promise<string> {
     // Date du jour au fuseau de l'établissement (jamais UTC).
     if (client) {
-      const res = await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date AS d`);
+      const res = await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date::text AS d`);
       return res.rows[0].d as string;
     }
     const now = new Date(Date.now() + 60 * 60 * 1000);
