@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v6 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e)
+# Matrice d'autorisation par module (v7 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -160,3 +160,22 @@ snapshots. Voir le [runbook H2e](../PHASE_H2E_JOURNAL_HEALTH_RUNBOOK.md).
 
 Ce contrôle ne classe pas sémantiquement tous les textes libres et ne corrige pas
 les autres autorisations privacy ou la révocation globale des sessions (G).
+
+
+## H2f — acteur courant des demandes de droits
+
+`PrivacyService.assertCurrentRequestActor` vérifie utilisateur actif/non supprimé
+et membership active du tenant avant création, liste, détail, nouvel export et
+résolution, y compris pour l'opérateur. Refus 403 sans effet métier. La vérification
+est sous RLS dans la transaction de l'opération ; pas de nouveau grant.
+
+Propriétaire et politique d'opérateur H2a inchangés. Un demandeur actif garde son
+propre historique après suppression du gardien, sans nouvel accès au dossier enfant.
+Un opérateur actif peut traiter le dossier d'un demandeur inactif. Création enfant
+et capacités d'export réutilisent le lien courant H2c.
+
+Le contrôle vise l'état de l'acteur, **pas les changements de rôles des anciens JWT**.
+Les gardes/claims de rôles existants, le support global et les autres endpoints restent
+à revoir en G. Registre/DPIA/violations et anciens snapshots restent hors de ce lot.
+Voir le [runbook H2f](../PHASE_H2F_PRIVACY_ACTOR_RUNBOOK.md) pour la matrice HTTP/PG,
+les positifs conservés et les frontières exactes.

@@ -106,7 +106,11 @@ const journalHealth = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase39-jo
   .match(/H2e journal health: (\d+) passed, 0 failed/);
 if (!journalHealth || Number(journalHealth[1]) < 36) throw new Error('H2e journal health evidence missing or incomplete');
 console.log(`::notice title=H2e journal health passed::${journalHealth[1]} real HTTP/PostgreSQL scenarios passed: temperature and health_observation require health capability in parent feed and new rights exports; filtering before LIMIT; authorized health and ordinary journal retained. Not snapshot purge, global JWT revocation or arbitrary text classification.`);
-console.log('✓ GATE D : régressions Phase D + 42 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const privacyActor = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase40-privacy-actor-revocation.api.test.log'), 'utf8')
+  .match(/H2f privacy actor: (\d+) passed, 0 failed/);
+if (!privacyActor || Number(privacyActor[1]) < 156) throw new Error('H2f privacy actor evidence missing or incomplete');
+console.log(`::notice title=H2f privacy actor passed::${privacyActor[1]} real HTTP/PostgreSQL scenarios passed: active non-deleted user and active tenant membership required for rights-request creation, list, detail, export and resolution. Denied writes preserve business state; active requesters keep own history after guardian deletion. Not global JWT/role revocation or historical snapshot purge.`);
+console.log('✓ GATE D : régressions Phase D + 43 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

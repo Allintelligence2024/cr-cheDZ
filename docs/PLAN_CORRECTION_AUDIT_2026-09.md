@@ -497,6 +497,13 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
         dont publication HTTP de 101 événements pour le test de pagination.
         [Runbook H2e](PHASE_H2E_JOURNAL_HEALTH_RUNBOOK.md) ; gates complets/CI du SHA
         publié à vérifier en PR #44. Pas de classification de tout texte libre ni de révocation JWT globale.
+  - [x] **H2f acteur des demandes privacy** : utilisateur agissant actif/non supprimé
+        et membership présente/active avant création, liste, détail, export et résolution.
+        Contrôle aussi pour les opérateurs, sans bloquer le traitement d'un demandeur
+        inactif par un opérateur actif. Historique personnel d'un demandeur actif conservé.
+        Reproduction finale **68/156 → 156/156**, **43/43 suites strictes** locales.
+        [Runbook H2f](PHASE_H2F_PRIVACY_ACTOR_RUNBOOK.md) ; gates complets/CI à confirmer
+        sur le SHA publié. Pas de revalidation des rôles ni révocation JWT globale (G).
   - [ ] **Suite confidentialité** : autres projections santé/journal/médias et contrôles de gardien,
         snapshots privacy historiques et routes registre/DPIA/violations. Révocation
         globale des tokens et autres routes toujours à traiter en G. Pas de purge

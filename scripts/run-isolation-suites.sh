@@ -67,6 +67,7 @@ SUITES=(
   phase37-parent-revocation.api.test.mjs
   phase38-parent-financial-projection.api.test.mjs
   phase39-journal-health-disclosure.api.test.mjs
+  phase40-privacy-actor-revocation.api.test.mjs
 )
 
 FILTER="${1:-}"

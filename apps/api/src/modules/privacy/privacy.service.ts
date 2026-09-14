@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Pool, PoolClient } from 'pg';
 import { canManagePrivacyRequests } from '../../shared/authorization/disclosure-policy';
 import { PARENT_JOURNAL_VISIBILITY_SQL } from '../../shared/authorization/journal-disclosure';
+import { CURRENT_GUARDIAN_LINK_SQL } from '../../shared/authorization/guardian-access';
 import { ConfigService } from '@nestjs/config';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
@@ -52,12 +53,13 @@ export class PrivacyService {
   async createRequest(userId: string, role: string, dto: { request_type: string; subject_id?: string; notes?: string }): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
+      await this.assertCurrentRequestActor(client, userId);
       // Un parent ne peut demander que pour un enfant dont il est gardien ;
       // la directrice/le super_admin pour n'importe quel enfant du tenant.
       if (dto.subject_id) {
         const linked = await client.query(
           `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
-           WHERE cg.child_id = $1 AND g.user_id = $2 AND g.deleted_at IS NULL`,
+           WHERE cg.child_id = $1 AND g.user_id = $2 AND ${CURRENT_GUARDIAN_LINK_SQL}`,
           [dto.subject_id, userId],
         );
         const isStaff = canManagePrivacyRequests(role);
@@ -88,6 +90,7 @@ export class PrivacyService {
     const tenantId = requireTenant(this.tenantContext);
     const isStaff = canManagePrivacyRequests(role);
     return this.tenantContext.withTenantConnection(async (client) => {
+      await this.assertCurrentRequestActor(client, userId);
       const res = await client.query(
         `SELECT pr.id, pr.requester_id, pr.request_type, pr.subject_id, pr.status, pr.notes,
                 pr.deadline, pr.resolved_at, pr.created_at, u.email AS requester_email
@@ -104,6 +107,7 @@ export class PrivacyService {
     requireTenant(this.tenantContext);
     const isStaff = canManagePrivacyRequests(role);
     return this.tenantContext.withTenantConnection(async (client) => {
+      await this.assertCurrentRequestActor(client, userId);
       const r = await client.query(
         `SELECT * FROM privacy_requests WHERE id=$1 ${isStaff ? '' : 'AND requester_id=$2'}`,
         isStaff ? [requestId] : [requestId, userId],
@@ -118,6 +122,7 @@ export class PrivacyService {
     const tenantId = requireTenant(this.tenantContext);
     const isStaff = canManagePrivacyRequests(role);
     const exportRow = await this.tenantContext.withTenantConnection(async (client) => {
+      await this.assertCurrentRequestActor(client, userId);
       const request = (await client.query(
         `SELECT * FROM privacy_requests WHERE id=$1 ${isStaff ? '' : 'AND requester_id=$2'}`,
         isStaff ? [requestId] : [requestId, userId],
@@ -212,6 +217,25 @@ export class PrivacyService {
     return exportRow;
   }
 
+  /** H2f: all rights-request operations require a current actor in this tenant.
+   * This is not global JWT/role revocation. Request ownership/operator policy is
+   * unchanged, and active requesters retain their own case history after unlinking.
+   */
+  private async assertCurrentRequestActor(client: PoolClient, userId: string): Promise<void> {
+    const tenantId = requireTenant(this.tenantContext);
+    const actor = await client.query(
+      `SELECT 1 FROM users privacy_actor
+       JOIN memberships privacy_member ON privacy_member.user_id = privacy_actor.id
+       WHERE privacy_actor.id = $1 AND privacy_actor.status = 'active'
+         AND privacy_actor.deleted_at IS NULL
+         AND privacy_member.organization_id = $2 AND privacy_member.is_active = true
+       LIMIT 1`, [userId, tenantId],
+    );
+    if (!actor.rows[0]) {
+      throw new AppError('PRIVACY_ACTOR_INACTIVE', 'Accès aux demandes de droits indisponible pour ce compte', 'الوصول إلى طلبات الحقوق غير متاح لهذا الحساب', 403);
+    }
+  }
+
   /** Same guardian capabilities as the parent portal; an old request grants no access. */
   private async subjectAccess(client: PoolClient, childId: string, userId: string): Promise<{ journal: boolean; health: boolean; invoices: boolean }> {
     const row = (await client.query(
@@ -219,7 +243,7 @@ export class PrivacyService {
               bool_or(cg.can_receive_invoices) AS invoices
        FROM child_guardians cg JOIN guardians g ON g.id=cg.guardian_id
        JOIN children c ON c.id=cg.child_id
-       WHERE cg.child_id=$1 AND g.user_id=$2 AND g.deleted_at IS NULL AND c.deleted_at IS NULL
+       WHERE cg.child_id=$1 AND g.user_id=$2 AND ${CURRENT_GUARDIAN_LINK_SQL}
        GROUP BY cg.child_id`, [childId, userId],
     )).rows[0];
     if (!row) throw new AppError('PARENT_ACCESS_DENIED', 'Vous n’avez pas l’autorisation pour cet enfant', 'ليس لديك صلاحية لهذا الطفل', 403);
@@ -229,6 +253,7 @@ export class PrivacyService {
   async resolveRequest(requestId: string, actorId: string): Promise<Record<string, unknown>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
+      await this.assertCurrentRequestActor(client, actorId);
       const existing = (await client.query(`SELECT id FROM privacy_requests WHERE id=$1`, [requestId])).rows[0];
       if (!existing) throw Errors.notFound();
       const r = await client.query(

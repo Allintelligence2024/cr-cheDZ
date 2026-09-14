@@ -142,3 +142,14 @@ pas les gates CI réels.
 - Médias, autres projections santé, anonymisation, autres dettes H2/H3, stockage/CVE
   et APK release restent ouverts. Paie et facturation inchangées.
 - Aucune clôture de la grappe confidentialité ni aptitude à la production déclarée.
+
+
+## Confirmation de livraison et suite H2f
+
+H2e publié sur `d177badfb5670b79264148c472d6de5a6c9e44c0` :
+[CI 34896950734](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34896950734),
+**9/9 checks**, database **104153310242**. Notices H2e 36, H2d 44, H2c 156,
+H2b 50, H2a 21, F2 51, F4 7 + PostgreSQL et H1 dev/staging vérifiées.
+La suite [H2f](PHASE_H2F_PRIVACY_ACTOR_RUNBOOK.md) protège l'état courant de l'acteur
+des demandes de droits. Rôles/JWT globaux, autres routes privacy et projections ouverts.
+Aucun merge ou déploiement.
