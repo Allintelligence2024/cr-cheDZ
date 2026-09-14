@@ -27,20 +27,23 @@ tests/           tenant-isolation · sync · financial · e2e
 
 ## Démarrage rapide (dev)
 
+Prérequis : Docker avec Compose v2. Depuis la racine du monorepo, sur des données
+**synthétiques uniquement** :
+
 ```bash
-# 1. Base de données locale (PostgreSQL 16 + MinIO)
-docker compose -f infrastructure/docker/docker-compose.dev.yml up -d
-
-# 2. Migrations + seeds
-npm run db:migrate
-npm run db:seed
-
-# 3. Contrôle du schéma (RLS, contraintes)
-npm run db:check-schema
-
-# 4. API
-cd apps/api && npm run start:dev
+# Projet neuf : ne réutilise pas les volumes de l'ancien compose dev.
+docker compose -p creche-dev-v2 -f infrastructure/docker/docker-compose.dev.yml up --build
 ```
+
+Le compose installe avec `npm ci`, initialise les rôles PostgreSQL séparés, applique
+migrations/seeds et contrôle le schéma avant de lancer API, worker et web. Ne pas
+relancer ces opérations ni une deuxième API sur l'hôte avec les anciennes commandes.
+Web : `http://localhost:4000` ; santé API : `http://localhost:3000/api/v1/health`.
+
+Les valeurs `DEV_*` livrées sont strictement locales, jamais des secrets de production.
+Les anciens volumes ne sont pas supprimés. Paramètres, preview Arena, rebuild des
+packages partagés, redémarrage du worker après édition et arrêt sans destruction :
+[runbook H1 dev](docs/PHASE_H1_DEV_RUNBOOK.md).
 
 ## Règles non négociables
 
