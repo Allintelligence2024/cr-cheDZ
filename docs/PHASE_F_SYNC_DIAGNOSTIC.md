@@ -9,7 +9,8 @@ réseau Dart sont maintenant livrés. Le serveur a été corrigé sur les curseu
 string int64 partout, sans Number/int32, 400 avant SQL pour les valeurs invalides.
 Preuve : phase29, première reproduction 5/23 puis 23/23 ; suite enrichie 26/26.
 Schéma/DTO : 49/49 locaux. Le gate deux côtés exécute le Dart en CI ; aucun SDK
-installé localement ou committé. L'intégration dans le moteur Flutter reste F2.
+installé localement ou committé. L'intégration F2 est maintenant livrée ; voir `PHASE_F2_CLIENT_RUNBOOK.md`.
+L'analyse ci-dessous reste l'archive F0, pas un état du dernier HEAD.
 
 **Le runner ne lance plus `sync-f0.mjs`** : ses assertions décrivent les anciens
 bugs. La couverture API positive (deux appareils, idempotence) est reprise dans

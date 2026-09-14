@@ -14,5 +14,5 @@ Check: build API, then `node scripts/check-sync-contract.mjs` (Dart or Docker).
 Local fallback: `--node-only` is explicitly incomplete and forbidden in CI.
 
 No npm package or additional runtime dependency. The API imports its generated
-cursor validator; AJV is test tooling only. The Flutter engine is not yet wired
-into the generated Dart transport client. **Do not deploy this intermediate lot.**
+cursor validator; AJV is test tooling only. F2 wires the Flutter engine to the generated Dart transport client, with
+a separate strict Flutter/Drift gate. F3 projections and F4 remain open. **Do not deploy this intermediate lot.**

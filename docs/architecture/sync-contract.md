@@ -1,8 +1,9 @@
 # Contrat de transport sync v1 — F1
 
 Date : 2026-09-14. **Artefact livré, pas une déclaration de sync Flutter fonctionnelle.**
-Le contrat décrit les enveloppes réseau ; les projections métier, le stockage
-Drift et la garantie de pagination sous transactions concurrentes restent F2/F3.
+Le contrat décrit les enveloppes réseau ; les projections métier, la garantie de pagination sous transactions concurrentes restent F3.
+Le stockage Drift et le raccordement au moteur sont livrés en F2, voir
+[runbook F2](../PHASE_F2_CLIENT_RUNBOOK.md).
 
 ## Sources de vérité et génération
 
@@ -37,7 +38,7 @@ Le corpus commun et le refus d'une réponse à curseur numérique sont exécuté
 Les erreurs du transport sont propagées sans retry automatique.
 
 **Limite :** le transport de ce test est un enregistreur. Il ne contacte pas l'API.
-Le client généré n'est pas encore branché dans `SyncEngine` : cela relève de F2.
+Le client généré est désormais branché dans `SyncEngine` (F2), avec un gate Flutter/Drift distinct.
 Ce gate est F1, **pas F4**. Les résultats d'exécution CI sont ceux de la
 [PR #44](https://github.com/Allintelligence2024/cr-cheDZ/pull/44).
 
@@ -50,7 +51,7 @@ Ce gate est F1, **pas F4**. Les résultats d'exécution CI sont ceux de la
 en `int` : le serveur le renvoie désormais toujours en chaîne. L'ancien client
 était déjà en échec sur les pages non vides et n'envoyait pas le device obligatoire
 (F0). L'installation a été déclarée neuve, sans production par le client ; cette
-PR n'est néanmoins **pas à déployer avant F2–F4**. Ne pas inventer de fallback vers
+PR n'est néanmoins **pas à déployer avant la fin F3–F4**. Ne pas inventer de fallback vers
 un Number/int32 ni prétendre à une compatibilité mobile déjà testée.
 
 ## Authentification et appareil
@@ -69,12 +70,14 @@ Réponse : `{"device_id":"UUID-serveur"}`, **pas** `{id}`.
 - `name` : chaîne de 2 à 120 caractères ; fingerprint : chaîne ≥8.
 - `platform` : `android`, `ios`, `web`.
 - `app_version`, `fcm_token`, `apns_token` : chaînes optionnelles/nullable comme les DTO.
-- L'enregistrement actuel **n'est pas idempotent**. Ne pas l'appeler à chaque poll
-  ni le rejouer aveuglément après timeout. Sa reprise, le device stable et le scope
-  `(organization_id, user_id, installation)` seront implémentés/testés en F2.
-- Le serveur vérifie actuellement l'appareil actif **dans le tenant**, pas son
-  propriétaire individuel dans le parcours sync. L'isolation utilisateur demeure
-  un point F2/F3 ; ce document ne promet pas un contrôle qui n'existe pas.
+- F2 : enregistrement idempotent via verrou transactionnel par scope
+  `(organization_id, user_id, fingerprint)` ; le client persiste son fingerprint
+  avant le POST, conserve le device_id et ne réinscrit pas à chaque poll.
+- Appareil révoqué/inactif : 403 DEVICE_REVOKED ; doublons historiques ambigus :
+  409 DEVICE_REGISTRATION_AMBIGUOUS. Jamais de réactivation ou fusion automatique.
+- Le serveur exige maintenant l'appareil actif **du tenant ET de l'utilisateur**
+  authentifié. Révocation self-service : propriétaire uniquement, sinon 404.
+- Détails et limites (SQL direct, métadonnées, migration locale) dans le runbook F2.
 
 ## Push
 
@@ -103,7 +106,7 @@ Réponse : `{"device_id":"UUID-serveur"}`, **pas** `{id}`.
 - Les propriétés supplémentaires sont refusées, sauf dans `payload`.
 - Le lot est parcouru dans l'ordre fourni, **une transaction par opération**, pas
   de transaction globale. `event_id` est la clé d'idempotence ; `client_sequence`
-  n'est ni un curseur serveur ni un acquittement. Sa persistance locale reste F2.
+  n'est ni un curseur serveur ni un acquittement. Sa persistance locale est livrée en F2.
 - Commandes connues : `check_in`, `check_out`, `mark_absent`, `log_meal`,
   `log_nap_start`, `log_nap_end`, `log_diaper`, `log_activity`, `log_temperature`,
   `log_note`, `add_photo`, `log_incident`, `correct_attendance`.
@@ -122,7 +125,7 @@ Réponse obligatoire, même avec un lot vide :
 - Autres motifs existants : `DEVICE_REVOKED`, `ALREADY_PROCESSED`,
   `INVALID_DEVICE_TIME`, `DEVICE_TIME_AHEAD`, `INTERNAL_ERROR`, et ceux des services métier.
 - Ne jamais acquitter une opération absente des trois tableaux. `INTERNAL_ERROR`
-  n'est pas une preuve de rejet définitif. La politique locale de reprise reste F2.
+  n'est pas une preuve de rejet définitif. F2 conserve les opérations absentes/INTERNAL_ERROR et bloque les ACK incohérents.
 - La forme `conflicts` est contractualisée, mais **ni l'absence d'effet d'un conflit
   ni la stabilité de sa réponse au rejeu ne sont démontrées** : à tester/corriger en F3/F4.
 
@@ -151,7 +154,7 @@ est un **400**, pas une erreur SQL 500. Les valeurs HTTP query sont textuelles.
 - Répéter le dernier curseur n'inclut pas à nouveau les événements déjà lus.
 - `sync_cursors` conserve la dernière valeur servie ; ce n'est **pas une preuve
   d'application/acquittement du miroir local**. Le client reste responsable de
-  conserver sa page et son curseur dans une même transaction Drift (F2).
+  conserver sa page et son curseur dans une même transaction Drift (livré F2).
 - Le `next_cursor` d'un **push ne doit jamais remplacer le curseur de pull**.
 - **Réserve critique F3 : BIGSERIAL n'est pas un ordre de commit.** Un écrivain A
   lent peut réserver un ID inférieur à celui de B déjà committé. Cette correction

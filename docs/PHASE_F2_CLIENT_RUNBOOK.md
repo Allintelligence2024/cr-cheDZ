@@ -91,8 +91,8 @@ sont documentés dans F0. Aucun merge autorisé par ces tests.
 ## Gate
 
 `node scripts/check-staff-sync.mjs` : Flutter réel, pas un mock du moteur/Drift.
-Sur GitHub, Docker `ghcr.io/cirruslabs/flutter:3.44.0` (aligné avec le SDK minimal
-du lockfile) copie l'app dans un répertoire éphémère, fait `pub get
+Sur GitHub, Docker `ghcr.io/cirruslabs/flutter:3.47.1` (SDK dont les dépendances flutter_test correspondent au lockfile :
+test_api 0.7.12, matcher 0.12.20) copie l'app dans un répertoire éphémère, fait `pub get
 --enforce-lockfile`, exécute les tests et analyse l'app. Aucun SDK/fichier généré
 par pub n'est committé, aucun workflow modifié. Le gate ne masque pas un exit non nul.
 Les deux reproductions initiales utilisaient Flutter 3.35.4 et son graphe résolu ;
@@ -100,3 +100,10 @@ la validation finale exige le lockfile existant, sans downgrade implicite.
 
 Résultats finaux : voir les checks du dernier HEAD et le bilan de la PR #44.
 Ce gate **n'est pas** un APK Android release ni le parcours Flutter → vraie API F4.
+
+
+Le premier essai sur Flutter 3.44.0 a été **refusé par --enforce-lockfile** :
+le SDK aurait modifié 15 dépendances. Le minimum SDK indiqué au pied du lockfile
+ne suffit pas à désigner son SDK de résolution. Les pubspec Flutter/Flutter_test
+au tag 3.47.1 ont été vérifiés via GitHub ; ce SDK est épinglé sans modifier le
+lockfile. Ni ce refus ni les reproductions rouges ne sont des validations F2.

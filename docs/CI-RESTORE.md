@@ -155,3 +155,20 @@ API positive est reprise dans phase29 (26 assertions, dont limites int32/JS/int6
 **Ce gate est F1, pas F4** : le transport Dart est un enregistreur, la suite API
 utilise Node ; le moteur Flutter/Drift et les producteurs child restent ouverts.
 Aucun workflow modifié. Voir [contrat sync](architecture/sync-contract.md).
+
+
+### Complément F2 — vrai Flutter/Drift, SDK et lockfile alignés
+
+`check-staff-sync.mjs` est appelé en premier dans le gate D sur GitHub (ou
+RUN_STAFF_SYNC=1 local). Il utilise Flutter **3.47.1**, copie l'app dans le
+conteneur, exécute `pub get --enforce-lockfile`, tous les tests Flutter puis
+`flutter analyze --no-fatal-infos`. Erreur/timeout = échec du job database.
+Les résultats et erreurs synthétiques sont également des annotations GitHub.
+Aucun workflow modifié. Sans SDK/Docker ici, aucune exécution Flutter locale.
+
+Le gate historique Flutter d'analyse seul ne constitue pas cette preuve. Les
+premiers vrais tests ont révélé une classe Drift/imports incorrects, puis deux
+appels sans device. Après correction : moteur réel, Drift natif, stockage par
+scope, page/curseur atomiques et réponses tardives. La batterie API compte
+**33 suites/contrôles**, avec phase30 et ses 7 assertions de sécurité/reprise device.
+Le détail et les réserves F3/F4 sont dans `PHASE_F2_CLIENT_RUNBOOK.md`.

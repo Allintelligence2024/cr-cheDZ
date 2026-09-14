@@ -1,8 +1,8 @@
-# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.5)
+# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.6)
 
 > **Document de pilotage pour la prochaine session agent.**
 > Remplace la v1.x du même fichier (historique : voir `git log -- docs/PLAN_CORRECTION_AUDIT_2026-09.md`).
-> **Version** : 2.5 — 2026-09-14. Reprend la v2.0 mergée par la PR #43 (`d2bd1f9`)
+> **Version** : 2.6 — 2026-09-14. Reprend la v2.0 mergée par la PR #43 (`d2bd1f9`)
 > et ajoute le suivi local D/E1–E6 sur `arena/01a09e7f-cr-chedz` (pas encore mergé).
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md),
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md) et à la [matrice d'autorisation](architecture/authorization-matrix.md).
@@ -35,7 +35,8 @@
 - **F1 livré comme artefact** : schéma partagé, générateur TS/Dart, 49/49 cas
   schéma/DTO locaux ; gate Dart obligatoire en CI (voir `architecture/sync-contract.md`).
   **F3 curseurs corrigés** : 5/23 avant → 23/23 après, suite enrichie **26/26**.
-  Pas encore d’intégration du client généré dans Flutter/Drift, ni de gate F4. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
+  Intégration **F2 maintenant livrée** (voir runbook F2), gate Flutter réel requis ;
+  toujours pas de gate F4 complet. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
   du choix « mois partiels non facturés » des contrats de garde.
 - **Réserves D** : Docker non démarré ici, écart Compose PostgreSQL 16 / tests 18.4,
   gate CI strict désormais raccordé via le runner existant (validé en PR #44 sur 955b9cd). Ne pas confondre preuve locale et déploiement.
@@ -291,20 +292,36 @@ Artefact versionné livré : [contrat v1](architecture/sync-contract.md).
 - [x] Enveloppes exactes, erreurs, types et limites : `packages/sync-contract/`.
       Curseur string int64 partout ; payloads métier/projections restent F3.
 - [x] Générateur maison minimal : client réseau Dart et validateur API utilisés
-      par le gate ; `--check` interdit les dérives. **Le moteur Flutter existant
-      n'est pas encore branché sur ce client généré.**
+      par le gate ; `--check` interdit les dérives. **Le moteur Flutter est maintenant branché en F2.**
 - **Gate F1 deux côtés** : `scripts/check-sync-contract.mjs` doit réussir en CI :
   vrai Dart → six requêtes sérialisées → schéma AJV + vrais DTO TypeScript,
   corpus commun de 49 cas. Local sans SDK : `--node-only` explicitement partiel.
   Résultat de la dernière exécution : consulter PR #44 ; aucun skip Dart autorisé
   sur GitHub. Ce transport enregistreur n'est **pas** le gate F4.
 
-### F2. Corriger le client Dart
+### F2. Client Dart/Drift — implémenté, gate Flutter strict
 
-- [ ] `device_id` stable (UUID persisté localement ou issu de `POST /devices`) envoyé dans
-      **chaque** push/pull ; enregistrement avant la première sync.
-- [ ] Parser le curseur dans le bon type ; stocker/rejouer via Drift (`app_database.dart`).
-- [ ] Gérer le 400/401 explicitement (aujourd'hui l'échec de sync est probablement silencieux).
+Voir [runbook F2](PHASE_F2_CLIENT_RUNBOOK.md) pour les preuves avant correction,
+le rollback et les limites de projection. Le résultat du gate réel est celui de
+la dernière CI de la PR #44, pas celui du simple check historique `flutter-check`.
+
+- [x] Client réseau généré branché via SyncClient ; enregistrement avant toute
+      sync, fingerprint et device persistés ; retry serveur idempotent par scope.
+- [x] Namespace `(tenant, utilisateur)` dans fichiers Drift distincts ; ancien
+      fichier global préservé mais jamais réaffecté automatiquement.
+- [x] Curseur texte et application de page dans une transaction Drift ; séquence
+      locale persistée atomiquement avec la file ; aucune adoption du curseur push.
+- [x] 400/401/403 visibles, retries automatiques bloqués ; pending conservés.
+- [x] Garde single-flight avant connectivité, listeners/timers annulés ; client
+      API à token fixe par session, réponses tardives ignorées à la clôture.
+- [x] Pré-requis serveur : propriétaire du device exigé en push/pull et révocation
+      self-service ; 7/7 tests API après reproductions 1/6 puis 6/7.
+- **Gate F2** : vrai Flutter + Drift natif, tests de reprise/isolation/rollback/ACK,
+  puis analyse ; Flutter 3.47.1 et `pub get --enforce-lockfile`. Aucun SDK local
+  ni APK release revendiqué. Les tests de transport initiaux ont échoué **0/2**
+  sur le vrai Flutter avant correction ; voir les runs archivés dans le runbook.
+- **Ne pas déployer encore** : projections journal/media inconnues bloquent la
+  page sans avancer le curseur. F3 (producteurs/projections/commit order) puis F4.
 
 ### F3. Corriger le serveur si nécessaire
 
@@ -312,8 +329,8 @@ Artefact versionné livré : [contrat v1](architecture/sync-contract.md).
       pull vide/non vide et push ; erreurs 400 avant SQL. Suite `phase29` **26/26**.
 - [ ] Émetteurs `child` : projection minimale, bootstrap, tous les chemins, tombstones.
 - [ ] Ordre de commit/pagination sûre : reproduire A lente/B rapide, puis corriger.
-- [ ] Intégrité/scope device : FK simples déjà présentes depuis 006 (ne pas les
-      réinventer) ; contrôler le scope utilisateur et tenant composé si nécessaire.
+- [x] Scope utilisateur du device vérifié côté API en F2 ; FK simples depuis 006.
+- [ ] Intégrité composite SQL pour écritures directes, si nécessaire après reproduction.
 - [ ] Conflit : reproduire absence d'effet métier et réponse stable au rejeu avant correction.
 
 ### F4. GATE — test bout-à-bout (le vrai livrable)

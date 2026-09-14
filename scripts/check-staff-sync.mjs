@@ -11,7 +11,7 @@ const docker = process.env.GITHUB_ACTIONS === 'true' || process.env.FLUTTER_USE_
 const script = 'set -eu; cp -a /source/apps/staff-mobile /tmp/staff; cd /tmp/staff; flutter pub get --enforce-lockfile; flutter test --reporter expanded; flutter analyze --no-fatal-infos';
 const result = spawnSync(docker ? 'docker' : 'flutter', docker ? [
   'run', '--rm', '-v', `${root}:/source:ro`, '--entrypoint', 'bash',
-  'ghcr.io/cirruslabs/flutter:3.44.0', '-c', script,
+  'ghcr.io/cirruslabs/flutter:3.47.1', '-c', script,
 ] : ['test', 'test/sync_f2_test.dart', '--reporter', 'expanded'], {
   cwd: docker ? root : resolve(root, 'apps/staff-mobile'),
   encoding: 'utf8', timeout: 900000, maxBuffer: 8 * 1024 * 1024,
@@ -22,4 +22,4 @@ if (result.error || result.status !== 0) {
   console.error('::error title=F2 Flutter gate::' + details.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A'));
   process.exit(result.status || 1);
 }
-console.log('✓ F2 : real Flutter tests passed (not an Android release/F4 gate).');
+console.log('::notice title=F2 Flutter passed::Real Flutter tests and analysis passed with the enforced lockfile. Not an Android release or F4 gate.');
