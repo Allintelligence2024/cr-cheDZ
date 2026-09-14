@@ -40,9 +40,12 @@ function run(command, args, overrides = {}) {
     process.exit(result.status || 1);
   }
 }
-// H1 is an independent disposable stack, never the API test cluster.
+// H1 is independent: collect its failure but still run the sync regressions.
+let stagingFailed = false;
+// Never the API test cluster.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_STAGING_STACK === '1') {
-  run(process.execPath, ['scripts/test-staging-stack.mjs']);
+  const staging = spawnSync(process.execPath, ['scripts/test-staging-stack.mjs'], { env, stdio: 'inherit' });
+  stagingFailed = !!staging.error || staging.status !== 0;
 } else { console.log('H1 staging NOT EXECUTED locally (Docker required).'); }
 // F2 first: compile/run the real Flutter client, not just the wire fixture.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_STAFF_SYNC === '1') {
@@ -79,6 +82,8 @@ run(process.execPath, ['scripts/check-sync-contract.mjs', ...(env.GITHUB_ACTIONS
 console.log(`Logs isolation : ${env.ISOLATION_LOG_DIR}`);
 run('bash', ['scripts/run-isolation-suites.sh']);
 console.log('✓ GATE D : régressions Phase D + 36 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+
+if (stagingFailed) { console.error('H1 staging failed; overall gate remains RED.'); process.exit(1); }
 
 // F0 is archived evidence of the previous protocol, not a permanent bug gate.
 // Positive F1/F3 regressions now run as phase29 in the isolation battery.

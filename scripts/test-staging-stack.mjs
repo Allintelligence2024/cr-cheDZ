@@ -31,6 +31,11 @@ const prefix = ['compose', '--env-file', '/dev/null', '-p', project, '-f', resol
 function docker(args, { timeout = 600000, quiet = false } = {}) {
   const result = spawnSync('docker', args, { env, encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024 });
   if (!quiet) { process.stdout.write(result.stdout ?? ''); process.stderr.write(result.stderr ?? ''); }
+  if (result.status !== 0) {
+    let details = `${result.error ?? ''}\n${result.stdout ?? ''}\n${result.stderr ?? ''}`.slice(-12000);
+    for (const value of [appPassword, migratorPassword, env.POSTGRES_PASSWORD, env.JWT_SECRET, env.JWT_REFRESH_SECRET, env.MINIO_ROOT_PASSWORD]) details = details.replaceAll(value, '[redacted]');
+    for (let n = 0; n < details.length; n += 2000) console.error(`::error title=H1 command ${n / 2000 + 1}::` + details.slice(n, n + 2000).replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A'));
+  }
   assert.equal(result.status, 0, `Docker command failed: ${args.slice(0,3).join(' ')}`);
   return result.stdout.trim();
 }
