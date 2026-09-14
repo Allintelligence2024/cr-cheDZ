@@ -1,7 +1,7 @@
 # Contrat de transport sync v1 — F1
 
 Date : 2026-09-14. **Artefact livré, pas une déclaration de sync Flutter fonctionnelle.**
-Le contrat décrit les enveloppes réseau ; les autres projections métier restent ouvertes ; ordre de publication F3c et gate réel F4 documentés ci-dessous.
+Le contrat décrit les enveloppes réseau et les quatre projections actuellement produites ; ordre de publication F3c et gate réel F4 documentés ci-dessous. Android release et les détails/pièces jointes hors ligne ne sont pas qualifiés.
 Le stockage Drift et le raccordement au moteur sont livrés en F2, voir
 [runbook F2](../PHASE_F2_CLIENT_RUNBOOK.md).
 
@@ -141,7 +141,8 @@ Réponse obligatoire, même avec un lot vide :
   vérification manuelle, aucune version historique inventée ni réexécution automatique.
   Les anciens ACK acceptés restent reconnus. Preuves : [runbook F3a](../PHASE_F3A_OUTCOMES_RUNBOOK.md).
 - F4 exécute désormais le vrai moteur Flutter/Drift contre l'API (voir runbook),
-  sur le parcours enfants/présences. Les autres projections restent ouvertes.
+  sur les quatre types produits, y compris les métadonnées journal/médias.
+  Les détails de dossiers/pièces jointes hors ligne ne font pas partie de ce contrat.
 
 ## Pull et curseur int64
 

@@ -368,6 +368,8 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       indépendante : 11 opérations, 9 événements journal, 3 médias, pas de doublons.
       Batterie portée à **37 suites/contrôles** ; résultat de clôture du **dernier HEAD**
       dans les checks PR #44 (`F4 Flutter API passed` requis, pas le seul job Flutter).
+      **7/7 + PG acquis sur d9d2720**, run `34855762767` ; 37/37 local. Le gate
+      global de ce run reste rouge pour les nouveaux défauts d'image H1 ci-dessous.
 - [ ] **Qualification de déploiement / Android APK release** : distincte de F fonctionnelle.
       Journal/media sont des métadonnées, pas un téléchargement offline des dossiers.
       G/H et revue confidentialité/stockage restent nécessaires avant déploiement.
@@ -428,6 +430,10 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 - [x] Nouveau défaut **reproduit en vrai** : pull `minio/minio:latest` refusé, runs
       `34854334290` / `34854690262`. Image Quay versionnée + digest dans staging/prod/dev.
       Contrat structurel : **8/11 → 11/11** ; le téléchargement reste vérifié en CI.
+- [x] Défauts runtime reproduits après restauration de MinIO : presigner AWS
+      absent après prune, puis bcryptjs non hoisté absent de l'image. Dépendances
+      API runtime déclarées, modules du workspace copiés ; garde `npm ci --omit=dev`
+      isolé rouge → vert. Lock : métadonnées uniquement, aucune version/intégrité changée.
 - [x] **GATE réel implémenté et obligatoire** dans le runner CI existant, aucun workflow
       modifié : build images livrées → vrai compose staging → bootstrap/migrate/seed/
       schema-check → HTTP health API + job worker réellement terminé → destruction

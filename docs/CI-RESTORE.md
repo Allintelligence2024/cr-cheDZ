@@ -185,7 +185,7 @@ le rollback intégral. Migration additive 058, sans modifier 001–052/055.
 La suite tourne avec le rôle `creche_app` dans le gate strict, sans grants
 ajoutés par les helpers. Aucun workflow modifié. Les résultats du dernier HEAD
 sont dans la PR #44 ; voir `PHASE_F3A_OUTCOMES_RUNBOOK.md` pour les preuves,
-le rollback et les limites F3/F4 toujours ouvertes.
+le rollback et les limites historiques de ce lot (clôture fonctionnelle F ci-dessous).
 
 
 ### Complément F3b — enfants et tombstones
@@ -200,7 +200,7 @@ Les teardowns historiques purgent leur changelog synthétique **après** les enf
 car leur suppression physique produit désormais un tombstone. Le premier essai
 a réellement échoué sur les FK de nettoyage (RLS/phase4/phase5/phase6), sans défaut
 dans les assertions métier. Ne jamais désactiver le trigger/RLS pour contourner
-ce nettoyage. Voir `PHASE_F3B_CHILDREN_RUNBOOK.md` ; F3/F4 restent ouverts.
+ce nettoyage. Voir `PHASE_F3B_CHILDREN_RUNBOOK.md` ; les lots F suivants sont documentés ci-dessous.
 
 
 ### F3c / F4 — publication ordonnée et vraie API
@@ -238,3 +238,23 @@ deux gates ; la CI doit être verte sur le dernier HEAD. H1 est indépendant mai
 son échec reste bloquant pour le gate global. Aucun déploiement réel.
 Voir [runbook F/H1](PHASE_F_COMPLETION_H1_RUNBOOK.md) pour les limites (métadonnées
 seulement, pas de release Android ni de qualification G/H2/H3/dev/prod).
+
+
+### H1 — vrais défauts de l'image runtime, après restauration de MinIO
+
+Sur `d9d2720`, F4 est **7/7 vert avec PG**, mais le compose révèle un crash API :
+`@aws-sdk/s3-request-presigner` était une dépendance de développement racine,
+absente après prune. Le test isolé `scripts/check-api-runtime.mjs` reproduit ce
+crash, puis un second défaut : `bcryptjs` 2.x installé sous `apps/api/node_modules`
+n'était pas copié dans l'image. Ce sont deux défauts invisibles à un simple build.
+
+L'API déclare maintenant ses deux imports AWS comme dépendances runtime et son
+Dockerfile copie ses modules non hoistés après prune. Le lock ne change que de
+classification/ownership (2 ajouts, suppression d'un flag `dev`) : **aucune version,
+URL d'artefact ou intégrité modifiée**. Métadonnées actualisées par
+`npm prune --package-lock-only --ignore-scripts`, puis `npm ci` et audit prod 0.
+
+Le nouveau garde, obligatoire avant H1/F2/F4, fait un `npm ci --omit=dev` neuf hors
+du dépôt et charge le vrai `app.factory.js` dans la disposition des COPY de l'image.
+Il n'a ni NODE_PATH de développement ni fallback sur les node_modules du checkout.
+Ce garde d'import n'est pas substitué au vrai bootstrap HTTP/worker du compose.

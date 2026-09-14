@@ -38,4 +38,5 @@ if (result.error || result.status !== 0) {
   }
   process.exit(result.status || 1);
 }
-console.log('::notice title=F2 Flutter passed::Real Flutter tests and analysis passed with the enforced lockfile. Not an Android release or F4 gate.');
+const count = [...(result.stdout ?? '').matchAll(/\+(\d+): All tests passed!/g)].at(-1)?.[1] ?? 'All';
+console.log(`::notice title=F2 Flutter passed::${count} real Flutter tests and analysis passed with the enforced lockfile. Not an Android release or F4 gate.`);

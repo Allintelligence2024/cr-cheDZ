@@ -39,7 +39,12 @@ avancer ». Les opérations en attente/conflit et l'historique restent conservé
   journal → `contractError`, média → `Unsupported projection: media`, reprise bloquée.
   La preuve précède les correctifs Dart ; les cinq tests enfants/présences antérieurs
   restent acquis (la reprise étendue est désormais un des trois rouges).
-  Le bilan vert du dernier HEAD est suivi dans la PR #44.
+  **Après correction : 7/7 + PG sur `d9d2720`**, run `34855762767`,
+  job `104014779214`. Le gate global de ce run reste rouge uniquement pour H1.
+- Batterie finale locale **37/37**, rôles de production ; typecheck/lint/build,
+  **27 unitaires** et audit production **0 vulnérabilité**. Les teardowns phase5/6
+  ont été corrigés après un premier **35/37** : suppression des fixtures dans
+  l'ordre des FK, sans désactiver les contraintes.
 - F4 est étendu à sept tests réels Dio/SyncEngine/Drift sur fichiers : les cinq
   acquis F3c/F4, les huit commandes journal + observation HTTP, photos HTTP/sync
   et document sans enfant, rejeu,
@@ -119,13 +124,29 @@ réparation. `schema-check.mjs` reste accessible à son chemin compatible ; un
 échouent avant démarrage sur `docker pull minio/minio:latest` : `pull access denied`.
 Le correctif pointe les trois compose vers la release Quay versionnée et le digest
 `sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`.
-Le même tag/digest et changement de registre sont documentés dans cette
+Le même tag/digest et changement de registre sont documentés ici :
 [3](https://github.com/opencollective/opencollective-api/pull/12091).
 Contrat structurel : **8/11 avant → 11/11 après** ; seul le gate réel qualifie le pull
 et le démarrage dans notre environnement. Ce pin restaure une dépendance historique,
 **pas une garantie de maintenance/sécurité de MinIO** : revue de stockage/CVE et
 stratégie de maintien à traiter avant déploiement, avec H2. Le poste Arena ne peut
 pas atteindre Quay ; la preuve de téléchargement est obligatoirement en CI.
+
+**Deux autres défauts runtime reproduits** :
+- `d9d2720` télécharge/démarre bien MinIO et exécute migrations/seeds/schema-check,
+  mais l'API ne trouve pas `@aws-sdk/s3-request-presigner` après prune. Dépendance
+  racine dev au lieu de dépendance API runtime.
+- Le test de disposition d'image isolé, après la correction du premier défaut,
+  révèle `bcryptjs` manquant : sa version 2.x est installée sous
+  `apps/api/node_modules`, non copiée par le Dockerfile.
+
+L'API déclare ses imports AWS, le Dockerfile copie ses modules non hoistés après
+prune. Le lock ne change que de métadonnées (2 dépendances déclarées, flag `dev`
+supprimé), **versions/résolutions/intégrités toutes inchangées**. Aucun `npm install`
+ni `npm audit fix` : refresh de métadonnées via `npm prune --package-lock-only`,
+puis vrais `npm ci` (complet et `--omit=dev`) et audit production zéro.
+`scripts/check-api-runtime.mjs` reproduit les deux erreurs puis passe localement.
+Il est obligatoire dans le runner CI, sans remplacer le vrai démarrage H1.
 
 `scripts/test-staging-stack.mjs`, appelé par le runner CI existant, doit :
 

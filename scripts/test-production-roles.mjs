@@ -40,6 +40,8 @@ function run(command, args, overrides = {}) {
     process.exit(result.status || 1);
   }
 }
+// Fast production-layout reproduction before the slower Docker/Flutter gates.
+run(process.execPath, ['scripts/check-api-runtime.mjs']);
 // H1 is independent: collect its failure but still run the sync regressions.
 let stagingFailed = false;
 // Never the API test cluster.
