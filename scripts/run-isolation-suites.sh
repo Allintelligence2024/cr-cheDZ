@@ -63,6 +63,7 @@ SUITES=(
   phase34-sync-completion.api.test.mjs
   phase35-confidentiality.api.test.mjs
   phase28-worker-reliability.test.mjs
+  phase36-notification-revocation.api.test.mjs
 )
 
 FILTER="${1:-}"

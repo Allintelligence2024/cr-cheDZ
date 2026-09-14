@@ -2,7 +2,7 @@ import { GoogleAuth } from 'google-auth-library';
 import { createSign } from 'node:crypto';
 import * as http2 from 'node:http2';
 import { Pool, PoolClient, types } from 'pg';
-import { assertApplicationDatabaseRole, assertProductionConfig, BUSINESS_TIME_ZONE, dateOnly, monthBounds } from '@creche/prod-config';
+import { assertApplicationDatabaseRole, assertProductionConfig, BUSINESS_TIME_ZONE, dateOnly, monthBounds, notificationAllowed, NOTIFICATION_DENIED_REASON } from '@creche/prod-config';
 import { buildXlsx, storeExport, type ExportPayload } from './exports';
 import { runWorker, type ClaimedJob, type JobHandlers } from './job-runtime';
 import { buildInvoicePdf, deleteFile, storePdf } from './pdf';
@@ -403,7 +403,19 @@ async function drainNotificationQueue(): Promise<void> {
   try {
     const claimed = await client.query(`SELECT id, organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data FROM notif_queue_claim(25)`);
     for (const n of claimed.rows) {
-      // Canal WhatsApp : envoi via l'API Graph — flag vérifié à l'insertion.
+      // Recheck current rights under tenant RLS, after claim and before any provider call.
+      try {
+        const allowed = await withTenant(n.organization_id, c => notificationAllowed(c, n.organization_id, n.user_id, n.data, n.channel));
+        if (!allowed) {
+          // E3: sent means consumed, not delivered. Preserve why nothing was sent; no retry.
+          await client.query('SELECT notif_queue_finish($1, true, $2)', [n.id, NOTIFICATION_DENIED_REASON]);
+          continue;
+        }
+      } catch (error) {
+        await client.query('SELECT notif_queue_finish($1, false, $2)', [n.id, String((error as Error).message).slice(0, 500)]);
+        continue;
+      }
+      // Canal WhatsApp : droits, téléphone et flag revalidés ci-dessus.
       if (n.channel === 'whatsapp') {
         try {
           await whatsappSend(n.body_fr, n.data);

@@ -469,10 +469,17 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
         Le finding Excel médical est précisé : déjà refusé par `/exports`, fuite réelle
         via `/privacy/requests/:id/export`. Exports financiers du comptable conservés.
         [Matrice](architecture/authorization-matrix.md) et [runbook H2](PHASE_H2_CONFIDENTIALITY_RUNBOOK.md).
-  - [ ] **H2b** : revalidation entre mise en file et livraison, lecture d'anciennes
-        inbox après révocation, anciennes queues WhatsApp sans identité enfant/événement,
-        autres projections/contrôles de gardien. Pas de purge masquante ni de preuve
-        d'envoi réel déduite des tests d'insertion en base. G reste ouvert.
+  - [x] **H2b notifications** : prédicat partagé producteur/worker/inbox, droits
+        revalidés après claim et avant fournisseur, inbox filtrée avant LIMIT et
+        mark-read protégé. Anciennes queues WhatsApp sans références refusées avec
+        motif conservé, sans purge/retry automatique. **13/50 → 50/50** scénarios
+        réels API/PG/worker avec transports HTTP locaux, dont révocation après claim.
+        [Runbook H2b](PHASE_H2B_NOTIFICATION_RUNBOOK.md). Pas de qualification des
+        fournisseurs réels ni de rappel garanti des messages déjà en vol/livrés.
+  - [ ] **Suite confidentialité** : autres projections/contrôles de gardien,
+        snapshots privacy historiques et routes registre/DPIA/violations. Révocation
+        globale des tokens et autres routes toujours à traiter en G. Pas de purge
+        masquante ; la grappe et l'aptitude à la production ne sont pas clôturées.
 - [ ] **`anonymize.sql`** : laisse `guardians`/`staff`/`messages`/`sessions` intacts (RGPD/loi 25-11).
 - [ ] **`/metrics` public** + totaux cross-tenant + format Prometheus invalide → authentifier (ou
       restreindre au réseau interne) et valider le format avec un parseur Prometheus réel.

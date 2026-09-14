@@ -77,11 +77,13 @@ Les gates Docker H1 et Flutter F2/F4 demeurent obligatoires sur GitHub. Leur sta
 se lit sur le HEAD courant de la PR, pas sur un commit antérieur ni sur le seul
 code de sortie de `gh run watch`.
 
-## Limites et suite obligatoire H2b
+## Frontière du lot et continuation H2b
 
 **La grappe confidentialité n'est pas clôturée par ce lot.** Le contrôle des
 notifications est ici à la création, pas une qualification de livraison externe.
-Restent à reproduire/corriger ensemble avant toute mise en production :
+Les points notifications 1 et 2 ci-dessous sont désormais traités dans le
+[lot H2b](PHASE_H2B_NOTIFICATION_RUNBOOK.md), avec leurs propres preuves et limites.
+La revue des autres projections et la gestion des snapshots restent ouvertes :
 
 1. Révocation entre mise en file et envoi effectif ; revalidation des droits,
    appartenances et visibilité au moment d'envoyer. Les anciens payloads WhatsApp
@@ -119,3 +121,11 @@ requiert les tests de confidentialité et les gates de rôles/isolation verts.
 - Préflight H1 : HEAD précédent `5469367`, CI **34871282171**, **9/9 checks verts** ;
   notices H1 dev/staging et F2/F4 confirmées. Ce résultat n'est pas réutilisé comme
   validation du nouveau code H2a.
+
+### Confirmation CI de H2a
+
+Commit `39cd22322be0f2bd7252c04e3863432c461a050b` : CI
+[34874774910](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34874774910),
+check database **104079135223**, **9/9 checks verts**. Notices H2a (21 scénarios),
+H1 dev/staging et F2/F4 vérifiées par l'API GitHub. Cette preuve ne remplace pas la
+CI du code H2b ajouté ensuite.

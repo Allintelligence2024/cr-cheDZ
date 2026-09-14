@@ -135,6 +135,12 @@ async function main() {
        VALUES ('p6.parent@test.dz', 'Salima', 'Parent', $1, 'active') RETURNING id`,
       [hash],
     );
+    // A notified parent must have completed tenant onboarding, not merely exist globally.
+    await admin.query(
+      `INSERT INTO memberships(organization_id,user_id,role_id,is_active)
+       SELECT $1,$2,id,true FROM roles WHERE slug='parent_primary'`,
+      [A.org, parentUser.rows[0].id],
+    );
     const guardian = await api('POST', '/children/guardians', tokenA, {
       first_name_fr: 'Salima', last_name_fr: 'Amrani', relationship: 'mother',
       phone_primary: '0550123456', email: 'salima@test.dz', user_id: parentUser.rows[0].id,

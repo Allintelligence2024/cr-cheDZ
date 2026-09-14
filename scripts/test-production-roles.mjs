@@ -90,7 +90,11 @@ const confidentiality = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase35-
   .match(/H2 confidentiality: (\d+) passed, 0 failed/);
 if (!confidentiality || Number(confidentiality[1]) < 21) throw new Error('H2a confidentiality evidence missing or incomplete');
 console.log(`::notice title=H2a confidentiality passed::${confidentiality[1]} real HTTP/PostgreSQL scenarios passed: journal notification creation and rights-export authorization/projections. Not provider delivery or post-queue revocation qualification.`);
-console.log('✓ GATE D : régressions Phase D + 38 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const revocation = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase36-notification-revocation.api.test.log'), 'utf8')
+  .match(/H2b notifications: (\d+) passed, 0 failed/);
+if (!revocation || Number(revocation[1]) < 50) throw new Error('H2b notification evidence missing or incomplete');
+console.log(`::notice title=H2b notifications passed::${revocation[1]} real API/PostgreSQL/worker scenarios passed, with loopback HTTP provider doubles. Rights rechecked after claim, inbox filtered before LIMIT, consumed refusals retained with reasons. Not a live FCM/APNs/Meta qualification or recall of delivered messages.`);
+console.log('✓ GATE D : régressions Phase D + 39 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

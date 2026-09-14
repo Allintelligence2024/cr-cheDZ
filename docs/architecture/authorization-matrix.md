@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v2 — audit 2026-09, Phases C/H2a)
+# Matrice d'autorisation par module (v3 — audit 2026-09, Phases C/H2a/H2b)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -68,3 +68,31 @@ pas d'une validation juridique de toutes les catégories du droit d'accès.
 historiques après révocation, permissions des autres routes privacy/parent. Le
 registre, les DPIA et les violations conservent leurs rôles antérieurs, à revoir
 avec H2b/G. Cette section ne clôture pas l'inventaire global des routes.
+
+## H2b — notifications : contrôle à chaque frontière
+
+Le prédicat commun est `packages/prod-config/src/notification-access.ts`, exécuté
+sous le rôle applicatif avec tenant local, sans privilège de lecture global.
+
+| Frontière | Contrôle actuel |
+|---|---|
+| Publication parent | Utilisateur/membership actifs ; lien gardien/enfant courant ; référence/type d'événement valides ; droits can_receive_push et, pour journal, can_view_journal ; visibilité et non-privé |
+| Worker après claim | Même règle revalidée avant appel du fournisseur ; préférence du canal courante ; WhatsApp : flag courant et téléphone toujours identique |
+| Lecture inbox | Même autorisation enfant/événement et état utilisateur/membership, en SQL **avant LIMIT 100** ; pas de couplage à la préférence/au flag du transport externe |
+| Mark-read | Même autorisation ; 204 sans mutation sur notification désormais interdite |
+| Queue refusée | Consommée une seule fois avec motif explicite de non-envoi (contrat E3) ; pas de retry après restauration des droits |
+| Ancien WhatsApp sans identité enfant/événement | Refusé comme invérifiable ; pas de reconstruction depuis le texte ou le numéro |
+
+Les messages génériques push/inbox sans scope ni indices d'événement enfant
+restent régis par utilisateur/membership actifs ; aucun endpoint ne permet à un
+client d'injecter arbitrairement ces messages. Un nouveau producteur doit déclarer
+sa portée et ses tests. Toute référence enfant fournie, même malformée, et tout
+scope déclaré inconnu entraînent un contrôle fermé.
+
+Les constantes de types journal H2a sont maintenant réexportées depuis ce package
+commun. Les quatre routes privacy self-service H2a ne changent pas dans ce lot.
+
+**Limites maintenues :** autres endpoints et révocation globale des tokens (G),
+autres projections privacy/parent et snapshots historiques, fournisseurs externes
+réels. Une vérification avant transport ne rappelle pas un message déjà transmis
+et n'est pas atomique avec une révocation simultanée sur un réseau externe.
