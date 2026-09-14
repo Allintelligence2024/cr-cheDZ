@@ -5,4 +5,4 @@ COPY . .
 RUN npm ci
 RUN npm run build --workspace @creche/prod-config
 # Bind only source directories in Compose, never hide /app or node_modules.
-CMD ["npm", "run", "start:dev", "--workspace", "@creche/worker"]
+CMD ["npm", "run", "dev", "--workspace", "@creche/admin-web"]

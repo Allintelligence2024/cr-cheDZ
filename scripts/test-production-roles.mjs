@@ -40,16 +40,18 @@ function run(command, args, overrides = {}) {
     process.exit(result.status || 1);
   }
 }
-run(process.execPath, ['--test', 'tests/tenant-isolation/registry-pull.test.mjs']);
+run(process.execPath, ['--test', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs']);
 // Fast production-layout reproduction before the slower Docker/Flutter gates.
 run(process.execPath, ['scripts/check-api-runtime.mjs']);
 // H1 is independent: collect its failure but still run the sync regressions.
-let stagingFailed = false;
+let stackFailed = false;
 // Never the API test cluster.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_STAGING_STACK === '1') {
   const staging = spawnSync(process.execPath, ['scripts/test-staging-stack.mjs'], { env, stdio: 'inherit' });
-  stagingFailed = !!staging.error || staging.status !== 0;
-} else { console.log('H1 staging NOT EXECUTED locally (Docker required).'); }
+  stackFailed = !!staging.error || staging.status !== 0;
+  const development = spawnSync(process.execPath, ['scripts/test-staging-stack.mjs', '--dev'], { env, stdio: 'inherit' });
+  stackFailed = stackFailed || !!development.error || development.status !== 0;
+} else { console.log('H1 staging/dev NOT EXECUTED locally (Docker required).'); }
 // F2 first: compile/run the real Flutter client, not just the wire fixture.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_STAFF_SYNC === '1') {
   run(process.execPath, ['scripts/check-staff-sync.mjs']);
@@ -86,7 +88,7 @@ console.log(`Logs isolation : ${env.ISOLATION_LOG_DIR}`);
 run('bash', ['scripts/run-isolation-suites.sh']);
 console.log('✓ GATE D : régressions Phase D + 37 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
-if (stagingFailed) { console.error('H1 staging failed; overall gate remains RED.'); process.exit(1); }
+if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 
 // F0 is archived evidence of the previous protocol, not a permanent bug gate.
 // Positive F1/F3 regressions now run as phase29 in the isolation battery.
