@@ -369,6 +369,7 @@ async function main() {
     await admin.query(`DELETE FROM child_status_history WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM daily_summaries WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM children WHERE organization_id IN ${orgIds}`);
+    await admin.query(`DELETE FROM sync_changelog WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM guardians WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM org_sequences WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM memberships WHERE organization_id IN ${orgIds}`);

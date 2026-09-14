@@ -5,6 +5,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import bcrypt from 'bcryptjs';
 import { appUrl, ensureAppRole } from './helpers.mjs';
 import { assertSchema } from '../contracts/schema-validator.mjs';
@@ -65,7 +67,7 @@ try {
     assert.equal(r.status, 201, JSON.stringify(r.body)); return r.body.id;
   }
   async function events(id) {
-    const rows = (await db.query('SELECT sync_seq::text,aggregate_type AS type,aggregate_id,event_type,payload FROM sync_changelog WHERE organization_id=$1 AND aggregate_id=$2 ORDER BY sync_seq', [org, id])).rows;
+    const rows = (await db.query('SELECT sync_seq::text,aggregate_type AS type,aggregate_id,event_type,payload FROM sync_changelog WHERE organization_id=$1 AND aggregate_id=$2 ORDER BY sync_changelog.sync_seq', [org, id])).rows;
     rows.forEach(e => { assert.equal(e.type, 'child'); assert.equal(e.payload.id, id); assert.equal(e.payload.organization_id, org); });
     return rows;
   }
@@ -152,6 +154,49 @@ try {
     assert.deepEqual(new Set(received.map(e => e.aggregate_id)), new Set(ids));
     assert.deepEqual(await pull(second.next_cursor), { events: [], next_cursor: second.next_cursor });
   });
+  await check('privileged tenant reassignment invalidates the OLD scope with a minimal tombstone', async () => {
+    const id = await create();
+    const target = (await db.query("INSERT INTO organizations(slug,name_fr,wilaya) VALUES($1,'Move target','31') RETURNING id", [`f3b-move-${suffix}`])).rows[0].id;
+    const targetSite = (await db.query("INSERT INTO sites(organization_id,name_fr) VALUES($1,'Target') RETURNING id", [target])).rows[0].id;
+    await db.query('UPDATE children SET organization_id=$2,site_id=$3,room_id=NULL,version=version+1 WHERE id=$1', [id, target, targetSite]);
+    const old = (await events(id)).at(-1); minimal(old, true); assert.equal(old.event_type, 'deleted');
+    const moved = (await db.query("SELECT payload FROM sync_changelog WHERE organization_id=$1 AND aggregate_id=$2", [target, id])).rows;
+    assert.equal(moved.length, 1); assert.equal(moved[0].payload.organization_id, target);
+  });
+  await check('migration bootstraps pre-existing live/deleted children; rehearsal fully rolls back', async () => {
+    // Replay the ACTUAL migration SQL against pre-059 fixtures, inside one
+    // reversible transaction. No migration file/registry is edited or deleted.
+    const upgrade = new pg.Client({ connectionString: process.env.MIGRATION_DATABASE_URL ?? adminUrl });
+    await upgrade.connect();
+    const live = randomUUID(), deleted = randomUUID();
+    try {
+      await upgrade.query('BEGIN'); await upgrade.query("SET LOCAL lock_timeout='5s'");
+      if (process.env.PRODUCTION_ROLE_TESTS === '1') {
+        assert.equal((await upgrade.query('SELECT current_user AS role')).rows[0].role, 'creche_migrator');
+      }
+      await upgrade.query('DROP TRIGGER sync_child_changed ON children');
+      await upgrade.query('DROP FUNCTION sync_child_changed(), sync_child_projection(children), sync_child_tombstone(children,timestamptz,bigint)');
+      await upgrade.query(`INSERT INTO children(id,organization_id,site_id,created_by,first_name_fr,last_name_fr,date_of_birth,deleted_at,notes)
+        VALUES($1,$3,$4,$5,'Legacy','Live','2024-02-29',NULL,'PRIVATE-LEGACY'),
+              ($2,$3,$4,$5,'Legacy','Deleted','2024-01-01',NOW(),'PRIVATE-DELETED')`, [live, deleted, org, site, user]);
+      assert.equal((await upgrade.query('SELECT 1 FROM sync_changelog WHERE aggregate_id=ANY($1::uuid[])', [[live, deleted]])).rowCount, 0);
+      await upgrade.query(readFileSync(new URL('../../infrastructure/database/migrations/059_sync_children.sql', import.meta.url), 'utf8'));
+      const rows = (await upgrade.query('SELECT aggregate_id,event_type,payload FROM sync_changelog WHERE aggregate_id=ANY($1::uuid[])', [[live, deleted]])).rows;
+      assert.equal(rows.length, 2);
+      const snapshot = rows.find(e => e.aggregate_id === live); minimal(snapshot); assert.equal(snapshot.event_type, 'snapshot');
+      const tombstone = rows.find(e => e.aggregate_id === deleted); minimal(tombstone, true); assert.equal(tombstone.event_type, 'deleted');
+    } finally { await upgrade.query('ROLLBACK'); await upgrade.end(); }
+    assert.equal((await db.query('SELECT 1 FROM children WHERE id=ANY($1::uuid[])', [[live, deleted]])).rowCount, 0);
+    // DDL rollback must have restored the installed trigger, not disabled sync.
+    const id = await create(); assert.equal((await events(id)).length, 1);
+  });
+  await check('normal migration rerun does not duplicate the bootstrap', async () => {
+    const count = async () => (await db.query('SELECT count(*)::text AS n FROM sync_changelog')).rows[0].n;
+    const before = await count();
+    const output = execFileSync(process.execPath, ['scripts/migrate.mjs'], { env: { ...process.env, DATABASE_URL: adminUrl }, encoding: 'utf8', timeout: 30000 });
+    assert.match(output, /Aucune migration en attente/); assert.equal(await count(), before);
+  });
+
 } finally {
   if (app) await app.close(); if (pool) await pool.end(); if (scoped) await scoped.end(); await db.end();
 }

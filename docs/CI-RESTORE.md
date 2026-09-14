@@ -186,3 +186,18 @@ La suite tourne avec le rôle `creche_app` dans le gate strict, sans grants
 ajoutés par les helpers. Aucun workflow modifié. Les résultats du dernier HEAD
 sont dans la PR #44 ; voir `PHASE_F3A_OUTCOMES_RUNBOOK.md` pour les preuves,
 le rollback et les limites F3/F4 toujours ouvertes.
+
+
+### Complément F3b — enfants et tombstones
+
+La batterie passe à **35 suites/contrôles** avec phase32 : 13 contrôles HTTP/PG,
+bootstrap/rejeu de la migration 059 et pagination statique 501 enfants compris.
+Flutter : 9 nouveaux tests du projecteur/vrai écran ; reproduction 23/31 sur
+2300816 avant correction. Résultat final : dernier HEAD de la PR #44, gate strict
+`database`, pas seulement `flutter-check`.
+
+Les teardowns historiques purgent leur changelog synthétique **après** les enfants,
+car leur suppression physique produit désormais un tombstone. Le premier essai
+a réellement échoué sur les FK de nettoyage (RLS/phase4/phase5/phase6), sans défaut
+dans les assertions métier. Ne jamais désactiver le trigger/RLS pour contourner
+ce nettoyage. Voir `PHASE_F3B_CHILDREN_RUNBOOK.md` ; F3/F4 restent ouverts.

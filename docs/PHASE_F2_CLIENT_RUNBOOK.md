@@ -77,8 +77,9 @@ avant l'attente connectivité ; listeners/timers désabonnés à l'arrêt.
 
 ## Limites et rollback
 
-**F3/F4 toujours ouverts.** Pas de producteurs child ajoutés ; bootstrap,
-tombstones et ordre de commit BIGSERIAL restent à traiter. Les projections
+**F3/F4 toujours ouverts.** Producteurs child, bootstrap et tombstones sont
+maintenant traités en [F3b](PHASE_F3B_CHILDREN_RUNBOOK.md). L'ordre de commit
+BIGSERIAL reste à traiter. Les projections
 actuellement appliquées sont child/attendance. Journal/media/type futur non pris
 en charge **bloque la page sans avancer le curseur** : pas de perte silencieuse.
 Ce blocage explicite interdit de présenter ce lot comme une sync complète prête

@@ -1,4 +1,4 @@
-# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.7)
+# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.8)
 
 > **Document de pilotage pour la prochaine session agent.**
 > Remplace la v1.x du même fichier (historique : voir `git log -- docs/PLAN_CORRECTION_AUDIT_2026-09.md`).
@@ -327,7 +327,11 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 
 - [x] Curseur cohérent string int64 : DTO sans Number, SQL sans cast int32,
       pull vide/non vide et push ; erreurs 400 avant SQL. Suite `phase29` **26/26**.
-- [ ] Émetteurs `child` : projection minimale, bootstrap, tous les chemins, tombstones.
+- [x] **F3b enfants** : producteur SQL transactionnel, projection minimale de 13 champs,
+      bootstrap initial et tombstones ; migration 059. API : 3/10 avant → 13/13 enrichis.
+      Flutter : 23/31 avant correction (8 vrais rouges), gate strict du dernier HEAD requis.
+      Voir [runbook F3b](PHASE_F3B_CHILDREN_RUNBOOK.md), limites et rollback.
+      La batterie contient désormais 35 suites/contrôles.
 - [ ] Ordre de commit/pagination sûre : reproduire A lente/B rapide, puis corriger.
 - [x] Scope utilisateur du device vérifié côté API en F2 ; FK simples depuis 006.
 - [ ] Intégrité composite SQL pour écritures directes, si nécessaire après reproduction.

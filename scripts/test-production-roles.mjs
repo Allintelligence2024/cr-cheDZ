@@ -65,7 +65,7 @@ if (env.GITHUB_ACTIONS === 'true' || env.RUN_MONITORING_STACK === '1') {
 run(process.execPath, ['scripts/check-sync-contract.mjs', ...(env.GITHUB_ACTIONS === 'true' || env.RUN_SYNC_DART === '1' ? [] : ['--node-only'])]);
 console.log(`Logs isolation : ${env.ISOLATION_LOG_DIR}`);
 run('bash', ['scripts/run-isolation-suites.sh']);
-console.log('✓ GATE D : régressions Phase D + 34 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+console.log('✓ GATE D : régressions Phase D + 35 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 // F0 is archived evidence of the previous protocol, not a permanent bug gate.
 // Positive F1/F3 regressions now run as phase29 in the isolation battery.

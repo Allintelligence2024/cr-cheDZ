@@ -125,6 +125,7 @@ void main() {
       'created_at': '2026-09-14T08:00:00Z', 'payload': {
         'id': child, 'organization_id': org, 'site_id': org, 'first_name_fr': 'Test',
         'last_name_fr': 'Enfant', 'date_of_birth': '2024-01-01', 'status': 'active',
+        'version': 1, 'is_walking': false,
       },
     }] : [], 'next_cursor': '1'};
     h.online = true; await tester.runAsync(h.engine.sync);

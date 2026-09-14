@@ -391,6 +391,7 @@ const main = async () => {
       await db.query(`DELETE FROM invoices WHERE organization_id IN (${orgs})`);
       await db.query(`DELETE FROM contracts WHERE organization_id IN (${orgs})`);
       await db.query(`DELETE FROM children WHERE organization_id IN (${orgs})`);
+      await db.query(`DELETE FROM sync_changelog WHERE organization_id IN (${orgs})`);
       await db.query(`DELETE FROM data_access_logs WHERE organization_id IN (${orgs})`);
       await db.query(`DELETE FROM privacy_dpias WHERE organization_id IN (${orgs}) OR approved_by IN (SELECT id FROM users WHERE email LIKE 'p22-%')`);
       await db.query(`DELETE FROM audit_logs WHERE organization_id IN (${orgs})`);

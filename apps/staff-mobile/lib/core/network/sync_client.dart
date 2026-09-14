@@ -56,28 +56,63 @@ class SyncClient {
     }
     if (type == 'child') {
       final child = event['payload'] as Map<String, dynamic>;
-      if (child['organization_id'] != db.scope.organizationId) throw const FormatException('Cross-scope child event');
+      final id = _uuid(child['id']);
+      final organizationId = _uuid(child['organization_id']);
+      if (organizationId != db.scope.organizationId || _uuid(event['aggregate_id']) != id) {
+        throw const FormatException('Cross-scope or mismatched child identity');
+      }
+      final version = child['version'];
+      if (version is! int || version < 1) throw const FormatException('Invalid child version');
+      final kind = event['event_type'];
+      if (kind == 'deleted') {
+        final removedAt = child['deleted_at'];
+        if (removedAt is! String || !removedAt.contains('T') || DateTime.tryParse(removedAt) == null) {
+          throw const FormatException('Invalid child tombstone');
+        }
+        // Only remove the child mirror. NEVER delete/reassign its operation queue.
+        // The engine encloses projection changes and cursor in the same transaction.
+        await (db.delete(db.localChildren)..where((t) => t.id.equals(id))).go();
+        return;
+      }
+      if (kind != 'created' && kind != 'updated' && kind != 'snapshot') {
+        throw FormatException('Unsupported child event: $kind');
+      }
+      final birth = child['date_of_birth'];
+      final parsedBirth = birth is String ? DateTime.tryParse(birth) : null;
+      if (birth is! String || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(birth) ||
+          parsedBirth == null || parsedBirth.toIso8601String().substring(0, 10) != birth) {
+        throw const FormatException('Invalid child calendar date');
+      }
+      final walking = child['is_walking'];
+      if (walking is! bool) throw const FormatException('Invalid child walking flag');
       await db.into(db.localChildren).insertOnConflictUpdate(
-            LocalChildrenCompanion.insert(
-              id: child['id'] as String,
-              organizationId: child['organization_id'] as String,
-              siteId: child['site_id'] as String,
-              roomId: Value<String?>(child['room_id'] as String?),
-              firstNameFr: child['first_name_fr'] as String,
-              firstNameAr: Value<String?>(child['first_name_ar'] as String?),
-              lastNameFr: child['last_name_fr'] as String,
-              lastNameAr: Value<String?>(child['last_name_ar'] as String?),
-              dateOfBirth: child['date_of_birth'] as String,
-              photoUrl: Value<String?>(child['photo_url'] as String?),
-              status: child['status'] as String,
-              isWalking: Value(child['is_walking'] as bool? ?? false),
-              serverVersion: Value(child['version'] as int? ?? 0),
-              syncedAt: Value(DateTime.now().toIso8601String()),
-            ),
-          );
+        LocalChildrenCompanion.insert(
+          id: id, organizationId: organizationId,
+          siteId: _uuid(child['site_id']),
+          roomId: Value<String?>(child['room_id'] == null ? null : _uuid(child['room_id'])),
+          firstNameFr: child['first_name_fr'] as String,
+          firstNameAr: Value<String?>(child['first_name_ar'] as String?),
+          lastNameFr: child['last_name_fr'] as String,
+          lastNameAr: Value<String?>(child['last_name_ar'] as String?),
+          dateOfBirth: birth,
+          photoUrl: Value<String?>(child['photo_url'] as String?),
+          status: child['status'] as String,
+          isWalking: Value(walking), serverVersion: Value(version),
+          syncedAt: Value(DateTime.now().toIso8601String()),
+        ),
+      );
+      return;
     }
     if (type != 'attendance' && type != 'child') {
       throw FormatException('Unsupported projection: $type');
     }
   }
+
+  static String _uuid(Object? value) {
+    if (value is! String || !RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(value)) {
+      throw const FormatException('Invalid child identity');
+    }
+    return value.toLowerCase();
+  }
+
 }

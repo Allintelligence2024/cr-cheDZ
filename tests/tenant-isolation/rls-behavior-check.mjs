@@ -192,6 +192,7 @@ async function main() {
     await admin.query(`DELETE FROM daily_log_events WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'test-org-%')`);
     await admin.query(`DELETE FROM invoices WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'test-org-%')`);
     await admin.query(`DELETE FROM children WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'test-org-%')`);
+    await admin.query(`DELETE FROM sync_changelog WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'test-org-%')`);
     await admin.query(`DELETE FROM rooms WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'test-org-%')`);
     await admin.query(`DELETE FROM sites WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'test-org-%')`);
     await admin.query(`DELETE FROM users WHERE email IN ('edu.a@test.dz', 'edu.b@test.dz')`);

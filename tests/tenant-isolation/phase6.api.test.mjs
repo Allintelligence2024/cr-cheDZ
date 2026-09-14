@@ -407,7 +407,6 @@ async function main() {
     const orgIds = `(SELECT id FROM organizations WHERE slug LIKE 'p6-%')`;
     await admin.query(`DELETE FROM sync_operations WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM sync_cursors WHERE organization_id IN ${orgIds}`);
-    await admin.query(`DELETE FROM sync_changelog WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM media_access_logs WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM media_assets WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM notification_queue WHERE organization_id IN ${orgIds}`);
@@ -427,6 +426,7 @@ async function main() {
     await admin.query(`DELETE FROM room_moves WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM child_status_history WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM children WHERE organization_id IN ${orgIds}`);
+    await admin.query(`DELETE FROM sync_changelog WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM guardians WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM org_sequences WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM memberships WHERE organization_id IN ${orgIds}`);

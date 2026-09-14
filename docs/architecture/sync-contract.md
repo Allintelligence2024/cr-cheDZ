@@ -196,13 +196,18 @@ sur non-2xx ; le client généré la propage sans la transformer en succès.
 
 ## État des autres travaux F
 
-Les événements `child` manquent encore. Projection minimale explicite, bootstrap,
-tombstones et tous les chemins d'écriture restent F3 ; jamais de `to_jsonb(children)`
-ni de dossier médical/contacts/notes internes dans le changelog par commodité.
+**F3b enfants** : `created/updated/snapshot` transportent une projection explicite
+à 13 champs ; `deleted` contient seulement id/tenant/version/deleted_at. Producteur
+SQL transactionnel pour tous les écrivains, bootstrap initial en migration 059,
+consommation Drift atomique avec le curseur, sans effacer la file d'opérations.
+Voir [runbook F3b](../PHASE_F3B_CHILDREN_RUNBOOK.md) pour la liste des champs et les
+preuves. Aucun `to_jsonb(children)`, dossier médical, contact ou note interne
+ajouté au changelog. Les autres projections restent ouvertes.
 
 Les FK `sync_operations.device_id` et `sync_cursors.device_id` existent déjà depuis
 006 ; cela ne prouve pas l'intégrité composite tenant/device/utilisateur. Pas de
-migration SQL nouvelle dans ce lot (001–052 inchangées, 055 réservée à G).
+correction composite SQL dans ce lot ; migrations additives 058/059 pour F3a/F3b,
+001–052 inchangées, 055 réservée à G.
 
 **Preuves locales :** phase29 = 26/26 après correction (première reproduction :
 5/23 avant), corpus schéma/DTO = 49/49. Le diagnostic historique F0 est conservé
