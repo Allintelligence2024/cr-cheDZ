@@ -98,7 +98,11 @@ const parentAccess = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase37-par
   .match(/H2c parent access: (\d+) passed, 0 failed/);
 if (!parentAccess || Number(parentAccess[1]) < 156) throw new Error('H2c parent access evidence missing or incomplete');
 console.log(`::notice title=H2c parent access passed::${parentAccess[1]} real HTTP/PostgreSQL scenarios passed on 13 child-scoped parent routes. Current guardian/child/user/membership checked; capabilities stay separate; refused writes do not mutate business records. Not global JWT revocation, field-projection review or recall of signed URLs.`);
-console.log('✓ GATE D : régressions Phase D + 40 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const financialProjection = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase38-parent-financial-projection.api.test.log'), 'utf8')
+  .match(/H2d financial projection: (\d+) passed, 0 failed/);
+if (!financialProjection || Number(financialProjection[1]) < 44) throw new Error('H2d financial projection evidence missing or incomplete');
+console.log(`::notice title=H2d financial projection passed::${financialProjection[1]} real HTTP/PostgreSQL scenarios passed: public financial field allowlists, HMAC-signed initialization against a loopback gateway, raw response kept internal, authorized PDF and accounting views retained. Not real SATIM qualification, historical purge or full confidentiality closure.`);
+console.log('✓ GATE D : régressions Phase D + 41 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

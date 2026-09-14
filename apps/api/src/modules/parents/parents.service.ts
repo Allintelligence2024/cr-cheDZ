@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PARENT_INVOICE_FIELDS_SQL, PARENT_RECEIPT_FIELDS_SQL } from './financial-projection';
 import { CURRENT_GUARDIAN_LINK_SQL } from '../../shared/authorization/guardian-access';
 import type { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
@@ -153,10 +154,7 @@ export class ParentsService {
   async invoices(userId: string): Promise<Array<Record<string, unknown>>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => (await client.query(
-      `SELECT i.id, i.invoice_number, i.period_year, i.period_month, i.subtotal,
-              i.discount_amount, i.total_amount, i.paid_amount, i.balance,
-              i.status, i.due_date, i.pdf_url, i.created_at,
-              c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+      `SELECT ${PARENT_INVOICE_FIELDS_SQL}
        FROM invoices i
        JOIN child_guardians cg ON cg.child_id = i.child_id
        JOIN guardians g ON g.id = cg.guardian_id
@@ -170,7 +168,7 @@ export class ParentsService {
     await this.assertInvoicePermission(userId, invoiceId);
     return this.tenantContext.withTenantConnection(async (client) => {
       const invoice = (await client.query(
-        `SELECT i.*, c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+        `SELECT ${PARENT_INVOICE_FIELDS_SQL}
          FROM invoices i JOIN children c ON c.id = i.child_id WHERE i.id = $1`, [invoiceId],
       )).rows[0];
       const lines = (await client.query(
@@ -204,9 +202,7 @@ export class ParentsService {
   async receipts(userId: string): Promise<Array<Record<string, unknown>>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => (await client.query(
-      `SELECT p.id, p.reference_number, p.receipt_number, p.amount, p.method, p.status,
-              p.confirmed_at, p.notes,
-              c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+      `SELECT ${PARENT_RECEIPT_FIELDS_SQL}
        FROM payments p
        JOIN child_guardians cg ON cg.child_id = p.child_id
        JOIN guardians g ON g.id = cg.guardian_id
@@ -220,7 +216,7 @@ export class ParentsService {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       const payment = (await client.query(
-        `SELECT p.*, c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+        `SELECT ${PARENT_RECEIPT_FIELDS_SQL}
          FROM payments p JOIN children c ON c.id = p.child_id WHERE p.id = $1`, [paymentId],
       )).rows[0];
       if (!payment) throw Errors.notFound();

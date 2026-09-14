@@ -483,7 +483,14 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
         Les refus déjà effectifs sont des non-régressions, pas de nouveaux findings.
         [Runbook H2c](PHASE_H2C_PARENT_ACCESS_RUNBOOK.md) ; résultat complet et CI
         du SHA publié à vérifier en PR #44. Ni rappel d'URL signée ni révocation JWT globale.
-  - [ ] **Suite confidentialité** : projections de champs et autres contrôles de gardien,
+  - [x] **H2d projections financières parent** : listes/détails factures et reçus
+        à champs explicites, sans notes internes ni réponse brute passerelle ;
+        `pdf_ready` remplace la clé PDF dans le JSON, route PDF protégée conservée.
+        **32/44 → 44/44** HTTP/PG, dont vrai adaptateur de paiement avec initialisation
+        HTTP signée vers un fournisseur loopback. Accès comptable et données internes en base conservés.
+        [Runbook H2d](PHASE_H2D_FINANCIAL_PROJECTION_RUNBOOK.md) ; pas de qualification
+        SATIM réelle ni purge d'historique. Gates complets/CI à vérifier en PR #44.
+  - [ ] **Suite confidentialité** : projections santé/journal/médias et autres contrôles de gardien,
         snapshots privacy historiques et routes registre/DPIA/violations. Révocation
         globale des tokens et autres routes toujours à traiter en G. Pas de purge
         masquante ; la grappe et l'aptitude à la production ne sont pas clôturées.

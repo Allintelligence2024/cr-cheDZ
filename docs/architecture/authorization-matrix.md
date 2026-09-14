@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v4 — audit 2026-09, Phases C/H2a/H2b/H2c)
+# Matrice d'autorisation par module (v5 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -29,7 +29,7 @@
 | **sync** | staff mobile (STAFF_ROLES) | staff mobile | — |
 | **invitations** | `super_admin`, `director` | `super_admin`, `director` (jamais `super_admin` comme cible) | — |
 | **multi-rôles** (`/members/:id/roles`) | `super_admin`, `director` | `super_admin`, `director` (jamais `super_admin` comme cible) | — |
-| **parent** (13 routes enfant) | Utilisateur/membership actifs + lien gardien/enfant courant ; capacités distinctes, pas le seul rôle JWT | Absence : journal ; consentement : lien courant | Projections de champs encore à revoir |
+| **parent** (13 routes enfant) | Utilisateur/membership actifs + lien gardien/enfant courant ; capacités distinctes, pas le seul rôle JWT | Absence : journal ; consentement : lien courant | Finances minimisées H2d ; autres projections à revoir |
 
 ## Décisions à reconfirmer en Phase H (G2/H2)
 
@@ -117,3 +117,26 @@ correction : **107/156** ; après : **156/156**. Voir le
 JWT globale (G), les projections de champs financières/santé et les autres
 routes privacy. Le contrôle d'une nouvelle URL ne rappelle pas une URL déjà
 signée. Aucune sérialisation globale des révocations en cours de requête.
+
+
+## H2d — finances parent : projections explicites
+
+Les listes et détails de factures/reçus partagent deux projections fermées dans
+`modules/parents/financial-projection.ts`. Les contrôles H2c demeurent : lien courant,
+utilisateur/membership actifs et can_receive_invoices. Le contenu n'est pas autorisé
+par sa seule forme.
+
+- Factures : identification, période, montants/solde, statut/dates, noms d'enfant ;
+  détail avec lignes FR/AR. `pdf_ready` indique une référence PDF non vide, sans
+  révéler la clé ; téléchargement via la route PDF protégée existante.
+- Reçus : références métier, montant/devise, méthode/statut/dates, enfant. Pas de
+  notes internes, réponse JSON passerelle, référence fournisseur, créateur ou clé
+  de stockage. Le statut pending du détail n'est pas transformé en confirmé.
+- Back-office comptable inchangé et toujours protégé par ses rôles ; notes,
+  allocations et diagnostics restent en base. Aucune purge rétroactive.
+
+**32/44 → 44/44** scénarios réels API/PG ; adaptateur paiement HTTP avec fournisseur
+loopback synthétique. Le [runbook H2d](../PHASE_H2D_FINANCIAL_PROJECTION_RUNBOOK.md)
+détaille les champs, la réduction du contrat client et les faux positifs écartés.
+Santé/journal/médias, routes privacy et révocation globale JWT ne sont pas qualifiés
+par ce contrôle de projection financière.

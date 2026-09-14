@@ -135,3 +135,14 @@ remplacent pas la qualification CI réelle.
   sont pas modifiés ; cette règle n'est pas une décision juridique d'effacement.
 - G/H3, maintien/CVE stockage, Android APK release et décisions paie restent ouverts.
   Aucun merge, déploiement ni aptitude à la production déclaré.
+
+
+## Confirmation de livraison et suite H2d
+
+H2c publié sur `5a6ece2b96d4aec20fdb6ea75bb138d1266623d7` :
+[CI 34888169634](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34888169634),
+**9/9 checks**, database **104123879371**. Notices H2c 156, H2b 50, H2a 21,
+F2 51, F4 7 + PG et H1 dev/staging vérifiées. Aucun merge ou déploiement.
+La suite [H2d](PHASE_H2D_FINANCIAL_PROJECTION_RUNBOOK.md) minimise les quatre
+réponses JSON financières parent ; les projections santé/journal/médias et G
+restent à revoir.
