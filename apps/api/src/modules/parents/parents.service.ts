@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { CURRENT_GUARDIAN_LINK_SQL } from '../../shared/authorization/guardian-access';
 import type { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -29,7 +30,7 @@ export class ParentsService {
        FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = cg.child_id
        WHERE g.user_id = $1 AND c.deleted_at IS NULL
-         AND cg.can_view_journal = true
+         AND cg.can_view_journal = true AND ${CURRENT_GUARDIAN_LINK_SQL}
        ORDER BY c.first_name_fr, c.last_name_fr`, [userId],
     )).rows);
   }
@@ -65,7 +66,7 @@ export class ParentsService {
     return this.tenantContext.withTenantConnection(async (client) => {
       const guardian = await client.query(
         `SELECT cg.guardian_id FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
-         WHERE cg.child_id = $1 AND g.user_id = $2`, [dto.child_id, userId],
+         WHERE cg.child_id = $1 AND g.user_id = $2 AND ${CURRENT_GUARDIAN_LINK_SQL}`, [dto.child_id, userId],
       );
       if (!guardian.rows[0]) throw Errors.notFound();
       const row = await client.query(
@@ -160,7 +161,7 @@ export class ParentsService {
        JOIN child_guardians cg ON cg.child_id = i.child_id
        JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = i.child_id
-       WHERE g.user_id = $1 AND cg.can_receive_invoices = true
+       WHERE g.user_id = $1 AND ${CURRENT_GUARDIAN_LINK_SQL} AND cg.can_receive_invoices = true
        ORDER BY i.created_at DESC`, [userId],
     )).rows);
   }
@@ -210,7 +211,7 @@ export class ParentsService {
        JOIN child_guardians cg ON cg.child_id = p.child_id
        JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = p.child_id
-       WHERE g.user_id = $1 AND cg.can_receive_invoices = true AND p.status = 'confirmed'
+       WHERE g.user_id = $1 AND ${CURRENT_GUARDIAN_LINK_SQL} AND cg.can_receive_invoices = true AND p.status = 'confirmed'
        ORDER BY p.confirmed_at DESC`, [userId],
     )).rows);
   }
@@ -232,7 +233,7 @@ export class ParentsService {
   private async canReceiveInvoices(client: PoolClient, userId: string, childId: string): Promise<boolean> {
     const r = await client.query(
       `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
-       WHERE cg.child_id = $1 AND g.user_id = $2 AND cg.can_receive_invoices = true`,
+       WHERE cg.child_id = $1 AND g.user_id = $2 AND ${CURRENT_GUARDIAN_LINK_SQL} AND cg.can_receive_invoices = true`,
       [childId, userId],
     );
     return Boolean(r.rows[0]);
@@ -263,7 +264,7 @@ export class ParentsService {
     const allowed = await this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
         `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
-         WHERE cg.child_id = $1 AND g.user_id = $2 AND cg.can_view_health = true`,
+         WHERE cg.child_id = $1 AND g.user_id = $2 AND ${CURRENT_GUARDIAN_LINK_SQL} AND cg.can_view_health = true`,
         [childId, userId],
       );
       return Boolean(res.rows[0]);
@@ -285,13 +286,13 @@ export class ParentsService {
   }
 
   private async assertLinked(userId: string, childId: string): Promise<void> { await this.assertPermission(userId, childId, 'guardian_id'); }
-  private async assertPermission(userId: string, childId: string, permission: string): Promise<void> {
+  private async assertPermission(userId: string, childId: string, permission: 'guardian_id' | 'can_view_journal'): Promise<void> {
     requireTenant(this.tenantContext);
     const allowed = await this.tenantContext.withTenantConnection(async (client) => {
       const column = permission === 'guardian_id' ? 'cg.guardian_id' : `cg.${permission}`;
       const res = await client.query(
         `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id=cg.guardian_id
-         WHERE cg.child_id=$1 AND g.user_id=$2 AND ${column}${permission === 'guardian_id' ? ' IS NOT NULL' : ' = true'}`,
+         WHERE cg.child_id=$1 AND g.user_id=$2 AND ${CURRENT_GUARDIAN_LINK_SQL} AND ${column}${permission === 'guardian_id' ? ' IS NOT NULL' : ' = true'}`,
         [childId, userId],
       );
       return Boolean(res.rows[0]);

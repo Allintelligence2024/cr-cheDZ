@@ -94,7 +94,11 @@ const revocation = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase36-notif
   .match(/H2b notifications: (\d+) passed, 0 failed/);
 if (!revocation || Number(revocation[1]) < 50) throw new Error('H2b notification evidence missing or incomplete');
 console.log(`::notice title=H2b notifications passed::${revocation[1]} real API/PostgreSQL/worker scenarios passed, with loopback HTTP provider doubles. Rights rechecked after claim, inbox filtered before LIMIT, consumed refusals retained with reasons. Not a live FCM/APNs/Meta qualification or recall of delivered messages.`);
-console.log('✓ GATE D : régressions Phase D + 39 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const parentAccess = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase37-parent-revocation.api.test.log'), 'utf8')
+  .match(/H2c parent access: (\d+) passed, 0 failed/);
+if (!parentAccess || Number(parentAccess[1]) < 156) throw new Error('H2c parent access evidence missing or incomplete');
+console.log(`::notice title=H2c parent access passed::${parentAccess[1]} real HTTP/PostgreSQL scenarios passed on 13 child-scoped parent routes. Current guardian/child/user/membership checked; capabilities stay separate; refused writes do not mutate business records. Not global JWT revocation, field-projection review or recall of signed URLs.`);
+console.log('✓ GATE D : régressions Phase D + 40 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

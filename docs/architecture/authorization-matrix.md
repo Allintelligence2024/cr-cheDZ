@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v3 — audit 2026-09, Phases C/H2a/H2b)
+# Matrice d'autorisation par module (v4 — audit 2026-09, Phases C/H2a/H2b/H2c)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -29,7 +29,7 @@
 | **sync** | staff mobile (STAFF_ROLES) | staff mobile | — |
 | **invitations** | `super_admin`, `director` | `super_admin`, `director` (jamais `super_admin` comme cible) | — |
 | **multi-rôles** (`/members/:id/roles`) | `super_admin`, `director` | `super_admin`, `director` (jamais `super_admin` comme cible) | — |
-| **parent** (`/parent/*`) | tout rôle `parent_*` (scoping par guardianship dans le service) | idem | — |
+| **parent** (13 routes enfant) | Utilisateur/membership actifs + lien gardien/enfant courant ; capacités distinctes, pas le seul rôle JWT | Absence : journal ; consentement : lien courant | Projections de champs encore à revoir |
 
 ## Décisions à reconfirmer en Phase H (G2/H2)
 
@@ -96,3 +96,24 @@ commun. Les quatre routes privacy self-service H2a ne changent pas dans ce lot.
 autres projections privacy/parent et snapshots historiques, fournisseurs externes
 réels. Une vérification avant transport ne rappelle pas un message déjà transmis
 et n'est pas atomique avec une révocation simultanée sur un réseau externe.
+
+
+## H2c — portail parent : lien courant et capacités distinctes
+
+Les 13 routes enfant du portail utilisent maintenant
+`shared/authorization/guardian-access.ts` : gardien/enfant non supprimés,
+utilisateur/membership actifs, appartenances tenant cohérentes, puis capacité
+journal/santé/factures selon la route. Consentements : lien courant seulement.
+Les listes filtrent en SQL ; détails et écritures refusent les anciens droits.
+Ces routes self-service ne nécessitent pas un rôle JWT parent si l'utilisateur
+est réellement gardien autorisé ; être parent de rôle sans lien ne suffit pas.
+
+La matrice réelle **12 états × 13 routes = 156** vérifie les positifs, les
+révocations, un pair, un autre tenant et les capacités indépendantes. Avant
+correction : **107/156** ; après : **156/156**. Voir le
+[runbook H2c](../PHASE_H2C_PARENT_ACCESS_RUNBOOK.md) pour les faux positifs écartés.
+
+**Non couvert :** les deux routes de préférences personnelles, la révocation
+JWT globale (G), les projections de champs financières/santé et les autres
+routes privacy. Le contrôle d'une nouvelle URL ne rappelle pas une URL déjà
+signée. Aucune sérialisation globale des révocations en cours de requête.

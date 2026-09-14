@@ -171,3 +171,13 @@ Les guards locaux du préflight ne remplacent pas les vrais gates Docker/Flutter
   des snapshots privacy historiques et des routes registre/DPIA/violations.
   Anonymisation, metrics, stockage, invitations, autres dettes H2/H3, paie à décider
   et Android release restent ouverts. Aucune aptitude à la production n'est déclarée.
+
+
+## Confirmation de livraison et suite H2c
+
+H2b publié sur `7de167f8fc85d0a4d5bb02940f3944ecf3e3e9fd` :
+[CI 34883591879](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34883591879),
+**9/9 checks**, database **104108603013**. Notices H2b 50, H2a 21,
+F2 51, F4 7 + PostgreSQL et H1 dev/staging vérifiées. Pas de merge/déploiement.
+La suite [H2c](PHASE_H2C_PARENT_ACCESS_RUNBOOK.md) traite les accès enfant du
+portail parent ; elle ne clôture ni les projections de champs ni G.

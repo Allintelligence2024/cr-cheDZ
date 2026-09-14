@@ -476,7 +476,14 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
         réels API/PG/worker avec transports HTTP locaux, dont révocation après claim.
         [Runbook H2b](PHASE_H2B_NOTIFICATION_RUNBOOK.md). Pas de qualification des
         fournisseurs réels ni de rappel garanti des messages déjà en vol/livrés.
-  - [ ] **Suite confidentialité** : autres projections/contrôles de gardien,
+  - [x] **H2c portail parent — accès enfant courants** : 13 routes protégées par
+        un prédicat commun de lien gardien/enfant, utilisateur et membership actuels.
+        Droits journal/santé/factures distincts, consentements liés conservés.
+        **107/156 → 156/156** scénarios HTTP/PG, dont écritures refusées sans mutation.
+        Les refus déjà effectifs sont des non-régressions, pas de nouveaux findings.
+        [Runbook H2c](PHASE_H2C_PARENT_ACCESS_RUNBOOK.md) ; résultat complet et CI
+        du SHA publié à vérifier en PR #44. Ni rappel d'URL signée ni révocation JWT globale.
+  - [ ] **Suite confidentialité** : projections de champs et autres contrôles de gardien,
         snapshots privacy historiques et routes registre/DPIA/violations. Révocation
         globale des tokens et autres routes toujours à traiter en G. Pas de purge
         masquante ; la grappe et l'aptitude à la production ne sont pas clôturées.

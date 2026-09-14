@@ -64,6 +64,7 @@ SUITES=(
   phase35-confidentiality.api.test.mjs
   phase28-worker-reliability.test.mjs
   phase36-notification-revocation.api.test.mjs
+  phase37-parent-revocation.api.test.mjs
 )
 
 FILTER="${1:-}"
