@@ -5,8 +5,11 @@
 Le client demande désormais local + e-mail + SMS + WhatsApp. Alertmanager et
 le relais sont livrés, avec 4/4 tests de transport/reprise et un test Docker de
 la chaîne complète ajouté à la CI existante (sans modification de workflow).
-Voir [runbook alertes E2](PHASE_E2_ALERTING_RUNBOOK.md). Le résultat CI est encore
-en attente ; aucune réception sur coordonnées réelles n'est revendiquée.
+Voir [runbook alertes E2](PHASE_E2_ALERTING_RUNBOOK.md). **Gate E2 validé en CI**,
+[PR #44](https://github.com/Allintelligence2024/cr-cheDZ/pull/44), commit `955b9cd` :
+9/9 checks verts, y compris le test des vrais moteurs et la chaîne complète.
+Aucune réception sur coordonnées réelles n'est revendiquée : activation opérateur
+encore nécessaire. Les réserves plus bas décrivent la livraison précédente.
 F0 est commencé : voir [diagnostic sync](PHASE_F_SYNC_DIAGNOSTIC.md).
 
 ## État de la livraison précédente — 2026-09-14

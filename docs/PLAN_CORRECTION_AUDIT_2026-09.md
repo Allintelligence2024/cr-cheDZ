@@ -30,13 +30,13 @@
 - **Suite E2** : routage Prometheus → Alertmanager → relais local/e-mail/SMS/WhatsApp
   livré selon le choix client ; 0/2 routage avant → 2/2 après, 4/4 tests de relais.
   Gate des vrais moteurs Docker et de la chaîne complète raccordé à la CI existante,
-  **résultat PR en attente**. Réception sur coordonnées réelles non configurée.
+  **validé en CI sur `955b9cd` (PR #44, 9/9 checks)**. Réception sur coordonnées réelles non configurée.
   Voir `PHASE_E2_ALERTING_RUNBOOK.md`.
 - **F commencée (F0 reproduit, F1 brouillon)** : voir `PHASE_F_SYNC_DIAGNOSTIC.md`.
   Pas encore de correction Dart ni de gate F4. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
   du choix « mois partiels non facturés » des contrats de garde.
 - **Réserves D** : Docker non démarré ici, écart Compose PostgreSQL 16 / tests 18.4,
-  gate CI strict désormais raccordé via le runner existant (validation PR en attente). Ne pas confondre preuve locale et déploiement.
+  gate CI strict désormais raccordé via le runner existant (validé en PR #44 sur 955b9cd). Ne pas confondre preuve locale et déploiement.
 
 ---
 
@@ -204,11 +204,14 @@ paiements et rétention expirées n'étaient pas traitées automatiquement.
       et lignes expirées supprimés, paiement failed, aucune mensualité produite.
 - [x] Santé PostgreSQL lisible sans worker ; retard après **2 périodes** depuis
       le dernier succès (2 h/48 h), exporter et règles Prometheus câblés.
-- [ ] **GATE supervision à terminer** : `npm run check:worker-monitoring` avec
-      promtool 2.53.0, images cibles, métriques/firing et réception opérateur quand
-      tous les workers sont arrêtés. Ici : outil absent, gate exit 2, téléchargements
-      réseau bloqués. Alertmanager et relais 4 canaux maintenant livrés ; le gate
-      Docker est exécuté en CI. Coordonnées/credentials d'exploitation à configurer.
+- [x] **GATE supervision technique validé en CI** : promtool 2.53.0, vrais
+      exporter/Prometheus/Alertmanager, aucune présence de worker, réception locale,
+      SMTP de test et requêtes SMS/WhatsApp simulées, résolutions et perte exporter.
+      PR #44, commit `955b9cd`, run `34826565565`, 9/9 checks verts.
+- [ ] **Activation d'exploitation** : coordonnées/credentials SMTP/Twilio, modèle
+      WhatsApp approuvé et essai sur destinations réelles. Aucune livraison réelle
+      revendiquée ; pas de déploiement. Voir `PHASE_E2_ALERTING_RUNBOOK.md`.
+
 
 ### E3. Notification non livrée — corrigé selon la décision client
 

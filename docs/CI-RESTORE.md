@@ -126,3 +126,8 @@ récepteurs de test), remet le schéma à neuf, puis les 31 suites et le diagnos
 F0. Aucun fichier workflow modifié. Le gate E2 n'est pas ignoré
 si Docker échoue. Hors GitHub Actions, RUN_MONITORING_STACK=1 l'active explicitement.
 Le diagnostic F0 constate des défauts non corrigés : ne pas le lire comme gate F4.
+
+
+Résultat acquis : PR #44 / commit `955b9cd`, run `34826565565` : **9/9 checks
+verts**, dont database (gate D strict + vrai gate E2 Docker + diagnostic F0) et
+les quatre images. Les coordonnées réelles de notification restent à configurer.

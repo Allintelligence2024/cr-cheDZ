@@ -115,6 +115,14 @@ ports de test sont nettoyés. Les binaires/images/credentials ne sont pas commit
 - Relais : **4/4**, avec vrai dialogue SMTP local, panne partielle SMS,
   reprise après redémarrage, déduplication concurrente, auth et limites d'entrée.
 - Sandbox : Docker absent ; téléchargement officiel des binaires bloqué.
-- Gate moteur/réseau : **validation CI en attente** au moment de cette rédaction.
+- **Gate moteur/réseau validé en CI**, commit `955b9cd`, run
+  [34826565565](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34826565565).
+  Le job database bloquant est vert ; il exécute promtool, la chaîne Docker E2,
+  le reset de sécurité, les 31 suites strictes et le diagnostic F0.
+- **PR #44 : 9/9 checks verts sur ce commit**, dont les quatre builds d'images.
+  Les téléchargements de logs bruts sont également bloqués ici ; les statuts
+  sont vérifiés via l'API GitHub et le gate ne peut pas être ignoré par le runner.
+- Local complémentaire : **18/18** tests de monitoring/routage/relais/Compose,
+  build/typecheck/lint verts, 27 unitaires, audit prod 0 vulnérabilité.
 - Réception réelle e-mail/SMS/WhatsApp : non testée sans configuration opérateur.
   Ne pas la confondre avec les reçus des simulateurs.

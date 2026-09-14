@@ -69,5 +69,5 @@ passer un test : cela pourrait exposer des données d'autres enfants.
 7. Vrai client Dart → deux appareils → reprise → conflit → changement de tenant,
    en CI avec SDK hors Git. À défaut, fixtures réelles Dart validées contre les DTO.
 
-Le gate E2 est exécuté séparément par la CI Docker ; son état ne prouve en rien
+Le gate E2 est validé en CI Docker (PR #44, commit 955b9cd) ; cela ne prouve en rien
 que F est fonctionnelle. Aucune migration F ajoutée ici ; 055 reste réservée à G2.
