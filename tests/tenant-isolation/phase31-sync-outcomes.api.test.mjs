@@ -227,6 +227,32 @@ try {
     assert.deepEqual((await push(op)).accepted, [op.event_id]);
     assert.equal((await db.query('SELECT count(*)::int AS n FROM daily_log_events WHERE sync_event_id=$1', [op.event_id])).rows[0].n, 1);
   });
+  await check('UUID casing in device/entity IDs remains idempotent for identical retries', async () => {
+    const id = await child();
+    const op = operation(id, { entity_id: id.toUpperCase() });
+    const first = await push(op, device.toUpperCase());
+    assert.deepEqual(first.accepted, [op.event_id]);
+    const before = await effects(id);
+    assert.deepEqual(outcome(await push(op, device.toUpperCase())), outcome(first));
+    assert.deepEqual(await effects(id), before);
+  });
+  await check('two first-session corrections at base 0 create once and conflict once', async () => {
+    const id = await child(false);
+    const results = await Promise.all([push(operation(id, { base_version: 0 })), push(operation(id, { base_version: 0 }))]);
+    assert.equal(results.flatMap(r => r.accepted).length, 1);
+    assert.equal(results.flatMap(r => r.conflicts).length, 1);
+    assert.equal(results.flatMap(r => r.rejected).length, 0);
+    assert.equal((await session(id)).version, 1);
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM attendance_events WHERE child_id=$1', [id])).rows[0].n, 1);
+  });
+  await check('legacy accepted operation still replays its ACK without executing', async () => {
+    const id = await child(); const op = operation(id);
+    await db.query(`INSERT INTO sync_operations(organization_id,device_id,user_id,event_id,client_sequence,schema_version,command,entity_type,payload,occurred_at_device,status)
+      VALUES($1,$2,$3,$4,$5,1,$6,$7,$8,$9,'accepted')`, [org, device, user, op.event_id, op.client_sequence, op.command, op.entity_type, JSON.stringify(op.payload), op.occurred_at_device]);
+    const before = await effects(id);
+    assert.deepEqual((await push(op)).accepted, [op.event_id]);
+    assert.deepEqual(await effects(id), before);
+  });
   await check('legacy conflict without a saved outcome fails explicitly without inventing a version', async () => {
     const id = await child(); const op = operation(id, { base_version: 0 });
     await db.query(`INSERT INTO sync_operations(organization_id,device_id,user_id,event_id,client_sequence,schema_version,command,entity_type,payload,base_version,occurred_at_device,status,rejection_reason)

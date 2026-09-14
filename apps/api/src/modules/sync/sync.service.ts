@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { Injectable } from '@nestjs/common';
 import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
@@ -45,7 +46,15 @@ export class SyncService {
 
     for (const op of operations) {
       try {
-        await this.processOperation(op, userId, deviceId, result, tenantId);
+        // Publish the ACK only AFTER withTenantConnection has committed.
+        const outcome = await this.processOperation(op, userId, deviceId, tenantId);
+        if (outcome.status === 'accepted') {
+          result.accepted.push(op.event_id);
+        } else if (outcome.status === 'conflict') {
+          result.conflicts.push({ event_id: op.event_id, reason: outcome.reason ?? 'CONFLICT', current_version: outcome.currentVersion ?? 0 });
+        } else {
+          result.rejected.push({ event_id: op.event_id, reason: outcome.reason ?? 'REJECTED', message: outcome.message ?? 'Opération rejetée' });
+        }
       } catch {
         // Une opération ne doit jamais faire échouer le lot entier.
         result.rejected.push({
@@ -63,69 +72,57 @@ export class SyncService {
     op: SyncOperationDto,
     userId: string,
     deviceId: string,
-    result: SyncPushResult,
     tenantId: string,
-  ): Promise<void> {
-    await this.tenantContext.withTenantConnection(async (client) => {
-      // 0. Commande connue (avant tout INSERT : l'enum DB rejetterait sinon)
+  ): Promise<CommandOutcome> {
+    return this.tenantContext.withTenantConnection(async (client): Promise<CommandOutcome> => {
       if (!this.isKnownCommand(op.command)) {
-        result.rejected.push({
-          event_id: op.event_id,
-          reason: 'UNKNOWN_COMMAND',
-          message: `Commande ${op.command} inconnue`,
-        });
-        return;
+        return { status: 'rejected', reason: 'UNKNOWN_COMMAND', message: `Commande ${op.command} inconnue` };
       }
-      // 1. Version de schéma
       if (op.schema_version > 1) {
-        result.rejected.push({
-          event_id: op.event_id,
-          reason: 'UNSUPPORTED_SCHEMA_VERSION',
-          message: `Version ${op.schema_version} non supportée`,
-        });
-        return;
+        return { status: 'rejected', reason: 'UNSUPPORTED_SCHEMA_VERSION', message: `Version ${op.schema_version} non supportée` };
       }
-      // 2. Appareil actif (RLS : appareil du tenant courant)
       const dev = await client.query(
         `SELECT id FROM devices WHERE id = $1 AND registered_by = $2 AND is_active = true AND revoked_at IS NULL`,
         [deviceId, userId],
       );
       if (dev.rows.length === 0) {
-        result.rejected.push({
-          event_id: op.event_id,
-          reason: 'DEVICE_REVOKED',
-          message: 'Appareil révoqué ou inconnu',
-        });
-        return;
+        return { status: 'rejected', reason: 'DEVICE_REVOKED', message: 'Appareil révoqué ou inconnu' };
       }
-      // 3. Déduplication par event_id (idempotence)
+      // Serialize retries BEFORE reading/inserting the unique event. A loser must
+      // read the committed result, not turn a unique violation into INTERNAL_ERROR.
+      // Tenant participates in the key; all row access below remains under RLS.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 48272))', [JSON.stringify([tenantId.toLowerCase(), op.event_id.toLowerCase()])]);
       const existing = await client.query(
-        `SELECT status FROM sync_operations WHERE event_id = $1`,
+        `SELECT device_id, user_id, status, response_outcome, command, entity_type,
+                entity_id, payload, base_version, schema_version, client_sequence, occurred_at_device
+         FROM sync_operations WHERE event_id = $1`,
         [op.event_id],
       );
       if (existing.rows.length > 0) {
-        if (existing.rows[0].status === 'accepted') {
-          result.accepted.push(op.event_id);
-        } else {
-          result.rejected.push({
-            event_id: op.event_id,
-            reason: 'ALREADY_PROCESSED',
-            message: 'Opération déjà traitée',
-          });
+        const row = existing.rows[0];
+        if (row.device_id !== deviceId.toLowerCase() || row.user_id !== userId.toLowerCase()) {
+          return { status: 'rejected', reason: 'EVENT_ID_OWNERSHIP_MISMATCH', message: 'Identifiant déjà utilisé par un autre appareil ou utilisateur' };
         }
-        return;
+        if (row.command !== op.command || row.entity_type !== op.entity_type ||
+            row.entity_id !== (op.entity_id?.toLowerCase() ?? null) || row.base_version !== (op.base_version ?? null) ||
+            row.schema_version !== op.schema_version || String(row.client_sequence) !== String(op.client_sequence) ||
+            new Date(row.occurred_at_device).getTime() !== new Date(op.occurred_at_device).getTime() ||
+            !isDeepStrictEqual(row.payload, op.payload)) {
+          return { status: 'rejected', reason: 'EVENT_ID_REUSED', message: 'Identifiant déjà utilisé avec un autre contenu' };
+        }
+        if (row.response_outcome) return row.response_outcome as CommandOutcome;
+        // Historical accepted ACKs are unambiguous. Never invent a conflict
+        // version, re-execute an old command, or infer its result from live state.
+        if (row.status === 'accepted') return { status: 'accepted' };
+        return { status: 'rejected', reason: 'LEGACY_RESULT_UNAVAILABLE', message: 'Résultat historique incomplet ; vérification manuelle requise' };
       }
-      // 4. Heure appareil cohérente (trop dans le futur → rejet)
       const deviceTime = new Date(op.occurred_at_device);
       if (Number.isNaN(deviceTime.getTime())) {
-        result.rejected.push({ event_id: op.event_id, reason: 'INVALID_DEVICE_TIME', message: 'Heure appareil invalide' });
-        return;
+        return { status: 'rejected', reason: 'INVALID_DEVICE_TIME', message: 'Heure appareil invalide' };
       }
       if (deviceTime.getTime() > Date.now() + DEVICE_TIME_TOLERANCE_MS) {
-        result.rejected.push({ event_id: op.event_id, reason: 'DEVICE_TIME_AHEAD', message: 'Heure appareil dans le futur' });
-        return;
+        return { status: 'rejected', reason: 'DEVICE_TIME_AHEAD', message: 'Heure appareil dans le futur' };
       }
-      // 5. Enregistrer l'opération (processing)
       await client.query(
         `INSERT INTO sync_operations
            (organization_id, device_id, user_id, event_id, client_sequence,
@@ -138,30 +135,16 @@ export class SyncService {
           JSON.stringify(op.payload), op.base_version ?? null, op.occurred_at_device,
         ],
       );
-      // 6. Appliquer la commande
       const outcome = await this.applyCommand(client, op, userId, deviceId);
-      // 7. Statut final
+      // A retryable failure may occur AFTER a write (including a non-SQL throw).
+      // Roll back the operation AND all effects; don't persist a terminal rejection.
+      if (outcome.reason === 'INTERNAL_ERROR') throw new Error('Retryable sync operation failure');
       await client.query(
-        `UPDATE sync_operations SET status = $1, processed_at = NOW(), rejection_reason = $2
-         WHERE event_id = $3`,
-        [outcome.status, outcome.reason ?? null, op.event_id],
+        `UPDATE sync_operations SET status = $1, processed_at = NOW(), rejection_reason = $2,
+           response_outcome = $3::jsonb WHERE event_id = $4`,
+        [outcome.status, outcome.reason ?? null, JSON.stringify(outcome), op.event_id],
       );
-
-      if (outcome.status === 'accepted') {
-        result.accepted.push(op.event_id);
-      } else if (outcome.status === 'conflict') {
-        result.conflicts.push({
-          event_id: op.event_id,
-          reason: outcome.reason ?? 'CONFLICT',
-          current_version: outcome.currentVersion ?? 0,
-        });
-      } else {
-        result.rejected.push({
-          event_id: op.event_id,
-          reason: outcome.reason ?? 'REJECTED',
-          message: outcome.message ?? 'Opération rejetée',
-        });
-      }
+      return outcome;
     });
   }
 
@@ -198,29 +181,13 @@ export class SyncService {
         return this.attendance.applyCheckOut(client, base);
       case 'mark_absent':
         return this.attendance.applyMarkAbsent(client, { ...base, reason: payload.reason as string | undefined });
-      case 'correct_attendance': {
-        const outcome = await this.attendance.applyCorrection(client, {
+      case 'correct_attendance':
+        return this.attendance.applyCorrection(client, {
           ...base,
           action: payload.action as string,
           reason: (payload.reason as string) ?? 'correction_sync',
+          baseVersion: op.base_version ?? undefined,
         });
-        // Conflit optimiste : base_version de la session attendue.
-        if (op.base_version !== undefined && outcome.status === 'accepted') {
-          const session = await client.query(
-            `SELECT version FROM attendance_sessions WHERE child_id = $1 AND session_date =
-               (SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date)`,
-            [payload.child_id],
-          );
-          if (session.rows.length > 0 && session.rows[0].version !== op.base_version) {
-            return {
-              status: 'conflict',
-              reason: 'VERSION_MISMATCH',
-              currentVersion: session.rows[0].version,
-            };
-          }
-        }
-        return outcome;
-      }
       case 'log_meal':
       case 'log_nap_start':
       case 'log_nap_end':

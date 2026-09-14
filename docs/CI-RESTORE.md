@@ -172,3 +172,17 @@ appels sans device. Après correction : moteur réel, Drift natif, stockage par
 scope, page/curseur atomiques et réponses tardives. La batterie API compte
 **33 suites/contrôles**, avec phase30 et ses 7 assertions de sécurité/reprise device.
 Le détail et les réserves F3/F4 sont dans `PHASE_F2_CLIENT_RUNBOOK.md`.
+
+
+### Complément F3a — conflits et résultats transactionnels
+
+`phase31-sync-outcomes.api.test.mjs` porte la batterie à **34 suites/contrôles**.
+Vrai HTTP/PG : 0/15 avant correction, puis 18/18 ciblés ; contrôle de version
+avant mutation, rejeu durable, concurrence et échec réel au COMMIT. Le test
+injecte aussi une exception après la vraie écriture du journal pour vérifier
+le rollback intégral. Migration additive 058, sans modifier 001–052/055.
+
+La suite tourne avec le rôle `creche_app` dans le gate strict, sans grants
+ajoutés par les helpers. Aucun workflow modifié. Les résultats du dernier HEAD
+sont dans la PR #44 ; voir `PHASE_F3A_OUTCOMES_RUNBOOK.md` pour les preuves,
+le rollback et les limites F3/F4 toujours ouvertes.

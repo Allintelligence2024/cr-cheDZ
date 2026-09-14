@@ -1,4 +1,4 @@
-# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.6)
+# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.7)
 
 > **Document de pilotage pour la prochaine session agent.**
 > Remplace la v1.x du même fichier (historique : voir `git log -- docs/PLAN_CORRECTION_AUDIT_2026-09.md`).
@@ -331,7 +331,12 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 - [ ] Ordre de commit/pagination sûre : reproduire A lente/B rapide, puis corriger.
 - [x] Scope utilisateur du device vérifié côté API en F2 ; FK simples depuis 006.
 - [ ] Intégrité composite SQL pour écritures directes, si nécessaire après reproduction.
-- [ ] Conflit : reproduire absence d'effet métier et réponse stable au rejeu avant correction.
+- [x] **F3a conflits/résultats** : 0/15 avant correction → 18/18 ciblés après ;
+      contrôle de version avant mutation, résultat persisté/rejoué, ACK après COMMIT,
+      retry concurrent sérialisé et rollback sur INTERNAL_ERROR. Migration additive 058.
+      Voir [runbook F3a](PHASE_F3A_OUTCOMES_RUNBOOK.md) ; batterie désormais 34 suites,
+      résultat complet/CI à consulter sur le dernier HEAD de la PR #44.
+      **F3 reste ouvert** pour les items non cochés ci-dessus et les autres projections.
 
 ### F4. GATE — test bout-à-bout (le vrai livrable)
 

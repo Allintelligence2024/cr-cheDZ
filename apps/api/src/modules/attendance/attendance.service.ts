@@ -251,7 +251,7 @@ export class AttendanceService {
   /** Correction tracée : force un statut + événement 'correction'. */
   async applyCorrection(
     client: PoolClient,
-    p: ApplyParams & { action: string; reason: string },
+    p: ApplyParams & { action: string; reason: string; baseVersion?: number },
   ): Promise<CommandResult> {
     const tenantId = this.tenantContext.getTenantId();
     const child = await this.childOfTenant(client, p.childId);
@@ -267,6 +267,12 @@ export class AttendanceService {
 
     const today = await this.todayInAlgiers(client);
     const session = await this.sessionForUpdate(client, p.childId, today);
+    // Check the locked PRE-mutation version. Zero denotes a missing session.
+    // childOfTenant locks the parent row too, serializing first-session creation
+    // with all attendance commands (HTTP and sync), not only existing sessions.
+    if (p.baseVersion !== undefined && p.baseVersion !== (session?.version ?? 0)) {
+      return { status: 'conflict', reason: 'VERSION_MISMATCH', currentVersion: session?.version ?? 0 };
+    }
     let sessionId = session?.id ?? null;
     if (!sessionId) {
       const created = await client.query(
@@ -302,7 +308,7 @@ export class AttendanceService {
   private async childOfTenant(client: PoolClient, childId: string): Promise<{ id: string; site_id: string; room_id: string | null } | null> {
     // RLS : un enfant d'un autre tenant → 0 ligne.
     const res = await client.query(
-      `SELECT id, site_id, room_id FROM children WHERE id = $1 AND deleted_at IS NULL`,
+      `SELECT id, site_id, room_id FROM children WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
       [childId],
     );
     return res.rows[0] ?? null;
@@ -310,7 +316,7 @@ export class AttendanceService {
 
   private async sessionForUpdate(client: PoolClient, childId: string, date: string) {
     const res = await client.query(
-      `SELECT id, status FROM attendance_sessions
+      `SELECT id, status, version FROM attendance_sessions
        WHERE child_id = $1 AND session_date = $2 FOR UPDATE`,
       [childId, date],
     );

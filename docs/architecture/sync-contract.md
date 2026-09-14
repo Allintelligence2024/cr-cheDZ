@@ -122,12 +122,26 @@ Réponse obligatoire, même avec un lot vide :
 - `accepted` : tableau d'UUID event_id.
 - `rejected` : `{event_id: UUID, reason: string, message: string}`.
 - `conflicts` : `{event_id: UUID, reason: string, current_version: integer}`.
-- Autres motifs existants : `DEVICE_REVOKED`, `ALREADY_PROCESSED`,
+- Autres motifs existants : `DEVICE_REVOKED`, `EVENT_ID_REUSED`,
+  `EVENT_ID_OWNERSHIP_MISMATCH`, `LEGACY_RESULT_UNAVAILABLE`,
   `INVALID_DEVICE_TIME`, `DEVICE_TIME_AHEAD`, `INTERNAL_ERROR`, et ceux des services métier.
 - Ne jamais acquitter une opération absente des trois tableaux. `INTERNAL_ERROR`
   n'est pas une preuve de rejet définitif. F2 conserve les opérations absentes/INTERNAL_ERROR et bloque les ACK incohérents.
-- La forme `conflicts` est contractualisée, mais **ni l'absence d'effet d'un conflit
-  ni la stabilité de sa réponse au rejeu ne sont démontrées** : à tester/corriger en F3/F4.
+- **F3a** : `correct_attendance` compare `base_version` avant mutation sur la
+  session verrouillée (session absente = version 0, base absente/null = sans CAS).
+  Un conflit ne modifie ni état ni événements/changelog. Le résultat est persisté
+  avec la commande (migration 058) et rejoué sans le recalculer après d'autres écritures.
+- Le verrou `(tenant, event_id)` sérialise les retries. Appareil/utilisateur et
+  contenu d'origine doivent être identiques ; sinon rejet explicite, sans effet.
+  UUID device/entity canoniques, comparaison profonde du payload.
+- L'ACK n'est publié qu'après COMMIT. Une erreur transitoire annule opération et
+  effets et laisse la commande rejouable. Le `next_cursor` du push peut évoluer
+  au rejeu : seul le résultat de l'opération est mémorisé, jamais le curseur global.
+- Ancien résultat non accepté sans détail durable : `LEGACY_RESULT_UNAVAILABLE`,
+  vérification manuelle, aucune version historique inventée ni réexécution automatique.
+  Les anciens ACK acceptés restent reconnus. Preuves : [runbook F3a](../PHASE_F3A_OUTCOMES_RUNBOOK.md).
+- F4 reste à démontrer avec le vrai client Dart contre l'API ; pagination/projections
+  restent ouvertes en F3, indépendamment de ce résultat sur les conflits.
 
 ## Pull et curseur int64
 

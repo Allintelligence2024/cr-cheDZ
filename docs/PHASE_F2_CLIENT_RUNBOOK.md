@@ -72,7 +72,8 @@ avant l'attente connectivité ; listeners/timers désabonnés à l'arrêt.
 - Réseau/5xx/429 : état error visible + backoff 2→60s.
 - ACK étranger/contradictoire : aucun acquittement local. ACK absent ou
   INTERNAL_ERROR : pending conservé. Rejets métier et conflits restent consultables
-  dans la file, avec motif. F3 doit encore valider la sémantique serveur du conflit.
+  dans la file, avec motif. La sémantique serveur du conflit est maintenant
+  couverte en [F3a](PHASE_F3A_OUTCOMES_RUNBOOK.md) ; le parcours F4 reste ouvert.
 
 ## Limites et rollback
 
