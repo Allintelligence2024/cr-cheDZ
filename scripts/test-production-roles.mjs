@@ -49,11 +49,16 @@ run(process.execPath, ['scripts/bootstrap-roles.mjs']);
 run(process.execPath, ['scripts/migrate.mjs', '--reset']);
 run(process.execPath, ['scripts/migrate.mjs']);
 run(process.execPath, ['scripts/seed.mjs']);
+// Retour rapide sur le gate E2 réseau AVANT les suites API longues.
+if (env.GITHUB_ACTIONS === 'true' || env.RUN_MONITORING_STACK === '1') {
+  run(process.execPath, ['scripts/test-worker-monitoring-stack.mjs']);
+  // Le test d'alerte vieillit les ticks : restaurer du neuf pour phase3/4.
+  run(process.execPath, ['scripts/migrate.mjs', '--reset']);
+  run(process.execPath, ['scripts/migrate.mjs']);
+  run(process.execPath, ['scripts/seed.mjs']);
+}
 console.log(`Logs isolation : ${env.ISOLATION_LOG_DIR}`);
 run('bash', ['scripts/run-isolation-suites.sh']);
 console.log('✓ GATE D : régressions Phase D + 31 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 run(process.execPath, ['tests/diagnostics/sync-f0.mjs']);
-if (env.GITHUB_ACTIONS === 'true' || env.RUN_MONITORING_STACK === '1') {
-  run(process.execPath, ['scripts/test-worker-monitoring-stack.mjs']);
-}

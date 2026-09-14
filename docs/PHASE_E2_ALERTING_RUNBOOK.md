@@ -96,8 +96,9 @@ npm run test:production-roles
 ```
 
 Dans GitHub Actions, le workflow existant appelle `run-isolation-suites.sh` :
-ce script délègue au gate D strict (garde anti-récursion), puis exécute le test
-réseau E2. **Aucun fichier workflow modifié.** Le gate est bloquant, pas un skip.
+ce script délègue au gate D strict (garde anti-récursion). Le test réseau E2
+précède les suites API longues pour un retour rapide, suivi d’un reset/migrate/seed
+obligatoire avant la batterie d’isolation. **Aucun fichier workflow modifié.** Le gate est bloquant, pas un skip.
 
 Le test réseau démarre les vrais exporter/Prometheus/Alertmanager sous Docker,
 avec le rôle `creche_app` et **aucun worker**. Il vieillit `last_success_at`, vérifie

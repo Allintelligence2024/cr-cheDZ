@@ -121,8 +121,8 @@ requise. Voir le runbook phase E et ADR-013.
 
 Dans GitHub Actions, `scripts/run-isolation-suites.sh` délègue maintenant au
 runner strict D quand il n'est pas déjà dans ce mode. Pas de récursion : celui-ci
-pose PRODUCTION_ROLE_TESTS=1. Après les 31 suites, le runner exécute le diagnostic
-F0 et `test-worker-monitoring-stack.mjs` (Docker, promtool, vrais services,
-récepteurs de test). Aucun fichier workflow modifié. Le gate E2 n'est pas ignoré
+pose PRODUCTION_ROLE_TESTS=1. Le runner exécute d’abord `test-worker-monitoring-stack.mjs` (Docker, promtool, vrais services,
+récepteurs de test), remet le schéma à neuf, puis les 31 suites et le diagnostic
+F0. Aucun fichier workflow modifié. Le gate E2 n'est pas ignoré
 si Docker échoue. Hors GitHub Actions, RUN_MONITORING_STACK=1 l'active explicitement.
 Le diagnostic F0 constate des défauts non corrigés : ne pas le lire comme gate F4.
