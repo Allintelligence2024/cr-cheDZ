@@ -1,19 +1,32 @@
 import '../database/app_database.dart';
+import 'api_client.dart';
+import 'generated/sync_wire_client.dart';
 
 /// Client de synchronisation — push (file d'opérations) + pull (changelog).
 /// C02 : le curseur serveur est une séquence (sync_seq), jamais l'horloge.
 class SyncClient {
-  SyncClient(this._api);
+  SyncClient(this._api) {
+    _wire = SyncWireClient((method, path, data) => method == 'GET'
+      ? _api.get<Map<String, dynamic>>(path, query: data)
+      : _api.post<Map<String, dynamic>>(path, data));
+  }
+  final ApiClient _api;
+  late final SyncWireClient _wire;
+  void close() => _api.close();
 
-  final dynamic _api; // ApiClient — typé dans api_client.dart
-
-  Future<Map<String, dynamic>> push(List<Map<String, dynamic>> operations) async {
-    return _api.post<Map<String, dynamic>>('/sync/push', {'operations': operations});
+  Future<String> register(String fingerprint, String platform) async {
+    final response = await _wire.registerDevice({
+      'name': 'Crèche personnel', 'device_fingerprint': fingerprint,
+      'platform': platform, 'app_version': '0.1.0',
+    });
+    return response['device_id'] as String;
   }
 
-  Future<Map<String, dynamic>> pull(int cursor) async {
-    return _api.get<Map<String, dynamic>>('/sync/pull', query: {'cursor': cursor});
-  }
+  Future<Map<String, dynamic>> push(List<Map<String, dynamic>> operations, {String? deviceId}) =>
+      _wire.push({'device_id': deviceId, 'operations': operations});
+
+  Future<Map<String, dynamic>> pull(Object cursor, {String? deviceId}) =>
+      _wire.pull({'device_id': deviceId, 'cursor': cursor});
 
   /// Mise à jour de la base locale à partir d'un événement du changelog.
   Future<void> applyRemoteEvent(AppDatabase db, Map<String, dynamic> event) async {
@@ -26,12 +39,7 @@ class SyncClient {
       final sessionDate = payload['session_date'] as String?;
       final status = payload['status'] as String?;
       if (sessionId != null && childId != null && sessionDate != null && status != null) {
-        // L'organisation est déduite des enfants locaux (une seule org/appareil).
-        final childRow = await (db.select(db.localChildren)
-              ..where((t) => t.id.equals(childId))
-              ..limit(1))
-            .getSingleOrNull();
-        final orgId = childRow?.organizationId ?? '';
+        final orgId = db.scope.organizationId;
         await db.into(db.localAttendanceSessions).insertOnConflictUpdate(
           LocalAttendanceSessionsCompanion.insert(
             id: sessionId,
@@ -43,10 +51,12 @@ class SyncClient {
           ),
         );
       }
+      else { throw const FormatException('Incomplete attendance event'); }
       return;
     }
     if (type == 'child') {
       final child = event['payload'] as Map<String, dynamic>;
+      if (child['organization_id'] != db.scope.organizationId) throw const FormatException('Cross-scope child event');
       await db.into(db.localChildren).insertOnConflictUpdate(
             LocalChildrenCompanion.insert(
               id: child['id'] as String,
@@ -66,6 +76,8 @@ class SyncClient {
             ),
           );
     }
-    // attendance_event / daily_log / media : Phase 5-6 (synchro complète).
+    if (type != 'attendance' && type != 'child') {
+      throw FormatException('Unsupported projection: $type');
+    }
   }
 }

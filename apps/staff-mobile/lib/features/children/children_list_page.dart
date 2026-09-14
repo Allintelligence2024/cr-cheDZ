@@ -8,9 +8,10 @@ import 'child.dart';
 /// Liste des enfants d'une section (données locales Drift) avec statut de
 /// présence du jour et actions Arrivée/Départ (offline-first).
 class ChildrenListPage extends StatefulWidget {
-  const ChildrenListPage({super.key, required this.syncEngine});
+  const ChildrenListPage({super.key, required this.syncEngine, this.onLogout});
 
   final SyncEngine syncEngine;
+  final VoidCallback? onLogout;
 
   @override
   State<ChildrenListPage> createState() => _ChildrenListPageState();
@@ -48,6 +49,7 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
       entityType: 'attendance_session',
       payload: {'child_id': child.id, 'site_id': child.siteId},
     );
+    if (!mounted) return;
     setState(() => _statusByChild[child.id] = 'present');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -66,6 +68,7 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
       entityType: 'attendance_session',
       payload: {'child_id': child.id, 'site_id': child.siteId},
     );
+    if (!mounted) return;
     setState(() => _statusByChild[child.id] = 'departed');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -123,7 +126,7 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: AppBar(actions: [if (widget.onLogout != null) IconButton(onPressed: widget.onLogout, icon: const Icon(Icons.logout), tooltip: 'Se déconnecter')],
         title: const Text('Enfants de la section'),
         actions: [
           IconButton(

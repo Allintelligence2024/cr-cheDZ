@@ -8,10 +8,10 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const docker = process.env.GITHUB_ACTIONS === 'true' || process.env.FLUTTER_USE_DOCKER === '1';
-const script = 'set -eu; cp -a /source/apps/staff-mobile /tmp/staff; cd /tmp/staff; flutter pub get; flutter test test/sync_f2_test.dart --reporter expanded';
+const script = 'set -eu; cp -a /source/apps/staff-mobile /tmp/staff; cd /tmp/staff; flutter pub get --enforce-lockfile; flutter test --reporter expanded; flutter analyze --no-fatal-infos';
 const result = spawnSync(docker ? 'docker' : 'flutter', docker ? [
   'run', '--rm', '-v', `${root}:/source:ro`, '--entrypoint', 'bash',
-  'ghcr.io/cirruslabs/flutter:3.35.4', '-c', script,
+  'ghcr.io/cirruslabs/flutter:3.44.0', '-c', script,
 ] : ['test', 'test/sync_f2_test.dart', '--reporter', 'expanded'], {
   cwd: docker ? root : resolve(root, 'apps/staff-mobile'),
   encoding: 'utf8', timeout: 900000, maxBuffer: 8 * 1024 * 1024,

@@ -40,6 +40,9 @@ class ApiClient {
   }
 
   final Dio _dio;
+  final CancelToken _cancel = CancelToken();
+
+  void close() { _cancel.cancel('Session closed'); _dio.close(force: true); }
   bool _refreshing = false;
 
   /// Posé par le SyncEngine/le shell après restauration de session.
@@ -50,21 +53,21 @@ class ApiClient {
   set onRefresh(Future<bool> Function()? fn) => _onRefresh = fn;
 
   Future<T> get<T>(String path, {Map<String, dynamic>? query}) async {
-    final res = await _dio.get<T>(path, queryParameters: query);
+    final res = await _dio.get<T>(path, queryParameters: query, cancelToken: _cancel);
     return res.data!;
   }
 
   Future<T> post<T>(String path, [Object? body]) async {
-    final res = await _dio.post<T>(path, data: body);
+    final res = await _dio.post<T>(path, data: body, cancelToken: _cancel);
     return res.data!;
   }
 
   Future<T> patch<T>(String path, [Object? body]) async {
-    final res = await _dio.patch<T>(path, data: body);
+    final res = await _dio.patch<T>(path, data: body, cancelToken: _cancel);
     return res.data!;
   }
 
   Future<void> delete(String path) async {
-    await _dio.delete(path);
+    await _dio.delete(path, cancelToken: _cancel);
   }
 }

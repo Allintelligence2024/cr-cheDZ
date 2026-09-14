@@ -87,8 +87,8 @@ export class SyncService {
       }
       // 2. Appareil actif (RLS : appareil du tenant courant)
       const dev = await client.query(
-        `SELECT id FROM devices WHERE id = $1 AND is_active = true AND revoked_at IS NULL`,
-        [deviceId],
+        `SELECT id FROM devices WHERE id = $1 AND registered_by = $2 AND is_active = true AND revoked_at IS NULL`,
+        [deviceId, userId],
       );
       if (dev.rows.length === 0) {
         result.rejected.push({
@@ -333,8 +333,8 @@ export class SyncService {
     const tenantId = this.tenantContext.getTenantId();
     return this.tenantContext.withTenantConnection(async (client) => {
       const dev = await client.query(
-        `SELECT id FROM devices WHERE id = $1 AND is_active = true AND revoked_at IS NULL`,
-        [deviceId],
+        `SELECT id FROM devices WHERE id = $1 AND registered_by = $2 AND is_active = true AND revoked_at IS NULL`,
+        [deviceId, this.tenantContext.getUserId()],
       );
       if (dev.rows.length === 0) {
         throw new AppError('DEVICE_REVOKED', 'Appareil révoqué ou inconnu', 'تم إلغاء الجهاز', 403);

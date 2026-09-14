@@ -56,6 +56,7 @@ SUITES=(
   phase25-security-audit-c.api.test.mjs
   phase27-worker-lifecycle.test.mjs
   phase29-sync-contract.api.test.mjs
+  phase30-sync-device.api.test.mjs
   phase28-worker-reliability.test.mjs
 )
 

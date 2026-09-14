@@ -14,7 +14,7 @@ class SyncStatusBanner extends StatelessWidget {
     return StreamBuilder<SyncStatus>(
       stream: syncEngine.statusStream,
       builder: (context, snapshot) {
-        final status = snapshot.data ?? SyncStatus.idle;
+        final status = snapshot.data ?? syncEngine.currentStatus;
         switch (status) {
           case SyncStatus.syncing:
             return const SyncBanner(
@@ -38,6 +38,18 @@ class SyncStatusBanner extends StatelessWidget {
               messageAr: 'غير متصل — ستتم المزامنة عند الاتصال',
               messageFr: 'Hors ligne — synchronisation dès la connexion',
             );
+          case SyncStatus.authenticationRequired:
+            return const SyncBanner(color: Color(0xFFF44336), icon: Icons.lock,
+              messageAr: 'انتهت الجلسة — أعد تسجيل الدخول، البيانات محفوظة',
+              messageFr: 'Session expirée — reconnectez-vous, données conservées');
+          case SyncStatus.contractError:
+            return const SyncBanner(color: Color(0xFFF44336), icon: Icons.system_update,
+              messageAr: 'المزامنة متوقفة — تحقق من إصدار التطبيق',
+              messageFr: 'Sync bloquée — vérifier le contrat ou mettre à jour');
+          case SyncStatus.deviceRevoked:
+            return const SyncBanner(color: Color(0xFFF44336), icon: Icons.block,
+              messageAr: 'الجهاز ملغى أو الوصول مرفوض — اتصل بالإدارة',
+              messageFr: 'Appareil révoqué ou accès refusé — contacter la direction');
           case SyncStatus.idle:
             return const SizedBox.shrink();
         }
@@ -82,10 +94,10 @@ class SyncBanner extends StatelessWidget {
           else
             Icon(icon, color: Colors.white, size: 18),
           const SizedBox(width: 8),
-          Text(
+          Flexible(child: Text(
             message,
             style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-          ),
+          )),
         ],
       ),
     );
