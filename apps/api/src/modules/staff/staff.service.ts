@@ -46,8 +46,15 @@ export class StaffService {
   async getById(id: string): Promise<Record<string, unknown>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
+      // C1 (audit 2026-09) : projection EXPLICITE — `SELECT sp.*` exposait
+      // national_id, cnas_number, base_salary, phone, notes et les contacts
+      // d'urgence à tout rôle authentifié. Ces champs restent uniquement
+      // accessibles aux modules RH (payroll) qui les lisent en base.
       const res = await client.query(
-        `SELECT sp.*, u.email, COALESCE(u.first_name,'') AS first_name, COALESCE(u.last_name,'') AS last_name
+        `SELECT sp.id, sp.user_id, sp.employee_number, sp.qualification,
+                sp.contract_type, sp.hire_date, sp.is_active,
+                sp.created_at, sp.updated_at,
+                u.email, COALESCE(u.first_name,'') AS first_name, COALESCE(u.last_name,'') AS last_name
          FROM staff_profiles sp JOIN users u ON u.id = sp.user_id
          WHERE sp.id = $1`,
         [id],
