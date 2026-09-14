@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+/** Gate D local/CI. DESTRUCTIF : cluster dédié, base *_test uniquement.
+ * Fixtures/inspection : DATABASE_URL administrateur.
+ * DDL/seeds : creche_migrator. HTTP/worker/RLS : creche_app.
+ * Les helpers ne créent aucun rôle et n'ajoutent aucun grant en ce mode.
+ */
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+
+if (process.env.ALLOW_DATABASE_RESET !== '1' || !process.env.DATABASE_URL) {
+  throw new Error('Base jetable dédiée : DATABASE_URL et ALLOW_DATABASE_RESET=1 requis');
+}
+const adminUrl = new URL(process.env.DATABASE_URL);
+if (!decodeURIComponent(adminUrl.pathname).endsWith('_test')) {
+  throw new Error('Gate destructif réservé aux bases dont le nom se termine par _test');
+}
+const appPassword = randomBytes(32).toString('hex');
+const migratorPassword = randomBytes(32).toString('hex');
+function url(role, password) {
+  const u = new URL(adminUrl); u.username = role; u.password = password; return u.toString();
+}
+const env = {
+  ...process.env,
+  NODE_ENV: 'test',
+  BOOTSTRAP_DATABASE_URL: adminUrl.toString(),
+  APP_DATABASE_PASSWORD: appPassword,
+  MIGRATOR_DATABASE_PASSWORD: migratorPassword,
+  MIGRATION_DATABASE_URL: url('creche_migrator', migratorPassword),
+  APP_DATABASE_URL: url('creche_app', appPassword),
+  PRODUCTION_ROLE_TESTS: '1',
+  ISOLATION_LOG_DIR: mkdtempSync(join(tmpdir(), 'creche-roles-gate-')),
+};
+function run(command, args, overrides = {}) {
+  const result = spawnSync(command, args, { env: { ...env, ...overrides }, stdio: 'inherit' });
+  if (result.error || result.status !== 0) {
+    console.error(`Gate D interrompu : ${command} ${args.join(' ')} (exit ${result.status})`);
+    process.exit(result.status || 1);
+  }
+}
+run(process.execPath, ['--test', 'tests/tenant-isolation/production-compose-contract.test.mjs']);
+run(process.execPath, ['--test', 'tests/monitoring/worker-monitoring.test.mjs', 'tests/monitoring/alert-routing.test.mjs', 'tests/monitoring/alert-relay.test.mjs']);
+run(process.execPath, ['--test', 'tests/tenant-isolation/phase26-production-roles.test.mjs']);
+// La suite de régression injecte des rôles dangereux. Rebootstrap des secrets
+// et reset du schéma AVANT les suites historiques (phase3/4 attendent du neuf).
+run(process.execPath, ['scripts/bootstrap-roles.mjs']);
+run(process.execPath, ['scripts/migrate.mjs', '--reset']);
+run(process.execPath, ['scripts/migrate.mjs']);
+run(process.execPath, ['scripts/seed.mjs']);
+console.log(`Logs isolation : ${env.ISOLATION_LOG_DIR}`);
+run('bash', ['scripts/run-isolation-suites.sh']);
+console.log('✓ GATE D : régressions Phase D + 31 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+
+run(process.execPath, ['tests/diagnostics/sync-f0.mjs']);
+if (env.GITHUB_ACTIONS === 'true' || env.RUN_MONITORING_STACK === '1') {
+  run(process.execPath, ['scripts/test-worker-monitoring-stack.mjs']);
+}

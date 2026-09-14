@@ -58,3 +58,71 @@ text vs enum, invisible sur un moteur non validé). Le fichier local
 build api+worker → suites isolation+phase3→phase22 via
 `scripts/run-isolation-suites.sh`, plus jobs admin-web/support-console
 (typecheck+build) et security (npm audit --omit=dev).
+
+
+## 2026-09-14 — Gate Phase D (action humaine `workflows`)
+
+Les workflows sont désormais suivis et la PR #37 est mergée. Les sections
+antérieures décrivent l'historique, pas l'état courant ; ne pas pousser vers les
+anciennes branches de session mentionnées ci-dessus.
+
+Après `npm ci`, typecheck et **build API + worker**, remplacer la préparation de
+base et l'appel historique des suites du job `database` par :
+
+```yaml
+- name: Gate D/E — rôles/grants de production + régressions + 31 suites
+  env:
+    ALLOW_DATABASE_RESET: '1'
+    # DATABASE_URL hérité : administrateur du service PostgreSQL CI jetable.
+    # Base *_test et cluster dédié obligatoires, jamais une base de staging/prod.
+  run: npm run test:production-roles
+```
+
+Le runner génère deux secrets de test distincts, applique le bootstrap livré,
+exécute les migrations et seeds comme `creche_migrator`, et force les connexions
+API/worker/RLS à `creche_app` sans grants ad hoc des helpers. Les fixtures et les
+vérifications hors API conservent leur connexion administrateur de test.
+`schema-check` utilise aussi la connexion applicative. Le runner remet la base à
+zéro avant les suites historiques, dont phase3/4 dépendent.
+
+Aucune modification de `.github/workflows/*` n'est incluse dans la Phase D.
+Le succès local n'est pas un résultat CI tant que cette étape n'est pas câblée.
+
+
+### Complément E1 — même commande, 53 migrations et 30 suites
+
+Le runner inclut désormais `phase27-worker-lifecycle.test.mjs` après les 29
+contrôles historiques. Il teste de vrais processus (SIGKILL/SIGTERM/SIGINT), les
+baux, les heartbeats et la concurrence. Les quatre tests initiaux étaient rouges
+avant 053. Aucun workflow n'est modifié automatiquement ; les réserves de droits
+restent celles du plan de reprise. Voir `PHASE_E_WORKER_RUNBOOK.md`.
+
+
+### Complément E2–E6 — 56 migrations, 31 suites et gate Prometheus séparé
+
+Le runner inclut `phase28-worker-reliability.test.mjs` après E1 et ajoute trois
+précontrôles **structurels** de monitoring. Les fixtures API/worker utilisent
+les vrais rôles de production. La mensualité automatique reste désactivée par
+choix du client. Migration 055 réservée à G2, ne pas renuméroter 056/057.
+
+Le gate distinct `npm run check:worker-monitoring` exige **promtool 2.53.0** et
+évalue `tests/monitoring/worker-alerts.test.yml`. Il sort avec code 2 quand le
+binaire manque. L'installer dans le runner (ou fournir `PROMTOOL`) et câbler ce
+gate en CI ; ne pas le remplacer par les tests structurels ni ignorer son code.
+Le binaire ne doit pas être committé. Les téléchargements ont échoué dans le
+sandbox : aucun succès promtool n'est revendiqué pour cette session.
+
+La validation de réception opérateur et des images Compose reste un gate staging
+supplémentaire. Aucun changement `.github/workflows/*` inclus, permission humaine
+requise. Voir le runbook phase E et ADR-013.
+
+
+### Complément E2 / F0 — raccordement sans modification des workflows
+
+Dans GitHub Actions, `scripts/run-isolation-suites.sh` délègue maintenant au
+runner strict D quand il n'est pas déjà dans ce mode. Pas de récursion : celui-ci
+pose PRODUCTION_ROLE_TESTS=1. Après les 31 suites, le runner exécute le diagnostic
+F0 et `test-worker-monitoring-stack.mjs` (Docker, promtool, vrais services,
+récepteurs de test). Aucun fichier workflow modifié. Le gate E2 n'est pas ignoré
+si Docker échoue. Hors GitHub Actions, RUN_MONITORING_STACK=1 l'active explicitement.
+Le diagnostic F0 constate des défauts non corrigés : ne pas le lire comme gate F4.

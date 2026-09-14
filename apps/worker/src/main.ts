@@ -1,9 +1,10 @@
 import { GoogleAuth } from 'google-auth-library';
 import { createSign } from 'node:crypto';
 import * as http2 from 'node:http2';
-import { Pool, PoolClient } from 'pg';
-import { assertProductionConfig } from '@creche/prod-config';
+import { Pool, PoolClient, types } from 'pg';
+import { assertApplicationDatabaseRole, assertProductionConfig, BUSINESS_TIME_ZONE, dateOnly, monthBounds } from '@creche/prod-config';
 import { buildXlsx, storeExport, type ExportPayload } from './exports';
+import { runWorker, type ClaimedJob, type JobHandlers } from './job-runtime';
 import { buildInvoicePdf, deleteFile, storePdf } from './pdf';
 
 // MISSION P1 (feat(config)) : garde de config au boot — en production, un
@@ -20,11 +21,13 @@ try {
  * Worker : jobs transactionnels + livraison push (FCM HTTP v1 / APNs).
  *
  * RLS : le worker tourne avec le rôle applicatif NOBYPASSRLS. Le claim et la
- * terminaison des jobs passent par jobs_claim_next()/jobs_finish()
- * (SECURITY DEFINER, migration 024 — même pattern bootstrap que l'auth) ;
+ * terminaison des jobs passent par jobs_claim_leased()/jobs_finish_leased()
+ * (SECURITY DEFINER, migration 053 — même pattern bootstrap que l'auth) ;
  * TOUT accès aux données métier (invoices, children, …) se fait dans une
  * transaction avec SET LOCAL app.tenant_id (withTenant).
  */
+// PostgreSQL DATE ne représente pas un instant : aucun passage par Date/TZ.
+types.setTypeParser(1082, (value) => value);
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const firebaseCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
   ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON) as { project_id: string }
@@ -53,15 +56,6 @@ async function withTenant<T>(orgId: string, fn: (client: PoolClient) => Promise<
 }
 
 // ── Jobs métier ─────────────────────────────────────────────────────────────
-
-interface ClaimedJob {
-  id: string;
-  job_type: string;
-  payload: Record<string, unknown>;
-  organization_id: string | null;
-  attempts: number;
-  max_attempts: number;
-}
 
 /** generate_invoice_pdf : PDF réel → stockage (local/S3) → invoices.pdf_url. */
 async function generateInvoicePdf(job: ClaimedJob): Promise<void> {
@@ -92,7 +86,7 @@ async function generateInvoicePdf(job: ClaimedJob): Promise<void> {
     orgName: data.invoice.org_name ?? 'Crèche',
     invoiceNumber: data.invoice.invoice_number,
     periodLabel: `${String(data.invoice.period_month).padStart(2, '0')}/${data.invoice.period_year}`,
-    dueDate: data.invoice.due_date.toISOString?.().slice(0, 10) ?? String(data.invoice.due_date),
+    dueDate: dateOnly(data.invoice.due_date),
     childName: `${data.invoice.first_name_fr} ${data.invoice.last_name_fr}`.trim(),
     lines: data.lines.map((l: { description_fr: string; quantity: string; unit_price: string; total_price: string }) => ({
       description: l.description_fr,
@@ -113,71 +107,50 @@ async function generateInvoicePdf(job: ClaimedJob): Promise<void> {
   });
 }
 
-/** send_monthly_invoices : génération mensuelle idempotente pour tous les contrats actifs. */
+/** Facturation MANUELLE uniquement (scheduler désactivé par décision client).
+ * Un contrat doit couvrir le mois complet ; aucune modification des factures
+ * existantes/payées. Facture + lignes + enqueue PDF dans UNE transaction.
+ */
 async function sendMonthlyInvoices(job: ClaimedJob): Promise<void> {
   const orgId = job.organization_id;
   if (!orgId) throw new Error('ORGANIZATION_REQUIRED');
   const payload = job.payload as { period_year?: number; period_month?: number; due_date?: string };
-  if (!payload.period_year || !payload.period_month || !payload.due_date) throw new Error('PAYLOAD_INCOMPLET');
-  const { period_year: year, period_month: month, due_date: dueDate } = payload;
-
-  const created: string[] = [];
+  const [first, last] = monthBounds(payload.period_year!, payload.period_month!);
+  const dueDate = payload.due_date ? dateOnly(payload.due_date) : last;
+  const year = payload.period_year!; const month = payload.period_month!;
+  const cents = (value: unknown) => Math.round(Number(value ?? 0) * 100);
+  const money = (value: number) => (value / 100).toFixed(2);
   await withTenant(orgId, async (client) => {
     const contracts = (await client.query(
-      `SELECT * FROM contracts WHERE is_active = true
-         AND (end_date IS NULL OR end_date >= $1::date)`,
-      [`${year}-${String(month).padStart(2, '0')}-01`],
+      `SELECT * FROM contracts WHERE is_active=true AND start_date <= $1::date
+        AND (end_date IS NULL OR end_date >= $2::date)`, [first,last],
     )).rows;
     for (const contract of contracts) {
-      const subtotal = Number(contract.monthly_base_amount)
-        + (contract.includes_meals ? Number(contract.meal_amount ?? 0) : 0)
-        + (contract.includes_transport ? Number(contract.transport_amount ?? 0) : 0);
-      const discount = Math.round(subtotal * Number(contract.discount_percent ?? 0)) / 100;
-      const total = subtotal - discount;
-      const seq = (await client.query(`SELECT next_org_sequence($1) AS n`, [orgId])).rows[0].n;
+      const care = cents(contract.monthly_base_amount);
+      const meal = contract.includes_meals ? cents(contract.meal_amount) : 0;
+      const transport = contract.includes_transport ? cents(contract.transport_amount) : 0;
+      const subtotal = care + meal + transport;
+      const discount = Math.round(subtotal * Math.round(Number(contract.discount_percent ?? 0) * 100) / 10000);
+      const seq = (await client.query('SELECT next_org_sequence($1) AS n', [orgId])).rows[0].n;
       const invoiceNumber = `FAC-${year}${String(month).padStart(2, '0')}-${seq}`;
-      // L'index unique partiel (021) garantit UNE facture par contrat/période,
-      // même si deux jobs tournent en parallèle (ON CONFLICT DO NOTHING).
       const inserted = (await client.query(
-        `INSERT INTO invoices (organization_id, invoice_number, child_id, contract_id, period_year, period_month,
-                               subtotal, discount_amount, total_amount, due_date, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         ON CONFLICT DO NOTHING RETURNING id`,
-        [orgId, invoiceNumber, contract.child_id, contract.id, year, month, subtotal, discount, total, dueDate, contract.created_by],
+        `INSERT INTO invoices(organization_id,invoice_number,child_id,contract_id,period_year,period_month,
+          subtotal,discount_amount,total_amount,due_date,created_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING RETURNING id`,
+        [orgId,invoiceNumber,contract.child_id,contract.id,year,month,money(subtotal),money(discount),money(subtotal-discount),dueDate,contract.created_by],
       )).rows[0];
-      if (!inserted) continue; // facture déjà générée → idempotent
-      created.push(inserted.id);
-      await client.query(
-        `INSERT INTO invoice_lines (organization_id, invoice_id, description_fr, description_ar, quantity, unit_price, total_price, line_type)
-         VALUES ($1,$2,'Garde mensuelle','الرعاية الشهرية',1,$3,$3,'care')`,
-        [orgId, inserted.id, subtotal],
-      );
-      if (contract.includes_meals) {
-        await client.query(
-          `INSERT INTO invoice_lines (organization_id, invoice_id, description_fr, description_ar, quantity, unit_price, total_price, line_type)
-           VALUES ($1,$2,'Repas','الوجبات',1,$3,$3,'meal')`,
-          [orgId, inserted.id, Number(contract.meal_amount ?? 0)],
-        );
+      if (!inserted) continue;
+      const lines = [
+        { fr: 'Garde mensuelle', ar: 'الرعاية الشهرية', amount: care, type: 'care', include: true },
+        { fr: 'Repas', ar: 'الوجبات', amount: meal, type: 'meal', include: contract.includes_meals },
+        { fr: 'Transport', ar: 'النقل', amount: transport, type: 'transport', include: contract.includes_transport },
+      ];
+      for (const line of lines.filter(l => l.include)) {
+        await client.query(`INSERT INTO invoice_lines(organization_id,invoice_id,description_fr,description_ar,quantity,unit_price,total_price,line_type)
+          VALUES($1,$2,$3,$4,1,$5,$5,$6)`, [orgId,inserted.id,line.fr,line.ar,money(line.amount),line.type]);
       }
-      if (contract.includes_transport) {
-        await client.query(
-          `INSERT INTO invoice_lines (organization_id, invoice_id, description_fr, description_ar, quantity, unit_price, total_price, line_type)
-           VALUES ($1,$2,'Transport','النقل',1,$3,$3,'transport')`,
-          [orgId, inserted.id, Number(contract.transport_amount ?? 0)],
-        );
-      }
-    }
-  });
-
-  // Une fois la génération mensuelle committée, on planifie les PDF (même
-  // transaction d'écriture jobs, tenant posé) pour les nouvelles factures.
-  await withTenant(orgId, async (client) => {
-    for (const invoiceId of created) {
-      await client.query(
-        `INSERT INTO background_jobs (organization_id, job_type, payload, priority)
-         VALUES ($1, 'generate_invoice_pdf', $2, 2)`,
-        [orgId, JSON.stringify({ invoice_id: invoiceId })],
-      );
+      await client.query(`INSERT INTO background_jobs(organization_id,job_type,payload,priority)
+        VALUES($1,'generate_invoice_pdf',$2,2)`, [orgId,JSON.stringify({ invoice_id: inserted.id })]);
     }
   });
 }
@@ -187,29 +160,32 @@ async function sendMonthlyInvoices(job: ClaimedJob): Promise<void> {
  *  échoue (ex. S3 injoignable) RESTE en base et fait échouer le job après
  *  purge des autres — jamais de fausse purge complète. */
 async function videoClipsPurge(): Promise<void> {
-  const expired = await pool.query<{ id: string; storage_backend: 'local' | 's3'; storage_key: string }>(
-    `SELECT id, storage_backend, storage_key FROM video_clips_expired(500)`,
-  );
-  if (expired.rows.length === 0) {
-    console.log('[worker] video_clips_purge : rien à purger');
-    return;
-  }
-  const purgedIds: string[] = [];
-  const failures: string[] = [];
-  for (const clip of expired.rows) {
-    try {
-      await deleteFile(clip.storage_key, clip.storage_backend);
-      purgedIds.push(clip.id);
-    } catch (error) {
-      failures.push(`${clip.id}:${error instanceof Error ? error.message : String(error)}`.slice(0, 160));
+  for (;;) {
+    const expired = await pool.query<{ id: string; storage_backend: 'local' | 's3'; storage_key: string }>(
+      `SELECT id, storage_backend, storage_key FROM video_clips_expired(500)`,
+    );
+    if (expired.rows.length === 0) {
+      console.log('[worker] video_clips_purge : rien à purger');
+      return;
     }
-  }
-  if (purgedIds.length > 0) {
-    const r = await pool.query<{ n: number }>(`SELECT video_clips_delete_purged($1::uuid[]) AS n`, [purgedIds]);
-    console.log(`[worker] video_clips_purge : ${r.rows[0].n} clip(s) purgé(s) (> 30 j)`);
-  }
-  if (failures.length > 0) {
-    throw new Error(`VIDEO_PURGE_PARTIAL(${failures.length} échec(s) stockage): ${failures.join(' | ')}`);
+    const purgedIds: string[] = [];
+    const failures: string[] = [];
+    for (const clip of expired.rows) {
+      try {
+        await deleteFile(clip.storage_key, clip.storage_backend);
+        purgedIds.push(clip.id);
+      } catch (error) {
+        failures.push(`${clip.id}:${error instanceof Error ? error.message : String(error)}`.slice(0, 160));
+      }
+    }
+    if (purgedIds.length > 0) {
+      const r = await pool.query<{ n: number }>(`SELECT video_clips_delete_purged($1::uuid[]) AS n`, [purgedIds]);
+      console.log(`[worker] video_clips_purge : ${r.rows[0].n} clip(s) purgé(s) (> 30 j)`);
+    }
+    if (failures.length > 0) {
+      throw new Error(`VIDEO_PURGE_PARTIAL(${failures.length} échec(s) stockage): ${failures.join(' | ')}`);
+    }
+    if (expired.rows.length < 500) return;
   }
 }
 
@@ -221,8 +197,11 @@ async function videoClipsPurge(): Promise<void> {
  *  'pending' après traitement) ; toute erreur SQL fait échouer le job avec sa
  *  raison — jamais de faux « expiré ». */
 async function paymentsExpire(): Promise<void> {
-  const r = await pool.query<{ n: number }>(`SELECT payments_expire_pending() AS n`);
-  console.log(`[worker] payments_expire : ${r.rows[0].n} paiement(s) pending SATIM expiré(s) (> 72 h)`);
+  for (;;) {
+    const r = await pool.query<{ n: number }>('SELECT payments_expire_pending() AS n');
+    console.log(`[worker] payments_expire : ${r.rows[0].n} paiement(s) pending SATIM expiré(s) (> 72 h)`);
+    if (r.rows[0].n < 500) return;
+  }
 }
 
 /** retention_purge : purge des journaux au-delà de RETENTION_DAYS (défaut 1825 j). */
@@ -248,23 +227,23 @@ async function exportReport(job: ClaimedJob): Promise<void> {
                 s.status AS statut,
                 to_char((SELECT e.occurred_at FROM attendance_events e
                    WHERE e.session_id = s.id AND e.event_type='check_in'
-                   ORDER BY e.occurred_at LIMIT 1), 'HH24:MI') AS arrivee,
+                   ORDER BY e.occurred_at LIMIT 1) AT TIME ZONE $4, 'HH24:MI') AS arrivee,
                 to_char((SELECT e.occurred_at FROM attendance_events e
                    WHERE e.session_id = s.id AND e.event_type='check_out'
-                   ORDER BY e.occurred_at DESC LIMIT 1), 'HH24:MI') AS depart
+                   ORDER BY e.occurred_at DESC LIMIT 1) AT TIME ZONE $4, 'HH24:MI') AS depart
          FROM attendance_sessions s
          JOIN children c ON c.id = s.child_id
          LEFT JOIN rooms r ON r.id = c.room_id
          WHERE s.organization_id = $1 AND s.session_date BETWEEN $2 AND $3
          ORDER BY s.session_date, c.last_name_fr`,
-        [orgId, start, end],
+        [orgId, start, end, BUSINESS_TIME_ZONE],
       );
       return res.rows.map((row) => ({
         reference: row.reference_number,
         prenom: row.first_name_fr,
         nom: row.last_name_fr,
         salle: row.salle,
-        date: String(row.date).slice(0, 10),
+        date: dateOnly(row.date),
         statut: row.statut,
         arrivee: row.arrivee ?? '',
         depart: row.depart ?? '',
@@ -290,22 +269,25 @@ async function exportReport(job: ClaimedJob): Promise<void> {
       paye_dzd: Number(row.paid_amount),
       solde_dzd: Number(row.balance),
       statut: row.status,
-      echeance: String(row.due_date).slice(0, 10),
+      echeance: dateOnly(row.due_date),
     }));
   });
 
   const xlsx = await buildXlsx(payload.report_type, rows);
-  const key = await storeExport(orgId, payload.export_id, xlsx);
+  const key = await storeExport(orgId, payload.export_id, xlsx, job.lease_token);
   await withTenant(orgId, async (client) => {
-    await client.query(
-      `UPDATE report_exports SET status='done', storage_key=$2, file_size_bytes=$3, completed_at=NOW()
-       WHERE id=$1`,
-      [payload.export_id, key, xlsx.length],
+    const owned = await client.query(`SELECT id FROM background_jobs
+      WHERE id=$1 AND lease_token=$2 AND status='processing' FOR UPDATE`, [job.id,job.lease_token]);
+    if (!owned.rowCount) throw new Error('JOB_LEASE_LOST');
+    const updated = await client.query(
+      `UPDATE report_exports SET status='done', storage_key=$2, file_size_bytes=$3, completed_at=NOW(), failure_reason=NULL
+       WHERE id=$1 AND status='pending'`, [payload.export_id,key,xlsx.length],
     );
+    if (!updated.rowCount) throw new Error('EXPORT_STATE_NOT_PENDING');
   });
 }
 
-const JOB_HANDLERS: Record<string, (payload: unknown, orgId: string | null, job: ClaimedJob) => Promise<void>> = {
+const JOB_HANDLERS: JobHandlers = {
   generate_invoice_pdf: (_p, _o, job) => generateInvoicePdf(job),
   send_monthly_invoices: (_p, _o, job) => sendMonthlyInvoices(job),
   retention_purge: () => retentionPurge(),
@@ -315,7 +297,7 @@ const JOB_HANDLERS: Record<string, (payload: unknown, orgId: string | null, job:
   // ci-dessous) : ce job marque la prise en charge, le drain ne passe la file
   // en 'sent' qu'après traitement, avec failure_reason explicite
   // (PUSH_NOT_CONFIGURED_OR_NO_DEVICE) si aucun push n'a réellement été
-  // délivré — jamais de faux statut, l'inbox reste la voie fiable.
+  // délivré — sent signifie traité, pas livré ; l'inbox reste la voie fiable.
   send_parent_notification: async (_payload, orgId) => {
     if (!orgId) throw new Error('ORGANIZATION_REQUIRED');
   },
@@ -324,39 +306,6 @@ const JOB_HANDLERS: Record<string, (payload: unknown, orgId: string | null, job:
   // faux statut : le job échoue avec un message clair si invoqué).
   compress_media: async () => { throw new Error('NOT_IMPLEMENTED: compression média'); },
 };
-
-async function processNextJob(): Promise<boolean> {
-  const client = await pool.connect();
-  let jobId: string | null = null;
-  try {
-    // Claim + passage en 'processing' dans UNE transaction (verrou SKIP LOCKED
-    // effectif), via la fonction SECURITY DEFINER jobs_claim_next (024).
-    await client.query('BEGIN');
-    const claimed = await client.query(
-      `SELECT id, job_type, payload, organization_id, attempts, max_attempts FROM jobs_claim_next()`,
-    );
-    if (!claimed.rows[0]) {
-      await client.query('ROLLBACK');
-      return false;
-    }
-    jobId = claimed.rows[0].id as string;
-    await client.query('COMMIT');
-    const job = claimed.rows[0] as ClaimedJob;
-    const handler = JOB_HANDLERS[job.job_type];
-    if (!handler) throw new Error(`Type de job inconnu: ${job.job_type}`);
-    await handler(job.payload, job.organization_id, job);
-    await pool.query(`SELECT jobs_finish($1, true)`, [job.id]);
-    return true;
-  } catch (error) {
-    if (jobId) {
-      const reason = error instanceof Error ? error.message : String(error);
-      await pool.query(`SELECT jobs_finish($1, false, $2)`, [jobId, reason.slice(0, 500)]);
-    }
-    return true;
-  } finally {
-    client.release();
-  }
-}
 
 // ── Push FCM HTTP v1 / APNs ─────────────────────────────────────────────────
 
@@ -483,7 +432,8 @@ async function drainNotificationQueue(): Promise<void> {
           else if (d.platform === 'ios' && d.apns_token) { await apnsSend(d.apns_token, message); delivered = true; }
         }
         // Sans jeton/configuration, l'inbox reste la voie fiable ; ne jamais
-        // marquer 'sent' si rien n'a été livré, ni journaliser de token.
+        // perdre le motif de non-envoi, ni journaliser de token. 'sent' désigne
+        // le traitement de la queue, pas un accusé de livraison (décision E3).
         await client.query(`SELECT notif_queue_finish($1, true, $2)`, [n.id, delivered ? null : 'PUSH_NOT_CONFIGURED_OR_NO_DEVICE']);
       } catch (error) {
         await client.query(`SELECT notif_queue_finish($1, false, $2)`, [n.id, String((error as Error).message).slice(0, 500)]);
@@ -507,19 +457,12 @@ async function initSentry(): Promise<void> {
 }
 
 async function run(): Promise<void> {
+  await assertApplicationDatabaseRole(pool);
   await initSentry();
-  console.log('[worker] démarré — jobs (024) + FCM HTTP v1 / APNs');
-  for (;;) {
-    try {
-      const had = await processNextJob();
-      await drainNotificationQueue();
-      if (!had) await new Promise((r) => setTimeout(r, 2000));
-    } catch (error) {
-      sentry?.captureException(error);
-      console.error('[worker] boucle:', error instanceof Error ? error.message : String(error));
-      await new Promise((r) => setTimeout(r, 5000));
-    }
-  }
+  await runWorker(pool, JOB_HANDLERS, drainNotificationQueue, (error) => {
+    sentry?.captureException(error);
+    console.error('[worker] erreur:', error instanceof Error ? error.message : String(error));
+  });
 }
 
 run().catch((error) => { console.error('[worker] fatal:', error); process.exit(1); });

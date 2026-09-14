@@ -1,10 +1,42 @@
-# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.0)
+# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.4)
 
 > **Document de pilotage pour la prochaine session agent.**
 > Remplace la v1.x du même fichier (historique : voir `git log -- docs/PLAN_CORRECTION_AUDIT_2026-09.md`).
-> **Version** : 2.0 — 2026-09-14, **après merge de la PR #37 dans `main`** (`d6f2dfe`).
+> **Version** : 2.4 — 2026-09-14. Reprend la v2.0 mergée par la PR #43 (`d2bd1f9`)
+> et ajoute le suivi local D/E1–E6 sur `arena/01a09e7f-cr-chedz` (pas encore mergé).
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md),
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md) et à la [matrice d'autorisation](architecture/authorization-matrix.md).
+
+---
+
+## Suivi de cette session — D puis E1–E6
+
+- **D0 confirmé avec le client** : aucune production déployée, installation neuve ;
+  propriétaires et sauvegarde de production non applicables. Rollback écrit avant
+  correction. Aucune opération en production.
+- **D implémentée et validée localement** : 29/29 suites historiques avec les rôles
+  et grants de production, 14 tests PostgreSQL D, 8 tests structurels Compose.
+  Voir [runbook D](PHASE_D_ROLES_RUNBOOK.md) et ADR-011.
+- **E1 corrigé après reproduction** : migration 053, baux/heartbeat/reaper et arrêt
+  gracieux. 0/4 tests initiaux avant → 4/4 après ; **14/14** tests E1 et
+  **30/30** suites/contrôles D+E1 avec rôles de production (exit 0).
+  Voir [runbook E](PHASE_E_WORKER_RUNBOOK.md) et ADR-012.
+- **E2–E6 implémentés localement**, décisions client obtenues : 3 jobs planifiés,
+  facturation automatique **OFF**, mois partiels non facturés, échéance fin de
+  mois par défaut, statut notification conservé avec motif. Migrations 054/056/057.
+  **23/23** tests E2–E6 verts en rôles stricts et historiques ; **31/31** suites
+  au gate final D+E, exit 0 (premier passage 30/31 : faute de nom SQL dans un
+  test corrigée). Build/typecheck/lint verts, 27 unitaires, audit prod 0 vuln.
+- **Suite E2** : routage Prometheus → Alertmanager → relais local/e-mail/SMS/WhatsApp
+  livré selon le choix client ; 0/2 routage avant → 2/2 après, 4/4 tests de relais.
+  Gate des vrais moteurs Docker et de la chaîne complète raccordé à la CI existante,
+  **résultat PR en attente**. Réception sur coordonnées réelles non configurée.
+  Voir `PHASE_E2_ALERTING_RUNBOOK.md`.
+- **F commencée (F0 reproduit, F1 brouillon)** : voir `PHASE_F_SYNC_DIAGNOSTIC.md`.
+  Pas encore de correction Dart ni de gate F4. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
+  du choix « mois partiels non facturés » des contrats de garde.
+- **Réserves D** : Docker non démarré ici, écart Compose PostgreSQL 16 / tests 18.4,
+  gate CI strict désormais raccordé via le runner existant (validation PR en attente). Ne pas confondre preuve locale et déploiement.
 
 ---
 
@@ -84,47 +116,55 @@ l'audit initial contenait ~3 faux positifs et 3 claims non applicables (document
 > ([`BACKUP-RUNBOOK.md`](BACKUP-RUNBOOK.md)) + plan de rollback écrit **avant** de commencer.
 > Issue **#38**. Remarque : C5 n'est plus un prérequis (résolu en Phase C).
 
-### D0. Décision préalable (à trancher explicitement avec le client)
+### D0. Décision préalable (tranchée avec le client : aucune production déployée)
 
-- [ ] La prod contient-elle déjà de vraies données enfants ?
-      - **Non** → recréer la base proprement (beaucoup plus simple)
-      - **Oui** → correction en place, avec fenêtre de maintenance
-- [ ] Qui est propriétaire des tables aujourd'hui ? Si `creche_app` (superuser) l'est,
-      le transfert de propriété vers `creche_migrator`/`postgres` est un prérequis.
+- [x] Client : **pas de production déployée**, installation neuve. Aucune
+      suppression de volume existant autorisée par cette décision.
+- [x] Propriétaires/sauvegarde de production non applicables. Le bootstrap refuse
+      une propriété applicative historique ; ce cas exige une intervention dédiée.
 
 ### D1. Séparer les rôles : superuser ≠ migrateur ≠ applicatif
 
-Le dépôt prévoit déjà cette séparation (`infrastructure/database/roles.sql` : `creche_migrator`
-pour le DDL, `creche_app` en `NOBYPASSRLS`) — elle n'est jamais appliquée.
+Avant correction, le dépôt prévoyait déjà cette séparation (`infrastructure/database/roles.sql` : `creche_migrator`
+pour le DDL, `creche_app` en `NOBYPASSRLS`) — elle n'était jamais appliquée.
 
-- [ ] **Compose** : ne plus faire de l'utilisateur applicatif le superuser d'init
+- [x] **Compose** : ne plus faire de l'utilisateur applicatif le superuser d'init
       (`POSTGRES_USER: postgres` pour l'init seule, `DATABASE_URL` api/worker → `creche_app`).
-- [ ] **Câbler `roles.sql`** : service `bootstrap-roles` qui dépend de `postgres: healthy` et que
+- [x] **Câbler `roles.sql`** : service `bootstrap-roles` qui dépend de `postgres: healthy` et que
       `migrate` attend (préférable à `docker-entrypoint-initdb.d`, reproductible).
-- [ ] **Corriger `roles.sql`** : le `IF NOT EXISTS` actuel est un piège (C8-bis — le bloc est
+- [x] **Corriger `roles.sql`** : le `IF NOT EXISTS` actuel est un piège (C8-bis — le bloc est
       sauté silencieusement si le rôle existe déjà en superuser). Upsert idempotent qui garantit
       **l'état final** : `ELSE ALTER ROLE creche_app NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;`.
-- [ ] Mots de passe distincts `creche_app` / `creche_migrator` (secrets →
+- [x] Mots de passe distincts `creche_app` / `creche_migrator` (secrets →
       [`OPERATIONS-SECRETS.md`](OPERATIONS-SECRETS.md)).
-- [ ] `scripts/migrate.mjs` utilise `creche_migrator` ; api/worker `creche_app`.
+- [x] `scripts/migrate.mjs` utilise `creche_migrator` ; api/worker `creche_app`.
 
-### D2. Prouver que la RLS s'applique vraiment en prod
+### D2. Prouver la RLS avec les rôles de production
 
-- [ ] **Refus de démarrage** si le rôle applicatif est superuser/bypassrls en `production` :
+- [x] **Refus de démarrage** si le rôle applicatif est superuser/bypassrls en `production` :
       au boot de l'API, `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`
       → message explicite. Même check dans `migrate.mjs` (le migrateur PEUT avoir plus de droits,
       mais ne doit jamais être le rôle de l'app).
-- [ ] **GATE** : les **29 suites** de `tests/tenant-isolation/` tournent **avec les rôles de prod**
+- [x] **GATE LOCAL** : les **29 suites** de `tests/tenant-isolation/` tournent **avec les rôles de prod**
       (mêmes rôles, mêmes grants — pas le superuser). `schema-check` et `rls-behavior-check` (9/9
       attendu) avec `creche_app`. Tant que ce gate n'est pas vert, D n'est pas terminé.
 
 ### D3. Vérifier les grants
 
-- [ ] `GRANT … ON ALL TABLES IN SCHEMA public` : **rejouer après toute migration ajoutant une
+- [x] `GRANT … ON ALL TABLES IN SCHEMA public` : **rejouer après toute migration ajoutant une
       table** — automatiser en fin de `migrate.mjs`, sinon la 53e migration crée une table
       illisible pour `creche_app`. Vérifier les `GRANT EXECUTE` des fonctions `SECURITY DEFINER`
       (015, 016, 024, 042, 051…).
-- [ ] **Test** : après une migration ajoutant une table fictive, l'api la lit sans intervention manuelle.
+- [x] **Test** : après une migration ajoutant une table fictive, l'api la lit sans intervention manuelle.
+
+**D livré** : bootstrap transactionnel rejouable → migrateur NOSUPERUSER BYPASSRLS
+(fonctions SECURITY DEFINER sur FORCE RLS) → application NOBYPASSRLS. API **et
+worker** vérifient current_user/session_user, attributs, propriété, appartenance et
+CREATE. Seeds utilisent aussi le migrateur ; registre des migrations en lecture
+seule pour l'app. Grants dans chaque transaction de migration et sur run sans DDL.
+
+- [ ] Vérification Docker réelle et choix/validation du moteur cible (16 vs 18).
+- [ ] Câblage CI du nouveau gate (action humaine `workflows`).
 
 ---
 
@@ -135,70 +175,89 @@ pour le DDL, `creche_app` en `NOBYPASSRLS`) — elle n'est jamais appliquée.
 
 ### E1. Jobs orphelins (perte silencieuse de travail)
 
-- [ ] **Reaper** : `jobs_reap_stale(p_timeout interval)` — tout job `processing` dont `started_at`
-      est trop ancien repasse en `pending` (ou `failed` si `attempts >= max_attempts`). **Migration 053**.
-- [ ] **Arrêt gracieux** : `SIGTERM`/`SIGINT` dans `apps/worker/src/main.ts` (finir le job en cours,
+- [x] **Reaper** : `jobs_reap_stale(p_timeout interval)` — tout job `processing` dont le heartbeat
+      (ou `started_at` historique) est trop ancien repasse en `pending` (ou `failed` si `attempts >= max_attempts`). **Migration 053**.
+- [x] **Arrêt gracieux** : `SIGTERM`/`SIGINT` dans `apps/worker/src/job-runtime.ts` (finir le job en cours,
       ne plus réclamer, sortir). Vérifier `stop_grace_period` dans `docker-compose.prod.yml`.
-- [ ] Boucle de reaper périodique dans le worker (ou job dédié, voir E2).
-- [ ] **Test** : job long + SIGKILL du worker → le job est repris après le timeout. **Doit échouer
-      aujourd'hui.**
+- [x] Boucle de reaper périodique dans le worker (ou job dédié, voir E2).
+- [x] **Test** : job long + SIGKILL du worker → le job est repris après le timeout. **Rouge avant, vert après.**
 
-### E2. Le scheduler manquant — bug systémique
+**Compléments livrés** : bail UUID par tentative, heartbeat indépendant du
+handler, fencing des terminaisons tardives (même après reset du compteur par le
+support), reaper concurrent par batches de 500/SKIP LOCKED, deadline 45 s et
+stop_grace_period 60 s. At-least-once uniquement ; pas de mélange d'anciens et
+nouveaux workers au déploiement. Détails et résultats : [runbook E](PHASE_E_WORKER_RUNBOOK.md).
 
-4 handlers enregistrés (`retention_purge`, `video_clips_purge`, `payments_expire`,
-`send_monthly_invoices`), **0 producteur**. La purge DPIA 30 j (`video_clips_purge`) promise par
-`video.service.ts:23` et `:206` **n'existe pas** → vidéos d'enfants conservées indéfiniment
-(enjeu loi 25-11).
+### E2. Le scheduler manquant — reproduit et implémenté, gate supervision restant
 
-- [ ] **ADR** (`docs/adr/`) pour choisir le mécanisme : (1) boucle interne + verrou
-      `SELECT … FOR UPDATE SKIP LOCKED` sur `scheduler_ticks` (recommandé, mono-réplica) ;
-      (2) cron externe/K8s CronJob ; (3) pg_cron (extension absente de l'image standard).
-- [ ] Fréquences à valider avec le métier : `video_clips_purge` quotidien ; `retention_purge`
-      quotidien ; `payments_expire` horaire ; `send_monthly_invoices` mensuel (1er, idempotent) ;
-      `jobs_reap_stale` toutes les 5 min.
-- [ ] **Idempotence vérifiée** pour chacun avant planification (`send_monthly_invoices` déjà
-      documenté idempotent et testé `phase11-hardening.api.test.mjs:144`).
-- [ ] **GATE** : test qui avance l'horloge (ou injecte des `scheduled_at` passés) et vérifie que
-      chaque job **s'exécute réellement**. + alerte si un job planifié n'a pas tourné depuis N périodes.
+Avant correction : quatre handlers, aucun producteur ; les données vidéo,
+paiements et rétention expirées n'étaient pas traitées automatiquement.
 
-### E3. Faux statut de notification (HIGH-6)
+- [x] ADR-013 : boucle interne + ticks persistés + `FOR UPDATE SKIP LOCKED`.
+      Migration **056**, table FORCE RLS interne, aucun EXECUTE PUBLIC.
+- [x] Fréquences **validées par le client** : purges quotidiennes **02 h Alger**,
+      paiements chaque heure pleine, reaper 5 min. **Mensuelle automatique OFF**,
+      protégée par CHECK : pas d'activation implicite ni d'enqueue sans tenant.
+- [x] Retard coalescé et pas de doublon avec deux producteurs concurrents ; lots
+      vidéo/paiements de 500 drainés jusqu'à épuisement (501e ligne reproduite).
+- [x] Test : ticks passés injectés, trois handlers réellement exécutés, fichiers
+      et lignes expirées supprimés, paiement failed, aucune mensualité produite.
+- [x] Santé PostgreSQL lisible sans worker ; retard après **2 périodes** depuis
+      le dernier succès (2 h/48 h), exporter et règles Prometheus câblés.
+- [ ] **GATE supervision à terminer** : `npm run check:worker-monitoring` avec
+      promtool 2.53.0, images cibles, métriques/firing et réception opérateur quand
+      tous les workers sont arrêtés. Ici : outil absent, gate exit 2, téléchargements
+      réseau bloqués. Alertmanager et relais 4 canaux maintenant livrés ; le gate
+      Docker est exécuté en CI. Coordonnées/credentials d'exploitation à configurer.
 
-`main.ts:487` appelle `notif_queue_finish($1, true, 'PUSH_NOT_CONFIGURED_OR_NO_DEVICE')` — la
-fonction (042) ignore le motif quand `p_success=true` et met `failure_reason=NULL`. Le commentaire
-de `main.ts:314-318` promet l'inverse.
+### E3. Notification non livrée — corrigé selon la décision client
 
-- [ ] **Décider la sémantique** : trois états `sent` / `failed` / `skipped`, ou conserver
-      `failure_reason` même quand `p_success=true`. Le commentaire décrit l'option 2 (intention
-      d'origine). **Migration 054** (042 est immuable).
-- [ ] **Test** : notification sans device configuré → statut **et** `failure_reason` cohérents en base.
+- [x] Statuts existants conservés, `failure_reason` conservé même si succès de
+      traitement. **Migration 054** (042/043 intactes).
+- [x] Notification sans device : `sent` + `PUSH_NOT_CONFIGURED_OR_NO_DEVICE`.
+      Avant : motif NULL. **sent = queue traitée, pas preuve de push livré.**
 
-### E4. Dates d'export (HIGH-3)
+### E4. Calendrier DATE / heures — corrigé dans le périmètre worker
 
-- [ ] `main.ts:267` et `:293` : `String(row.date).slice(0,10)` → `"Sun Sep 13"`. Corriger par
-      **parseur pg dédié** (`pg.types.setTypeParser(1082, v => v)` — le `DATE` arrive déjà en
-      `YYYY-MM-DD`) ou formatage explicite. ⚠️ `.toISOString().slice(0,10)` (correct ligne 95 pour
-      un `timestamptz`) **décale d'un jour** un `DATE` en TZ négatif.
-- [ ] **Politique unique** de timezone (UTC+1 vs UTC éparpillé), helper centralisé
-      (`packages/` ?) — voir aussi H3.
-- [ ] **Test** : export avec un `DATE` au 1er du mois → cellule `YYYY-MM-01`, testé avec `TZ`
-      négatif **et** positif. Vérifier `pdf.ts:68` (`Échéance : ${data.dueDate}`) qui consomme la ligne 95.
+- [x] OID1082 pg dédié → chaîne ISO ; plus de `String(Date).slice(0,10)` ni de
+      conversion en instant pour une échéance. Déplacement au jour précédent
+      effectivement reproduit en **TZ positif** dans le PDF (correction du libellé
+      initial de l'audit qui mentionnait le TZ négatif).
+- [x] Helper calendrier partagé (`packages/prod-config/src/calendar.ts`) : dates
+      réelles, année bissextile, pas d'année zéro PostgreSQL, bornes de mois ;
+      horaires de présence explicitement en `Africa/Algiers`.
+- [x] Vrais PDF/XLSX : DATE au premier du mois, échéance exacte, tests TZ positif
+      **et** négatif ; sessions SQL à fuseaux différents pour les heures.
+- [ ] Harmonisation des autres modules H3 : **pas revendiquée comme faite**.
 
-### E5. Facturation mensuelle ignore `start_date` (HIGH-7)
+### E5. Facturation mensuelle — corrigé, automatique toujours désactivée
 
-- [ ] Confirmer : `sendMonthlyInvoices` (`main.ts:116`) itère les contrats actifs sans regarder
-      `start_date` (0 occurrence dans `main.ts`).
-- [ ] **Règle métier à décider AVEC LE CLIENT** : prorata ? mois entier ? rien le premier mois ?
-      (même question pour le payroll — « payroll sans prorata »). Vérifier
-      [`docs/regulatory/`](regulatory/) (décret 19-253).
-- [ ] Implémenter le prorata si retenu, en cohérence avec les triggers d'intégrité financière (C04)
-      et l'immuabilité des factures payées.
-- [ ] **Test** : contrat démarrant le 15/09 → facture de septembre au prorata (ou nulle), pas un
-      mois plein ; contrat démarrant le 01/10 → rien en septembre.
+- [x] Reproduction : contrats commençant le 15/09 ou le 01/10 facturés en septembre.
+- [x] Décision client : **pas de facture pour un mois partiellement couvert** ;
+      contrat actif du premier au dernier jour inclus. Aucun prorata de paie décidé.
+- [x] Échéance par défaut en fin de mois ; payload manuel explicite conservé par
+      compatibilité (interprétation documentée, pas validation client additionnelle).
+- [x] Après preuve rouge : facture/lignes/enqueue PDF dans la même transaction ;
+      repas/transport non doublés dans la ligne de garde. Centimes et C04 conservés.
+- [x] Tests de contrats partiels/futurs, échéance, total des lignes, échec enqueue
+      annulant la facture, rejeu sans doublon et facture payée intacte.
 
-### E6. Export date-simple bloqué en `pending`
+### E6. Export date-simple et échecs silencieux — corrigé
 
-- [ ] Reproduire (probablement même famille de bug que E4) ; ajouter timeout/statut `failed`
-      explicite — un export bloqué doit être **visible**, pas silencieux.
+- [x] Reproduit : `2026-09-01` devient `2026-09-01-01`, le job échoue mais le
+      rapport reste pending. Date simple corrigée en `[jour,jour]`, périodes
+      invalides/inversées refusées avant enqueue.
+- [x] **057** : projection des échecs terminaux (finish, reaper, timeout), reprise
+      support et réconciliation d'attente. Deadline handler **2 min** ; pending
+      **30 min** (maintenance + API tenant, lots bornés de 500).
+- [x] Publication sous bail verrouillé, chemin `{tenant}/exports/{id}/{lease}.xlsx`.
+      PUT tardif : ni publication après perte de bail ni écrasement d'une nouvelle
+      tentative. Un crash peut laisser un objet orphelin : lifecycle séparé requis.
+- [x] Tests API → worker → fichiers, stockage défaillant, vrai blocage SQL,
+      timeout visible, attente sans worker/tenant B intact, reprise et S3 simulé.
+
+Voir le [runbook E](PHASE_E_WORKER_RUNBOOK.md) pour les commandes, limites, preuves
+et rollback. **Implémentation locale ≠ déploiement ni gate supervision complet.**
 
 ---
 
@@ -206,20 +265,23 @@ de `main.ts:314-318` promet l'inverse.
 
 > Issue **#40**. Le plus gros chantier. Dépend de B (fait) et E.
 
-### F0. Diagnostic complet du contrat (avant d'écrire du code)
+### F0. Diagnostic du contrat — reproduit
 
-- [ ] **`device_id` absent du client** : `SyncPushDto.device_id` / `SyncPullDto.device_id` =
-      `@IsUUID()` requis ; `device_id` = 0 occurrence dans `apps/staff-mobile/lib` et
-      `apps/parent-mobile/lib` → 400 systématique. Confirmer en lisant
-      `apps/staff-mobile/lib/core/sync/sync_engine.dart`.
-- [ ] **Aucun enregistrement d'appareil** côté client (l'API a `POST /devices`) — sinon
-      `sync_cursors(device_id, organization_id)` référence un device inconnu.
-- [ ] **Curseur renvoyé en string** : `SyncPullDto.cursor` = `@IsInt() @Min(0)` → vérifier le type
-      renvoyé par `pull()` (JSON number vs string casse le parse Dart).
-- [ ] **Aucun émetteur d'événements `child`** : vérifier qui écrit dans `sync_changelog` (C02).
-      Si rien n'émet pour `child`, le pull renvoie un jeu vide — **pire** qu'une erreur visible.
+- [x] Staff sans device_id : push et pull HTTP **400** sur la vraie API.
+- [x] Aucun enregistrement côté client staff ; `/devices` renvoie `{device_id}`.
+- [x] Curseurs : push number, pull non vide string, pull vide number ; BIGINT pg.
+- [x] Création enfant HTTP 201, mais **aucun événement child** au pull.
+- [x] Nuance : pas de moteur de sync parent ; endpoints staff seulement, ne pas
+      déduire un 400 de sync parent d'une simple absence de chaîne dans son code.
+
+Diagnostic : `tests/diagnostics/sync-f0.mjs`, résultat synthétique versionné,
+[analyse F0](PHASE_F_SYNC_DIAGNOSTIC.md). Requêtes reconstruites depuis le Dart,
+**pas de client Dart exécuté**. Idempotence API vérifiée une fois les appareils
+correctement enregistrés. Curseur local non scopé et autres risques à reproduire.
 
 ### F1. Établir le contrat comme artefact de première classe
+
+Brouillon créé : `docs/architecture/sync-contract.md` ; non implémenté, pas encore validé des deux côtés.
 
 - [ ] Spécifier le contrat dans `docs/architecture/` : shape exact requêtes/réponses, types JSON
       précis (number vs string), codes d'erreur, sémantique du curseur, ordre des opérations.
@@ -281,7 +343,8 @@ de `main.ts:314-318` promet l'inverse.
 
 ### G3. Intégrité financière et conformité
 
-- [ ] Vérifier `jobs_finish($1, true, …)` systématiquement après le handler (`main.ts:349`) ;
+- [ ] Vérifier la chaîne de terminaison après le handler (depuis E1 :
+      `jobs_finish_leased` dans `job-runtime.ts`, conditionné au bail) ;
       confirmer que le drain (E3) est la seule voie et que `send_parent_notification` ne marque pas
       « sent » trop tôt.
 - [ ] `next_org_sequence` non hashé → numéros de facture devinables. Décider : séquentiel est
@@ -318,7 +381,7 @@ de `main.ts:314-318` promet l'inverse.
 - [ ] **`STORAGE_BACKEND`** : défaut divergent config prod vs runtime → aligner, échouer au
       démarrage si ambigu.
 - [ ] **Invitation token affiché sans garde `NODE_ENV`** → n'afficher qu'en `development`.
-- [ ] **Payroll sans prorata** → voir E5 (même règle métier).
+- [ ] **Payroll sans prorata** : décision client encore nécessaire ; la règle E5 des contrats de garde ne se transpose pas implicitement à la paie.
 - [ ] **Reproductibilité du lockfile** : `pnpm-workspace.yaml` présent alors que la CI fait `npm ci` ;
       `npm install` refuse de re-résoudre même face à une contradiction. Uniformiser sur **un seul**
       gestionnaire ; vérifier qu'un `npm ci` sur clone vierge redonne exactement l'arbre committé.
@@ -338,7 +401,7 @@ de `main.ts:314-318` promet l'inverse.
       manquant est un défaut fonctionnel pour le marché cible (priorité haute **dans** LOW).
 - [ ] Test parent-mobile = template compteur qui ne compile pas → remplacer par un vrai widget test
       (un test qui ne compile pas est pire qu'aucun test).
-- [ ] Timezone UTC+1 vs UTC éparpillé → traiter avec E4.
+- [ ] Timezone UTC+1 vs UTC éparpillé : E4 fixe worker/exports/factures ; auditer et harmoniser les autres modules séparément.
 - [ ] `flutter.zip` 142 MB + SDK hors du dépôt (vérifier `.gitignore`) ; jamais committer un SDK.
 
 ---
@@ -374,10 +437,11 @@ de `main.ts:314-318` promet l'inverse.
 
 | Migration | Objet | Phase |
 |---|---|---|
-| `053_jobs_reap_stale.sql` | reaper de jobs `processing` orphelins | E1 |
-| `054_notif_queue_finish_fix.sql` | conserver `failure_reason` / état « non délivré » | E3 |
+| `053_jobs_reap_stale.sql` | **créée** : reaper, baux et heartbeat de jobs orphelins | E1 |
+| `054_notif_queue_finish_fix.sql` | **créée** : conserver le motif, contrat de statut inchangé | E3 |
 | `055_rls_and_race_fixes.sql` | pattern GUC (régression 029 vs 018) + `FOR UPDATE` trigger 023 | G2 |
-| `056_scheduler.sql` | table/verrou de scheduler si option (1) retenue | E2 |
+| `056_scheduler.sql` | **créée** : ticks, coordination, 3 producteurs et santé | E2 |
+| `057_export_lifecycle.sql` | **créée** : échecs, délais et reprise des exports | E6 |
 
 ### Annexe 2 — Issues GitHub
 

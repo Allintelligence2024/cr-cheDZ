@@ -60,9 +60,13 @@ export async function buildXlsx(reportType: ExportPayload['report_type'], rows: 
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
-/** Enregistre l'export sur le backend (clé identique API/worker). */
-export async function storeExport(orgId: string, exportId: string, data: Buffer): Promise<string> {
-  const key = `${orgId}/exports/${exportId}.xlsx`;
+/** Clé par tentative : un PUT tardif ne peut écraser le fichier d'un autre bail.
+ * L'API télécharge uniquement la clé publiée en DB, jamais un chemin reconstruit.
+ */
+export async function storeExport(orgId: string, exportId: string, data: Buffer, leaseToken: string): Promise<string> {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (![orgId,exportId,leaseToken].every(value => uuid.test(value))) throw new Error('EXPORT_IDENTIFIER_INVALID');
+  const key = `${orgId}/exports/${exportId}/${leaseToken}.xlsx`;
   await storeFile(key, data, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   return key;
 }

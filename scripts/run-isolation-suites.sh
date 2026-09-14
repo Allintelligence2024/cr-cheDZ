@@ -12,8 +12,17 @@ export STORAGE_BACKEND="${STORAGE_BACKEND:-local}"
 export STORAGE_LOCAL_DIR="${STORAGE_LOCAL_DIR:-/tmp/creche-storage-tests}"
 export PAYMENT_WEBHOOK_SECRET="${PAYMENT_WEBHOOK_SECRET:-phase8-test-secret}"
 mkdir -p "$STORAGE_LOCAL_DIR"
+ISOLATION_LOG_DIR="${ISOLATION_LOG_DIR:-/tmp}"
+mkdir -p "$ISOLATION_LOG_DIR"
 
 cd "$(dirname "$0")/.."
+# Le workflow existant appelle ce runner : activer le gate D strict sans
+# modifier .github/workflows. Aucun reset supplémentaire hors GitHub Actions.
+if [[ "${GITHUB_ACTIONS:-}" == "true" && "${PRODUCTION_ROLE_TESTS:-}" != "1" && -z "${1:-}" ]]; then
+  ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
+  exit $?
+fi
+
 : "${DATABASE_URL:?DATABASE_URL requis (ex. postgres://postgres:postgres@localhost:54329/creche_test)}"
 
 SUITES=(
@@ -45,6 +54,8 @@ SUITES=(
   phase23-pending-expiry.api.test.mjs
   phase24-late-webhook.api.test.mjs
   phase25-security-audit-c.api.test.mjs
+  phase27-worker-lifecycle.test.mjs
+  phase28-worker-reliability.test.mjs
 )
 
 FILTER="${1:-}"
@@ -67,7 +78,7 @@ for s in "${SUITES[@]}"; do
     RESULTS+=("ABSENT|$s|fichier manquant")
     failed=$((failed+1)); continue
   fi
-  log="/tmp/suite-$(basename "$s" .mjs).log"
+  log="$ISOLATION_LOG_DIR/suite-$(basename "$s" .mjs).log"
   if node "$f" >"$log" 2>&1; then
     RESULTS+=("PASS|$s|$(grep -c '✓' "$log" 2>/dev/null || echo '?') assertions ✓")
   else

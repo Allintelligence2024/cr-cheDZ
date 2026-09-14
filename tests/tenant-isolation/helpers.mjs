@@ -1,3 +1,9 @@
+// Isolation des fixtures : ne pas déclencher une purge si une suite croise l'heure pleine.
+// Les scénarios E2 activent explicitement le scheduler dans leurs vrais workers.
+process.env.WORKER_SCHEDULER_ENABLED ??= 'false';
+
+import pg from 'pg';
+
 /**
  * Helpers partagés des tests d'isolation.
  *
@@ -6,10 +12,22 @@
  * superutilisateur avec NOBYPASSRLS. C'est le SEUL moyen de prouver que la
  * RLS protège réellement les données (le superuser la contourne toujours).
  */
-export const APP_TEST_ROLE = 'creche_app_test';
+export const APP_TEST_ROLE = process.env.PRODUCTION_ROLE_TESTS === '1' ? 'creche_app' : 'creche_app_test';
 export const APP_TEST_PASSWORD = 'creche_app_test_pw';
 
 export async function ensureAppRole(admin) {
+  if (process.env.PRODUCTION_ROLE_TESTS === '1') {
+    const { assertApplicationDatabaseRole } = await import('@creche/prod-config');
+    // IMPORTANT : aucun CREATE ROLE/GRANT ici. Tester les grants livrés, pas
+    // ceux d'un clone privilégié reconstruit par le helper.
+    const app = new pg.Client({ connectionString: appUrl() });
+    await app.connect();
+    try {
+      await assertApplicationDatabaseRole(app, { NODE_ENV: 'production' });
+      console.log('✓ Connexion applicative réelle : creche_app (grants de production inchangés)');
+    } finally { await app.end(); }
+    return;
+  }
   await admin.query(`
     DO $$
     BEGIN
@@ -39,6 +57,20 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION billing_webhook_apply(uuid, text, numeric, text, timestamptz, text) TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION jobs_claim_next() TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION jobs_finish(uuid, boolean, text) TO creche_app_test');
+  // E1 (053) — uniquement pour le mode historique. Le mode prod plus haut
+  // n'ajoute JAMAIS de grants : il vérifie ceux livrés par le migrateur.
+  const leased = await admin.query("SELECT to_regprocedure('jobs_claim_leased()') AS fn");
+  if (leased.rows[0].fn) {
+    await admin.query(`GRANT EXECUTE ON FUNCTION jobs_claim_leased(), jobs_heartbeat(uuid,uuid),
+      jobs_finish_leased(uuid,uuid,boolean,text), jobs_reap_stale(interval) TO creche_app_test`);
+  }
+  // E2/E6 : mode historique seulement ; en prod, grants de migrations inchangés.
+  if ((await admin.query("SELECT to_regprocedure('scheduler_enqueue_due()') AS fn")).rows[0].fn) {
+    await admin.query('GRANT EXECUTE ON FUNCTION scheduler_enqueue_due(), scheduler_health(), scheduler_next_run(text,timestamptz) TO creche_app_test');
+  }
+  if ((await admin.query("SELECT to_regprocedure('exports_reconcile_tenant()') AS fn")).rows[0].fn) {
+    await admin.query('GRANT EXECUTE ON FUNCTION exports_fail_job(uuid,uuid), exports_fail_stale(interval,uuid), exports_reconcile_tenant() TO creche_app_test');
+  }
   // Phase 7 (migration 025) : bootstrap login parent (guardians sous RLS)
   await admin.query('GRANT EXECUTE ON FUNCTION auth_parent_lookup_by_phone(text) TO creche_app_test');
   // Phase 10 (migration 029) : console support (recherche globale, jobs)
@@ -76,6 +108,12 @@ export async function ensureAppRole(admin) {
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */
 export function appUrl() {
+  if (process.env.PRODUCTION_ROLE_TESTS === '1') {
+    if (!process.env.APP_DATABASE_URL || new URL(process.env.APP_DATABASE_URL).username !== 'creche_app') {
+      throw new Error('APP_DATABASE_URL creche_app requis pour le gate de production');
+    }
+    return process.env.APP_DATABASE_URL;
+  }
   const u = new URL(process.env.DATABASE_URL);
   u.username = APP_TEST_ROLE;
   u.password = APP_TEST_PASSWORD;

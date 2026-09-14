@@ -23,7 +23,7 @@ import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
-import { appUrl, ensureAppRole } from './helpers.mjs';
+import { APP_TEST_ROLE, appUrl, ensureAppRole } from './helpers.mjs';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const failures = [];
@@ -213,8 +213,8 @@ const main = async () => {
 
     // ── 11. Rôle NOBYPASSRLS (preuve) ───────────────────────────────────────
     console.log('\n11) Rôle NOBYPASSRLS');
-    const roleCheck = await db.query(`SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname='creche_app_test'`);
-    ok('API connectée en creche_app_test NOBYPASSRLS', roleCheck.rows[0]?.rolsuper === false && roleCheck.rows[0]?.rolbypassrls === false, JSON.stringify(roleCheck.rows[0]));
+    const roleCheck = await db.query(`SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname=$1`, [APP_TEST_ROLE]);
+    ok(`API connectée en ${APP_TEST_ROLE} NOBYPASSRLS`, roleCheck.rows[0]?.rolsuper === false && roleCheck.rows[0]?.rolbypassrls === false, JSON.stringify(roleCheck.rows[0]));
     const appConn = new pg.Client({ connectionString: appUrl() });
     await appConn.connect();
     try {

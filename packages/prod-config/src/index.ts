@@ -92,3 +92,7 @@ export function assertProductionConfig(env: EnvLike = process.env): void {
       + problems.map((p) => `  - ${p}`).join('\n'),
   );
 }
+
+export { assertApplicationDatabaseRole } from './database-role';
+
+export { BUSINESS_TIME_ZONE, dateOnly, monthBounds, exportRange } from './calendar';

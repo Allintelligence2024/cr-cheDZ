@@ -47,9 +47,16 @@ function check(name, ok, detail = '') {
 }
 
 async function main() {
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  if (process.env.PRODUCTION_ROLE_TESTS === '1' && !process.env.APP_DATABASE_URL) {
+    throw new Error('APP_DATABASE_URL requis pour le gate de production');
+  }
+  const client = new pg.Client({ connectionString: process.env.PRODUCTION_ROLE_TESTS === '1' ? process.env.APP_DATABASE_URL : process.env.DATABASE_URL });
   await client.connect();
   try {
+    if (process.env.PRODUCTION_ROLE_TESTS === '1') {
+      const { assertApplicationDatabaseRole } = await import('@creche/prod-config');
+      await assertApplicationDatabaseRole(client, { NODE_ENV: 'production' });
+    }
     console.log('1) RLS sur toutes les tables tenant (C01)');
 
     // 1a. Tables avec organization_id mais sans RLS

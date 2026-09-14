@@ -1,3 +1,4 @@
+import { exportRange } from '@creche/prod-config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFile } from 'node:fs/promises';
@@ -43,10 +44,13 @@ export class ExportsService {
 
   async list(): Promise<Array<Record<string, unknown>>> {
     const tenantId = requireTenant(this.tenantContext);
-    return this.tenantContext.withTenantConnection(async (client) => (await client.query(
-      `SELECT id, report_type, period_label, status, file_size_bytes, failure_reason, created_at, completed_at
-       FROM report_exports WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 50`, [tenantId],
-    )).rows);
+    return this.tenantContext.withTenantConnection(async (client) => {
+      await client.query('SELECT exports_reconcile_tenant()');
+      return (await client.query(
+        `SELECT id, report_type, period_label, status, file_size_bytes, failure_reason, created_at, completed_at
+         FROM report_exports WHERE organization_id = $1 ORDER BY created_at DESC LIMIT 50`, [tenantId],
+      )).rows;
+    });
   }
 
   /** Téléchargement : buffer (local) ou URL signée (S3) — 404 si absent du tenant, 409 si pas prêt. */
@@ -114,17 +118,7 @@ export class ExportsService {
   }
 
   private computeRange(reportType: string, period: string): [string, string] {
-    if (reportType === 'invoices') {
-      const [year, month] = period.split('-').map(Number);
-      return [String(year), String(month)];
-    }
-    if (period.includes('..')) {
-      const [start, end] = period.split('..');
-      return [start, end];
-    }
-    // Mois complet pour les présences : 'YYYY-MM' → début/fin de mois.
-    const [year, month] = period.split('-').map(Number);
-    const end = new Date(Date.UTC(year, month, 0));
-    return [`${period}-01`, `${year}-${String(month).padStart(2, '0')}-${String(end.getUTCDate()).padStart(2, '0')}`];
+    try { return exportRange(reportType,period); }
+    catch { throw new AppError('EXPORT_PERIOD_INVALID', 'Période d’export invalide', 'فترة التصدير غير صالحة', 400); }
   }
 }

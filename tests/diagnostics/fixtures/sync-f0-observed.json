@@ -1,0 +1,23 @@
+{
+  "diagnostic": "F0",
+  "dart_executed": false,
+  "observed": {
+    "client_without_device": {
+      "push_status": 400,
+      "pull_status": 400
+    },
+    "child_after_http_create": {
+      "http_status": 201,
+      "child_events": 0
+    },
+    "cursor_types": {
+      "push": "number",
+      "pull_with_event": "string",
+      "sync_seq": "string",
+      "pull_empty": "number"
+    },
+    "api_idempotence_with_registered_device": true,
+    "parent_sync": "aucun moteur ; endpoints sync réservés aux rôles staff",
+    "dart_cursor_storage": "SharedPreferences sync_cursor global ; pas Drift, pas scope tenant/utilisateur"
+  }
+}

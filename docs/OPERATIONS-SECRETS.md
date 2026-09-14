@@ -17,6 +17,34 @@ NODE_ENV=production node apps/api/dist/main.js
 # Si invalide → GARDE CONFIG PRODUCTION — démarrage REFUSÉ + liste variables
 ```
 
+## PostgreSQL — séparation obligatoire (Phase D)
+
+Sur installation neuve, générer **trois secrets distincts** (trois appels séparés
+à `openssl rand -hex 32`) et les conserver dans le coffre opérateur :
+
+| Secret / variable | Destinataire uniquement |
+|---|---|
+| `POSTGRES_PASSWORD` | PostgreSQL init `postgres` + `BOOTSTRAP_DATABASE_URL` du bootstrap |
+| `MIGRATOR_DATABASE_PASSWORD` | bootstrap ; même secret encodé dans `MIGRATION_DATABASE_URL` de migrate/seed |
+| `APP_DATABASE_PASSWORD` | bootstrap ; même secret encodé dans `DATABASE_URL` de l'API/worker et du contrôle de schéma |
+
+Les URLs doivent désigner **la même base**. Utiliser les exemples de
+`.env.prod.example` ; les mots de passe non hexadécimaux doivent être encodés dans
+les URLs (pas dans les variables de mot de passe du bootstrap). Ne pas transmettre
+les secrets bootstrap/migrateur aux environnements API/worker. Le rôle du
+migrateur est NOSUPERUSER **BYPASSRLS**, secret réservé au déploiement.
+
+Au boot production/staging, API et worker interrogent le catalogue et refusent
+un rôle dangereux (`DATABASE_ROLE_UNSAFE`) avant écoute/claim. Ne jamais contourner
+cette garde en changeant NODE_ENV. Le bootstrap refuse les propriétaires et
+appartenances applicatives historiques : suivre le
+[runbook Phase D](PHASE_D_ROLES_RUNBOOK.md), pas une rétrogradation improvisée.
+
+Rotation : arrêter API/worker, changer les secrets dans le coffre et toutes les
+URLs correspondantes, rejouer bootstrap puis migrate, recréer les conteneurs
+applicatifs. Les sessions PostgreSQL déjà ouvertes ne sont pas invalidées par un
+simple ALTER ROLE PASSWORD ; l'arrêt/recréation des pools est indispensable.
+
 ## Secrets à obtenir (ordre)
 
 ### 1. SATIM (paiement en ligne)

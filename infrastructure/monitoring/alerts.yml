@@ -1,0 +1,29 @@
+groups:
+  - name: worker-scheduler
+    rules:
+      - alert: WorkerScheduledJobOverdue
+        expr: creche_worker_scheduler_overdue > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Traitement planifié en retard : {{ $labels.job_type }}"
+          description: "Aucun succès depuis deux périodes. Vérifier workers, jobs failed, stockage et DB (runbook phase E)."
+      - alert: WorkerSchedulerMonitoringUnavailable
+        expr: |
+          (count by (job, instance) (creche_worker_scheduler_overdue{job="postgres"}) != 3)
+          or (up{job="postgres"} == 1 unless on (job, instance) creche_worker_scheduler_overdue)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Métriques du scheduler absentes ou incomplètes"
+          description: "Vérifier migration 056, grants et postgres-queries.yml. Absence de métrique ne signifie pas succès."
+      - alert: DatabaseMetricsUnavailable
+        expr: up{job="postgres"} == 0 or absent(up{job="postgres"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Supervision PostgreSQL indisponible"
+          description: "La fraîcheur des traitements ne peut plus être contrôlée. Vérifier exporter, réseau et PostgreSQL."
