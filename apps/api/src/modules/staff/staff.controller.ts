@@ -37,22 +37,32 @@ class ExpiringQuery {
 }
 
 const WRITE_ROLES = ['super_admin', 'director'] as const;
+// C1 (audit 2026-09) — matrice d'autorisation en lecture :
+// la direction et la comptabilité gèrent le personnel ; l'éducateur, le
+// parent et les autres rôles n'ont AUCUN accès au module staff. Les champs
+// sensibles (national_id, cnas_number, base_salary, phone, notes, contacts
+// d'urgence) ne sont JAMAIS exposés par ces routes — la paie les lit
+// directement en base (payroll.service) sous les rôles RH.
+const READ_ROLES = ['super_admin', 'director', 'accountant'] as const;
 
 @Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
   @Get()
+  @Roles(...READ_ROLES)
   async list(): Promise<{ items: Array<Record<string, unknown>> }> {
     return { items: await this.staffService.list() };
   }
 
   @Get('documents/expiring')
+  @Roles(...READ_ROLES)
   async expiring(@Query() query: ExpiringQuery): Promise<{ items: Array<Record<string, unknown>> }> {
     return { items: await this.staffService.listExpiringDocuments(query.days ?? 30) };
   }
 
   @Get(':id')
+  @Roles(...READ_ROLES)
   async getById(@Param() params: StaffIdParam): Promise<Record<string, unknown>> {
     return this.staffService.getById(params.id);
   }
@@ -79,6 +89,7 @@ export class StaffController {
   // ── Documents ────────────────────────────────────────────────────────────
 
   @Get(':id/documents')
+  @Roles(...READ_ROLES)
   async documents(@Param() params: StaffIdParam): Promise<{ items: Array<Record<string, unknown>> }> {
     return { items: await this.staffService.listDocuments(params.id) };
   }
@@ -96,6 +107,7 @@ export class StaffController {
   // ── Affectations ─────────────────────────────────────────────────────────
 
   @Get(':id/assignments')
+  @Roles(...READ_ROLES)
   async assignments(@Param() params: StaffIdParam): Promise<{ items: Array<Record<string, unknown>> }> {
     return { items: await this.staffService.listAssignments(params.id) };
   }
@@ -124,6 +136,7 @@ export class StaffController {
   // ── Pointage ─────────────────────────────────────────────────────────────
 
   @Get(':id/attendance')
+  @Roles(...READ_ROLES)
   async attendance(@Param() params: StaffIdParam): Promise<{ items: Array<Record<string, unknown>> }> {
     return { items: await this.staffService.listAttendance(params.id) };
   }

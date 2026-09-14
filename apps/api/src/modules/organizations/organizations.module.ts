@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { EmailService } from '../../shared/email/email.service';
+import { InvitationJwtModule } from '../../shared/auth/invitation-jwt.module';
 import { PrivacyModule } from '../privacy/privacy.module';
 import { FeatureFlagsController } from './feature-flags.controller';
 import { FeatureFlagsService } from './feature-flags.service';
@@ -13,7 +14,7 @@ import { SitesController } from './sites.controller';
 import { SitesService } from './sites.service';
 
 @Module({
-  imports: [PrivacyModule],
+  imports: [PrivacyModule, InvitationJwtModule],
   controllers: [
     OrganizationsController,
     SitesController,

@@ -29,7 +29,15 @@ export class JwtAuthGuard implements CanActivate {
     if (!token) throw Errors.unauthorized();
 
     try {
-      const payload = await this.jwtService.verifyAsync<CurrentUserPayload>(token);
+      const payload = await this.jwtService.verifyAsync<CurrentUserPayload & { purpose?: string }>(token);
+      // C4 (audit 2026-09) : seuls les tokens d'accès (purpose='access')
+      // passent ce garde. Un token d'invitation (7 j) — même signé — ne doit
+      // jamais ouvrir de session sur une route protégée. Les routes qui
+      // consomment d'autres familles de tokens (accept-invitation) sont
+      // @Public() et vérifient elles-mêmes le purpose attendu.
+      if (payload.purpose !== 'access') {
+        throw Errors.unauthorized();
+      }
       request.user = payload;
       if (payload.organizationId) {
         this.tenantContext.setContext(payload.organizationId, payload.sub);

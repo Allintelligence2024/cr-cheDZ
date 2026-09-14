@@ -4,6 +4,9 @@ import { Pool } from 'pg';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { AppError } from '../../shared/errors';
+import { assertRoleAssignable } from '../../shared/roles/assignable-roles';
+import { INVITATION_JWT_SERVICE } from '../../shared/auth/invitation-jwt.module';
+import { INVITATION_TOKEN_PURPOSE } from '../../shared/auth/jwt-token-options';
 import { EmailService } from '../../shared/email/email.service';
 import { AuditService } from '../privacy/audit.service';
 import { CreateInvitationDto } from './dto/invitations.dto';
@@ -25,7 +28,7 @@ export class InvitationsService {
   constructor(
     @Inject(PG_POOL) private readonly pool: Pool,
     private readonly tenantContext: TenantContextService,
-    private readonly jwtService: JwtService,
+    @Inject(INVITATION_JWT_SERVICE) private readonly invitationJwtService: JwtService,
     private readonly email: EmailService,
     private readonly audit: AuditService,
   ) {}
@@ -43,9 +46,9 @@ export class InvitationsService {
         400,
       );
     }
-    if (dto.role_slug === 'super_admin') {
-      throw new AppError('ROLE_FORBIDDEN', 'Rôle super_admin non invitable', 'لا يمكن دعوة هذا الدور', 403);
-    }
+    // Garde centralisée (C2 — audit 2026-09) : super_admin n'est jamais
+    // attribuable, ni par invitation ni par affectation multi-rôles.
+    assertRoleAssignable(dto.role_slug);
     // Vérifier que l'organisation existe (table système).
     const org = await this.pool.query(`SELECT id, name_fr FROM organizations WHERE id = $1 AND is_active = true`, [orgId]);
     if (org.rows.length === 0) {
@@ -99,10 +102,11 @@ export class InvitationsService {
       [orgId, userId, role.rows[0].id, dto.site_id ?? null, dto.room_ids ?? null],
     );
 
-    // Token signé 7 jours — contient le but (purpose) pour éviter les usages croisés.
-    const token = await this.jwtService.signAsync(
+    // Token signé 7 jours — SECRET DÉRIVÉ dédié aux invitations (C4) et
+    // purpose='invitation' : utilisable uniquement par accept-invitation.
+    const token = await this.invitationJwtService.signAsync(
       {
-        purpose: 'invitation',
+        purpose: INVITATION_TOKEN_PURPOSE,
         sub: userId,
         orgId,
         role: role.rows[0].slug,

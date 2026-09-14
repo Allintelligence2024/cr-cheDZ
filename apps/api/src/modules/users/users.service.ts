@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { AppError, Errors } from '../../shared/errors';
+import { assertRoleAssignable } from '../../shared/roles/assignable-roles';
 import { AuditService } from '../privacy/audit.service';
 
 interface MembershipRow {
@@ -47,13 +48,28 @@ export class UsersService {
     });
   }
 
-  /** Ajoute un rôle additionnel — garde : pas de doublon avec le rôle principal. */
+  /** Ajoute un rôle additionnel — gardes (C2, audit 2026-09) :
+   *  - rôle connu et du tenant courant (ou système) → sinon 400 ROLE_NOT_FOUND ;
+   *  - super_admin JAMAIS attribuable (garde centralisée) → 403 ROLE_FORBIDDEN ;
+   *  - pas de doublon avec le rôle principal → 409 ROLE_ALREADY_PRIMARY. */
   async addRoleAssignment(actorId: string, orgId: string, dto: { user_id: string; role_id: string }): Promise<Record<string, unknown>> {
     return this.tenantContext.withTenantConnection(async (client) => {
       const membership = (await client.query(
         `SELECT role_id FROM memberships WHERE organization_id=$1 AND user_id=$2 AND is_active=true`, [orgId, dto.user_id],
       )).rows[0];
       if (!membership) throw Errors.notFound();
+      // Résolution du rôle : système (organization_id NULL) ou du tenant
+      // courant — un rôle d'une autre organisation est refusé (400).
+      const role = (await client.query(
+        `SELECT slug FROM roles
+         WHERE id = $1 AND (organization_id IS NULL OR organization_id = $2)
+         ORDER BY organization_id NULLS FIRST LIMIT 1`,
+        [dto.role_id, orgId],
+      )).rows[0];
+      if (!role) {
+        throw new AppError('ROLE_NOT_FOUND', 'Rôle inconnu ou hors organisation', 'الدور غير معروف أو خارج المؤسسة', 400);
+      }
+      assertRoleAssignable(role.slug);
       if (membership.role_id === dto.role_id) {
         throw new AppError('ROLE_ALREADY_PRIMARY', 'Ce rôle est déjà le rôle principal', 'هذا الدور هو الدور الأساسي بالفعل', 409);
       }
