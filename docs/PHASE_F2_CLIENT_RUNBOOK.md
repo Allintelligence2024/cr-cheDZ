@@ -116,3 +116,21 @@ revient pas à un SDK incompatible : il récupère le tag officiel 3.47.1 **dans
 le SDK éphémère du conteneur**, vérifie son commit, puis l'utilise sur une copie
 de l'app. Le dépôt applicatif est monté read-only, jamais checkout/reset par
 cette opération. L'image de base est fixée au digest constaté lors du premier run.
+
+
+### Régression UI de session reproduite puis corrigée
+
+CI `34839113217` / fe48f3e : **21/22** tests Flutter ; après logout, le texte
+synthétique « Private child from session A » reste dans un dialogue du Navigator.
+Remplacer `home` ne retire pas les routes modales. Le MaterialApp/Navigator est
+maintenant recréé à chaque epoch de session, avant d'afficher la connexion suivante.
+Le test utilise le vrai shell StaffApp (services injectés), pas seulement le moteur.
+
+L'analyse stricte a aussi détecté la mauvaise classe de ligne dans `Child.fromLocal`
+(table Drift au lieu de Data) et trois éléments inutilisés du formulaire groupé.
+Ils sont corrigés sans changer les règles métier. Le test d'écran vérifie le
+rendu d'une vraie ligne Drift, le rechargement après sync et le bouton logout.
+
+La batterie locale API finale est **33/33** (rôles/grants de production), 27
+unitaires, build/typecheck/lint verts, audit npm production 0. La preuve Flutter
+finale est celle de la CI du dernier HEAD ; pas d'exécution Flutter locale.

@@ -25,10 +25,16 @@ flutter pub get --enforce-lockfile
 flutter test --no-pub --reporter expanded
 flutter analyze --no-pub --no-fatal-infos
 cmp /source/apps/staff-mobile/pubspec.lock pubspec.lock`;
-const result = spawnSync(docker ? 'docker' : 'flutter', docker ? [
+const localScript = `set -eu
+before="$(sha256sum pubspec.lock)"
+flutter pub get --enforce-lockfile
+flutter test --no-pub --reporter expanded
+flutter analyze --no-pub --no-fatal-infos
+test "$before" = "$(sha256sum pubspec.lock)"`;
+const result = spawnSync(docker ? 'docker' : 'bash', docker ? [
   'run', '--rm', '-v', `${root}:/source:ro`, '--entrypoint', 'bash',
   'ghcr.io/cirruslabs/flutter:3.44.0@sha256:46691e311715845de03a3ba4753a475476936805b29431b1f00f1816981033f8', '-c', script,
-] : ['test', 'test/sync_f2_test.dart', '--reporter', 'expanded'], {
+] : ['-c', localScript], {
   cwd: docker ? root : resolve(root, 'apps/staff-mobile'),
   encoding: 'utf8', timeout: 900000, maxBuffer: 8 * 1024 * 1024,
 });

@@ -102,6 +102,8 @@ class _StaffAppState extends State<StaffApp> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
+    // Reset Navigator/overlays too: replacing home alone leaves private dialogs.
+    key: ValueKey(_epoch),
     title: 'Crèche — Personnel',
     theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB)), useMaterial3: true),
     home: !_ready ? const Scaffold(body: Center(child: CircularProgressIndicator()))
