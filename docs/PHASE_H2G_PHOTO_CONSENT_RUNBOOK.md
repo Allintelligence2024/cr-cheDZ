@@ -84,8 +84,9 @@ Le rejeu avant/après remplace temporairement les deux services par leurs blobs 
 sans changement de branche, puis restaure le correctif et reconstruit l'API ; base
 fraîche avant chaque ciblé.
 
-Le runner contient **44 suites/contrôles** et exige la notice `H2g photo consent passed`
-avec au moins **58 scénarios** et zéro échec. Résultats ciblés verts : **58/58**.
+Le runner contient **44 suites/contrôles** et exige au moins **58 scénarios** H2g
+et zéro échec. La notice agrégée `H2 confidentiality passed` expose `H2g=58` avec
+les résultats H2a–H2f ; les détails par lot restent dans stdout. Résultats ciblés verts : **58/58**.
 Typecheck/build tous workspaces, lint zéro avertissement, **27/27 unitaires** et audit
 production **0 vulnérabilité** verts. Batterie stricte fraîche : **44/44** ; notices
 H2a 21, H2b 50, H2c 156, H2d 44, H2e 36, H2f 156 et H2g 58 vérifiées. Rejeu final
@@ -93,6 +94,21 @@ sur les deux services H2f puis correctif restauré, avec reconstruction et base 
 à chaque passage : **35/58 avant → 58/58 après**.
 CI du SHA publié à vérifier en PR #44 ; Docker/Flutter réels restent des gates CI,
 non remplacés par les seuls contrôles structurels locaux.
+
+## Plafond d'annotations CI reproduit
+
+Le premier SHA `433ac3e65c952371e3a0bb399b40e999c8487ef1` a **9/9 checks verts**
+([run 34907534465](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34907534465)),
+mais la notice H2g n'apparaît pas : 4 notices H1/F2/F4 + 7 H2 dépassent le plafond
+GitHub de **10 notices par étape**. Source : [2](https://github.com/actions/toolkit/blob/main/docs/problem-matchers.md#limitations).
+Le check database 104187566158 expose exactement les dix premières notices ; les logs
+Azure sont inaccessibles ici (EOF/TLS), donc pas de qualification H2g par cette notice.
+
+`ci-notice-budget.test.mjs` reproduit le dépassement **11 > 10**, puis vérifie le budget
+et la présence des sept compteurs réels dans une seule notice agrégée H2. Les sept
+seuils et refus de résultat incomplet restent inchangés. Le runner passe à **5 notices**
+dans cette étape : H1 dev/staging, F2, F4 et H2 agrégée. Aucun workflow modifié.
+Le garde est intégré avant la batterie stricte ; nouvelle CI du SHA publié à confirmer.
 
 ## Limites et rollback
 

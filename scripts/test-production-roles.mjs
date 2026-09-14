@@ -40,7 +40,7 @@ function run(command, args, overrides = {}) {
     process.exit(result.status || 1);
   }
 }
-run(process.execPath, ['--test', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs']);
+run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs']);
 // Fast production-layout reproduction before the slower Docker/Flutter gates.
 run(process.execPath, ['scripts/check-api-runtime.mjs']);
 // H1 is independent: collect its failure but still run the sync regressions.
@@ -89,31 +89,34 @@ run('bash', ['scripts/run-isolation-suites.sh']);
 const confidentiality = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase35-confidentiality.api.test.log'), 'utf8')
   .match(/H2 confidentiality: (\d+) passed, 0 failed/);
 if (!confidentiality || Number(confidentiality[1]) < 21) throw new Error('H2a confidentiality evidence missing or incomplete');
-console.log(`::notice title=H2a confidentiality passed::${confidentiality[1]} real HTTP/PostgreSQL scenarios passed: journal notification creation and rights-export authorization/projections. Not provider delivery or post-queue revocation qualification.`);
+console.log(`H2a confidentiality passed: ${confidentiality[1]} real HTTP/PostgreSQL scenarios passed: journal notification creation and rights-export authorization/projections. Not provider delivery or post-queue revocation qualification.`);
 const revocation = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase36-notification-revocation.api.test.log'), 'utf8')
   .match(/H2b notifications: (\d+) passed, 0 failed/);
 if (!revocation || Number(revocation[1]) < 50) throw new Error('H2b notification evidence missing or incomplete');
-console.log(`::notice title=H2b notifications passed::${revocation[1]} real API/PostgreSQL/worker scenarios passed, with loopback HTTP provider doubles. Rights rechecked after claim, inbox filtered before LIMIT, consumed refusals retained with reasons. Not a live FCM/APNs/Meta qualification or recall of delivered messages.`);
+console.log(`H2b notifications passed: ${revocation[1]} real API/PostgreSQL/worker scenarios passed, with loopback HTTP provider doubles. Rights rechecked after claim, inbox filtered before LIMIT, consumed refusals retained with reasons. Not a live FCM/APNs/Meta qualification or recall of delivered messages.`);
 const parentAccess = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase37-parent-revocation.api.test.log'), 'utf8')
   .match(/H2c parent access: (\d+) passed, 0 failed/);
 if (!parentAccess || Number(parentAccess[1]) < 156) throw new Error('H2c parent access evidence missing or incomplete');
-console.log(`::notice title=H2c parent access passed::${parentAccess[1]} real HTTP/PostgreSQL scenarios passed on 13 child-scoped parent routes. Current guardian/child/user/membership checked; capabilities stay separate; refused writes do not mutate business records. Not global JWT revocation, field-projection review or recall of signed URLs.`);
+console.log(`H2c parent access passed: ${parentAccess[1]} real HTTP/PostgreSQL scenarios passed on 13 child-scoped parent routes. Current guardian/child/user/membership checked; capabilities stay separate; refused writes do not mutate business records. Not global JWT revocation, field-projection review or recall of signed URLs.`);
 const financialProjection = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase38-parent-financial-projection.api.test.log'), 'utf8')
   .match(/H2d financial projection: (\d+) passed, 0 failed/);
 if (!financialProjection || Number(financialProjection[1]) < 44) throw new Error('H2d financial projection evidence missing or incomplete');
-console.log(`::notice title=H2d financial projection passed::${financialProjection[1]} real HTTP/PostgreSQL scenarios passed: public financial field allowlists, HMAC-signed initialization against a loopback gateway, raw response kept internal, authorized PDF and accounting views retained. Not real SATIM qualification, historical purge or full confidentiality closure.`);
+console.log(`H2d financial projection passed: ${financialProjection[1]} real HTTP/PostgreSQL scenarios passed: public financial field allowlists, HMAC-signed initialization against a loopback gateway, raw response kept internal, authorized PDF and accounting views retained. Not real SATIM qualification, historical purge or full confidentiality closure.`);
 const journalHealth = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase39-journal-health-disclosure.api.test.log'), 'utf8')
   .match(/H2e journal health: (\d+) passed, 0 failed/);
 if (!journalHealth || Number(journalHealth[1]) < 36) throw new Error('H2e journal health evidence missing or incomplete');
-console.log(`::notice title=H2e journal health passed::${journalHealth[1]} real HTTP/PostgreSQL scenarios passed: temperature and health_observation require health capability in parent feed and new rights exports; filtering before LIMIT; authorized health and ordinary journal retained. Not snapshot purge, global JWT revocation or arbitrary text classification.`);
+console.log(`H2e journal health passed: ${journalHealth[1]} real HTTP/PostgreSQL scenarios passed: temperature and health_observation require health capability in parent feed and new rights exports; filtering before LIMIT; authorized health and ordinary journal retained. Not snapshot purge, global JWT revocation or arbitrary text classification.`);
 const privacyActor = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase40-privacy-actor-revocation.api.test.log'), 'utf8')
   .match(/H2f privacy actor: (\d+) passed, 0 failed/);
 if (!privacyActor || Number(privacyActor[1]) < 156) throw new Error('H2f privacy actor evidence missing or incomplete');
-console.log(`::notice title=H2f privacy actor passed::${privacyActor[1]} real HTTP/PostgreSQL scenarios passed: active non-deleted user and active tenant membership required for rights-request creation, list, detail, export and resolution. Denied writes preserve business state; active requesters keep own history after guardian deletion. Not global JWT/role revocation or historical snapshot purge.`);
+console.log(`H2f privacy actor passed: ${privacyActor[1]} real HTTP/PostgreSQL scenarios passed: active non-deleted user and active tenant membership required for rights-request creation, list, detail, export and resolution. Denied writes preserve business state; active requesters keep own history after guardian deletion. Not global JWT/role revocation or historical snapshot purge.`);
 const photoConsent = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase41-photo-consent-scope.api.test.log'), 'utf8')
   .match(/H2g photo consent: (\d+) passed, 0 failed/);
 if (!photoConsent || Number(photoConsent[1]) < 58) throw new Error('H2g photo consent evidence missing or incomplete');
-console.log(`::notice title=H2g photo consent passed::${photoConsent[1]} real HTTP/PostgreSQL scenarios passed: shared publication/parent-signing consent perimeter includes primary child, deduplicates participants and refuses unverifiable metadata. Authorized photos and staff access retained. Local signatures only, not image-content recognition, live storage delivery or signed-URL recall.`);
+console.log(`H2g photo consent passed: ${photoConsent[1]} real HTTP/PostgreSQL scenarios passed: shared publication/parent-signing consent perimeter includes primary child, deduplicates participants and refuses unverifiable metadata. Authorized photos and staff access retained. Local signatures only, not image-content recognition, live storage delivery or signed-URL recall.`);
+// All subprocesses share one workflow step (ten notices maximum). Keep full
+// per-lot details in stdout, but aggregate H2 so later lots are not silently lost.
+console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}. All HTTP/PostgreSQL scenario thresholds verified, zero failures. Local provider doubles/signatures only; no global JWT revocation, signed-URL recall or production qualification. Per-lot details remain in the job log and runbooks.`);
 console.log('✓ GATE D : régressions Phase D + 44 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
