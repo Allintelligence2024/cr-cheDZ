@@ -66,15 +66,16 @@ test "$before" = "$(sha256sum pubspec.lock)"`;
   assert.deepEqual(operations.find(r => r.event_id === report.conflict_event)?.response_outcome, { status: 'conflict', reason: 'VERSION_MISMATCH', currentVersion: 1 });
   for (const id of [...report.journal_events, report.photo_event]) assert.equal(operations.find(r=>r.event_id===id)?.status,'accepted');
   const journal = (await db.query('SELECT sync_event_id,event_type,event_date::text FROM daily_log_events WHERE child_id=$1',[report.child_id])).rows;
-  assert.equal(journal.length,8); assert.deepEqual(new Set(journal.map(r=>r.sync_event_id)),new Set(report.journal_events));
-  assert.deepEqual(new Set(journal.map(r=>r.event_type)),new Set(['meal','nap_start','nap_end','diaper','activity','temperature','note','incident']));
+  assert.equal(journal.length,9); assert.deepEqual(new Set(journal.map(r=>r.sync_event_id).filter(Boolean)),new Set(report.journal_events));
+  assert.deepEqual(new Set(journal.map(r=>r.event_type)),new Set(['meal','nap_start','nap_end','diaper','activity','temperature','note','incident','health_observation']));
   assert.equal((await db.query('SELECT 1 FROM media_assets WHERE child_id=$1',[report.child_id])).rowCount,2);
   assert.deepEqual((await db.query('SELECT aggregate_type,count(*)::int AS n FROM sync_changelog WHERE organization_id=$1 GROUP BY aggregate_type ORDER BY aggregate_type',[a.org])).rows,
-    [{aggregate_type:'attendance',n:1},{aggregate_type:'child',n:1},{aggregate_type:'daily_log',n:8},{aggregate_type:'media',n:2}]);
+    [{aggregate_type:'attendance',n:1},{aggregate_type:'child',n:1},{aggregate_type:'daily_log',n:9},{aggregate_type:'media',n:3}]);
   const sessions = (await db.query('SELECT status,version FROM attendance_sessions WHERE child_id=$1', [report.child_id])).rows;
   assert.deepEqual(sessions, [{ status: 'present', version: 1 }], 'conflict/replay changed business state');
   assert.equal((await db.query('SELECT 1 FROM attendance_events WHERE child_id=$1', [report.child_id])).rowCount, 1);
   assert.equal((await db.query('SELECT 1 FROM devices WHERE organization_id=$1 AND registered_by=$2', [a.org, a.user])).rowCount, 2, 'restart registered another device');
+  assert.equal((await db.query('SELECT 1 FROM media_assets WHERE organization_id=$1 AND child_id IS NULL AND media_type=$2',[a.org,'document'])).rowCount,1);
   assert.notEqual(report.device_a, report.device_b);
   console.log('::notice title=F4 Flutter API passed::7 real Flutter/Drift tests against live HTTP API + PostgreSQL assertions passed: two devices, push/pull, replay, conflict, restart, tenant isolation. All four produced types including journal/media metadata. No Android release or offline media binaries claimed.');
 } finally {

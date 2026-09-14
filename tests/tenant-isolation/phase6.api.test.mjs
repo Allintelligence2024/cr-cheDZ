@@ -421,12 +421,12 @@ async function main() {
     await admin.query(`DELETE FROM audit_logs WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p6.%@test.dz')`);
     await admin.query(`DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p6.%@test.dz')`);
-    await admin.query(`DELETE FROM devices WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM child_guardians WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM room_moves WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM child_status_history WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM children WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM sync_changelog WHERE organization_id IN ${orgIds}`);
+    await admin.query(`DELETE FROM devices WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM guardians WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM org_sequences WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM memberships WHERE organization_id IN ${orgIds}`);

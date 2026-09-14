@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../database/app_database.dart';
 import 'api_client.dart';
 import 'generated/sync_wire_client.dart';
@@ -104,14 +105,74 @@ class SyncClient {
       );
       return;
     }
-    if (type != 'attendance' && type != 'child') {
-      throw FormatException('Unsupported projection: $type');
+    if (type == 'daily_log' || type == 'media') {
+      final id = _uuid(event['aggregate_id']);
+      final organizationId = db.scope.organizationId;
+      // The current minimal payload has no tenant field; scope comes from the
+      // authenticated pull and scoped database. Reject contradictory envelopes.
+      if (payload.containsKey('organization_id') && _uuid(payload['organization_id']) != organizationId) {
+        throw const FormatException('Cross-scope projection');
+      }
+      final createdAt = _instant(event['created_at']);
+      if (type == 'daily_log') {
+        final kind = payload['event_type'];
+        const kinds = {'meal', 'nap_start', 'nap_end', 'diaper', 'activity',
+          'temperature', 'note', 'health_observation', 'incident'};
+        if (kind is! String || !kinds.contains(kind) || event['event_type'] != kind) {
+          throw const FormatException('Unsupported or mismatched journal kind');
+        }
+        final childId = _uuid(payload['child_id']);
+        final day = _calendarDate(payload['event_date']);
+        final occurredAt = _instant(payload['occurred_at']);
+        // Explicit whitelist: never copy future private/medical fields silently.
+        final metadata = {'child_id': childId, 'event_type': kind,
+          'event_date': day, 'occurred_at': occurredAt};
+        await db.into(db.localDailyEvents).insertOnConflictUpdate(
+          LocalDailyEventsCompanion.insert(
+            id: id, organizationId: organizationId, childId: childId,
+            eventDate: day, eventType: kind, occurredAt: occurredAt,
+            payloadJson: jsonEncode(metadata), isSynced: const Value(true),
+            createdAt: createdAt,
+          ),
+        );
+      } else {
+        if (_uuid(payload['media_id']) != id || event['event_type'] != 'media_registered') {
+          throw const FormatException('Unsupported or mismatched media identity');
+        }
+        final kind = payload['media_type'];
+        if (kind != 'photo' && kind != 'document') throw const FormatException('Unsupported media type');
+        final childId = payload['child_id'] == null ? null : _uuid(payload['child_id']);
+        await db.customStatement(
+          'INSERT INTO local_media(id,organization_id,child_id,media_type,created_at) VALUES(?,?,?,?,?) '
+          'ON CONFLICT(id) DO UPDATE SET organization_id=excluded.organization_id, '
+          'child_id=excluded.child_id,media_type=excluded.media_type,created_at=excluded.created_at',
+          [id, organizationId, childId, kind, createdAt],
+        );
+      }
+      return;
     }
+    throw FormatException('Unsupported projection: $type');
+  }
+
+  static String _calendarDate(Object? value) {
+    final parsed = value is String ? DateTime.tryParse(value) : null;
+    if (value is! String || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value) ||
+        parsed == null || parsed.toIso8601String().substring(0, 10) != value) {
+      throw const FormatException('Invalid journal calendar date');
+    }
+    return value;
+  }
+
+  static String _instant(Object? value) {
+    if (value is! String || !value.contains('T') || DateTime.tryParse(value) == null) {
+      throw const FormatException('Invalid projection timestamp');
+    }
+    return value;
   }
 
   static String _uuid(Object? value) {
     if (value is! String || !RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(value)) {
-      throw const FormatException('Invalid child identity');
+      throw const FormatException('Invalid projection identity');
     }
     return value.toLowerCase();
   }

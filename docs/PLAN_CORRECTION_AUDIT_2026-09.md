@@ -1,8 +1,8 @@
-# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.9)
+# PLAN DE REPRISE — Audit 2026-09, phases D→H (v3.0)
 
 > **Document de pilotage pour la prochaine session agent.**
 > Remplace la v1.x du même fichier (historique : voir `git log -- docs/PLAN_CORRECTION_AUDIT_2026-09.md`).
-> **Version** : 2.6 — 2026-09-14. Reprend la v2.0 mergée par la PR #43 (`d2bd1f9`)
+> **Version** : 3.0 — 2026-09-14. Reprend la v2.0 mergée par la PR #43 (`d2bd1f9`)
 > et ajoute le suivi local D/E1–E6 sur `arena/01a09e7f-cr-chedz` (pas encore mergé).
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md),
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md) et à la [matrice d'autorisation](architecture/authorization-matrix.md).
@@ -36,7 +36,7 @@
   schéma/DTO locaux ; gate Dart obligatoire en CI (voir `architecture/sync-contract.md`).
   **F3 curseurs corrigés** : 5/23 avant → 23/23 après, suite enrichie **26/26**.
   Intégration **F2 maintenant livrée** (voir runbook F2), gate Flutter réel requis ;
-  gate F4 réel désormais branché (résultat CI du dernier HEAD), pas de couverture toutes projections/release. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
+  gate F4 réel étendu aux quatre types produits (résultat CI du dernier HEAD), pas de qualification Android release. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
   du choix « mois partiels non facturés » des contrats de garde.
 - **Réserves D** : Docker non démarré ici, écart Compose PostgreSQL 16 / tests 18.4,
   gate CI strict désormais raccordé via le runner existant (validé en PR #44 sur 955b9cd). Ne pas confondre preuve locale et déploiement.
@@ -320,8 +320,9 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
   puis analyse ; Flutter 3.47.1 et `pub get --enforce-lockfile`. Aucun SDK local
   ni APK release revendiqué. Les tests de transport initiaux ont échoué **0/2**
   sur le vrai Flutter avant correction ; voir les runs archivés dans le runbook.
-- **Ne pas déployer encore** : projections journal/media inconnues bloquent la
-  page sans avancer le curseur. F3 (producteurs/projections/commit order) puis F4.
+- **Ne pas déployer encore** : G/H2/H3 et Android release restent distincts.
+  Journal/media sont désormais des projections de métadonnées explicites (pas de
+  cache des dossiers/pièces jointes) ; validation du dernier HEAD obligatoire.
 
 ### F3. Corriger le serveur si nécessaire
 
@@ -337,13 +338,20 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       pour les écrivains applicatifs. Suite enrichie 10/10 avec les projections présence.
       [Runbook F3c/F4](PHASE_F3C_F4_RUNBOOK.md) ; batterie portée à 36 suites/contrôles.
 - [x] Scope utilisateur du device vérifié côté API en F2 ; FK simples depuis 006.
-- [ ] Intégrité composite SQL pour écritures directes, si nécessaire après reproduction.
+- [x] Intégrité composite SQL : migration **061**, device/membership, opération/device/
+      propriétaire, curseur/tenant, origine/tenant. Reproduction `phase34` **1/10 → 10/10**
+      avec les deux défauts DATE journal. Contraintes validées, aucun effacement/cascade.
+- [x] Projections `daily_log` et `media` : métadonnées explicites, tous les types
+      actuellement produits, Drift v3 dans le même fichier scopé, migration v2 testée.
+      DATE journal corrigée côté publication/retour création ; anciennes publications
+      non réparées automatiquement. [Runbook clôture F/H1](PHASE_F_COMPLETION_H1_RUNBOOK.md).
 - [x] **F3a conflits/résultats** : 0/15 avant correction → 18/18 ciblés après ;
       contrôle de version avant mutation, résultat persisté/rejoué, ACK après COMMIT,
       retry concurrent sérialisé et rollback sur INTERNAL_ERROR. Migration additive 058.
       Voir [runbook F3a](PHASE_F3A_OUTCOMES_RUNBOOK.md) ; batterie désormais 34 suites,
       résultat complet/CI à consulter sur le dernier HEAD de la PR #44.
-      **F3 reste ouvert** pour les items non cochés ci-dessus et les autres projections.
+      **F3 implémenté** pour les quatre types actuellement produits ; toute projection
+      inconnue/malformée reste bloquante atomiquement. Aucun contenu privé ajouté.
 
 ### F4. GATE — test bout-à-bout (le vrai livrable)
 
@@ -354,9 +362,15 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       au lieu de DATE, version miroir 0 au lieu de 1. Projections corrigées ; résultat
       final des cinq tests/annotations `F4 Flutter API passed` à consulter dans la PR #44.
 - Le fallback de contrat F1 est conservé mais n'est **plus substitué** au parcours réel.
-- [ ] Couverture de **toutes** les projections / qualification de déploiement :
-      journal/media et autres types restent ouverts ; APK Android release distinct.
-      F4 démontre ici le parcours enfants/présences, pas une sync globale prête à déployer.
+- [x] Gate étendu aux **quatre projections produites** : sept tests réels, neuf types
+      journal, photos HTTP/sync et document sans enfant, reprise et isolation. Baseline
+      `33ab34e` : **4/7**, journal/media/reprise rouges avant correctif. Inspection PG
+      indépendante : 11 opérations, 9 événements journal, 3 médias, pas de doublons.
+      Batterie portée à **37 suites/contrôles** ; résultat de clôture du **dernier HEAD**
+      dans les checks PR #44 (`F4 Flutter API passed` requis, pas le seul job Flutter).
+- [ ] **Qualification de déploiement / Android APK release** : distincte de F fonctionnelle.
+      Journal/media sont des métadonnées, pas un téléchargement offline des dossiers.
+      G/H et revue confidentialité/stockage restent nécessaires avant déploiement.
 
 ---
 
@@ -408,14 +422,22 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 
 ### H1. Réparer staging
 
-- [ ] `docker-compose.staging.yml:34-40` : le service `migrate` monte `scripts/`,
-      `infrastructure/database`, `package.json` — **pas `tests/`** — puis exécute
-      `node tests/tenant-isolation/schema-check.mjs` → échec → api/worker jamais lancés.
-      Option préférée : **sortir `schema-check.mjs` de `tests/` vers `scripts/`** (outil de
-      déploiement, pas un test). Vérifier `prod.yml` et `dev.yml`.
-- [ ] **GATE** : `docker compose -f docker-compose.staging.yml up` → api et worker healthy.
-- [ ] Job CI qui **démarre réellement** le compose staging (ce bug est invisible tant que personne
-      ne lance staging).
+- [x] Finding « tests non monté » : déjà corrigé par **c5cfab4** (D), dans staging
+      et production. Ne pas annoncer une nouvelle réparation fictive. Le chemin
+      `tests/tenant-isolation/schema-check.mjs` reste compatible avec les appels livrés.
+- [x] Nouveau défaut **reproduit en vrai** : pull `minio/minio:latest` refusé, runs
+      `34854334290` / `34854690262`. Image Quay versionnée + digest dans staging/prod/dev.
+      Contrat structurel : **8/11 → 11/11** ; le téléchargement reste vérifié en CI.
+- [x] **GATE réel implémenté et obligatoire** dans le runner CI existant, aucun workflow
+      modifié : build images livrées → vrai compose staging → bootstrap/migrate/seed/
+      schema-check → HTTP health API + job worker réellement terminé → destruction
+      des volumes synthétiques. Un échec H1 garde le gate global rouge. Résultat du
+      dernier HEAD : notice `H1 staging passed` dans PR #44, pas un healthcheck simulé.
+- [ ] Suite H1 : reproduire les problèmes dev (ancien install réseau/contexte Docker).
+      Revue de maintien/sécurité du stockage requise avant déploiement ; le pin MinIO
+      n'est pas une qualification CVE ni un choix définitif de fournisseur.
+- Voir [runbook F/H1](PHASE_F_COMPLETION_H1_RUNBOOK.md). G reste ouvert ; ce chantier
+      synthétique n'autorise aucun déploiement réel, ni à sauter H2/H3.
 
 ### H2. MEDIUM (par grappes homogènes)
 

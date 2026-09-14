@@ -206,18 +206,19 @@ SQL transactionnel pour tous les écrivains, bootstrap initial en migration 059,
 consommation Drift atomique avec le curseur, sans effacer la file d'opérations.
 Voir [runbook F3b](../PHASE_F3B_CHILDREN_RUNBOOK.md) pour la liste des champs et les
 preuves. Aucun `to_jsonb(children)`, dossier médical, contact ou note interne
-ajouté au changelog. Les autres projections restent ouvertes.
+ajouté au changelog. Les métadonnées journal/media sont maintenant projetées (voir ci-dessous).
 
-Les FK `sync_operations.device_id` et `sync_cursors.device_id` existent déjà depuis
-006 ; cela ne prouve pas l'intégrité composite tenant/device/utilisateur. Pas de
-correction composite SQL dans ce lot ; migrations additives 058/059/060 pour F3a/F3b/F3c,
-001–052 inchangées, 055 réservée à G.
+Les FK simples de 006 sont complétées par **061** : membership du propriétaire du
+device, opération/device/propriétaire, curseur/device/tenant et origine du changelog.
+Contraintes pleinement validées, sans cascade ; des incohérences anciennes font
+échouer la migration au lieu de réattribuer un historique. 001–060 inchangées,
+055 réservée à G. Préflight et rollback dans le runbook F/H1.
 
 **Preuves locales :** phase29 = 26/26 après correction (première reproduction :
 5/23 avant), corpus schéma/DTO = 49/49. Le diagnostic historique F0 est conservé
 avec sa fixture, mais retiré du runner : ne pas exiger que les anciens défauts
 restent présents. Sa couverture API positive (push/pull/deux devices/idempotence)
-est reprise dans phase29. Le gate F4 réel enfants/présences est obligatoire ; autres projections/release restent ouvertes.
+est reprise dans phase29. Le gate F4 réel des quatre types produits est obligatoire ; Android release reste distinct.
 
 
 La première correction a également exposé une régression : `ORDER BY sync_seq`
@@ -233,5 +234,25 @@ Les nouvelles publications `attendance` contiennent une `session_date` DATE text
 à Alger et la `version` résultant de la commande, lues dans sa transaction. Drift
 conserve la version au lieu de laisser zéro. Les anciens événements ne sont pas
 backfillés en inventant une version historique à partir de l'état courant.
-Le gate `scripts/test-sync-api-flutter.mjs` exécute cinq tests du vrai moteur,
+Le gate `scripts/test-sync-api-flutter.mjs` exécute sept tests du vrai moteur,
 puis vérifie les opérations, événements, sessions et appareils dans PostgreSQL.
+
+
+### Projections journal/médias (F clôture fonctionnelle)
+
+- `daily_log` : ID canonique = `aggregate_id`, payload `{child_id, event_type,
+  event_date, occurred_at}` ; DATE stricte, type concordant avec l'enveloppe. Les
+  neuf types JournalService sont pris en charge. Stockage `LocalDailyEvents`,
+  `is_synced=true`, métadonnées explicitement filtrées ; pas de texte de dossier.
+- `media` / `media_registered` : `media_id` doit correspondre à `aggregate_id`,
+  `child_id` UUID ou null, `media_type` photo/document. Drift v3 `local_media`
+  conserve ces métadonnées, le tenant de la base scopée et `created_at` serveur.
+  Aucune clé S3, URL signée, visibilité/permission ou pièce jointe mise en cache.
+- Les détails et téléchargements restent en ligne, avec autorisation via les
+  endpoints existants. Les nouvelles projections n'élargissent pas les données
+  sensibles accessibles hors ligne. La matrice complète reste le chantier H2.
+- Toute erreur d'identité/type/date fait annuler tous les miroirs de la page et
+  le curseur ; file et historique d'opérations jamais supprimés. Le fichier v2
+  scopé est migré en v3 sur place, pas renommé ni abandonné.
+
+[Reproductions, frontière fonctionnelle, upgrade et rollback](../PHASE_F_COMPLETION_H1_RUNBOOK.md).

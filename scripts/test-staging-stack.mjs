@@ -48,7 +48,8 @@ async function until(fn, label) {
 const sql = (query) => compose(['exec', '-T', 'postgres', 'psql', '-U', 'postgres', '-d', env.POSTGRES_DB, '-v', 'ON_ERROR_STOP=1', '-Atc', query], { quiet: true, timeout: 10000 });
 try {
   for (const target of ['api', 'worker']) docker(['build', '-f', `apps/${target}/Dockerfile`, '-t', `ghcr.io/creche-saas/${target}:staging`, '.']);
-  for (const image of ['postgres:16-alpine', 'minio/minio:latest']) docker(['pull', image]);
+  const config = JSON.parse(compose(['config', '--format', 'json'], { quiet: true }));
+  for (const name of ['postgres', 'minio']) docker(['pull', config.services[name].image]);
   compose(['up', '-d', '--pull', 'never', 'api', 'worker', 'minio']);
   // Readiness is functional, not just a running PID or a made-up health label.
   await until(() => {

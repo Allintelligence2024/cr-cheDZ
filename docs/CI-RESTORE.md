@@ -220,3 +220,21 @@ Preuve rouge 7d0b520 : 3/5, date et version de présence incorrectes. Validation
 finale : annotation **F4 Flutter API passed** du dernier HEAD de la PR #44.
 Ce gate réel enfants/présences ne qualifie pas les autres projections ou l'APK
 release. Voir `PHASE_F3C_F4_RUNBOOK.md` pour sécurité des fixtures et rollback.
+
+
+## Clôture F et début H1 (PR #44)
+
+Le runner des rôles de production contient désormais 37 suites/contrôles et deux
+preuves distinctes obligatoires :
+- `F4 Flutter API passed` : sept tests réels, quatre types produits, inspection PG.
+  Baseline étendue `33ab34e` : 4/7, avant correction journal/media et reprise.
+- `H1 staging passed` : vrai compose staging synthétique, images livrées,
+  bootstrap/migration/seed/schema-check, HTTP health API et job worker `done`.
+  MinIO Docker Hub a échoué dans nos runs ; pin Quay versionné/digest, pull réel
+  requis. Le test n'est pas remplacé par le contrat structurel (11 assertions).
+
+Aucun workflow modifié. Sans Docker/Flutter, le local n'est pas une preuve de ces
+deux gates ; la CI doit être verte sur le dernier HEAD. H1 est indépendant mais
+son échec reste bloquant pour le gate global. Aucun déploiement réel.
+Voir [runbook F/H1](PHASE_F_COMPLETION_H1_RUNBOOK.md) pour les limites (métadonnées
+seulement, pas de release Android ni de qualification G/H2/H3/dev/prod).

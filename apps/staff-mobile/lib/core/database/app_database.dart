@@ -102,7 +102,7 @@ class AppDatabase extends _$AppDatabase {
   final SyncScope scope;
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   // Metadata uses Drift custom SQL to avoid hand-editing generated table code.
   Future<void> _createSyncState() => customStatement("""
@@ -114,15 +114,26 @@ class AppDatabase extends _$AppDatabase {
     )
   """);
 
+  // Registered media metadata only: downloads/consent remain online-authorized.
+  // Custom SQL avoids hand-editing generated Drift code, like sync_state.
+  Future<void> _createMediaMirror() => customStatement("""
+    CREATE TABLE IF NOT EXISTS local_media (
+      id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL,
+      child_id TEXT, media_type TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )
+  """);
+
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) async { await m.createAll(); await _createSyncState(); },
+    onCreate: (m) async { await m.createAll(); await _createSyncState(); await _createMediaMirror(); },
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         final rows = await customSelect('SELECT (SELECT count(*) FROM pending_operations) + (SELECT count(*) FROM local_children) + (SELECT count(*) FROM local_attendance_sessions) + (SELECT count(*) FROM local_daily_events) AS n').getSingle();
         if (rows.read<int>('n') != 0) throw StateError('Legacy data requires explicit scope recovery');
         await _createSyncState();
       }
+      if (from < 3) await _createMediaMirror();
     },
   );
 

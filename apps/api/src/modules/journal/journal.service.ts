@@ -200,7 +200,7 @@ export class JournalService {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
                $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
                $27,$28,$29,$30)
-       RETURNING id, event_type, event_date, occurred_at`,
+       RETURNING id, event_type, event_date::text, occurred_at`,
       [
         tenantId, input.childId, child.room_id, day, input.eventType, input.occurredAt,
         input.recordedBy, input.deviceId ?? null, input.isOffline ?? false, input.syncEventId ?? null,
@@ -247,7 +247,7 @@ export class JournalService {
   }
 
   private async todayAlgiers(client: PoolClient): Promise<string> {
-    const res = await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date AS d`);
+    const res = await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date::text AS d`);
     return res.rows[0].d as string;
   }
 }

@@ -61,7 +61,9 @@ try {
   for (const origin of [otherDevice,randomUUID()]) await check('SQL rejects foreign or nonexistent changelog origin', ()=>rejected(()=>c.query("INSERT INTO sync_changelog(organization_id,aggregate_type,aggregate_id,event_type,payload,origin_device_id) VALUES($1,'media',$2,'media_registered','{}',$3)",[org,randomUUID(),origin])));
   await check('SQL rejects registering a device to a foreign tenant member', ()=>rejected(()=>c.query("INSERT INTO devices(organization_id,name,device_fingerprint,platform,registered_by) VALUES($1,'Invalid',$2,'android',$3)",[org,randomUUID(),otherUser])));
   await check('SQL rejects changing device owner underneath accepted history', ()=>rejected(async()=> {
-    await operation(); await c.query('UPDATE devices SET registered_by=$1 WHERE id=$2',[peer,device]);
+    const op = await operation();
+    await c.query("UPDATE sync_operations SET status='accepted',response_outcome='{\"status\":\"accepted\"}' WHERE id=$1",[op.rows[0].id]);
+    await c.query('UPDATE devices SET registered_by=$1 WHERE id=$2',[peer,device]);
   }));
   await check('SQL valid references and device-free server publications remain legal', ()=>transaction(async()=> {
     await operation(); await c.query('INSERT INTO sync_cursors(organization_id,device_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[org,device]);
