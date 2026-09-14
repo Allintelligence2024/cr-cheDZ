@@ -238,6 +238,7 @@ services:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     environment:
       DATA_SOURCE_NAME: ${DATABASE_URL:?DATABASE_URL creche_app requis}
+      PGSSLMODE: ${MONITORING_PGSSLMODE:?mode SSL explicite requis pour libpq}
       PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
     volumes:
       - ../monitoring/postgres-queries.yml:/etc/postgres-exporter/queries.yml:ro

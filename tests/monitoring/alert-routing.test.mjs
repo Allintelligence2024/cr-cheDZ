@@ -11,3 +11,7 @@ test('E2 : récepteur authentifié, durable, aucun port relay exposé publiqueme
   const c=readFileSync('infrastructure/docker/docker-compose.prod.yml','utf8').split('  alert-relay:')[1]?.split('  postgres-exporter:')[0];
   assert.ok(c); assert.doesNotMatch(c,/\n    ports:/); assert.match(c,/alerts_data:/);
 });
+test('E2 : lib/pq reçoit un mode SSL explicite, y compris dans le cluster CI sans TLS',()=>{
+  assert.match(readFileSync('infrastructure/docker/docker-compose.prod.yml','utf8'),/PGSSLMODE: \$\{MONITORING_PGSSLMODE:\?/);
+  assert.match(readFileSync('scripts/test-worker-monitoring-stack.mjs','utf8'),/PGSSLMODE=disable/);
+});

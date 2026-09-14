@@ -27,6 +27,9 @@ Ne pas le publier sur Internet ; accès opérateur par réseau privé/SSH.
 
 ## Reprises et limites
 
+Le relais utilise **une seule réplique** : son ledger local n’est pas un verrou
+distribué, ne pas partager ce volume entre plusieurs processus.
+
 Alertmanager persiste son état et réessaie après HTTP 503. Le relais sérialise
 les lots et conserve un reçu **par canal**, sur volume persistant ; un SMTP
 accepté n'est pas renvoyé parce que le SMS a échoué. Déduplication 1 h, rappel AM
@@ -44,6 +47,10 @@ SMS sans frais ; configurer budgets, quotas et autorisations géographiques.
 
 1. Images API récentes contenant `apps/api/operations/alert-relay.mjs`,
    Prometheus 2.53.0, Alertmanager 0.27.0, exporter 0.15.0.
+   Définir `MONITORING_PGSSLMODE` explicitement : `disable` uniquement pour
+   PostgreSQL sans TLS sur le réseau Docker privé ; pour un serveur distant,
+   `verify-full` avec certificats/URL adaptés. Le test CI local impose disable.
+   Le pilote lib/pq de l’exporter n’a pas le même défaut TLS que node-pg.
 2. Créer hors Git un secret aléatoire d'au moins 32 caractères. Fichier absolu
    `ALERT_WEBHOOK_TOKEN_FILE`, mode **0400**, propriétaire **65534:65534**, lisible
    par les deux conteneurs. Ne pas le coller dans le chat. Dossier parent protégé.
@@ -103,6 +110,7 @@ ports de test sont nettoyés. Les binaires/images/credentials ne sont pas commit
 ## État des preuves
 
 - Avant raccordement : **0/2** tests de routage ; après : **2/2**.
+  Contrôle supplémentaire SSL explicite : rouge avant, vert après (3 tests de routage au total).
 - Relais : **4/4**, avec vrai dialogue SMTP local, panne partielle SMS,
   reprise après redémarrage, déduplication concurrente, auth et limites d'entrée.
 - Sandbox : Docker absent ; téléchargement officiel des binaires bloqué.
