@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Rejoue les 27 suites d'isolation (+ garde RLS = 28) dans l'ordre canonique
 # (HANDOFF) ; phase23 (MISSION P1) et phase24 (MISSION P2, webhook tardif)
-# ajoutées en dernier — id est 28 lignes.
+# ajoutées en dernier ; phase25 (audit 2026-09, Phase C) ajoutée ensuite — id est 29 lignes.
 # Prérequis : PostgreSQL réel sur DATABASE_URL, apps/api + apps/worker compilés.
 # Usage : bash scripts/run-isolation-suites.sh [préfixe-de-filtrage]
 set -uo pipefail
@@ -44,6 +44,7 @@ SUITES=(
   phase22-audit-fixes.api.test.mjs
   phase23-pending-expiry.api.test.mjs
   phase24-late-webhook.api.test.mjs
+  phase25-security-audit-c.api.test.mjs
 )
 
 FILTER="${1:-}"
