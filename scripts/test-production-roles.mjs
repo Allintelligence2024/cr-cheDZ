@@ -40,6 +40,10 @@ function run(command, args, overrides = {}) {
     process.exit(result.status || 1);
   }
 }
+// F2 first: compile/run the real Flutter client, not just the wire fixture.
+if (env.GITHUB_ACTIONS === 'true' || env.RUN_STAFF_SYNC === '1') {
+  run(process.execPath, ['scripts/check-staff-sync.mjs']);
+}
 run(process.execPath, ['--test', 'tests/tenant-isolation/production-compose-contract.test.mjs']);
 run(process.execPath, ['--test', 'tests/monitoring/worker-monitoring.test.mjs', 'tests/monitoring/alert-routing.test.mjs', 'tests/monitoring/alert-relay.test.mjs']);
 run(process.execPath, ['--test', 'tests/tenant-isolation/phase26-production-roles.test.mjs']);
