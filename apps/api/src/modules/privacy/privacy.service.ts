@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Pool, PoolClient } from 'pg';
 import { canManagePrivacyRequests } from '../../shared/authorization/disclosure-policy';
+import { PARENT_JOURNAL_VISIBILITY_SQL } from '../../shared/authorization/journal-disclosure';
 import { ConfigService } from '@nestjs/config';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
@@ -159,9 +160,7 @@ export class PrivacyService {
                 CASE WHEN $2::boolean THEN health_observation END AS health_observation, activity_name,
                 activity_notes, note_text, note_is_private, incident_severity, incident_description,
                 is_correction, visible_to_parents
-         FROM daily_log_events WHERE child_id=$1 AND visible_to_parents = true
-           AND note_is_private IS NOT TRUE
-           AND ($2::boolean OR event_type <> 'health_observation')
+         FROM daily_log_events WHERE child_id=$1 AND ${PARENT_JOURNAL_VISIBILITY_SQL}
          ORDER BY occurred_at`, [childId, access.health],
       )).rows : [];
       const attendance = (await client.query(

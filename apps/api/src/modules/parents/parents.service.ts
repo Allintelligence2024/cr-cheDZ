@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PARENT_INVOICE_FIELDS_SQL, PARENT_RECEIPT_FIELDS_SQL } from './financial-projection';
 import { CURRENT_GUARDIAN_LINK_SQL } from '../../shared/authorization/guardian-access';
+import { PARENT_JOURNAL_VISIBILITY_SQL } from '../../shared/authorization/journal-disclosure';
 import type { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -38,14 +39,20 @@ export class ParentsService {
 
   async feed(userId: string, childId: string): Promise<Array<Record<string, unknown>>> {
     await this.assertPermission(userId, childId, 'can_view_journal');
-    return this.tenantContext.withTenantConnection(async (client) => (await client.query(
-      `SELECT id, event_type, occurred_at, meal_type, meal_quantity, nap_start_at, nap_end_at,
-              nap_quality, diaper_type, activity_name, activity_notes, incident_severity,
-              incident_description, visible_to_parents
-       FROM daily_log_events WHERE child_id = $1 AND visible_to_parents = true
-         AND (note_is_private = false OR note_is_private IS NULL)
-       ORDER BY occurred_at DESC LIMIT 100`, [childId],
-    )).rows);
+    return this.tenantContext.withTenantConnection(async (client) => {
+      const health = await client.query(
+        `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
+         WHERE cg.child_id = $1 AND g.user_id = $2 AND cg.can_view_health = true
+           AND ${CURRENT_GUARDIAN_LINK_SQL} LIMIT 1`, [childId, userId],
+      );
+      return (await client.query(
+        `SELECT id, event_type, occurred_at, meal_type, meal_quantity, nap_start_at, nap_end_at,
+                nap_quality, diaper_type, activity_name, activity_notes, incident_severity,
+                incident_description, visible_to_parents
+         FROM daily_log_events WHERE child_id = $1 AND ${PARENT_JOURNAL_VISIBILITY_SQL}
+         ORDER BY occurred_at DESC, id DESC LIMIT 100`, [childId, health.rows.length > 0],
+      )).rows;
+    });
   }
 
   async reportAbsence(userId: string, childId: string, reason?: string): Promise<Record<string, unknown>> {

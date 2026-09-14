@@ -490,7 +490,14 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
         HTTP signée vers un fournisseur loopback. Accès comptable et données internes en base conservés.
         [Runbook H2d](PHASE_H2D_FINANCIAL_PROJECTION_RUNBOOK.md) ; pas de qualification
         SATIM réelle ni purge d'historique. Gates complets/CI à vérifier en PR #44.
-  - [ ] **Suite confidentialité** : projections santé/journal/médias et autres contrôles de gardien,
+  - [x] **H2e journal/santé** : règle de visibilité partagée fil parent/nouveaux
+        exports de droits ; `temperature` et `health_observation` nécessitent santé
+        en plus du journal, avec filtrage avant LIMIT. Valeurs/événements autorisés
+        conservés, sources et snapshots antérieurs intacts. **28/36 → 36/36** HTTP/PG,
+        dont publication HTTP de 101 événements pour le test de pagination.
+        [Runbook H2e](PHASE_H2E_JOURNAL_HEALTH_RUNBOOK.md) ; gates complets/CI du SHA
+        publié à vérifier en PR #44. Pas de classification de tout texte libre ni de révocation JWT globale.
+  - [ ] **Suite confidentialité** : autres projections santé/journal/médias et contrôles de gardien,
         snapshots privacy historiques et routes registre/DPIA/violations. Révocation
         globale des tokens et autres routes toujours à traiter en G. Pas de purge
         masquante ; la grappe et l'aptitude à la production ne sont pas clôturées.

@@ -102,7 +102,11 @@ const financialProjection = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phas
   .match(/H2d financial projection: (\d+) passed, 0 failed/);
 if (!financialProjection || Number(financialProjection[1]) < 44) throw new Error('H2d financial projection evidence missing or incomplete');
 console.log(`::notice title=H2d financial projection passed::${financialProjection[1]} real HTTP/PostgreSQL scenarios passed: public financial field allowlists, HMAC-signed initialization against a loopback gateway, raw response kept internal, authorized PDF and accounting views retained. Not real SATIM qualification, historical purge or full confidentiality closure.`);
-console.log('✓ GATE D : régressions Phase D + 41 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const journalHealth = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase39-journal-health-disclosure.api.test.log'), 'utf8')
+  .match(/H2e journal health: (\d+) passed, 0 failed/);
+if (!journalHealth || Number(journalHealth[1]) < 36) throw new Error('H2e journal health evidence missing or incomplete');
+console.log(`::notice title=H2e journal health passed::${journalHealth[1]} real HTTP/PostgreSQL scenarios passed: temperature and health_observation require health capability in parent feed and new rights exports; filtering before LIMIT; authorized health and ordinary journal retained. Not snapshot purge, global JWT revocation or arbitrary text classification.`);
+console.log('✓ GATE D : régressions Phase D + 42 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

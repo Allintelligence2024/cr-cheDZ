@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v5 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d)
+# Matrice d'autorisation par module (v6 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -140,3 +140,23 @@ loopback synthétique. Le [runbook H2d](../PHASE_H2D_FINANCIAL_PROJECTION_RUNBOO
 détaille les champs, la réduction du contrat client et les faux positifs écartés.
 Santé/journal/médias, routes privacy et révocation globale JWT ne sont pas qualifiés
 par ce contrôle de projection financière.
+
+
+## H2e — événements médicaux dans le journal parent
+
+Le fil parent et les nouveaux exports de droits utilisent
+`shared/authorization/journal-disclosure.ts` : visible et non privé, puis droit
+santé requis pour **temperature et health_observation**. L'accès journal reste
+nécessaire ; santé seule ne le remplace pas. Le fil applique le filtre avant LIMIT
+100 et conserve sa projection (pas de nouvelles valeurs médicales brutes).
+
+L'export autorisé conserve les valeurs médicales sous sa politique H2a ; sans
+santé, les colonnes médicales des événements non médicaux mixtes restent masquées.
+La vue brute/prévisualisation du personnel reste protégée par ses rôles et inchangée.
+
+**28/36 → 36/36** HTTP/PG, dont révocation avant requête, nouveaux JSON persistés,
+pagination sur 101 événements médicaux publiés par HTTP, et conservation des anciens
+snapshots. Voir le [runbook H2e](../PHASE_H2E_JOURNAL_HEALTH_RUNBOOK.md).
+
+Ce contrôle ne classe pas sémantiquement tous les textes libres et ne corrige pas
+les autres autorisations privacy ou la révocation globale des sessions (G).
