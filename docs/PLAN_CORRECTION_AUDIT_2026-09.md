@@ -445,10 +445,12 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       rôles séparés DEV_*, sources RO, proxy serveur vers `api:3000`, allowlist ciblée.
       **9/9** nouveaux tests verts ; démarrage réel local Nest/Vite/ts-node et job worker
       vérifiés, migration/seed/schema-check verts sur PostgreSQL jetable.
-- [ ] **Qualification Docker dev à confirmer en CI** : gate `--dev` ajouté au runner
+- [x] **Qualification Docker dev confirmée en CI sur `0870317`** : gate `--dev` ajouté au runner
       existant, sans workflow. Exige images livrées, bootstrap, migration/seed/schema-check,
       vrai HTTP API, proxy/HTML web et job worker ; aucun override des commandes/montages.
-      Docker absent localement : ne pas assimiler les tests locaux à cette preuve.
+      CI **34868421539**, check **104057998864**, succès **21m50s**, **9/9 checks** :
+      notices `H1 dev passed`, `H1 staging passed`, F2 et F4 vérifiées. Docker absent
+      localement : cette preuve provient de la CI, pas des seuls tests locaux.
       [Runbook dev](PHASE_H1_DEV_RUNBOOK.md) : lancement neuf, secrets locaux, rebuild,
       worker sans watch, anciens volumes conservés. G/H2/H3 restent ouverts.
 - [ ] Revue de maintien/sécurité du stockage requise avant déploiement ; le pin MinIO

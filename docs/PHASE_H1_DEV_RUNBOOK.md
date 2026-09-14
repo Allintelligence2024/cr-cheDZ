@@ -125,3 +125,20 @@ métier de paie n'est déduite des décisions E5.
 - Gate des rôles, reset → migrations → seeds puis isolation : **37/37 suites**.
 - Les gates Docker et Flutter restent explicitement non exécutés localement ;
   leur statut final doit être lu sur le commit courant de la PR, pas hérité de a2ab4f4.
+
+### Preuve Docker réelle — commit `0870317`
+
+[CI 34868421539](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34868421539),
+check database **104057998864**, succès en **21m50s** ; les **9/9 checks** du commit
+`0870317788b8aa19c2ae48d409a5509ead833d4d` sont verts. Notices vérifiées via l'API des
+annotations GitHub, pas seulement l'exit code du watcher :
+
+- **H1 dev passed** : Compose livré, bootstrap, migration, seed, schema-check,
+  santé HTTP API, proxy/HTML Vite et job worker terminé (une tentative).
+- **H1 staging passed** : même preuve bootstrap/runtime staging conservée.
+- **F2 Flutter passed** : 51 vrais tests et analyse.
+- **F4 Flutter API passed** : 7 vrais tests Flutter/Drift → HTTP API + PostgreSQL.
+
+H1 dev est qualifié dans ce périmètre synthétique. Les restrictions G/H2/H3,
+stockage complet et Android release ci-dessus ne sont pas levées. Les mises à jour
+de documentation qui consignent cette preuve ne changent pas le code testé.

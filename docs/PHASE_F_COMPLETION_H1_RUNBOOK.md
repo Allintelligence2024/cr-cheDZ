@@ -169,9 +169,10 @@ Sans Docker le test sort non-zéro et annonce **NOT EXECUTED**, jamais vert simu
 En CI il est obligatoire, sans modification de `.github/workflows/*`. Sa défaillance
 reste bloquante même si les tests indépendants de synchronisation continuent.
 
-H2/H3 restent ouverts. Le compose **dev** (ancien install réseau et ancien contexte
-Docker) reste à reproduire séparément ; ce gate staging ne qualifie pas dev/prod,
-le stockage complet, les canaux de notification, ni la matrice d'autorisation G/H2.
+H2/H3 restent ouverts. Le compose **dev** a ensuite été reproduit et corrigé dans
+`0870317` : [runbook dédié et preuve CI 34868421539](PHASE_H1_DEV_RUNBOOK.md).
+Les deux notices H1 dev/staging et les gates F2/F4 sont verts, 9/9 checks.
+Cette qualification synthétique ne constitue toujours pas un déploiement de production.
 
 
 ### Résilience du téléchargement de registre (sans contourner le gate)
