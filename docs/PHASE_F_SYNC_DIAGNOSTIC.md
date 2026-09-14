@@ -1,11 +1,31 @@
 # Phase F — diagnostic F0 et lancement du contrat
 
-Date : 2026-09-14. F **commencée**, pas déclarée corrigée. Aucune modification
-Dart/API sync dans cette étape ; pas de SDK Dart/Flutter installé ou committé.
+Date : 2026-09-14. **Archive F0 (baseline `d5f1864`)**, pas un gate du protocole actuel.
+
+## Suite F1/F3
+
+Le [contrat versionné](architecture/sync-contract.md), le générateur et le client
+réseau Dart sont maintenant livrés. Le serveur a été corrigé sur les curseurs :
+string int64 partout, sans Number/int32, 400 avant SQL pour les valeurs invalides.
+Preuve : phase29, première reproduction 5/23 puis 23/23 ; suite enrichie 26/26.
+Schéma/DTO : 49/49 locaux. Le gate deux côtés exécute le Dart en CI ; aucun SDK
+installé localement ou committé. L'intégration dans le moteur Flutter reste F2.
+
+**Le runner ne lance plus `sync-f0.mjs`** : ses assertions décrivent les anciens
+bugs. La couverture API positive (deux appareils, idempotence) est reprise dans
+`phase29-sync-contract.api.test.mjs`. La fixture F0 est gardée telle quelle comme
+preuve historique ; ne pas l'interpréter comme le résultat du dernier HEAD.
+
+---
+
+## Diagnostic historique
+
+F était commencée, pas déclarée corrigée. Aucune modification Dart/API sync dans
+l'étape F0 ; pas de SDK Dart/Flutter installé ou committé.
 
 ## Reproduction réelle
 
-Commande après migration/seed, sur cluster jetable `_test` :
+Commande **sur la baseline historique seulement**, après migration/seed sur cluster jetable `_test` :
 
 ```bash
 node tests/diagnostics/sync-f0.mjs
@@ -54,7 +74,7 @@ passer un test : cela pourrait exposer des données d'autres enfants.
 ## Prochain lot F1–F4
 
 1. Figer le contrat versionné, avec fixtures réellement émises par Dart et
-   schéma partagé. Brouillon : `architecture/sync-contract.md`.
+   schéma partagé. Désormais livré : `architecture/sync-contract.md`.
 2. Device stable, enregistré avant push/pull et lié au tenant + utilisateur ;
    définir l'idempotence d'enregistrement et le comportement en cas de révocation.
 3. Curseur décimal opaque (proposition string), borné en int64 SQL sans passage

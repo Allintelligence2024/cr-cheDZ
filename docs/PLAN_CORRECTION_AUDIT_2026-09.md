@@ -1,15 +1,15 @@
-# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.4)
+# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.5)
 
 > **Document de pilotage pour la prochaine session agent.**
 > Remplace la v1.x du même fichier (historique : voir `git log -- docs/PLAN_CORRECTION_AUDIT_2026-09.md`).
-> **Version** : 2.4 — 2026-09-14. Reprend la v2.0 mergée par la PR #43 (`d2bd1f9`)
+> **Version** : 2.5 — 2026-09-14. Reprend la v2.0 mergée par la PR #43 (`d2bd1f9`)
 > et ajoute le suivi local D/E1–E6 sur `arena/01a09e7f-cr-chedz` (pas encore mergé).
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md),
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md) et à la [matrice d'autorisation](architecture/authorization-matrix.md).
 
 ---
 
-## Suivi de cette session — D puis E1–E6
+## Suivi de cette session — D, E1–E6, puis F1/F3
 
 - **D0 confirmé avec le client** : aucune production déployée, installation neuve ;
   propriétaires et sauvegarde de production non applicables. Rollback écrit avant
@@ -32,8 +32,10 @@
   Gate des vrais moteurs Docker et de la chaîne complète raccordé à la CI existante,
   **validé en CI sur `955b9cd` (PR #44, 9/9 checks)**. Réception sur coordonnées réelles non configurée.
   Voir `PHASE_E2_ALERTING_RUNBOOK.md`.
-- **F commencée (F0 reproduit, F1 brouillon)** : voir `PHASE_F_SYNC_DIAGNOSTIC.md`.
-  Pas encore de correction Dart ni de gate F4. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
+- **F1 livré comme artefact** : schéma partagé, générateur TS/Dart, 49/49 cas
+  schéma/DTO locaux ; gate Dart obligatoire en CI (voir `architecture/sync-contract.md`).
+  **F3 curseurs corrigés** : 5/23 avant → 23/23 après, suite enrichie **26/26**.
+  Pas encore d’intégration du client généré dans Flutter/Drift, ni de gate F4. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
   du choix « mois partiels non facturés » des contrats de garde.
 - **Réserves D** : Docker non démarré ici, écart Compose PostgreSQL 16 / tests 18.4,
   gate CI strict désormais raccordé via le runner existant (validé en PR #44 sur 955b9cd). Ne pas confondre preuve locale et déploiement.
@@ -284,13 +286,18 @@ correctement enregistrés. Curseur local non scopé et autres risques à reprodu
 
 ### F1. Établir le contrat comme artefact de première classe
 
-Brouillon créé : `docs/architecture/sync-contract.md` ; non implémenté, pas encore validé des deux côtés.
+Artefact versionné livré : [contrat v1](architecture/sync-contract.md).
 
-- [ ] Spécifier le contrat dans `docs/architecture/` : shape exact requêtes/réponses, types JSON
-      précis (number vs string), codes d'erreur, sémantique du curseur, ordre des opérations.
-- [ ] Générer le client Dart depuis la spec (openapi-generator dart, ou générateur maison minimal
-      pour le module sync) ; **au minimum** un schéma JSON partagé `packages/sync-contract/` validé
-      des deux côtés.
+- [x] Enveloppes exactes, erreurs, types et limites : `packages/sync-contract/`.
+      Curseur string int64 partout ; payloads métier/projections restent F3.
+- [x] Générateur maison minimal : client réseau Dart et validateur API utilisés
+      par le gate ; `--check` interdit les dérives. **Le moteur Flutter existant
+      n'est pas encore branché sur ce client généré.**
+- **Gate F1 deux côtés** : `scripts/check-sync-contract.mjs` doit réussir en CI :
+  vrai Dart → six requêtes sérialisées → schéma AJV + vrais DTO TypeScript,
+  corpus commun de 49 cas. Local sans SDK : `--node-only` explicitement partiel.
+  Résultat de la dernière exécution : consulter PR #44 ; aucun skip Dart autorisé
+  sur GitHub. Ce transport enregistreur n'est **pas** le gate F4.
 
 ### F2. Corriger le client Dart
 
@@ -301,8 +308,13 @@ Brouillon créé : `docs/architecture/sync-contract.md` ; non implémenté, pas 
 
 ### F3. Corriger le serveur si nécessaire
 
-- [ ] Émetteurs d'événements pour les entités manquantes (`child`…) ; type de retour du curseur
-      cohérent avec la spec ; contrainte d'intégrité sur `device_id` (FK vers `devices` ?).
+- [x] Curseur cohérent string int64 : DTO sans Number, SQL sans cast int32,
+      pull vide/non vide et push ; erreurs 400 avant SQL. Suite `phase29` **26/26**.
+- [ ] Émetteurs `child` : projection minimale, bootstrap, tous les chemins, tombstones.
+- [ ] Ordre de commit/pagination sûre : reproduire A lente/B rapide, puis corriger.
+- [ ] Intégrité/scope device : FK simples déjà présentes depuis 006 (ne pas les
+      réinventer) ; contrôler le scope utilisateur et tenant composé si nécessaire.
+- [ ] Conflit : reproduire absence d'effet métier et réponse stable au rejeu avant correction.
 
 ### F4. GATE — test bout-à-bout (le vrai livrable)
 

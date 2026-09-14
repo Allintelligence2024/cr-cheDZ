@@ -131,3 +131,27 @@ Le diagnostic F0 constate des défauts non corrigés : ne pas le lire comme gate
 Résultat acquis : PR #44 / commit `955b9cd`, run `34826565565` : **9/9 checks
 verts**, dont database (gate D strict + vrai gate E2 Docker + diagnostic F0) et
 les quatre images. Les coordonnées réelles de notification restent à configurer.
+
+
+### Complément F1/F3 — contrat partagé et curseurs int64
+
+Le gate D exécute maintenant `scripts/check-sync-contract.mjs` avant la batterie :
+- vérification sans écriture des artefacts générés ;
+- 49 cas JSON Schema/AJV comparés aux vrais DTO ;
+- **Dart obligatoire sur GitHub**, image `dart:3.9.4-sdk`, source read-only,
+  réseau du conteneur coupé, pas de package pub ni SDK dans Git ;
+- capture de six requêtes sérialisées par le client généré, puis validation
+  schéma/DTO. Rapport temporaire et JSON synthétique dans les logs (aucun secret).
+
+`--node-only` est réservé au local sans SDK : le message annonce explicitement
+que Dart n'a pas été exécuté. Ce flag est interdit sur GitHub. `RUN_SYNC_DART=1`
+active le gate Dart dans le runner local (`SYNC_USE_DOCKER=1` pour Docker).
+
+La batterie contient maintenant **32 suites/contrôles**, phase29 incluse. Le
+reset/migrate/seed avant les suites reste obligatoire. Le diagnostic F0 historique
+n'est plus exécuté : il exigeait les bugs de curseur que F3 corrige. Sa couverture
+API positive est reprise dans phase29 (26 assertions, dont limites int32/JS/int64).
+
+**Ce gate est F1, pas F4** : le transport Dart est un enregistreur, la suite API
+utilise Node ; le moteur Flutter/Drift et les producteurs child restent ouverts.
+Aucun workflow modifié. Voir [contrat sync](architecture/sync-contract.md).

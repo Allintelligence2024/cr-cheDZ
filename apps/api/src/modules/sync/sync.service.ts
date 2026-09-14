@@ -41,7 +41,7 @@ export class SyncService {
 
   async push(deviceId: string, userId: string, operations: SyncOperationDto[]): Promise<SyncPushResult> {
     const tenantId = this.tenantContext.getTenantId();
-    const result: SyncPushResult = { accepted: [], rejected: [], conflicts: [], next_cursor: 0 };
+    const result: SyncPushResult = { accepted: [], rejected: [], conflicts: [], next_cursor: '0' };
 
     for (const op of operations) {
       try {
@@ -329,7 +329,7 @@ export class SyncService {
 
   // ── Pull ─────────────────────────────────────────────────────────────────
 
-  async pull(cursor: number, deviceId: string): Promise<{ events: Array<Record<string, unknown>>; next_cursor: number }> {
+  async pull(cursor: string, deviceId: string): Promise<{ events: Array<Record<string, unknown>>; next_cursor: string }> {
     const tenantId = this.tenantContext.getTenantId();
     return this.tenantContext.withTenantConnection(async (client) => {
       const dev = await client.query(
@@ -341,15 +341,15 @@ export class SyncService {
       }
 
       const res = await client.query(
-        `SELECT sync_seq, aggregate_type AS type, aggregate_id, event_type, payload, created_at
+        `SELECT sync_seq::text AS sync_seq, aggregate_type AS type, aggregate_id, event_type, payload, created_at
          FROM sync_changelog
          WHERE organization_id = $1 AND sync_seq > $2
-         ORDER BY sync_seq
+         ORDER BY sync_changelog.sync_seq
          LIMIT ${MAX_PULL_BATCH}`,
         [tenantId, cursor],
       );
       const events = res.rows;
-      const nextCursor = events.length > 0 ? (events[events.length - 1].sync_seq as number) : cursor;
+      const nextCursor = events.length > 0 ? (events[events.length - 1].sync_seq as string) : cursor;
 
       await client.query(
         `INSERT INTO sync_cursors (device_id, organization_id, cursor_value, last_sync_at)
@@ -362,14 +362,14 @@ export class SyncService {
     });
   }
 
-  private async currentMaxSeq(tenantId: string): Promise<number> {
+  private async currentMaxSeq(tenantId: string): Promise<string> {
     // Connexion avec contexte tenant (jamais la pool brute sur une table RLS).
     return this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
-        `SELECT COALESCE(MAX(sync_seq), 0)::int AS m FROM sync_changelog WHERE organization_id = $1`,
+        `SELECT COALESCE(MAX(sync_seq), 0)::text AS m FROM sync_changelog WHERE organization_id = $1`,
         [tenantId],
       );
-      return res.rows[0].m as number;
+      return res.rows[0].m as string;
     });
   }
 }

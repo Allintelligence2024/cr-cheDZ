@@ -1,0 +1,510 @@
+[
+  {
+    "name": "cursor 0",
+    "definition": "Cursor",
+    "value": "0",
+    "valid": true
+  },
+  {
+    "name": "cursor 1",
+    "definition": "Cursor",
+    "value": "1",
+    "valid": true
+  },
+  {
+    "name": "cursor 2147483648",
+    "definition": "Cursor",
+    "value": "2147483648",
+    "valid": true
+  },
+  {
+    "name": "cursor 9007199254740993",
+    "definition": "Cursor",
+    "value": "9007199254740993",
+    "valid": true
+  },
+  {
+    "name": "cursor 9223372036854775807",
+    "definition": "Cursor",
+    "value": "9223372036854775807",
+    "valid": true
+  },
+  {
+    "name": "bad cursor 0",
+    "definition": "Cursor",
+    "value": 0,
+    "valid": false
+  },
+  {
+    "name": "bad cursor 1",
+    "definition": "Cursor",
+    "value": 1,
+    "valid": false
+  },
+  {
+    "name": "bad cursor None",
+    "definition": "Cursor",
+    "value": null,
+    "valid": false
+  },
+  {
+    "name": "bad cursor []",
+    "definition": "Cursor",
+    "value": [],
+    "valid": false
+  },
+  {
+    "name": "bad cursor {}",
+    "definition": "Cursor",
+    "value": {},
+    "valid": false
+  },
+  {
+    "name": "bad cursor ''",
+    "definition": "Cursor",
+    "value": "",
+    "valid": false
+  },
+  {
+    "name": "bad cursor True",
+    "definition": "Cursor",
+    "value": true,
+    "valid": false
+  },
+  {
+    "name": "bad cursor '00'",
+    "definition": "Cursor",
+    "value": "00",
+    "valid": false
+  },
+  {
+    "name": "bad cursor '01'",
+    "definition": "Cursor",
+    "value": "01",
+    "valid": false
+  },
+  {
+    "name": "bad cursor '+1'",
+    "definition": "Cursor",
+    "value": "+1",
+    "valid": false
+  },
+  {
+    "name": "bad cursor '-1'",
+    "definition": "Cursor",
+    "value": "-1",
+    "valid": false
+  },
+  {
+    "name": "bad cursor '1.0'",
+    "definition": "Cursor",
+    "value": "1.0",
+    "valid": false
+  },
+  {
+    "name": "bad cursor '1e3'",
+    "definition": "Cursor",
+    "value": "1e3",
+    "valid": false
+  },
+  {
+    "name": "bad cursor ' 1'",
+    "definition": "Cursor",
+    "value": " 1",
+    "valid": false
+  },
+  {
+    "name": "bad cursor '1\\n'",
+    "definition": "Cursor",
+    "value": "1\n",
+    "valid": false
+  },
+  {
+    "name": "bad cursor '9223372036854775808'",
+    "definition": "Cursor",
+    "value": "9223372036854775808",
+    "valid": false
+  },
+  {
+    "name": "bad cursor '9999999999999999999999'",
+    "definition": "Cursor",
+    "value": "9999999999999999999999",
+    "valid": false
+  },
+  {
+    "name": "entity_id 11111111-1111-4111-8111-111111111111",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z",
+      "entity_id": "11111111-1111-4111-8111-111111111111"
+    },
+    "valid": true
+  },
+  {
+    "name": "entity_id None",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z",
+      "entity_id": null
+    },
+    "valid": true
+  },
+  {
+    "name": "entity_id FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z",
+      "entity_id": "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF"
+    },
+    "valid": true
+  },
+  {
+    "name": "entity_id not-uuid",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z",
+      "entity_id": "not-uuid"
+    },
+    "valid": false
+  },
+  {
+    "name": "entity_id 13",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z",
+      "entity_id": 13
+    },
+    "valid": false
+  },
+  {
+    "name": "valid push",
+    "definition": "PushRequest",
+    "value": {
+      "device_id": "11111111-1111-4111-8111-111111111111",
+      "operations": [
+        {
+          "event_id": "11111111-1111-4111-8111-111111111111",
+          "client_sequence": 1,
+          "schema_version": 1,
+          "command": "check_in",
+          "entity_type": "attendance",
+          "payload": {
+            "child_id": "11111111-1111-4111-8111-111111111111"
+          },
+          "occurred_at_device": "2026-09-14T08:00:00Z"
+        }
+      ]
+    },
+    "valid": true
+  },
+  {
+    "name": "unknown command is a business rejection",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "unknown_command",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z"
+    },
+    "valid": true
+  },
+  {
+    "name": "invalid time is a business rejection",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "bad-date"
+    },
+    "valid": true
+  },
+  {
+    "name": "bad sequence 0",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 0,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z"
+    },
+    "valid": false
+  },
+  {
+    "name": "bad sequence 1.5",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1.5,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z"
+    },
+    "valid": false
+  },
+  {
+    "name": "bad sequence 1",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": "1",
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z"
+    },
+    "valid": false
+  },
+  {
+    "name": "bad sequence True",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": true,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing device",
+    "definition": "PushRequest",
+    "value": {
+      "operations": []
+    },
+    "valid": false
+  },
+  {
+    "name": "extra field",
+    "definition": "PullQuery",
+    "value": {
+      "device_id": "11111111-1111-4111-8111-111111111111",
+      "cursor": "0",
+      "other": 1
+    },
+    "valid": false
+  },
+  {
+    "name": "numeric query cursor",
+    "definition": "PullQuery",
+    "value": {
+      "device_id": "11111111-1111-4111-8111-111111111111",
+      "cursor": 1
+    },
+    "valid": false
+  },
+  {
+    "name": "valid register",
+    "definition": "RegisterRequest",
+    "value": {
+      "name": "Tablette",
+      "device_fingerprint": "installation-1",
+      "platform": "android"
+    },
+    "valid": true
+  },
+  {
+    "name": "short fingerprint",
+    "definition": "RegisterRequest",
+    "value": {
+      "name": "Tablette",
+      "device_fingerprint": "a",
+      "platform": "android"
+    },
+    "valid": false
+  },
+  {
+    "name": "unknown platform",
+    "definition": "RegisterRequest",
+    "value": {
+      "name": "Tablette",
+      "device_fingerprint": "installation-1",
+      "platform": "windows"
+    },
+    "valid": false
+  },
+  {
+    "name": "extra operation field",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z",
+      "admin": true
+    },
+    "valid": false
+  },
+  {
+    "name": "array payload",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": [],
+      "occurred_at_device": "2026-09-14T08:00:00Z"
+    },
+    "valid": false
+  },
+  {
+    "name": "null optional",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z",
+      "base_version": null,
+      "entity_id": null
+    },
+    "valid": true
+  },
+  {
+    "name": "fractional version",
+    "definition": "Operation",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "client_sequence": 1,
+      "schema_version": 1,
+      "command": "check_in",
+      "entity_type": "attendance",
+      "payload": {
+        "child_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "occurred_at_device": "2026-09-14T08:00:00Z",
+      "base_version": 1.5
+    },
+    "valid": false
+  },
+  {
+    "name": "missing accepted",
+    "definition": "PushResponse",
+    "value": {
+      "rejected": [],
+      "conflicts": [],
+      "next_cursor": "0"
+    },
+    "valid": false
+  },
+  {
+    "name": "number response cursor",
+    "definition": "PullResponse",
+    "value": {
+      "events": [],
+      "next_cursor": 1
+    },
+    "valid": false
+  },
+  {
+    "name": "empty page",
+    "definition": "PullResponse",
+    "value": {
+      "events": [],
+      "next_cursor": "9223372036854775807"
+    },
+    "valid": true
+  },
+  {
+    "name": "valid event",
+    "definition": "Event",
+    "value": {
+      "sync_seq": "9007199254740993",
+      "type": "attendance",
+      "aggregate_id": "11111111-1111-4111-8111-111111111111",
+      "event_type": "check_in",
+      "payload": {},
+      "created_at": "2026-09-14T08:00:00Z"
+    },
+    "valid": true
+  },
+  {
+    "name": "conflict",
+    "definition": "Conflict",
+    "value": {
+      "event_id": "11111111-1111-4111-8111-111111111111",
+      "reason": "VERSION_MISMATCH",
+      "current_version": 3
+    },
+    "valid": true
+  }
+]
