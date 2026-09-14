@@ -7,6 +7,7 @@ import { AppError } from '../../shared/errors';
 import { ImportChildRowDto, type ImportError, type ImportResult } from './dto/import.dto';
 
 const VALID_GENDERS = new Set(['M', 'F']);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Import d'enfants (50+ lignes).
@@ -37,6 +38,34 @@ export class ImportService {
         validRows.push({ row, index });
       }
     });
+
+    // C5 (audit 2026-09) : un room_id doit appartenir au tenant courant.
+    // Avant ce correctif, la salle d'une AUTRE organisation était insérée
+    // (FK globale sans check tenant) et une salle inexistante faisait
+    // échouer TOUTE la transaction (500). Désormais : erreur ligne par ligne.
+    const roomIds = [...new Set(validRows.map((v) => v.row.room_id).filter((r): r is string => Boolean(r)))];
+    if (roomIds.length > 0) {
+      const knownRooms = new Set<string>(
+        await this.tenantContext.withTenantConnection(async (client) => {
+          const res = await client.query(
+            `SELECT id FROM rooms WHERE id = ANY($1::uuid[]) AND organization_id = $2`,
+            [roomIds, tenantId],
+          );
+          return res.rows.map((r) => r.id as string);
+        }),
+      );
+      for (const v of [...validRows]) {
+        if (v.row.room_id && !knownRooms.has(v.row.room_id)) {
+          errors.push({
+            row: v.index + 1,
+            field: 'room_id',
+            message_fr: 'Salle introuvable ou hors organisation',
+            message_ar: 'القسم غير موجود أو خارج المؤسسة',
+          });
+          validRows.splice(validRows.indexOf(v), 1);
+        }
+      }
+    }
 
     // En dry-run, on s'arrête ici : aucun effet de bord.
     if (dryRun) {
@@ -113,6 +142,13 @@ export class ImportService {
     }
     if (row.gender && !VALID_GENDERS.has(row.gender)) {
       out.push({ field: 'gender', message_fr: 'Genre invalide (M ou F)', message_ar: 'الجنس غير صالح (M أو F)' });
+    }
+    if (row.room_id && !UUID_RE.test(row.room_id)) {
+      out.push({
+        field: 'room_id',
+        message_fr: 'Identifiant de salle invalide',
+        message_ar: 'معرّف القسم غير صالح',
+      });
     }
     if (row.guardian_first_name && (!row.guardian_last_name || !row.guardian_phone)) {
       out.push({
