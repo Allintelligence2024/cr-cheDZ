@@ -3,7 +3,37 @@
 > **Document de pilotage exécutable** — à cocher tâche par tâche.
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md) et
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md).
-> **Version** : 1.1 — 2026-09-14 (Phase C exécutée et validée — §C6)
+> **Version** : 1.2 — 2026-09-14 (Phases A/B/C exécutées ; PR #37 = PR #36 + Phase C)
+
+---
+
+## État d'avancement
+
+| Phase | Statut | Livrable |
+|---|---|---|
+| **A** | ✅ **A1 fait et validé en CI** · ⚠️ A2 bloqué (permissions) | PR #36 **remplacée par PR #37** — `security` ✅, `database` ✅, **9/9 checks verts**, `MERGEABLE / CLEAN` |
+| **B** | ✅ **B1 fait** (réappliqué après perte au merge) · ⚠️ B2 garde validé, câblage CI bloqué (`workflows`) | PR #37 (commits `4cb6a54`, `a9275ba`) |
+| **C** | ✅ **C1/C2/C4/C3/C5 corrigés et validés le 2026-09-14** (suite `phase25` rouge avant → verte après, batterie 29/29) | PR #37 (§C6) |
+| **D** → **H** | ⏳ à faire | issues **#38** (D), **#39** (E), **#40** (F), **#41** (G), **#42** (H) |
+
+**À faire tout de suite** : merger la **PR #37** — c'est elle qui remet la permission `INTERNET`
+dans `main`, remet l'audit à 0 vulnérabilité **et** livre la Phase C. La PR #36 est **fermée**
+(superseded, ses commits sont tous inclus dans la #37 — voir Annexe 2).
+
+### Permissions manquantes de la GitHub App (blocages transverses)
+
+Vérifié le 2026-09-13/14. Trois limitations distinctes, qui bloquent A2 et B2 :
+
+| Permission | Ce qu'elle bloque | Erreur observée |
+|---|---|---|
+| `administration` | branch protection (`required_status_checks`) | lecture **403**, écriture **404** |
+| `workflows` | modifier `.github/workflows/*` **et re-run un job** | push refusé ; `gh run rerun --failed` → « cannot be rerun » |
+| — | **commenter une issue existante** | **403**, y compris avec un corps minimal |
+
+Ce que le bot **peut** faire : pousser sur sa branche de session, créer/modifier une **PR**,
+commenter une **PR**, créer une **issue**. La limitation sur les commentaires d'issue est
+contre-intuitive : l'issue #35 a pu être **créée** mais pas **commentée** — son suivi détaillé
+est donc dans le corps des PR.
 
 ---
 
@@ -431,6 +461,30 @@ Les deux commits orphelins `083c0b6`/`4463110` peuvent être ignorés (la branch
 > 🔒 **Rappel de la contrainte de session** : une session Arena est verrouillée sur sa branche.
 > `git push` vers une autre branche est exclu ; l'API Contents permet un commit côté serveur,
 > mais comme on le voit ici cela ne protège pas d'un merge concurrent.
+
+#### B3.4 L'espace de travail local peut régresser — le remote est la source de vérité
+
+Observé le 2026-09-13, après une interruption de session : l'arbre local était revenu à
+`7401589` (ancien `main`) avec les modifications de fichiers **non commitées**, les 5 commits
+ayant disparu du `git log` local, et `apps/*/android/` redevenu non suivi. Le remote, lui,
+était intact à `4b2cb32`.
+
+Réflexe à avoir dans cette situation — **vérifier le remote avant de retravailler** :
+
+```bash
+gh api repos/<owner>/<repo>/branches/<branche> --jq '.commit.sha'   # le remote a-t-il survécu ?
+gh pr view <n> --json mergeable,mergeStateStatus,commits            # la PR est-elle intacte ?
+git fetch origin refs/heads/<branche> && git reset --hard FETCH_HEAD
+```
+
+Le refspec de fetch de ces clones est restreint à `main`
+(`+refs/heads/main:refs/remotes/origin/main`), donc `origin/<branche-de-session>` **n'existe pas**
+localement : `git rev-parse origin/<branche>` échoue même quand tout est bien poussé. Ce n'est pas
+un signe de perte — il faut fetcher le ref explicitement.
+
+Vérification des GATE **après** resynchronisation, sur l'état réel et non sur l'historique :
+garde manifest → exit 0 avec `INTERNET` présent dans les 2 manifests `main/` ; lockfile →
+`multer` 2.3.0, `nodemailer` 9.1.1, `body-parser` 1.20.8, une seule entrée `qs` = 6.16.0.
 
 ---
 
@@ -1008,12 +1062,12 @@ Les migrations 001-052 sont **immuables** (ADR-007). Tout correctif SQL passe pa
 
 | Issue | Objet | Phase |
 |---|---|---|
-| **#35** | Régression `npm audit` (multer 2.3.0 + nodemailer 9.1.1) — **ouverte**. Correctif A1 ✅ appliqué et validé le 2026-09-13 ; à fermer au merge. **Débordement découvert** : `body-parser` 1.20.6 → 1.20.8 également nécessaire (§A3.2) | A1 |
-| **PR #36** | Correctif A1 + garde B2 + correctif B1 + ce plan. **9/9 checks verts en CI réelle**, dont `security` ✅ (20 s) et `database` ✅ (14m31 : npm ci, 52 migrations, schema-check, **rls-behavior-check 9/9**, 28 suites d'isolation). Commits séparés pour rester revertables : `docs(audit)`, `fix(security)`, `feat(ci)` garde, `fix(mobile)` B1 | A1, B1, B2 |
+| **#35** | Régression `npm audit` (multer 2.3.0 + nodemailer 9.1.1) — **ouverte**. Correctif A1 ✅ appliqué et validé le 2026-09-13 ; à fermer au merge de la #37. **Débordement découvert** : `body-parser` 1.20.6 → 1.20.8 également nécessaire (§A3.2) | A1 |
+| **PR #36** | **FERMÉE le 2026-09-14 — superseded par la PR #37** (même contenu + Phase C). Historique : 9/9 checks verts en CI réelle (`security` 20 s, `database` 14m31, 28 suites), commits `docs(audit)`, `fix(security)`, `feat(ci)` garde, `fix(mobile)` B1, `docs(audit)` v1.1 (`9923944`) | A1, B1, B2 |
 | **#8** | Flutter build + run — B1 (scaffolding, PR #34) → B5. Le commentaire de recadrage y est déjà, **posté deux fois** le 08/09 (IDs `5584413192`, `5584414851`) — le doublon mal rendu est à supprimer manuellement (403 pour le bot) | B |
-| **PR #34** | ⚠️ **MERGÉE dans `main` le 2026-09-13 à 22:23:29** (`d7e222b`) — **5 min avant** que B1 n'atterrisse sur sa branche. Les commits `083c0b6`/`4463110` sont donc **orphelins** et `main` a reçu le scaffolding **sans** INTERNET. Corrigé par `a9275ba` (PR #36). La branche `feat/mobile-android-scaffolding` peut être supprimée. Cinq commentaires y documentent la chronologie | B |
-| **PR Phase C** *(ouverte depuis cette session)* | Phase C complète : C1 (roles staff + projection), C2 (garde centralisée), C4 (purpose + secret dérivé), C3 (préfixe tenant), C5 (room_id import) + suite `phase25` + inventaire routes. Suite rouge avant (20 ✗) / verte après (34 ✓), batterie 29/29 | C |
-| à créer | Une issue par phase D→H, avec le gate de sortie comme critère d'acceptation | — |
+| **PR #34** | ⚠️ **MERGÉE dans `main` le 2026-09-13 à 22:23:29** (`d7e222b`) — **5 min avant** que B1 n'atterrisse sur sa branche. Les commits `083c0b6`/`4463110` sont donc **orphelins** et `main` a reçu le scaffolding **sans** INTERNET. Corrigé par `a9275ba` (PR #36, repris par #37). La branche `feat/mobile-android-scaffolding` peut être supprimée. Cinq commentaires y documentent la chronologie | B |
+| **PR #37** *(ouverte, à merger)* | **A1 + B1 + B2 + Phase C complète** (fast-forward de la branche #36 + 8 commits : suite `phase25` rouge avant → verte après, C1 projection + `@Roles`, C2 garde centralisée, C4 purpose + secret dérivé, C3 préfixe tenant, C5 room_id import, inventaire routes, matrice d'autorisation). **9/9 checks verts** (`database` 15m, `security` 30 s), `MERGEABLE / CLEAN`. **C'est l'unique merge nécessaire** | A, B, C |
+| **#38–#42** | Issues par phase D→H avec le gate de sortie comme critère d'acceptation (créées le 2026-09-14) | D→H |
 
 ### Annexe 3 — Vérifications effectuées pour ce plan
 
