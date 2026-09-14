@@ -301,6 +301,11 @@ export class SyncService {
     if (!p.storage_key || !p.mime_type) {
       return { status: 'rejected', reason: 'MISSING_FIELDS', message: 'storage_key et mime_type requis' };
     }
+    // C3 (audit 2026-09) : rejet PAR OPÉRATION (pas un 500 global) si la clé
+    // est hors du périmètre du tenant.
+    if (!String(p.storage_key).startsWith(`${tenantId}/`)) {
+      return { status: 'rejected', reason: 'STORAGE_KEY_TENANT_MISMATCH', message: 'Clé de stockage hors organisation' };
+    }
     try {
       await this.media.registerFromSync(client, tenantId, {
         childId: base.childId,
@@ -314,7 +319,10 @@ export class SyncService {
         childrenInPhoto: p.children_in_photo as string[] | undefined,
       });
       return { status: 'accepted' };
-    } catch {
+    } catch (err) {
+      if (err instanceof AppError && err.code === 'STORAGE_KEY_TENANT_MISMATCH') {
+        return { status: 'rejected', reason: err.code, message: err.messageFr };
+      }
       return { status: 'rejected', reason: 'INTERNAL_ERROR', message: 'Erreur lors de l\'enregistrement de la photo' };
     }
   }

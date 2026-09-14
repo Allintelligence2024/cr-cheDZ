@@ -13,7 +13,21 @@ import { StorageService } from './storage.service';
  * - is_visible_to_parents=true IMPOSSIBLE sans consentement photo valide
  *   pour CHAQUE enfant présent (children_in_photo) + all_consents_checked.
  * - Chaque téléchargement est journalisé (media_access_logs, loi 25-11).
+ * - C3 (audit 2026-09) : la clé de stockage DOIT être préfixée par le tenant
+ *   courant — le client ne choisit pas le périmètre de ses objets.
  */
+
+/** La clé doit appartenir au périmètre du tenant (préfixe `{orgId}/`). */
+export function assertStorageKeyInTenant(storageKey: string, tenantId: string): void {
+  if (!storageKey.startsWith(`${tenantId}/`)) {
+    throw new AppError(
+      'STORAGE_KEY_TENANT_MISMATCH',
+      'Clé de stockage hors du périmètre de votre organisation',
+      'مفتاح التخزين خارج نطاق مؤسستك',
+      400,
+    );
+  }
+}
 @Injectable()
 export class MediaService {
   constructor(
@@ -43,6 +57,7 @@ export class MediaService {
 
   async register(userId: string, dto: RegisterMediaDto): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
+    assertStorageKeyInTenant(dto.storage_key, tenantId);
     return this.tenantContext.withTenantConnection(async (client) => {
       if (dto.child_id) await this.childOfTenant(client, dto.child_id);
       if (dto.children_in_photo?.length) {
@@ -234,6 +249,9 @@ export class MediaService {
       childrenInPhoto?: string[];
     },
   ): Promise<Record<string, unknown>> {
+    // C3 (audit 2026-09) : même garde que register() — la voie sync (offline)
+    // ne doit pas pouvoir écrire hors du périmètre du tenant.
+    assertStorageKeyInTenant(input.storageKey, tenantId);
     if (input.childrenInPhoto?.length) {
       for (const cid of input.childrenInPhoto) {
         await this.childOfTenant(client, cid);
