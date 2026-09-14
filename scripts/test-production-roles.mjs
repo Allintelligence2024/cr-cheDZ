@@ -40,6 +40,7 @@ function run(command, args, overrides = {}) {
     process.exit(result.status || 1);
   }
 }
+run(process.execPath, ['--test', 'tests/tenant-isolation/registry-pull.test.mjs']);
 // Fast production-layout reproduction before the slower Docker/Flutter gates.
 run(process.execPath, ['scripts/check-api-runtime.mjs']);
 // H1 is independent: collect its failure but still run the sync regressions.

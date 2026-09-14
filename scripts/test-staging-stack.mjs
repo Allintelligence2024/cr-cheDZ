@@ -4,6 +4,7 @@
  * Build the delivered Dockerfiles; do not override staging service commands/mounts.
  */
 import assert from 'node:assert/strict';
+import { pullRegistryImage } from './registry-pull.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -49,7 +50,7 @@ const sql = (query) => compose(['exec', '-T', 'postgres', 'psql', '-U', 'postgre
 try {
   for (const target of ['api', 'worker']) docker(['build', '-f', `apps/${target}/Dockerfile`, '-t', `ghcr.io/creche-saas/${target}:staging`, '.']);
   const config = JSON.parse(compose(['config', '--format', 'json'], { quiet: true }));
-  for (const name of ['postgres', 'minio']) docker(['pull', config.services[name].image]);
+  for (const name of ['postgres', 'minio']) process.stdout.write(await pullRegistryImage(config.services[name].image, { env }));
   compose(['up', '-d', '--pull', 'never', 'api', 'worker', 'minio']);
   // Readiness is functional, not just a running PID or a made-up health label.
   await until(() => {
@@ -69,6 +70,9 @@ try {
   for (const name of ['api', 'worker']) assert.equal(services.find(s => s.Service === name)?.State, 'running');
   console.log('::notice title=H1 staging passed::Delivered staging compose: bootstrap roles, migration, seed, schema-check completed; actual API HTTP health and worker claim/finish verified. Synthetic isolated stack only. No production deployment, no Phase G or H2/H3 qualification.');
 } catch (error) {
+  let failure = String(error.stack ?? error);
+  for (const value of [appPassword, migratorPassword, env.POSTGRES_PASSWORD, env.JWT_SECRET, env.JWT_REFRESH_SECRET, env.MINIO_ROOT_PASSWORD]) failure = failure.replaceAll(value, '[redacted]');
+  console.error('::error title=H1 failure::' + failure.slice(-4000).replaceAll('%','%25').replaceAll('\r','%0D').replaceAll('\n','%0A'));
   // Container logs may include connection errors: redact generated secrets.
   const result = spawnSync('docker', [...prefix, 'logs', '--tail', '80'], { env, encoding: 'utf8' });
   let text = (result.stdout ?? '') + (result.stderr ?? '');

@@ -172,3 +172,18 @@ reste bloquante même si les tests indépendants de synchronisation continuent.
 H2/H3 restent ouverts. Le compose **dev** (ancien install réseau et ancien contexte
 Docker) reste à reproduire séparément ; ce gate staging ne qualifie pas dev/prod,
 le stockage complet, les canaux de notification, ni la matrice d'autorisation G/H2.
+
+
+### Résilience du téléchargement de registre (sans contourner le gate)
+
+Sur `6c63c9e`, run `34858962288`, F2 **51 tests + analyse** et F4 **7/7 + PG**
+sont confirmés ; H1 échoue uniquement sur un timeout HTTP de Quay avant démarrage.
+La relance du job par API est refusée (permission Actions, 403). Le prochain commit
+relance la CI par le mécanisme PR existant, sans modifier les workflows.
+
+Le téléchargement de chaque image dispose désormais de trois tentatives maximum,
+avec attente de 2 puis 4 secondes, **uniquement pour les erreurs réseau transitoires**.
+Une erreur d'authentification, un manifest absent ou une erreur inconnue reste
+immédiatement fatale. L'image/tag/digest ne change jamais ; aucun retry des migrations
+ou commandes métier. Tests du helper : **5/8 avant → 8/8 après**, obligatoires avant
+les autres gates. Ils ne remplacent pas le véritable pull/démarrage en CI.
