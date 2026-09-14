@@ -3,7 +3,35 @@
 > **Document de pilotage exécutable** — à cocher tâche par tâche.
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md) et
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md).
-> **Version** : 1.0 — 2026-09-13
+> **Version** : 1.1 — 2026-09-13
+
+---
+
+## État d'avancement
+
+| Phase | Statut | Livrable |
+|---|---|---|
+| **A** | ✅ **A1 fait et validé en CI** · ⚠️ A2 bloqué (permissions) | PR #36 — `security` ✅ 23 s, `database` ✅ 14m28 s, **9/9 checks verts**, `MERGEABLE / CLEAN` |
+| **B** | ✅ **B1 fait** (réappliqué après perte au merge) · ⚠️ B2 garde validé, câblage CI bloqué | PR #36 (commits `4cb6a54`, `a9275ba`) |
+| **C** → **H** | ⏳ à faire | — |
+
+**À faire tout de suite** : merger la PR #36 — c'est elle qui remet la permission `INTERNET`
+dans `main` (voir §B3.3, `main` est actuellement en régression sur ce point).
+
+### Permissions manquantes de la GitHub App (blocages transverses)
+
+Vérifié le 2026-09-13. Trois limitations distinctes, qui bloquent A2 et B2 :
+
+| Permission | Ce qu'elle bloque | Erreur observée |
+|---|---|---|
+| `administration` | branch protection (`required_status_checks`) | lecture **403**, écriture **404** |
+| `workflows` | modifier `.github/workflows/*` **et re-run un job** | push refusé ; `gh run rerun --failed` → « cannot be rerun » |
+| — | **commenter une issue existante** | **403**, y compris avec un corps minimal |
+
+Ce que le bot **peut** faire : pousser sur sa branche de session, créer/modifier une **PR**,
+commenter une **PR**, créer une **issue**, pousser un commit sur une branche tierce via l'API
+Contents. La limitation sur les commentaires d'issue est contre-intuitive : l'issue #35 a pu être
+**créée** mais pas **commentée** — son suivi détaillé est donc dans le corps de la PR #36.
 
 ---
 
@@ -431,6 +459,30 @@ Les deux commits orphelins `083c0b6`/`4463110` peuvent être ignorés (la branch
 > 🔒 **Rappel de la contrainte de session** : une session Arena est verrouillée sur sa branche.
 > `git push` vers une autre branche est exclu ; l'API Contents permet un commit côté serveur,
 > mais comme on le voit ici cela ne protège pas d'un merge concurrent.
+
+#### B3.4 L'espace de travail local peut régresser — le remote est la source de vérité
+
+Observé le 2026-09-13, après une interruption de session : l'arbre local était revenu à
+`7401589` (ancien `main`) avec les modifications de fichiers **non commitées**, les 5 commits
+ayant disparu du `git log` local, et `apps/*/android/` redevenu non suivi. Le remote, lui,
+était intact à `4b2cb32`.
+
+Réflexe à avoir dans cette situation — **vérifier le remote avant de retravailler** :
+
+```bash
+gh api repos/<owner>/<repo>/branches/<branche> --jq '.commit.sha'   # le remote a-t-il survécu ?
+gh pr view <n> --json mergeable,mergeStateStatus,commits            # la PR est-elle intacte ?
+git fetch origin refs/heads/<branche> && git reset --hard FETCH_HEAD
+```
+
+Le refspec de fetch de ces clones est restreint à `main`
+(`+refs/heads/main:refs/remotes/origin/main`), donc `origin/<branche-de-session>` **n'existe pas**
+localement : `git rev-parse origin/<branche>` échoue même quand tout est bien poussé. Ce n'est pas
+un signe de perte — il faut fetcher le ref explicitement.
+
+Vérification des GATE **après** resynchronisation, sur l'état réel et non sur l'historique :
+garde manifest → exit 0 avec `INTERNET` présent dans les 2 manifests `main/` ; lockfile →
+`multer` 2.3.0, `nodemailer` 9.1.1, `body-parser` 1.20.8, une seule entrée `qs` = 6.16.0.
 
 ---
 
