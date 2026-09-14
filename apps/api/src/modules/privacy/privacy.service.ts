@@ -6,6 +6,7 @@ import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
+import { ACCESS_TOKEN_PURPOSE } from '../../shared/auth/jwt-token-options';
 import { AuditService } from './audit.service';
 
 /**
@@ -349,6 +350,7 @@ export class PrivacyService {
     const membership = (await this.pool.query(`SELECT * FROM auth_get_memberships($1)`, [user.id])).rows[0] ?? null;
     const role = user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none');
     const accessToken = this.jwt.sign({
+      purpose: ACCESS_TOKEN_PURPOSE,
       sub: user.id,
       organizationId: membership?.organization_id ?? null,
       role,

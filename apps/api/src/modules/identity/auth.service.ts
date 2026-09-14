@@ -6,6 +6,8 @@ import { Pool } from 'pg';
 import * as bcrypt from 'bcryptjs';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { AppError, Errors } from '../../shared/errors';
+import { ACCESS_TOKEN_PURPOSE } from '../../shared/auth/jwt-token-options';
+import { INVITATION_JWT_SERVICE } from '../../shared/auth/invitation-jwt.module';
 import { AuditService } from '../privacy/audit.service';
 import { SessionsService } from './sessions.service';
 import { TotpService } from './totp.service';
@@ -59,6 +61,7 @@ export class AuthService {
   constructor(
     @Inject(PG_POOL) private readonly pool: Pool,
     private readonly jwtService: JwtService,
+    @Inject(INVITATION_JWT_SERVICE) private readonly invitationJwtService: JwtService,
     private readonly config: ConfigService,
     private readonly sessions: SessionsService,
     private readonly totp: TotpService,
@@ -401,7 +404,10 @@ export class AuthService {
   ): Promise<LoginResult> {
     let payload: { purpose?: string; sub?: string; orgId?: string; role?: string };
     try {
-      payload = await this.jwtService.verifyAsync(token);
+      // C4 (audit 2026-09) : vérification avec le JwtService d'INVITATION
+      // (secret dérivé) — un access token ne peut plus être confondu ici,
+      // et un token d'invitation ne peut plus servir de session.
+      payload = await this.invitationJwtService.verifyAsync(token);
     } catch {
       throw new AppError('INVALID_INVITATION', 'Lien d\'invitation invalide ou expiré', 'رابط الدعوة غير صالح أو منتهي', 400);
     }
@@ -538,6 +544,7 @@ export class AuthService {
     const role = user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none');
     const roles = user.is_super_admin ? ['super_admin'] : await this.effectiveRoles(user.id, membership);
     return this.jwtService.sign({
+      purpose: ACCESS_TOKEN_PURPOSE,
       sub: user.id,
       organizationId: membership?.organization_id ?? null,
       role,
