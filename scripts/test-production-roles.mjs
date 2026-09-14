@@ -53,6 +53,15 @@ run(process.execPath, ['scripts/bootstrap-roles.mjs']);
 run(process.execPath, ['scripts/migrate.mjs', '--reset']);
 run(process.execPath, ['scripts/migrate.mjs']);
 run(process.execPath, ['scripts/seed.mjs']);
+// F4 uses the live API and real Flutter engine, before the long historical suites.
+if (env.GITHUB_ACTIONS === 'true' || env.RUN_SYNC_E2E === '1') {
+  run(process.execPath, ['scripts/test-sync-api-flutter.mjs']);
+  run(process.execPath, ['scripts/migrate.mjs', '--reset']);
+  run(process.execPath, ['scripts/migrate.mjs']);
+  run(process.execPath, ['scripts/seed.mjs']);
+} else {
+  console.log('F4 non exécuté localement (SDK absent) ; obligatoire sur GitHub.');
+}
 // Retour rapide sur le gate E2 réseau AVANT les suites API longues.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_MONITORING_STACK === '1') {
   run(process.execPath, ['scripts/test-worker-monitoring-stack.mjs']);

@@ -3,23 +3,13 @@
  * Docker copies sources to ephemeral storage: pub/test never alter checkout.
  * On error, bounded synthetic build/test output is exposed as a CI annotation.
  */
+import { flutterImage, flutterBootstrap } from './flutter-sdk.mjs';
 import { spawnSync } from 'node:child_process';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const docker = process.env.GITHUB_ACTIONS === 'true' || process.env.FLUTTER_USE_DOCKER === '1';
-// Cirrus has no 3.47.1 image. Bootstrap the exact official tag inside a known,
-// digest-pinned tool image; NEVER checkout/reset the application repository.
-const flutterCommit = '6655482ec06e547f90abf8ae7590466f4415978d';
-const script = `set -eu
-sdk="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
-case "$sdk" in /sdks/flutter|/opt/flutter) ;; *) echo "Unexpected SDK path: $sdk"; exit 1;; esac
-git config --global --add safe.directory "$sdk"
-git -C "$sdk" fetch --depth 1 origin tag 3.47.1
-test "$(git -C "$sdk" rev-parse '3.47.1^{commit}')" = '${flutterCommit}'
-git -C "$sdk" checkout --force --detach '${flutterCommit}'
-flutter --version
-cp -a /source/apps/staff-mobile /tmp/staff
+const script = `${flutterBootstrap}cp -a /source/apps/staff-mobile /tmp/staff
 cd /tmp/staff
 flutter pub get --enforce-lockfile
 flutter test --no-pub --reporter expanded
@@ -33,7 +23,7 @@ flutter analyze --no-pub --no-fatal-infos
 test "$before" = "$(sha256sum pubspec.lock)"`;
 const result = spawnSync(docker ? 'docker' : 'bash', docker ? [
   'run', '--rm', '-v', `${root}:/source:ro`, '--entrypoint', 'bash',
-  'ghcr.io/cirruslabs/flutter:3.44.0@sha256:46691e311715845de03a3ba4753a475476936805b29431b1f00f1816981033f8', '-c', script,
+  flutterImage, '-c', script,
 ] : ['-c', localScript], {
   cwd: docker ? root : resolve(root, 'apps/staff-mobile'),
   encoding: 'utf8', timeout: 900000, maxBuffer: 8 * 1024 * 1024,
