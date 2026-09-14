@@ -107,8 +107,11 @@ identifiants uniques ; ne pas réinitialiser la base pendant une autre suite.
 Typecheck/build tous workspaces, lint `--max-warnings=0`, **27/27 unitaires** et audit
 production **0 vulnérabilité** verts. Runner existant porté à **43 suites/contrôles**,
 gate exigeant 156 scénarios et `H2f privacy actor passed`. Résultat local complet
-**43/43** ; CI du SHA publié à confirmer dans la PR #44. Docker/Flutter réels restent des gates CI ; leurs
-guards locaux ne les remplacent pas.
+**43/43**. CI du SHA `5814ed0f9b33fcd5a0e8957c31ce6f91bdf114ac` confirmée :
+[34903495839](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34903495839),
+**9/9 checks**, database **104174698221**, notices H2f 156, H2e 36, H2d 44, H2c 156,
+H2b 50, H2a 21, F2 51, F4 7 + PG et H1 dev/staging vérifiées. PR #44 non mergée.
+Docker/Flutter réels restent des gates CI ; leurs guards locaux ne les remplacent pas.
 
 ## Limites et rollback
 

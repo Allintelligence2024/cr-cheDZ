@@ -502,8 +502,16 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
         Contrôle aussi pour les opérateurs, sans bloquer le traitement d'un demandeur
         inactif par un opérateur actif. Historique personnel d'un demandeur actif conservé.
         Reproduction finale **68/156 → 156/156**, **43/43 suites strictes** locales.
-        [Runbook H2f](PHASE_H2F_PRIVACY_ACTOR_RUNBOOK.md) ; gates complets/CI à confirmer
-        sur le SHA publié. Pas de revalidation des rôles ni révocation JWT globale (G).
+        [Runbook H2f](PHASE_H2F_PRIVACY_ACTOR_RUNBOOK.md) ; CI **34903495839**,
+        **9/9 checks** sur `5814ed0`, database **104174698221** confirmé. Pas de revalidation des rôles ni révocation JWT globale (G).
+  - [x] **H2g consentements photo parent** : helper commun publication/nouvelle URL,
+        primaire inclus et participants dédupliqués, déclaration/flag vérifiés,
+        enfants du tenant non supprimés et derniers consentements accordés/non révoqués.
+        **35/58 → 58/58** HTTP/PG ; photos autorisées, retrait de visibilité et accès
+        interne staff conservés. Métadonnées historiques incohérentes refusées sans purge.
+        [Runbook H2g](PHASE_H2G_PHOTO_CONSENT_RUNBOOK.md) ; **44/44 suites strictes**
+        locales, rejeu final frais confirmé ; CI du SHA publié à confirmer. Ni analyse des octets, ni rappel des URLs déjà signées,
+        ni qualification du stockage réel ou de nouvelles politiques document/MIME.
   - [ ] **Suite confidentialité** : autres projections santé/journal/médias et contrôles de gardien,
         snapshots privacy historiques et routes registre/DPIA/violations. Révocation
         globale des tokens et autres routes toujours à traiter en G. Pas de purge
@@ -600,7 +608,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (29 suites) — gate local équivalent au job CI database
+# Batterie complète (44 suites/contrôles après H2g) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

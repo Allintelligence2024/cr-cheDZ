@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { photoConsentsAllowed } from '../../shared/authorization/photo-consent';
 import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -121,38 +122,13 @@ export class MediaService {
       if (media.rows.length === 0) throw Errors.notFound();
       const m = media.rows[0];
 
-      if (visible && !m.all_consents_checked) {
+      if (visible && !await photoConsentsAllowed(client, tenantId, m)) {
         throw new AppError(
           'CONSENT_REQUIRED',
-          'Consentement photo requis avant la visibilité aux parents',
-          'موافقة الصور مطلوبة قبل العرض للوالدين',
+          'Consentement photo requis pour tous les enfants concernés',
+          'موافقة الصور مطلوبة لجميع الأطفال المعنيين',
           422,
         );
-      }
-      if (visible && m.children_in_photo?.length) {
-        // Chaque enfant présent sur la photo doit avoir un consentement
-        // photo_individual actif — seul le DERNIER consentement compte
-        // (append-only) : une révocation rend la publication impossible.
-        const consents = await client.query(
-          `WITH latest AS (
-             SELECT DISTINCT ON (child_id) child_id, granted, revoked_at
-             FROM consent_records
-             WHERE child_id = ANY($1::uuid[]) AND consent_type = 'photo_individual'
-             ORDER BY child_id, created_at DESC
-           )
-           SELECT child_id FROM latest WHERE granted = true AND revoked_at IS NULL`,
-          [m.children_in_photo],
-        );
-        const consented = new Set(consents.rows.map((r: { child_id: string }) => r.child_id));
-        const missing = (m.children_in_photo as string[]).filter((cid) => !consented.has(cid));
-        if (missing.length > 0) {
-          throw new AppError(
-            'CONSENT_REQUIRED',
-            'Consentement manquant pour un ou plusieurs enfants de la photo',
-            'موافقة مفقودة لطفل أو أكثر في الصورة',
-            422,
-          );
-        }
       }
 
       const res = await client.query(

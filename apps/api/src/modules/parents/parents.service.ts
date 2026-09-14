@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { photoConsentsAllowed } from '../../shared/authorization/photo-consent';
 import { PARENT_INVOICE_FIELDS_SQL, PARENT_RECEIPT_FIELDS_SQL } from './financial-projection';
 import { CURRENT_GUARDIAN_LINK_SQL } from '../../shared/authorization/guardian-access';
 import { PARENT_JOURNAL_VISIBILITY_SQL } from '../../shared/authorization/journal-disclosure';
@@ -126,30 +127,17 @@ export class ParentsService {
 
   async photoUrl(userId: string, childId: string, mediaId: string, ip?: string): Promise<{ url: string; key: string }> {
     await this.assertPermission(userId, childId, 'can_view_journal');
+    const tenantId = requireTenant(this.tenantContext);
     await this.tenantContext.withTenantConnection(async (client) => {
       // La révocation est effective immédiatement : une ancienne photo déjà
       // publiée ne peut plus obtenir d'URL si l'un des consentements manque.
       const r = await client.query(
-        `SELECT children_in_photo FROM media_assets
+        `SELECT child_id, children_in_photo, all_consents_checked FROM media_assets
          WHERE id=$1 AND child_id=$2 AND is_visible_to_parents=true AND deleted_at IS NULL`,
         [mediaId, childId],
       );
       if (!r.rows[0]) throw Errors.notFound();
-      const children = (r.rows[0].children_in_photo as string[] | null) ?? [childId];
-      // Seul le DERNIER consentement par enfant compte (append-only) : une
-      // révocation coupe immédiatement l'accès, même si un ancien
-      // consentement 'granted' existe encore dans l'historique.
-      const valid = await client.query(
-        `WITH latest AS (
-           SELECT DISTINCT ON (child_id) child_id, granted, revoked_at
-           FROM consent_records
-           WHERE child_id = ANY($1::uuid[]) AND consent_type = 'photo_individual'
-           ORDER BY child_id, created_at DESC
-         )
-         SELECT child_id FROM latest WHERE granted = true AND revoked_at IS NULL`,
-        [children],
-      );
-      if (valid.rows.length !== children.length) {
+      if (!await photoConsentsAllowed(client, tenantId, r.rows[0])) {
         throw new AppError('CONSENT_REVOKED', 'Le consentement photo a été retiré', 'تم سحب الموافقة على الصورة', 422);
       }
     });

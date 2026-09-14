@@ -110,7 +110,11 @@ const privacyActor = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase40-pri
   .match(/H2f privacy actor: (\d+) passed, 0 failed/);
 if (!privacyActor || Number(privacyActor[1]) < 156) throw new Error('H2f privacy actor evidence missing or incomplete');
 console.log(`::notice title=H2f privacy actor passed::${privacyActor[1]} real HTTP/PostgreSQL scenarios passed: active non-deleted user and active tenant membership required for rights-request creation, list, detail, export and resolution. Denied writes preserve business state; active requesters keep own history after guardian deletion. Not global JWT/role revocation or historical snapshot purge.`);
-console.log('✓ GATE D : régressions Phase D + 43 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const photoConsent = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase41-photo-consent-scope.api.test.log'), 'utf8')
+  .match(/H2g photo consent: (\d+) passed, 0 failed/);
+if (!photoConsent || Number(photoConsent[1]) < 58) throw new Error('H2g photo consent evidence missing or incomplete');
+console.log(`::notice title=H2g photo consent passed::${photoConsent[1]} real HTTP/PostgreSQL scenarios passed: shared publication/parent-signing consent perimeter includes primary child, deduplicates participants and refuses unverifiable metadata. Authorized photos and staff access retained. Local signatures only, not image-content recognition, live storage delivery or signed-URL recall.`);
+console.log('✓ GATE D : régressions Phase D + 44 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

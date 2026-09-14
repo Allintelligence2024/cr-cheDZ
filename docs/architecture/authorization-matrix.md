@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v7 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f)
+# Matrice d'autorisation par module (v8 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -179,3 +179,23 @@ Les gardes/claims de rôles existants, le support global et les autres endpoints
 à revoir en G. Registre/DPIA/violations et anciens snapshots restent hors de ce lot.
 Voir le [runbook H2f](../PHASE_H2F_PRIVACY_ACTOR_RUNBOOK.md) pour la matrice HTTP/PG,
 les positifs conservés et les frontières exactes.
+
+
+## H2g — consentements photo à publication et nouvelle URL parent
+
+Le helper `shared/authorization/photo-consent.ts` est partagé par la publication
+(`visible=true`) et la nouvelle URL parent, après le garde H2c dans ce dernier cas.
+Déclaration non vide/non nulle, flag vrai, ensemble dédupliqué primaire + participants,
+enfants du tenant non supprimés et derniers consentements `photo_individual` accordés
+et non révoqués. Le primaire ne peut plus être omis pour échapper au contrôle.
+
+Publication refusée : 422 sans mutation ; URL refusée : 422 sans signature ni journal
+d'accès média ; exclusion du fil. Retrait de visibilité et accès staff interne sous
+rôles inchangés. Doublons valides désormais acceptés aussi en lecture parent.
+
+**35/58 → 58/58** HTTP/PG, avec signatures SDK locales seulement. Les incohérences
+historiques sont explicitement injectées en SQL, pas soumises comme un flag client.
+Pas de purge/réécriture des sources, reconnaissance des personnes dans les octets,
+rappel d'URLs signées, sérialisation concurrente, arbitrage multi-gardiens ou changement
+de politique document/MIME. Autres projections médias et revalidation des rôles/JWT
+restent ouvertes. Voir le [runbook H2g](../PHASE_H2G_PHOTO_CONSENT_RUNBOOK.md).
