@@ -9,6 +9,10 @@ rule_files:
   - /etc/prometheus/alerts.yml
 
 scrape_configs:
+  # H2j: /metrics requires a current platform-admin access JWT. This example
+  # does NOT provision/rotate it: anonymous scraping now returns 401.
+  # Production collector credentials/least-privilege delegation remain unqualified.
+  # See docs/PHASE_H2J_METRICS_RUNBOOK.md; never restore public access as a workaround.
   - job_name: 'api'
     metrics_path: /api/v1/metrics
     static_configs:

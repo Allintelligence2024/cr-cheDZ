@@ -1,5 +1,11 @@
 # PLAN D'IMPLEMENTATION — Logiciel de Gestion de Crèche (Algérie)
 
+> Mise à jour H2j (2026-09-15) : les mentions historiques « /metrics public »
+> ci-dessous sont supersédées. Endpoint désormais réservé à l'administrateur
+> plateforme courant ; format validé par parseur officiel. Collecte avec credential
+> de service encore ouverte : voir `PHASE_H2J_METRICS_RUNBOOK.md`.
+
+
 > **Document de pilotage** — basé sur l'architecture finale fournie (Parties 1 à 10).
 > **Portée** : analyse critique de l'architecture + plan d'implémentation phase par phase, avec corrections techniques obligatoires, jalons, critères d'acceptation, estimations et registre des risques.
 > **Version** : 1.0 — 2026-08-01

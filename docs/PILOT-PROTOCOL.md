@@ -1,5 +1,11 @@
 # PILOT PROTOCOL — 5 crèches x 2 semaines (terrain)
 
+> H2j : `/api/v1/metrics` n'est plus public. JWT d'accès d'un administrateur
+> plateforme courant requis ; sans lui les exemples curl anonymes ci-dessous
+> répondent 401. Credential/rotation du scraper de production non livrés : voir
+> [runbook H2j](/docs/PHASE_H2J_METRICS_RUNBOOK.md). Ne pas publier les tokens.
+
+
 > Rien de codable ne manque. Le risque suivant est terrain + humain. Ce protocole est la checklist la plus utile avant données d'enfants.
 
 ## Préparation (J-3)

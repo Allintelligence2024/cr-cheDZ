@@ -1,5 +1,11 @@
 # RUNBOOK — Exploitation (Phase 11)
 
+> H2j : `/api/v1/metrics` n'est plus public. JWT d'accès d'un administrateur
+> plateforme courant requis ; sans lui les exemples curl anonymes ci-dessous
+> répondent 401. Credential/rotation du scraper de production non livrés : voir
+> [runbook H2j](/docs/PHASE_H2J_METRICS_RUNBOOK.md). Ne pas publier les tokens.
+
+
 > Procédures opérationnelles : déploiement, restauration, incidents, montée de
 > version. À compléter avec les accès réels (vault) et les alertes Grafana.
 

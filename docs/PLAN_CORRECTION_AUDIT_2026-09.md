@@ -580,8 +580,15 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
         globale des tokens et autres routes toujours à traiter en G. Pas de purge
         masquante ; la grappe et l'aptitude à la production ne sont pas clôturées.
 - [ ] **`anonymize.sql`** : laisse `guardians`/`staff`/`messages`/`sessions` intacts (RGPD/loi 25-11).
-- [ ] **`/metrics` public** + totaux cross-tenant + format Prometheus invalide → authentifier (ou
-      restreindre au réseau interne) et valider le format avec un parseur Prometheus réel.
+- [x] **H2j `/metrics` accès et format** : administrateur plateforme courant requis,
+      pas d'accès anonyme/tenant ; labels échappés et routes inconnues regroupées,
+      histogrammes complets/ordonnés. **6/26 → 26/26**, HTTP/PG et parseur officiel
+      prometheus-client pin/hash vérifié. Runner **53**, strict/CI à confirmer en PR #44.
+      [Runbook H2j](PHASE_H2J_METRICS_RUNBOOK.md).
+- [ ] **Collecte API d'exploitation** : le scraper anonyme reçoit désormais 401.
+      Credential de service limité, provisionnement/rotation et ingestion réelle
+      restent à qualifier ; les JWT admin expirants ne sont pas un montage automatique.
+      Collecte E2 du SQL exporter distincte, pas de repli public pour la rétablir.
 - [ ] **OpenAPI** : « prétendu auto-généré, aucun swagger, < 10 % des endpoints » — vérifier ;
       soit générer réellement (prérequis F1), soit arrêter de le prétendre dans la doc.
 - [x] **H2i `STORAGE_BACKEND` — sélection et bootstrap** : écart reproduit et sélecteur
@@ -690,7 +697,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (52 suites/contrôles après H2i) — rôles stricts : voir runbook H2g
+# Batterie complète (53 suites/contrôles après H2j) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

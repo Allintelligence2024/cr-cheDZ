@@ -13,7 +13,7 @@ test('strict gate budgets notices for H1/F2/F4 and aggregates every H2 count', (
     `${directNotices + 4} notices in one step exceed GitHub's ten-notice limit`);
   const aggregate = source.split('\n').find(line => line.includes('::notice title=H2 confidentiality passed::'));
   assert.ok(aggregate, 'one verifiable H2 annotation required');
-  for (const [lot, counter] of Object.entries({ H2a: 'confidentiality', H2b: 'revocation', H2c: 'parentAccess', H2d: 'financialProjection', H2e: 'journalHealth', H2f: 'privacyActor', H2g: 'photoConsent', H2h: 'staffDocuments', H2i: 'storageSelection' })) {
+  for (const [lot, counter] of Object.entries({ H2a: 'confidentiality', H2b: 'revocation', H2c: 'parentAccess', H2d: 'financialProjection', H2e: 'journalHealth', H2f: 'privacyActor', H2g: 'photoConsent', H2h: 'staffDocuments', H2i: 'storageSelection', H2j: 'metricsEvidence' })) {
     assert.ok(aggregate.includes(lot + '=${' + counter + '[1]}'), `${lot} actual result missing from aggregate`);
   }
 });

@@ -1,16 +1,18 @@
 import { Controller, Get, Header } from '@nestjs/common';
-import { Public } from '../../shared/decorators/public.decorator';
+import { Roles } from '../../shared/decorators/roles.decorator';
+import { CurrentUser, CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { MetricsService } from './metrics.service';
 
-/** Endpoint /metrics au format Prometheus (text/plain, public, sans PII). */
+/** Endpoint /metrics au format Prometheus (text/plain, administrateur plateforme uniquement). */
 @Controller('metrics')
 export class MetricsController {
   constructor(private readonly metrics: MetricsService) {}
 
-  @Public()
+  @Roles('super_admin')
   @Get()
   @Header('content-type', 'text/plain; version=0.0.4; charset=utf-8')
-  async index(): Promise<string> {
-    return this.metrics.scrape();
+  @Header('cache-control', 'no-store')
+  async index(@CurrentUser() user: CurrentUserPayload): Promise<string> {
+    return this.metrics.scrape(user.sub);
   }
 }

@@ -291,3 +291,11 @@ committées dans le compteur partagé ; limite HTTP 5/min/IP/route en complémen
 cryptographiques déjà conformes. Chiffrement au repos, anti-rejeu du code, step-up
 avant préparation, MFA de tous les canaux PIN/OTP et révocation globale des JWT restent
 ouverts. Le facteur est une propriété du compte, pas une nouvelle autorisation tenant.
+
+## H2j — Métriques globales
+
+GET/HEAD /metrics : JWT d'accès avec rôle super_admin **et** compte plateforme courant
+actif, non supprimé/non verrouillé. Refus sans exposition des compteurs ; autorisation
+avant le helper global, pas une politique RLS tenant ajoutée au helper. Health reste
+public. 6/26 → 26/26, [runbook H2j](../PHASE_H2J_METRICS_RUNBOOK.md). Collecte de service,
+rotation du bearer et révocation post-contrôle restent ouvertes.
