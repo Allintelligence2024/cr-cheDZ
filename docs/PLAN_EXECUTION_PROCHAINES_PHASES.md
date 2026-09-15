@@ -1,5 +1,11 @@
 # PLAN D'EXÉCUTION — Prochaines phases (P2 → P8)
 
+> Mise à jour H2j (2026-09-15) : les mentions historiques « /metrics public »
+> ci-dessous sont supersédées. Endpoint désormais réservé à l'administrateur
+> plateforme courant ; format validé par parseur officiel. Collecte avec credential
+> de service encore ouverte : voir `PHASE_H2J_METRICS_RUNBOOK.md`.
+
+
 > **Document de pilotage exécutable** — suite du [`PLAN_IMPLEMENTATION.md`](PLAN_IMPLEMENTATION.md).
 > À cocher tâche par tâche. Mise à jour à chaque sprint.
 > **Version** : 1.0 — 2026-08-01

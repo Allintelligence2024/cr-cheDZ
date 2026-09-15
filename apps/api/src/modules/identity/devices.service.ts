@@ -28,6 +28,25 @@ export class DevicesService {
     if (!tenantId) throw Errors.forbidden();
 
     const result = await this.tenantContext.withTenantConnection(async (client) => {
+      // Serialize registrations for this tenant/user/installation BEFORE lookup.
+      // Also works with legacy data: ambiguous duplicates fail closed, not deleted.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 48271))', [
+        JSON.stringify([tenantId, userId, input.deviceFingerprint]),
+      ]);
+      const existing = await client.query(
+        `SELECT id, is_active, revoked_at FROM devices
+         WHERE organization_id=$1 AND registered_by=$2 AND device_fingerprint=$3
+         ORDER BY created_at, id LIMIT 2 FOR UPDATE`,
+        [tenantId, userId, input.deviceFingerprint],
+      );
+      if (existing.rows.length > 1) {
+        throw new AppError('DEVICE_REGISTRATION_AMBIGUOUS', 'Appareil ambigu, intervention requise', 'الجهاز غير محدد، يلزم التدخل', 409);
+      }
+      if (existing.rows.length === 1) {
+        const row = existing.rows[0];
+        if (!row.is_active || row.revoked_at) throw Errors.deviceRevoked();
+        return { id: row.id as string, created: false };
+      }
       const res = await client.query(
         `INSERT INTO devices
            (organization_id, name, device_fingerprint, platform, app_version, fcm_token, apns_token, registered_by)
@@ -35,10 +54,10 @@ export class DevicesService {
          RETURNING id`,
         [tenantId, input.name, input.deviceFingerprint, input.platform, input.appVersion ?? null, input.fcmToken ?? null, input.apnsToken ?? null, userId],
       );
-      return res.rows[0] as { id: string };
+      return { id: res.rows[0].id as string, created: true };
     });
 
-    await this.audit.log({
+    if (result.created) await this.audit.log({
       organizationId: tenantId,
       userId,
       action: 'create',
@@ -46,7 +65,7 @@ export class DevicesService {
       resourceId: result.id,
       resourceLabel: input.name,
     });
-    return result;
+    return { id: result.id };
   }
 
   async list(userId: string): Promise<Array<Record<string, unknown>>> {
@@ -74,9 +93,9 @@ export class DevicesService {
       const res = await client.query(
         `UPDATE devices
          SET is_active = false, revoked_at = NOW(), revoked_reason = 'manual'
-         WHERE id = $1
+         WHERE id = $1 AND registered_by = $2
          RETURNING id, name`,
-        [deviceId],
+        [deviceId, userId],
       );
       if (res.rows.length === 0) {
         throw new AppError('NOT_FOUND', 'Appareil introuvable', 'الجهاز غير موجود', 404);

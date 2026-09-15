@@ -34,6 +34,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createDpiaReviewer } from '../fixtures/dpia-reviewer.mjs';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import { appUrl, ensureAppRole } from './helpers.mjs';
@@ -186,7 +187,9 @@ const main = async () => {
         risk_assessment: { level: 'moderate', reference: 'docs/regulatory/DPIA-VIDEOSURVEILLANCE.md' },
         mitigation_measures: ['accès restreint', 'purge 30 j', 'visionnage journalisé'],
       });
-      await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, tokenDir, {});
+      const reviewerToken = await createDpiaReviewer(db, orgId, tag, api);
+      const approval = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, reviewerToken, {});
+      ok('DPIA approuvée par un responsable distinct', approval.status === 201 && approval.body.status === 'approved');
       await api('POST', '/support/flags/video_surveillance', tokenSuper, { organization_id: orgId, is_enabled: true });
     };
     await enableVideoFor(A.org, tokenDirA);
@@ -391,6 +394,7 @@ const main = async () => {
       await db.query(`DELETE FROM invoices WHERE organization_id IN (${orgs})`);
       await db.query(`DELETE FROM contracts WHERE organization_id IN (${orgs})`);
       await db.query(`DELETE FROM children WHERE organization_id IN (${orgs})`);
+      await db.query(`DELETE FROM sync_changelog WHERE organization_id IN (${orgs})`);
       await db.query(`DELETE FROM data_access_logs WHERE organization_id IN (${orgs})`);
       await db.query(`DELETE FROM privacy_dpias WHERE organization_id IN (${orgs}) OR approved_by IN (SELECT id FROM users WHERE email LIKE 'p22-%')`);
       await db.query(`DELETE FROM audit_logs WHERE organization_id IN (${orgs})`);

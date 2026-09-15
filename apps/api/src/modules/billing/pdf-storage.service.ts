@@ -1,3 +1,4 @@
+import { resolveStorageBackend, type StorageBackend } from '@creche/prod-config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
@@ -10,7 +11,7 @@ import { join } from 'node:path';
  * Stockage des PDF de facturation.
  *
  * Deux backends explicitement configurés (aucune magie) :
- * - `STORAGE_BACKEND=s3`    (défaut) : S3/MinIO, URLs signées en lecture ;
+ * - `STORAGE_BACKEND=s3`    (défaut hors production uniquement) : S3/MinIO, URLs signées en lecture ;
  * - `STORAGE_BACKEND=local` : répertoire local `STORAGE_LOCAL_DIR`
  *   (pratique pour les tests et les déploiements mono-serveur).
  *
@@ -18,10 +19,15 @@ import { join } from 'node:path';
  */
 @Injectable()
 export class PdfStorageService {
+  private readonly backend: StorageBackend;
   private readonly client: S3Client;
   private readonly bucket: string;
 
   constructor(private readonly config: ConfigService) {
+    this.backend = resolveStorageBackend({
+      NODE_ENV: this.config.get<string>('NODE_ENV'),
+      STORAGE_BACKEND: this.config.get<string>('STORAGE_BACKEND'),
+    });
     this.bucket = this.config.get<string>('S3_BUCKET', 'creche-media');
     this.client = new S3Client({
       endpoint: this.config.get<string>('S3_ENDPOINT', 'http://localhost:9000'),
@@ -35,7 +41,7 @@ export class PdfStorageService {
   }
 
   isLocal(): boolean {
-    return this.config.get<string>('STORAGE_BACKEND', 's3') === 'local';
+    return this.backend === 'local';
   }
 
   localDir(): string {

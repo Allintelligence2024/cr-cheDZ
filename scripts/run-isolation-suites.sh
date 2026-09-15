@@ -12,8 +12,17 @@ export STORAGE_BACKEND="${STORAGE_BACKEND:-local}"
 export STORAGE_LOCAL_DIR="${STORAGE_LOCAL_DIR:-/tmp/creche-storage-tests}"
 export PAYMENT_WEBHOOK_SECRET="${PAYMENT_WEBHOOK_SECRET:-phase8-test-secret}"
 mkdir -p "$STORAGE_LOCAL_DIR"
+ISOLATION_LOG_DIR="${ISOLATION_LOG_DIR:-/tmp}"
+mkdir -p "$ISOLATION_LOG_DIR"
 
 cd "$(dirname "$0")/.."
+# Le workflow existant appelle ce runner : activer le gate D strict sans
+# modifier .github/workflows. Aucun reset supplémentaire hors GitHub Actions.
+if [[ "${GITHUB_ACTIONS:-}" == "true" && "${PRODUCTION_ROLE_TESTS:-}" != "1" && -z "${1:-}" ]]; then
+  ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
+  exit $?
+fi
+
 : "${DATABASE_URL:?DATABASE_URL requis (ex. postgres://postgres:postgres@localhost:54329/creche_test)}"
 
 SUITES=(
@@ -45,6 +54,30 @@ SUITES=(
   phase23-pending-expiry.api.test.mjs
   phase24-late-webhook.api.test.mjs
   phase25-security-audit-c.api.test.mjs
+  phase27-worker-lifecycle.test.mjs
+  phase29-sync-contract.api.test.mjs
+  phase30-sync-device.api.test.mjs
+  phase31-sync-outcomes.api.test.mjs
+  phase32-sync-children.api.test.mjs
+  phase33-sync-publication.api.test.mjs
+  phase34-sync-completion.api.test.mjs
+  phase35-confidentiality.api.test.mjs
+  phase28-worker-reliability.test.mjs
+  phase36-notification-revocation.api.test.mjs
+  phase37-parent-revocation.api.test.mjs
+  phase38-parent-financial-projection.api.test.mjs
+  phase39-journal-health-disclosure.api.test.mjs
+  phase40-privacy-actor-revocation.api.test.mjs
+  phase41-photo-consent-scope.api.test.mjs
+  phase42-staff-document-scope.api.test.mjs
+  phase43-auth-hardening.api.test.mjs
+  phase44-rls-integrity.pg.test.mjs
+  phase45-dpia-approval.api.test.mjs
+  phase46-refresh-rotation.api.test.mjs
+  phase47-invitations.api.test.mjs
+  phase48-totp-management.api.test.mjs
+  phase49-storage-selection.test.mjs
+  phase50-metrics.api.test.mjs
 )
 
 FILTER="${1:-}"
@@ -67,7 +100,7 @@ for s in "${SUITES[@]}"; do
     RESULTS+=("ABSENT|$s|fichier manquant")
     failed=$((failed+1)); continue
   fi
-  log="/tmp/suite-$(basename "$s" .mjs).log"
+  log="$ISOLATION_LOG_DIR/suite-$(basename "$s" .mjs).log"
   if node "$f" >"$log" 2>&1; then
     RESULTS+=("PASS|$s|$(grep -c '✓' "$log" 2>/dev/null || echo '?') assertions ✓")
   else

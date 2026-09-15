@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { assertStorageKeyInTenant } from '../../shared/authorization/storage-key';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
@@ -173,6 +174,7 @@ export class StaffService {
     return this.tenantContext.withTenantConnection(async (client) => {
       const staff = await client.query(`SELECT id FROM staff_profiles WHERE id = $1`, [staffId]);
       if (staff.rows.length === 0) throw Errors.notFound();
+      assertStorageKeyInTenant(dto.storage_key, tenantId);
       const res = await client.query(
         `INSERT INTO staff_documents
            (organization_id, staff_id, document_type, title, storage_key,

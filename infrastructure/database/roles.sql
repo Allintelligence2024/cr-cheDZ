@@ -1,43 +1,50 @@
--- ============================================================================
--- roles.sql — Rôles PostgreSQL (C06).
--- À exécuter par le superutilisateur PostgreSQL (pas par le runner de
--- migrations). En dev local, le rôle creche_app peut rester propriétaire ;
--- en staging/prod, l'application utilise creche_app (NOBYPASSRLS) et les
--- migrations un rôle dédié creche_migrator.
---
---   sudo -u postgres psql -f infrastructure/database/roles.sql
--- ============================================================================
-
--- Rôle de migration (DDL uniquement)
+-- Phase D : bootstrap administrateur, AVANT migrations (installation neuve).
+-- Les secrets sont injectés par scripts/bootstrap-roles.mjs, jamais ici.
+-- Ce fichier doit être exécuté dans une transaction (runner bootstrap).
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'creche_migrator') THEN
     CREATE ROLE creche_migrator LOGIN;
   END IF;
-END $$;
-
--- Rôle applicatif : peut lire/écrire les données mais PAS contourner la RLS.
-DO $$
-BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'creche_app') THEN
-    CREATE ROLE creche_app LOGIN NOBYPASSRLS;
+    CREATE ROLE creche_app LOGIN;
+  END IF;
+
+  -- Une base historique demande un transfert de propriété explicite, pas une
+  -- rétrogradation aveugle. Même FORCE RLS n'empêche pas un owner de faire DDL.
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relowner = 'creche_app'::regrole)
+     OR EXISTS (SELECT 1 FROM pg_namespace WHERE nspowner = 'creche_app'::regrole)
+     OR EXISTS (SELECT 1 FROM pg_database WHERE datdba = 'creche_app'::regrole)
+     OR EXISTS (SELECT 1 FROM pg_proc WHERE proowner = 'creche_app'::regrole) THEN
+    RAISE EXCEPTION 'DATABASE_ROLE_OWNS_OBJECTS: transfert de propriété requis avant bootstrap';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_auth_members WHERE member IN ('creche_app'::regrole, 'creche_migrator'::regrole)) THEN
+    RAISE EXCEPTION 'DATABASE_ROLE_MEMBERSHIP: retirer les appartenances après revue administrateur';
   END IF;
 END $$;
 
--- Octrois (à rejouer après toute nouvelle migration ajoutant des tables)
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO creche_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO creche_app;
+-- Garantir l'état FINAL, y compris si les rôles existaient déjà (C8-bis).
+ALTER ROLE creche_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
+-- BYPASSRLS nécessaire aux fonctions SECURITY DEFINER sur tables FORCE RLS.
+-- Secret du migrateur strictement absent des environnements API/worker.
+ALTER ROLE creche_migrator LOGIN NOSUPERUSER BYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;
+
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE ALL ON SCHEMA public FROM creche_app;
+ALTER SCHEMA public OWNER TO creche_migrator;
 GRANT USAGE ON SCHEMA public TO creche_app;
-GRANT USAGE ON SCHEMA public TO creche_migrator;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+DO $$
+BEGIN
+  -- CREATE autorise l'installation des extensions trusted de 001 sans superuser.
+  EXECUTE format('GRANT CONNECT, CREATE ON DATABASE %I TO creche_migrator', current_database());
+  EXECUTE format('REVOKE CREATE ON DATABASE %I FROM PUBLIC, creche_app', current_database());
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO creche_app', current_database());
+END $$;
+
+-- Le créateur des tables futures est le migrateur, PAS le bootstrap postgres.
+ALTER DEFAULT PRIVILEGES FOR ROLE creche_migrator IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO creche_app;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+ALTER DEFAULT PRIVILEGES FOR ROLE creche_migrator IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO creche_app;
-
--- Fonctions SECURITY DEFINER (bootstrap auth) : exécution réservée à creche_app
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO creche_app;
-
--- Comportement safe-by-default :
--- si app.tenant_id n'est pas posé, current_setting(..., true) = NULL
--- => toute politique RLS est fausse => 0 ligne (jamais une fuite).
--- L'application n'utilise que SET LOCAL dans withTenantConnection().
+ALTER DEFAULT PRIVILEGES FOR ROLE creche_migrator IN SCHEMA public
+  GRANT EXECUTE ON FUNCTIONS TO creche_app;

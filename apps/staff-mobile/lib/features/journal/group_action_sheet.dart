@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../core/database/app_database.dart';
 import '../../core/sync/sync_engine.dart';
 
 /// Action groupée : applique un événement (ex. repas) à TOUS les enfants
@@ -19,14 +18,12 @@ class _GroupActionSheetState extends State<GroupActionSheet> {
   String _mealType = 'lunch';
   String _mealQuantity = 'good';
   String _diaperType = 'wet';
-  int _count = 0;
   bool _busy = false;
 
   Future<void> _apply() async {
     setState(() => _busy = true);
     final db = widget.syncEngine.database;
     // Enfants présents aujourd'hui (miroir local des sessions).
-    final today = DateTime.now().toIso8601String().substring(0, 10);
     final statuses = await widget.syncEngine.attendanceStatusByChild(DateTime.now());
     final children = await db.select(db.localChildren).get();
     final present = children.where((c) => statuses[c.id] == 'present').toList();

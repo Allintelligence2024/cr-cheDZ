@@ -1,5 +1,11 @@
 # CHECKLIST PILOTE — 2 semaines (Phase 12)
 
+> H2j : `/api/v1/metrics` n'est plus public. JWT d'accès d'un administrateur
+> plateforme courant requis ; sans lui les exemples curl anonymes ci-dessous
+> répondent 401. Credential/rotation du scraper de production non livrés : voir
+> [runbook H2j](/docs/PHASE_H2J_METRICS_RUNBOOK.md). Ne pas publier les tokens.
+
+
 > À remplir chaque jour par la directrice (ou l'équipe support). Objectif :
 > 5 crèches × 2 semaines d'utilisation quotidienne, métriques vérifiées,
 > 0 incident bloquant non résolu en 24 h.

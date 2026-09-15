@@ -8,7 +8,9 @@ import {
   IsUUID,
   Min,
   ValidateNested,
+  ValidateBy,
 } from 'class-validator';
+import { isSyncCursor } from '../generated/sync-contract';
 
 /** Commandes offline supportées (enum sync_command). */
 export const SYNC_COMMANDS = [
@@ -71,10 +73,9 @@ export class SyncPushDto {
 }
 
 export class SyncPullQuery {
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  cursor!: number;
+  // Never coerce through Number: PostgreSQL BIGINT exceeds JS safe integers.
+  @ValidateBy({ name: 'isSyncCursor', validator: { validate: isSyncCursor } })
+  cursor!: string;
 
   @IsUUID()
   device_id!: string;
@@ -84,5 +85,5 @@ export interface SyncPushResult {
   accepted: string[];
   rejected: Array<{ event_id: string; reason: string; message: string }>;
   conflicts: Array<{ event_id: string; reason: string; current_version: number }>;
-  next_cursor: number;
+  next_cursor: string;
 }

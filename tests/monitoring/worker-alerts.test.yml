@@ -1,0 +1,80 @@
+rule_files:
+  - ../../infrastructure/monitoring/alerts.yml
+evaluation_interval: 1m
+tests:
+  - name: worker absent, métrique DB en retard, alerte puis résolution
+    interval: 1m
+    input_series:
+      - series: 'creche_worker_scheduler_overdue{job="postgres",instance="db:9187",job_type="payments_expire"}'
+        values: '0+0x4 1+0x10 0+0x10'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: WorkerScheduledJobOverdue
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: WorkerScheduledJobOverdue
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: postgres
+              instance: db:9187
+              job_type: payments_expire
+            exp_annotations:
+              summary: "Traitement planifié en retard : payments_expire"
+              description: "Aucun succès depuis deux périodes. Vérifier workers, jobs failed, stockage et DB (runbook phase E)."
+      - eval_time: 20m
+        alertname: WorkerScheduledJobOverdue
+        exp_alerts: []
+  - name: exporter arrêté, pas de faux vert
+    interval: 1m
+    input_series:
+      - series: 'up{job="postgres",instance="db:9187"}'
+        values: '0+0x5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: DatabaseMetricsUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: postgres
+              instance: db:9187
+            exp_annotations:
+              summary: "Supervision PostgreSQL indisponible"
+              description: "La fraîcheur des traitements ne peut plus être contrôlée. Vérifier exporter, réseau et PostgreSQL."
+  - name: exporter vivant mais requête personnalisée absente
+    interval: 1m
+    input_series:
+      - series: 'up{job="postgres",instance="db:9187"}'
+        values: '1+0x5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: WorkerSchedulerMonitoringUnavailable
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: postgres
+              instance: db:9187
+            exp_annotations:
+              summary: "Métriques du scheduler absentes ou incomplètes"
+              description: "Vérifier migration 056, grants et postgres-queries.yml. Absence de métrique ne signifie pas succès."
+  - name: trois traitements sains
+    interval: 1m
+    input_series:
+      - series: 'up{job="postgres",instance="db:9187"}'
+        values: '1+0x15'
+      - series: 'creche_worker_scheduler_overdue{job="postgres",instance="db:9187",job_type="payments_expire"}'
+        values: '0+0x15'
+      - series: 'creche_worker_scheduler_overdue{job="postgres",instance="db:9187",job_type="retention_purge"}'
+        values: '0+0x15'
+      - series: 'creche_worker_scheduler_overdue{job="postgres",instance="db:9187",job_type="video_clips_purge"}'
+        values: '0+0x15'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: WorkerScheduledJobOverdue
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: WorkerSchedulerMonitoringUnavailable
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: DatabaseMetricsUnavailable
+        exp_alerts: []

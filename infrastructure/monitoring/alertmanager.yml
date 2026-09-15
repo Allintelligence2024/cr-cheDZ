@@ -1,0 +1,18 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: operations
+  group_by: ['alertname', 'job_type', 'instance']
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+receivers:
+  - name: operations
+    webhook_configs:
+      - url: http://alert-relay:8091/alerts
+        send_resolved: true
+        max_alerts: 100
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /run/secrets/alert-webhook-token

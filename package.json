@@ -29,7 +29,9 @@
     "db:check-rls-usage": "node scripts/check-rls-usage.mjs",
     "check:routes-inventory": "node scripts/inventory-route-guards.mjs",
     "check:android-manifest": "node scripts/check-android-manifest.mjs",
-    "test:unit": "npm run test --workspace @creche/api"
+    "test:production-roles": "node scripts/test-production-roles.mjs",
+    "test:unit": "npm run test --workspace @creche/api",
+    "check:worker-monitoring": "node scripts/check-worker-monitoring.mjs"
   },
   "engines": {
     "node": ">=20"

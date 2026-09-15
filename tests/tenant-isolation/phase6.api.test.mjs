@@ -135,6 +135,12 @@ async function main() {
        VALUES ('p6.parent@test.dz', 'Salima', 'Parent', $1, 'active') RETURNING id`,
       [hash],
     );
+    // A notified parent must have completed tenant onboarding, not merely exist globally.
+    await admin.query(
+      `INSERT INTO memberships(organization_id,user_id,role_id,is_active)
+       SELECT $1,$2,id,true FROM roles WHERE slug='parent_primary'`,
+      [A.org, parentUser.rows[0].id],
+    );
     const guardian = await api('POST', '/children/guardians', tokenA, {
       first_name_fr: 'Salima', last_name_fr: 'Amrani', relationship: 'mother',
       phone_primary: '0550123456', email: 'salima@test.dz', user_id: parentUser.rows[0].id,
@@ -407,7 +413,6 @@ async function main() {
     const orgIds = `(SELECT id FROM organizations WHERE slug LIKE 'p6-%')`;
     await admin.query(`DELETE FROM sync_operations WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM sync_cursors WHERE organization_id IN ${orgIds}`);
-    await admin.query(`DELETE FROM sync_changelog WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM media_access_logs WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM media_assets WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM notification_queue WHERE organization_id IN ${orgIds}`);
@@ -422,11 +427,12 @@ async function main() {
     await admin.query(`DELETE FROM audit_logs WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p6.%@test.dz')`);
     await admin.query(`DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p6.%@test.dz')`);
-    await admin.query(`DELETE FROM devices WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM child_guardians WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM room_moves WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM child_status_history WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM children WHERE organization_id IN ${orgIds}`);
+    await admin.query(`DELETE FROM sync_changelog WHERE organization_id IN ${orgIds}`);
+    await admin.query(`DELETE FROM devices WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM guardians WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM org_sequences WHERE organization_id IN ${orgIds}`);
     await admin.query(`DELETE FROM memberships WHERE organization_id IN ${orgIds}`);

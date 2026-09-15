@@ -1,5 +1,11 @@
 # ANTIGRAVITY — Human Ops via MCP (Model Context Protocol)
 
+> H2j : `/api/v1/metrics` n'est plus public. JWT d'accès d'un administrateur
+> plateforme courant requis ; sans lui les exemples curl anonymes ci-dessous
+> répondent 401. Credential/rotation du scraper de production non livrés : voir
+> [runbook H2j](/docs/PHASE_H2J_METRICS_RUNBOOK.md). Ne pas publier les tokens.
+
+
 > Ce fichier est le prompt complet pour Antigravity (Google) + MCP pour exécuter le travail humain restant après P3. Il transforme les tâches "opérationnelles/humaines" en actions traçables via outils MCP.
 
 ## Contexte à charger dans Antigravity

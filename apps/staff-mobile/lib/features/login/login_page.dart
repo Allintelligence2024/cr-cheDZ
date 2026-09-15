@@ -8,7 +8,7 @@ class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.auth, required this.onAuthenticated});
 
   final AuthService auth;
-  final VoidCallback onAuthenticated;
+  final Future<void> Function() onAuthenticated;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -30,9 +30,9 @@ class _LoginPageState extends State<LoginPage> {
     try {
       await widget.auth.login(_email.text.trim(), _password.text);
       if (!mounted) return;
-      widget.onAuthenticated();
+      await widget.onAuthenticated();
     } catch (_) {
-      setState(() => _error = 'Email ou mot de passe incorrect');
+      if (mounted) setState(() => _error = 'Email ou mot de passe incorrect');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

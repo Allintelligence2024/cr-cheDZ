@@ -1,11 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { Pool } from 'pg';
 import { PG_POOL } from '../../shared/database/database.provider';
+import { Errors } from '../../shared/errors';
 
 /**
  * Métriques Prometheus minimales (Phase 11) — sans dépendance externe.
  * Compteurs HTTP en mémoire + métriques métier lues en base au scrape.
- * Aucune donnée tenant n'est exposée (compteurs globaux uniquement).
+ * Agrégats inter-tenant : réservés à un administrateur plateforme courant.
  */
 @Injectable()
 export class MetricsService {
@@ -20,7 +21,7 @@ export class MetricsService {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
   private key(method: string, route: string, status: number): string {
-    return `${method} ${route} ${status}`;
+    return JSON.stringify([method, route, status]);
   }
 
   httpRequest(method: string, route: string, status: number, durationSeconds: number): void {
@@ -32,7 +33,7 @@ export class MetricsService {
       while (this.http5xx.length && this.http5xx[0] < cutoff) this.http5xx.shift();
     }
 
-    const dk = `${method} ${route}`;
+    const dk = JSON.stringify([method, route]);
     const d = this.durations.get(dk) ?? { count: 0, sum: 0 };
     d.count += 1;
     d.sum += durationSeconds;
@@ -49,25 +50,36 @@ export class MetricsService {
   }
 
   /** Sortie au format texte Prometheus. */
-  async scrape(): Promise<string> {
+  async scrape(userId: string): Promise<string> {
+    // RolesGuard checks the signed role; also verify CURRENT platform authority.
+    // Account-scoped check, before querying any global business aggregates.
+    const actor = await this.pool.query(
+      `SELECT id FROM users WHERE id=$1 AND is_super_admin=true
+       AND status='active' AND deleted_at IS NULL
+       AND (locked_until IS NULL OR locked_until<=clock_timestamp())`, [userId],
+    );
+    if (!actor.rowCount) throw Errors.forbidden();
     const out: string[] = [];
     const gauges = await this.dbGauges();
     const gauge = (name: string): string => (gauges.has(name) ? String(gauges.get(name)) : 'NaN'); // absent = indisponible (jamais de faux 0)
     out.push('# HELP http_requests_total Total des requêtes HTTP traitées.');
     out.push('# TYPE http_requests_total counter');
     for (const [k, v] of [...this.counters.entries()].sort()) {
-      const [method, route, status] = k.split(' ');
-      out.push(`http_requests_total{method="${method}",route="${route}",status="${status}"} ${v}`);
+      const [method, route, status] = JSON.parse(k) as [string, string, number];
+      out.push(`http_requests_total{method="${this.escapeLabel(method)}",route="${this.escapeLabel(route)}",status="${status}"} ${v}`);
     }
 
     out.push('# HELP http_request_duration_seconds Durée des requêtes HTTP.');
     out.push('# TYPE http_request_duration_seconds histogram');
-    for (const [k, v] of [...this.buckets.entries()].sort()) {
-      out.push(`http_request_duration_seconds_bucket{${k}} ${v}`);
-    }
     for (const [k, d] of [...this.durations.entries()].sort()) {
-      out.push(`http_request_duration_seconds_sum{${k}} ${d.sum.toFixed(6)}`);
-      out.push(`http_request_duration_seconds_count{${k}} ${d.count}`);
+      const [method, route] = JSON.parse(k) as [string, string];
+      const labels = `method="${this.escapeLabel(method)}",route="${this.escapeLabel(route)}"`;
+      // Export every bucket (including zero), in increasing numeric order.
+      for (const edge of [...this.bucketEdges, '+Inf']) {
+        out.push(`http_request_duration_seconds_bucket{${labels},le="${edge}"} ${this.buckets.get(`${k} le=${edge}`) ?? 0}`);
+      }
+      out.push(`http_request_duration_seconds_sum{${labels}} ${d.sum.toFixed(6)}`);
+      out.push(`http_request_duration_seconds_count{${labels}} ${d.count}`);
     }
 
     out.push('# HELP creche_jobs_pending Jobs en attente dans background_jobs.');
@@ -100,6 +112,10 @@ export class MetricsService {
     out.push('# TYPE process_uptime_seconds gauge');
     out.push(`process_uptime_seconds ${((Date.now() - this.startedAt) / 1000).toFixed(1)}`);
     return out.join('\n') + '\n';
+  }
+
+  private escapeLabel(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
   }
 
   private get http5xx24h(): number {

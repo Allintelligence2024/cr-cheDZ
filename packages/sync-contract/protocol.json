@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "cursorMaximum": "9223372036854775807",
+  "routes": {
+    "registerDevice": {
+      "method": "POST",
+      "path": "/devices",
+      "request": "RegisterRequest",
+      "response": "RegisterResponse"
+    },
+    "push": {
+      "method": "POST",
+      "path": "/sync/push",
+      "request": "PushRequest",
+      "response": "PushResponse"
+    },
+    "pull": {
+      "method": "GET",
+      "path": "/sync/pull",
+      "request": "PullQuery",
+      "response": "PullResponse"
+    }
+  }
+}

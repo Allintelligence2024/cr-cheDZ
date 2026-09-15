@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { isUUID } from 'class-validator';
 import { randomInt } from 'node:crypto';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import * as bcrypt from 'bcryptjs';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { AppError, Errors } from '../../shared/errors';
@@ -13,6 +14,9 @@ import { SessionsService } from './sessions.service';
 import { TotpService } from './totp.service';
 import { SmsService } from '../../shared/sms/sms.service';
 import { WhatsAppService } from '../../shared/whatsapp/whatsapp.service';
+
+// Work factor for unknown accounts; not a promise of constant network latency.
+const DUMMY_PASSWORD_HASH = '$2b$12$0BIuseBWXKjyHtdMOE3Rk.hzrgIz6M3nCdfBu/VftHWG5Vd6IXDAu';
 
 interface MembershipRow {
   organization_id: string;
@@ -86,36 +90,18 @@ export class AuthService {
     );
     const user = res.rows[0];
 
-    // Anti-énumération (audit — commentaire corrigé) : la protection réelle
-    // est le MESSAGE D'ERREUR UNIFIÉ (INVALID_CREDENTIALS FR/AR identique que
-    // l'email existe ou non — même statut, même code, même durée de réponse).
-    // recordFailedAttempt(null, ·) est un NO-OP : aucun compteur n'est tenu
-    // pour un email inconnu (pas de table dédiée, pas de ligne gardée).
-    if (!user) {
-      await this.recordFailedAttempt(null, email);
+    // Verify the secret before disclosing status/lockout. Unknown accounts
+    // receive the same public error and still perform a bcrypt comparison.
+    const passwordOk = await bcrypt.compare(password, user?.password_hash ?? DUMMY_PASSWORD_HASH);
+    if (!user?.password_hash || !passwordOk) {
+      await this.recordFailedAttempt(user?.id ?? null, email);
       throw Errors.invalidCredentials();
     }
-
-    if (user.locked_until && user.locked_until > new Date()) {
-      throw Errors.accountLocked(this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15));
-    }
-    // Choix produit (documenté, volontaire) : les comptes 'pending' (invités
-    // pas encore onboardés) peuvent se connecter — l'onboarding termine
-    // l'activation. Seuls 'suspended' (et les statuts hors active/pending)
-    // sont refusés (ACCOUNT_SUSPENDED).
-    if (user.status !== 'active' && user.status !== 'pending') {
-      throw Errors.accountSuspended();
-    }
-
-    const passwordOk =
-      user.password_hash != null && (await bcrypt.compare(password, user.password_hash));
-    if (!passwordOk) {
-      await this.recordFailedAttempt(user.id, email);
-      throw Errors.invalidCredentials();
-    }
+    this.assertLoginAllowed(user);
 
     if (user.totp_enabled) {
       if (!totpCode || !user.totp_secret || !this.totp.verify(user.totp_secret, totpCode)) {
+        await this.recordFailedAttempt(user.id, email);
         throw Errors.totpInvalid();
       }
     }
@@ -189,7 +175,7 @@ export class AuthService {
     await this.pool.query(`UPDATE otp_codes SET used_at = NOW() WHERE target = $1 AND purpose = 'parent_login' AND used_at IS NULL`, [target]);
     await this.pool.query(
       `INSERT INTO otp_codes (target, code_hash, purpose, channel, expires_at) VALUES ($1,$2,'parent_login',$3,NOW() + INTERVAL '10 minutes')`,
-      [target, await bcrypt.hash(code, this.config.get<number>('BCRYPT_ROUNDS', 12)), channel],
+      [target, await bcrypt.hash(code, Number(this.config.get<number>('BCRYPT_ROUNDS', 12))), channel],
     );
     if (channel === 'whatsapp') {
       await this.sendOTPByWhatsApp(target, code);
@@ -236,10 +222,14 @@ export class AuthService {
     );
     const row = otp.rows[0];
     if (!row || row.attempts >= 5 || !(await bcrypt.compare(code, row.code_hash))) {
-      if (row) await this.pool.query(`UPDATE otp_codes SET attempts=attempts+1 WHERE id=$1`, [row.id]);
+      if (row) await this.pool.query(`UPDATE otp_codes SET attempts=attempts+1 WHERE id=$1 AND used_at IS NULL AND attempts<5`, [row.id]);
       throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     }
-    await this.pool.query(`UPDATE otp_codes SET used_at=NOW() WHERE id=$1`, [row.id]);
+    const consumed = await this.pool.query(
+      `UPDATE otp_codes SET used_at=NOW()
+       WHERE id=$1 AND used_at IS NULL AND attempts<5 AND expires_at>NOW() RETURNING id`, [row.id],
+    );
+    if (consumed.rowCount !== 1) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     // Bootstrap RLS : guardians est une table tenant ; la fonction SECURITY
     // DEFINER (migration 025) fait la recherche hors contexte tenant.
     const found = await this.pool.query<UserRow>(
@@ -247,12 +237,12 @@ export class AuthService {
       [target],
     );
     const user = found.rows[0];
-    if (!user) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
+    if (!user?.id) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     return this.issueTokenPair(user, ctx);
   }
 
   async setParentPin(userId: string, pin: string): Promise<void> {
-    await this.pool.query(`UPDATE users SET parent_pin_hash=$2, version=version+1 WHERE id=$1`, [userId, await bcrypt.hash(pin, this.config.get<number>('BCRYPT_ROUNDS', 12))]);
+    await this.pool.query(`UPDATE users SET parent_pin_hash=$2, version=version+1 WHERE id=$1`, [userId, await bcrypt.hash(pin, Number(this.config.get<number>('BCRYPT_ROUNDS', 12)))]);
   }
 
   async loginParentPin(phone: string, pin: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
@@ -264,6 +254,7 @@ export class AuthService {
     );
     const user = res.rows[0];
     if (!user?.parent_pin_hash || !(await bcrypt.compare(pin, user.parent_pin_hash))) {
+      await this.recordFailedAttempt(user?.id ?? null, phone);
       throw new AppError('INVALID_PARENT_PIN', 'PIN incorrect', 'رمز PIN غير صحيح', 401);
     }
     return this.issueTokenPair(user, ctx);
@@ -278,72 +269,78 @@ export class AuthService {
     userAgent?: string,
   ): Promise<LoginResult> {
     const hash = SessionsService.hashRefreshToken(refreshToken);
-    const res = await this.pool.query(
-      `SELECT * FROM auth_refresh_lookup($1)`,
-      [hash],
-    );
-    const row = res.rows[0];
-    if (!row) throw Errors.invalidRefreshToken();
+    const client = await this.pool.connect();
+    let reused: { userId: string; organizationId: string | null } | undefined;
+    try {
+      await client.query('BEGIN');
+      const initial = (await client.query(`SELECT * FROM auth_refresh_lookup($1)`, [hash])).rows[0];
+      if (!initial) throw Errors.invalidRefreshToken();
 
-    if (row.session_revoked_at) {
-      // Session révoquée à cause de la révocation de l'appareil → message dédié,
-      // pas de suspicion de compromission.
-      if (row.revoked_reason === 'device_revoked') throw Errors.deviceRevoked();
+      // Same-user refreshes (including replay on another session) share one lock.
+      // Lock user BEFORE session consistently; reload session state after waiting.
+      const user = (await client.query<UserRow>(
+        `SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [initial.user_id],
+      )).rows[0];
+      if (!user) throw Errors.invalidRefreshToken();
+      await client.query(`SELECT id FROM sessions WHERE id=$1 FOR UPDATE`, [initial.session_id]);
+      const row = (await client.query(`SELECT * FROM auth_refresh_lookup($1)`, [hash])).rows[0];
+      if (!row) throw Errors.invalidRefreshToken();
 
-      // Réutilisation d'un refresh déjà révoqué → compromission présumée :
-      // on révoque toutes les sessions de l'utilisateur.
-      await this.sessions.revokeAllForUser(row.user_id, 'reuse_detected');
-      await this.audit.log({
-        organizationId: row.organization_id,
-        userId: row.user_id,
-        action: 'revoke',
-        resourceType: 'session',
-        resourceLabel: 'reuse_detected',
-      });
-      throw Errors.sessionReuseDetected();
+      if (row.session_revoked_at) {
+        if (row.revoked_reason === 'device_revoked') throw Errors.deviceRevoked();
+        // Preserve existing reuse policy: revoke ALL this user's refresh sessions.
+        // Commit this security effect before reporting failure to the caller.
+        await this.sessions.revokeAllForUser(row.user_id, 'reuse_detected', client);
+        await client.query('COMMIT');
+        reused = { userId: row.user_id, organizationId: row.organization_id };
+      } else {
+        if (new Date(row.expires_at).getTime() <= Date.now()) throw Errors.sessionExpired();
+        if (row.device_id && row.device_revoked) throw Errors.deviceRevoked();
+        if (user.status !== 'active') throw Errors.accountSuspended();
+
+        await client.query(
+          `UPDATE sessions SET revoked_at=NOW(), revoked_reason='rotated' WHERE id=$1`, [row.session_id],
+        );
+        const membership = await this.membershipFor(user, client);
+        const session = await this.sessions.createSession({
+          userId: user.id,
+          organizationId: membership?.organization_id ?? null,
+          deviceId: deviceId ?? row.device_id,
+          ipAddress,
+          userAgent,
+        }, client);
+        const accessToken = await this.signAccessToken(user, membership, client);
+        await client.query('COMMIT');
+        return {
+          access_token: accessToken,
+          refresh_token: session.refreshToken,
+          expires_in: 15 * 60,
+          user: {
+            id: user.id,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            email: user.email,
+            organization_id: membership?.organization_id ?? null,
+            role: user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none'),
+            is_super_admin: user.is_super_admin,
+          },
+        };
+      }
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
     }
-    if (new Date(row.expires_at) < new Date()) throw Errors.sessionExpired();
-    if (row.device_id && row.device_revoked) throw Errors.deviceRevoked();
-    if (row.user_status !== 'active') throw Errors.accountSuspended();
-
-    // Rotation : la session courante est révoquée, une nouvelle est créée.
-    await this.pool.query(
-      `UPDATE sessions SET revoked_at = NOW(), revoked_reason = 'rotated'
-       WHERE id = $1 AND revoked_at IS NULL`,
-      [row.session_id],
-    );
-
-    const userRes = await this.pool.query<UserRow>(
-      `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,
-      [row.user_id],
-    );
-    const user = userRes.rows[0];
-    if (!user) throw Errors.invalidRefreshToken();
-
-    const membership = await this.membershipFor(user);
-    const session = await this.sessions.createSession({
-      userId: user.id,
-      organizationId: membership?.organization_id ?? null,
-      deviceId: deviceId ?? row.device_id,
-      ipAddress,
-      userAgent,
+    // Legacy best-effort audit is deliberately outside the committed revocation.
+    if (reused) await this.audit.log({
+      organizationId: reused.organizationId,
+      userId: reused.userId,
+      action: 'revoke',
+      resourceType: 'session',
+      resourceLabel: 'reuse_detected',
     });
-
-    const accessToken = await this.signAccessToken(user, membership);
-    return {
-      access_token: accessToken,
-      refresh_token: session.refreshToken,
-      expires_in: 15 * 60,
-      user: {
-        id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        email: user.email,
-        organization_id: membership?.organization_id ?? null,
-        role: user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none'),
-        is_super_admin: user.is_super_admin,
-      },
-    };
+    throw Errors.sessionReuseDetected();
   }
 
   async logout(refreshToken: string, userId: string, ipAddress?: string, userAgent?: string): Promise<void> {
@@ -374,7 +371,7 @@ export class AuthService {
     if (!user || user.password_hash == null || !(await bcrypt.compare(oldPassword, user.password_hash))) {
       throw new AppError('INVALID_CREDENTIALS', 'Mot de passe actuel incorrect', 'كلمة المرور الحالية غير صحيحة', 400);
     }
-    const hash = await bcrypt.hash(newPassword, this.config.get<number>('BCRYPT_ROUNDS', 12));
+    const hash = await bcrypt.hash(newPassword, Number(this.config.get<number>('BCRYPT_ROUNDS', 12)));
     await this.pool.query(
       `UPDATE users SET password_hash = $2, version = version + 1 WHERE id = $1`,
       [userId, hash],
@@ -402,7 +399,7 @@ export class AuthService {
     profile: { firstName: string; lastName: string; password: string },
     ctx: { deviceId?: string; ipAddress?: string; userAgent?: string },
   ): Promise<LoginResult> {
-    let payload: { purpose?: string; sub?: string; orgId?: string; role?: string };
+    let payload: { purpose?: string; sub?: string; orgId?: string; role?: string; email?: string };
     try {
       // C4 (audit 2026-09) : vérification avec le JwtService d'INVITATION
       // (secret dérivé) — un access token ne peut plus être confondu ici,
@@ -411,45 +408,68 @@ export class AuthService {
     } catch {
       throw new AppError('INVALID_INVITATION', 'Lien d\'invitation invalide ou expiré', 'رابط الدعوة غير صالح أو منتهي', 400);
     }
-    if (payload.purpose !== 'invitation' || !payload.sub || !payload.orgId) {
+    if (payload.purpose !== 'invitation' || typeof payload.sub !== 'string' || !isUUID(payload.sub)
+      || typeof payload.orgId !== 'string' || !isUUID(payload.orgId)) {
       throw new AppError('INVALID_INVITATION', 'Lien d\'invitation invalide ou expiré', 'رابط الدعوة غير صالح أو منتهي', 400);
     }
 
-    const res = await this.pool.query<UserRow>(
-      `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,
-      [payload.sub],
-    );
-    const user = res.rows[0];
-    if (!user) {
-      throw new AppError('INVALID_INVITATION', 'Lien d\'invitation invalide ou expiré', 'رابط الدعوة غير صالح أو منتهي', 400);
-    }
-    if (user.status === 'active') {
-      throw new AppError('INVITATION_ALREADY_USED', 'Cette invitation a déjà été utilisée', 'تم استخدام هذه الدعوة بالفعل', 400);
-    }
-
-    const hash = await bcrypt.hash(profile.password, this.config.get<number>('BCRYPT_ROUNDS', 12));
-    await this.pool.query(
-      `UPDATE users
-       SET first_name = $2, last_name = $3, password_hash = $4,
-           status = 'active', email_verified_at = NOW(), failed_attempts = 0,
-           version = version + 1
-       WHERE id = $1`,
-      [user.id, profile.firstName, profile.lastName, hash],
-    );
-    await this.pool.query(`SELECT invite_accept($1, $2)`, [user.id, payload.orgId]);
-
-    await this.audit.log({
-      organizationId: payload.orgId,
-      userId: user.id,
-      action: 'approve',
-      resourceType: 'membership',
-      resourceLabel: 'invitation_accept',
-      newValues: { role: payload.role },
-      ipAddress: ctx.ipAddress,
-      userAgent: ctx.userAgent,
-    });
-
-    return this.issueTokenPair(user, ctx);
+    const invalid = () => new AppError('INVALID_INVITATION',
+      'Lien d’invitation invalide ou expiré', 'رابط الدعوة غير صالح أو منتهي', 400);
+    // Compute the expensive hash before taking locks; all checks run again inside.
+    const hash = await bcrypt.hash(profile.password, Number(this.config.get<number>('BCRYPT_ROUNDS', 12)));
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.tenant_id',$1,true), set_config('app.user_id',$2,true)`, [payload.orgId, payload.sub]);
+      const user = (await client.query<UserRow>(
+        `SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [payload.sub],
+      )).rows[0];
+      if (!user) throw invalid();
+      if (user.status === 'active') throw new AppError('INVITATION_ALREADY_USED',
+        'Cette invitation a déjà été utilisée', 'تم استخدام هذه الدعوة بالفعل', 400);
+      if (user.status !== 'pending' || user.email !== payload.email) throw invalid();
+      this.assertLoginAllowed(user);
+      const org = await client.query(`SELECT id FROM organizations WHERE id=$1 AND is_active=true`, [payload.orgId]);
+      if (!org.rows[0]) throw invalid();
+      const invited = (await client.query(
+        `SELECT m.id, m.is_active, m.joined_at, r.slug FROM memberships m JOIN roles r ON r.id=m.role_id
+         WHERE m.user_id=$1 AND m.organization_id=$2 FOR UPDATE OF m`, [user.id, payload.orgId],
+      )).rows[0];
+      if (!invited || !invited.is_active || invited.joined_at || invited.slug !== payload.role) throw invalid();
+      // A request can outlive the JWT while waiting for an account/membership lock.
+      try { await this.invitationJwtService.verifyAsync(token); } catch { throw invalid(); }
+      const activated = (await client.query<UserRow>(
+        `UPDATE users SET first_name=$2,last_name=$3,password_hash=$4,status='active',
+          email_verified_at=NOW(),failed_attempts=0,locked_until=NULL,version=version+1
+         WHERE id=$1 RETURNING *`, [user.id, profile.firstName, profile.lastName, hash],
+      )).rows[0];
+      await client.query(`UPDATE memberships SET joined_at=NOW() WHERE id=$1`, [invited.id]);
+      // The invitation's tenant is explicit, never the account's oldest membership.
+      const membership = (await client.query<MembershipRow>(
+        `SELECT * FROM auth_get_memberships($1) WHERE organization_id=$2`, [user.id, payload.orgId],
+      )).rows[0];
+      if (!membership) throw invalid();
+      const session = await this.sessions.createSession({
+        userId: user.id, organizationId: payload.orgId, deviceId: ctx.deviceId,
+        ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+      }, client);
+      const accessToken = await this.signAccessToken(activated, membership, client);
+      await this.audit.logInTransaction(client, {
+        organizationId: payload.orgId, userId: user.id, action: 'approve',
+        resourceType: 'membership', resourceId: invited.id, resourceLabel: 'invitation_accept',
+        newValues: { role: invited.slug }, ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+      });
+      await client.query('COMMIT');
+      return {
+        access_token: accessToken, refresh_token: session.refreshToken, expires_in: 15 * 60,
+        user: { id: user.id, first_name: activated.first_name, last_name: activated.last_name,
+          email: activated.email, organization_id: membership.organization_id,
+          role: membership.role_slug, is_super_admin: activated.is_super_admin },
+      };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { client.release(); }
   }
 
   /** Construit une session complète (access + refresh) pour un utilisateur. */
@@ -457,7 +477,16 @@ export class AuthService {
     user: UserRow,
     ctx: { deviceId?: string; ipAddress?: string; userAgent?: string },
   ): Promise<LoginResult> {
+    // Parent PIN/OTP issuance: refresh status after the initial account lookup.
+    // Invitation acceptance uses its own atomic transaction above.
+    const current = await this.pool.query<UserRow>(
+      `SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL`, [user.id],
+    );
+    user = current.rows[0];
+    if (!user) throw Errors.invalidCredentials();
+    this.assertLoginAllowed(user);
     const membership = await this.membershipFor(user);
+    await this.pool.query(`UPDATE users SET failed_attempts=0, locked_until=NULL WHERE id=$1`, [user.id]);
     const session = await this.sessions.createSession({
       userId: user.id,
       organizationId: membership?.organization_id ?? null,
@@ -485,64 +514,101 @@ export class AuthService {
   // ── 2FA ─────────────────────────────────────────────────────────────────
 
   async enableTotp(userId: string): Promise<{ secret: string; otpauth_url: string }> {
-    const res = await this.pool.query<UserRow>(`SELECT email, totp_secret FROM users WHERE id = $1`, [userId]);
-    const user = res.rows[0];
-    const secret = user?.totp_secret ?? this.totp.generateSecret();
-    await this.pool.query(
-      `UPDATE users SET totp_secret = $2, version = version + 1 WHERE id = $1`,
-      [userId, secret],
-    );
-    return {
-      secret,
-      otpauth_url: this.totp.otpauthUrl(secret, user?.email ?? userId),
-    };
+    return this.withTotpAccount(userId, async (client, user) => {
+      // A bearer token alone must never reveal an already activated factor.
+      if (user.totp_enabled) throw Errors.totpAlreadyEnabled();
+      const secret = user.totp_secret ?? this.totp.generateSecret();
+      if (!user.totp_secret) {
+        await client.query('UPDATE users SET totp_secret=$2, version=version+1 WHERE id=$1', [userId, secret]);
+        await this.audit.logInTransaction(client, {
+          userId, action: 'update', resourceType: 'user', resourceId: userId,
+          newValues: { totp_setup: true },
+        });
+      }
+      return { secret, otpauth_url: this.totp.otpauthUrl(secret, user.email ?? userId) };
+    });
   }
 
   async verifyTotp(userId: string, code: string): Promise<{ enabled: boolean }> {
-    const res = await this.pool.query<UserRow>(`SELECT totp_secret, totp_enabled FROM users WHERE id = $1`, [userId]);
-    const user = res.rows[0];
-    if (!user?.totp_secret || !this.totp.verify(user.totp_secret, code)) {
-      throw Errors.totpInvalid();
-    }
-    if (!user.totp_enabled) {
-      await this.pool.query(`UPDATE users SET totp_enabled = true, version = version + 1 WHERE id = $1`, [userId]);
-      await this.audit.log({ userId, action: 'update', resourceType: 'user', resourceId: userId, newValues: { totp_enabled: true } });
-    }
-    return { enabled: true };
+    return this.changeTotp(userId, code, true);
   }
 
   async disableTotp(userId: string, code: string): Promise<{ enabled: boolean }> {
-    const res = await this.pool.query<UserRow>(`SELECT totp_secret, totp_enabled FROM users WHERE id = $1`, [userId]);
-    const user = res.rows[0];
-    if (!user?.totp_secret || !this.totp.verify(user.totp_secret, code)) {
-      throw Errors.totpInvalid();
+    return this.changeTotp(userId, code, false);
+  }
+
+  private async changeTotp(userId: string, code: string, enabled: boolean): Promise<{ enabled: boolean }> {
+    return this.withTotpAccount(userId, async (client, user) => {
+      if (!user.totp_secret) return Errors.totpInvalid();
+      if (!this.totp.verify(user.totp_secret, code)) {
+        await this.recordFailedAttempt(userId, user.email ?? '', client);
+        // Returned, not thrown: persist the failed proof before emitting 401.
+        return Errors.totpInvalid();
+      }
+      if (!enabled || !user.totp_enabled) {
+        await client.query(
+          `UPDATE users SET totp_enabled=$2,
+             totp_secret=CASE WHEN $2 THEN totp_secret ELSE NULL END,
+             failed_attempts=0, locked_until=NULL, version=version+1 WHERE id=$1`,
+          [userId, enabled],
+        );
+        await this.audit.logInTransaction(client, {
+          userId, action: 'update', resourceType: 'user', resourceId: userId,
+          newValues: { totp_enabled: enabled },
+        });
+      } else if (user.failed_attempts || user.locked_until) {
+        await client.query('UPDATE users SET failed_attempts=0, locked_until=NULL, version=version+1 WHERE id=$1', [userId]);
+      }
+      return { enabled };
+    });
+  }
+
+  /** Account-scoped settings: current state and secret are checked AFTER the
+   * user lock. Keep factor mutation and minimal audit on this same connection.
+   * AppError values commit failed-proof counters; thrown errors roll back.
+   */
+  private async withTotpAccount<T>(
+    userId: string,
+    operation: (client: PoolClient, user: UserRow) => Promise<T | AppError>,
+  ): Promise<T> {
+    const client = await this.pool.connect();
+    let result: T | AppError;
+    try {
+      await client.query('BEGIN');
+      const res = await client.query<UserRow>('SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [userId]);
+      const user = res.rows[0];
+      if (!user) throw Errors.invalidCredentials();
+      this.assertLoginAllowed(user);
+      result = await operation(client, user);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
-    await this.pool.query(
-      `UPDATE users SET totp_enabled = false, totp_secret = NULL, version = version + 1 WHERE id = $1`,
-      [userId],
-    );
-    await this.audit.log({ userId, action: 'update', resourceType: 'user', resourceId: userId, newValues: { totp_enabled: false } });
-    return { enabled: false };
+    if (result instanceof AppError) throw result;
+    return result;
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
-  private async membershipFor(user: UserRow): Promise<MembershipRow | null> {
+  private async membershipFor(user: UserRow, client: Pick<PoolClient, 'query'> = this.pool): Promise<MembershipRow | null> {
     if (user.is_super_admin) return null;
-    const res = await this.pool.query<MembershipRow>(`SELECT * FROM auth_get_memberships($1)`, [user.id]);
+    const res = await client.query<MembershipRow>(`SELECT * FROM auth_get_memberships($1)`, [user.id]);
     return res.rows[0] ?? null;
   }
 
   /** Rôles effectifs (principal + additions) pour le JWT — multi-rôles (040). */
-  private async effectiveRoles(userId: string, membership: MembershipRow | null): Promise<string[]> {
+  private async effectiveRoles(userId: string, membership: MembershipRow | null, client: Pick<PoolClient, 'query'> = this.pool): Promise<string[]> {
     if (!membership) return [];
-    const res = await this.pool.query<{ role_slug: string }>(`SELECT role_slug FROM auth_user_roles($1) WHERE organization_id = $2`, [userId, membership.organization_id]);
+    const res = await client.query<{ role_slug: string }>(`SELECT role_slug FROM auth_user_roles($1) WHERE organization_id = $2`, [userId, membership.organization_id]);
     return res.rows.map((r) => r.role_slug);
   }
 
-  private async signAccessToken(user: UserRow, membership: MembershipRow | null): Promise<string> {
+  private async signAccessToken(user: UserRow, membership: MembershipRow | null, client: Pick<PoolClient, 'query'> = this.pool): Promise<string> {
     const role = user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none');
-    const roles = user.is_super_admin ? ['super_admin'] : await this.effectiveRoles(user.id, membership);
+    const roles = user.is_super_admin ? ['super_admin'] : await this.effectiveRoles(user.id, membership, client);
     return this.jwtService.sign({
       purpose: ACCESS_TOKEN_PURPOSE,
       sub: user.id,
@@ -554,20 +620,31 @@ export class AuthService {
     });
   }
 
-  private async recordFailedAttempt(userId: string | null, email: string): Promise<void> {
+  private assertLoginAllowed(user: UserRow): void {
+    // Existing onboarding contract: active and pending may authenticate.
+    if (user.status !== 'active' && user.status !== 'pending') throw Errors.accountSuspended();
+    if (user.locked_until && user.locked_until > new Date()) {
+      throw Errors.accountLocked(Number(this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15)));
+    }
+  }
+
+  private async recordFailedAttempt(userId: string | null, email: string, client: Pick<PoolClient, 'query'> = this.pool): Promise<void> {
     if (!userId) return;
-    const max = this.config.get<number>('MAX_LOGIN_ATTEMPTS', 5);
-    const lockMinutes = this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15);
-    const res = await this.pool.query<UserRow>(
-      `SELECT failed_attempts, locked_until FROM users WHERE id = $1`,
-      [userId],
-    );
-    const current = res.rows[0];
-    const attempts = (current?.failed_attempts ?? 0) + 1;
-    const lockUntil = attempts >= max ? new Date(Date.now() + lockMinutes * 60_000) : null;
-    await this.pool.query(
-      `UPDATE users SET failed_attempts = $2, locked_until = $3, version = version + 1 WHERE id = $1`,
-      [userId, attempts, lockUntil],
+    const max = Number(this.config.get<number>('MAX_LOGIN_ATTEMPTS', 5));
+    const lockMinutes = Number(this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15));
+    // One row-serialized update. Concurrent failures cannot overwrite increments;
+    // an expired lock starts a fresh window, an active lock is not prolonged.
+    // Use statement time: a caller transaction may have waited on the user lock.
+    await client.query(
+      `UPDATE users SET
+         failed_attempts = CASE WHEN locked_until<=statement_timestamp() THEN 1 ELSE failed_attempts+1 END,
+         locked_until = CASE
+           WHEN (CASE WHEN locked_until<=statement_timestamp() THEN 1 ELSE failed_attempts+1 END)>=$2
+             THEN statement_timestamp() + ($3 * INTERVAL '1 minute') ELSE NULL END,
+         version = version+1
+       WHERE id=$1 AND (locked_until IS NULL OR locked_until<=statement_timestamp())
+       RETURNING failed_attempts, locked_until`,
+      [userId, max, lockMinutes],
     );
     void email;
   }

@@ -7,8 +7,7 @@ import { AuditService } from '../privacy/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateJournalEventDto, GroupJournalEventDto } from './dto/journal.dto';
 
-/** Types déclenchant une notification push parent. */
-const NOTIFY_PARENT_TYPES = new Set(['meal', 'nap_end', 'incident']);
+import { JOURNAL_NOTIFICATION_TYPES } from '../../shared/authorization/disclosure-policy';
 
 export interface JournalEventInput {
   childId: string;
@@ -181,9 +180,9 @@ export class JournalService {
     }
     const f = input.fields;
 
-    // Un événement 'note' privé n'est jamais visible aux parents.
+    // Même un DTO mixte ne doit pas publier un contenu marqué privé.
     const visible = input.visibleToParents ?? true;
-    const isPrivateNote = input.eventType === 'note' && (f.note_is_private as boolean) === true;
+    const isPrivateNote = f.note_is_private === true;
 
     const day = await this.todayAlgiers(client);
     const res = await client.query(
@@ -200,7 +199,7 @@ export class JournalService {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
                $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,
                $27,$28,$29,$30)
-       RETURNING id, event_type, event_date, occurred_at`,
+       RETURNING id, event_type, event_date::text, occurred_at`,
       [
         tenantId, input.childId, child.room_id, day, input.eventType, input.occurredAt,
         input.recordedBy, input.deviceId ?? null, input.isOffline ?? false, input.syncEventId ?? null,
@@ -231,7 +230,7 @@ export class JournalService {
     );
 
     // Notification parent pour les événements visibles notifiables.
-    if (!isPrivateNote && visible && NOTIFY_PARENT_TYPES.has(input.eventType)) {
+    if (!isPrivateNote && visible && JOURNAL_NOTIFICATION_TYPES.has(input.eventType)) {
       await this.notifications.notifyGuardiansOfEvent(client, tenantId, input.childId, input.eventType, evt.id);
     }
 
@@ -247,7 +246,7 @@ export class JournalService {
   }
 
   private async todayAlgiers(client: PoolClient): Promise<string> {
-    const res = await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date AS d`);
+    const res = await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date::text AS d`);
     return res.rows[0].d as string;
   }
 }

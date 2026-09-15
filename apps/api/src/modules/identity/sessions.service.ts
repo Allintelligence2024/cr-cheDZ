@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { PG_POOL } from '../../shared/database/database.provider';
 
 export interface CreatedSession {
@@ -21,18 +21,19 @@ export class SessionsService {
     return createHash('sha256').update(token).digest('hex');
   }
 
+  /** Explicit client joins a caller-owned transaction (refresh); defaults preserve login callers. */
   async createSession(params: {
     userId: string;
     organizationId: string | null;
     deviceId?: string | null;
     ipAddress?: string | null;
     userAgent?: string | null;
-  }): Promise<CreatedSession> {
+  }, client: Pick<PoolClient, 'query'> = this.pool): Promise<CreatedSession> {
     const refreshToken = randomBytes(48).toString('base64url');
     const refreshHash = SessionsService.hashRefreshToken(refreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 jours
 
-    const result = await this.pool.query(
+    const result = await client.query(
       `INSERT INTO sessions
          (user_id, organization_id, refresh_token_hash, device_id, ip_address, user_agent, expires_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -61,8 +62,8 @@ export class SessionsService {
   }
 
   /** Révocation de toutes les sessions d'un utilisateur (reuse détectée, mot de passe changé). */
-  async revokeAllForUser(userId: string, reason: string): Promise<void> {
-    await this.pool.query(
+  async revokeAllForUser(userId: string, reason: string, client: Pick<PoolClient, 'query'> = this.pool): Promise<void> {
+    await client.query(
       `UPDATE sessions SET revoked_at = NOW(), revoked_reason = $2
        WHERE user_id = $1 AND revoked_at IS NULL`,
       [userId, reason],

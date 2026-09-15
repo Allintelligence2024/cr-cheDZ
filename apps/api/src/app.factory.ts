@@ -4,6 +4,7 @@ import { INestApplication } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { requestContextMiddleware } from './shared/context/request-context.middleware';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { MetricsService } from './modules/metrics/metrics.service';
 import { metricsMiddleware } from './shared/metrics.middleware';
 
@@ -14,8 +15,11 @@ import { metricsMiddleware } from './shared/metrics.middleware';
 export async function createApp(): Promise<INestApplication> {
   // rawBody: conserve le corps brut (req.rawBody) pour la vérification HMAC
   // du webhook de paiement (apps/api/src/modules/billing/billing.controller.ts).
-  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true });
 
+  // Exactly one ingress hop. Production API must remain private behind nginx,
+  // which overwrites X-Forwarded-For; never trust an arbitrary chain.
+  app.set('trust proxy', 1);
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.enableCors({

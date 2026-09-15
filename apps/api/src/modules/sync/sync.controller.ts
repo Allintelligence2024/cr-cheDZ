@@ -24,7 +24,7 @@ export class SyncController {
   @Roles(...STAFF_ROLES)
   async pull(
     @Query() query: SyncPullQuery,
-  ): Promise<{ events: Array<Record<string, unknown>>; next_cursor: number }> {
+  ): Promise<{ events: Array<Record<string, unknown>>; next_cursor: string }> {
     return this.syncService.pull(query.cursor, query.device_id);
   }
 }

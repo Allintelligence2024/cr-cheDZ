@@ -9,13 +9,12 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
+import { connectMigrationClient } from './migration-connection.mjs';
 
 const SEEDS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'infrastructure', 'database', 'seeds');
 
 async function run() {
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-  await client.connect();
+  const client = await connectMigrationClient();
   try {
     const files = readdirSync(SEEDS_DIR)
       .filter((f) => f.endsWith('.sql'))

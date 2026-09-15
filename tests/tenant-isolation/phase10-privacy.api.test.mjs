@@ -22,6 +22,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { createDpiaReviewer } from '../fixtures/dpia-reviewer.mjs';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import { appUrl, ensureAppRole } from './helpers.mjs';
@@ -165,7 +166,8 @@ const main = async () => {
       mitigation_measures: ['urls signées', 'consentements'],
     });
     ok('DPIA créée (draft)', dpia.status === 201 && dpia.body.status === 'draft', JSON.stringify(dpia.body).slice(0, 100));
-    const approved = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, tokenA, {});
+    const reviewerToken = await createDpiaReviewer(db, A.org, tag, api);
+    const approved = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, reviewerToken, {});
     ok('DPIA approuvée', (approved.status === 200 || approved.status === 201) && approved.body.status === 'approved');
 
     // ── 9. Impersonation (support) ──────────────────────────────────────────
@@ -224,13 +226,13 @@ const main = async () => {
       await db.query(`DELETE FROM background_jobs WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
       await db.query(`DELETE FROM notification_queue WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
       await db.query(`DELETE FROM notification_inbox WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
-      await db.query(`DELETE FROM sync_changelog WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
       await db.query(`DELETE FROM data_access_logs WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
       await db.query(`DELETE FROM audit_logs WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
       await db.query(`DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'pv-%')`);
       await db.query(`DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'pv-%')`);
       await db.query(`DELETE FROM child_guardians WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
       await db.query(`DELETE FROM children WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
+      await db.query(`DELETE FROM sync_changelog WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
       await db.query(`DELETE FROM guardians WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
       await db.query(`DELETE FROM org_sequences WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);
       await db.query(`DELETE FROM memberships WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'pv-%')`);

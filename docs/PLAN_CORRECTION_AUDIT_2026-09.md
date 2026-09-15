@@ -1,10 +1,45 @@
-# PLAN DE REPRISE — Audit 2026-09, phases D→H (v2.0)
+# PLAN DE REPRISE — Audit 2026-09, phases D→H (v3.0)
 
 > **Document de pilotage pour la prochaine session agent.**
 > Remplace la v1.x du même fichier (historique : voir `git log -- docs/PLAN_CORRECTION_AUDIT_2026-09.md`).
-> **Version** : 2.0 — 2026-09-14, **après merge de la PR #37 dans `main`** (`d6f2dfe`).
+> **Version** : 3.0 — 2026-09-14. Reprend la v2.0 mergée par la PR #43 (`d2bd1f9`)
+> et ajoute le suivi local D/E1–E6 sur `arena/01a09e7f-cr-chedz` (pas encore mergé).
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md),
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md) et à la [matrice d'autorisation](architecture/authorization-matrix.md).
+
+---
+
+## Suivi de cette session — D, E1–E6, puis F1/F3
+
+- **D0 confirmé avec le client** : aucune production déployée, installation neuve ;
+  propriétaires et sauvegarde de production non applicables. Rollback écrit avant
+  correction. Aucune opération en production.
+- **D implémentée et validée localement** : 29/29 suites historiques avec les rôles
+  et grants de production, 14 tests PostgreSQL D, 8 tests structurels Compose.
+  Voir [runbook D](PHASE_D_ROLES_RUNBOOK.md) et ADR-011.
+- **E1 corrigé après reproduction** : migration 053, baux/heartbeat/reaper et arrêt
+  gracieux. 0/4 tests initiaux avant → 4/4 après ; **14/14** tests E1 et
+  **30/30** suites/contrôles D+E1 avec rôles de production (exit 0).
+  Voir [runbook E](PHASE_E_WORKER_RUNBOOK.md) et ADR-012.
+- **E2–E6 implémentés localement**, décisions client obtenues : 3 jobs planifiés,
+  facturation automatique **OFF**, mois partiels non facturés, échéance fin de
+  mois par défaut, statut notification conservé avec motif. Migrations 054/056/057.
+  **23/23** tests E2–E6 verts en rôles stricts et historiques ; **31/31** suites
+  au gate final D+E, exit 0 (premier passage 30/31 : faute de nom SQL dans un
+  test corrigée). Build/typecheck/lint verts, 27 unitaires, audit prod 0 vuln.
+- **Suite E2** : routage Prometheus → Alertmanager → relais local/e-mail/SMS/WhatsApp
+  livré selon le choix client ; 0/2 routage avant → 2/2 après, 4/4 tests de relais.
+  Gate des vrais moteurs Docker et de la chaîne complète raccordé à la CI existante,
+  **validé en CI sur `955b9cd` (PR #44, 9/9 checks)**. Réception sur coordonnées réelles non configurée.
+  Voir `PHASE_E2_ALERTING_RUNBOOK.md`.
+- **F1 livré comme artefact** : schéma partagé, générateur TS/Dart, 49/49 cas
+  schéma/DTO locaux ; gate Dart obligatoire en CI (voir `architecture/sync-contract.md`).
+  **F3 curseurs corrigés** : 5/23 avant → 23/23 après, suite enrichie **26/26**.
+  Intégration **F2 maintenant livrée** (voir runbook F2), gate Flutter réel requis ;
+  gate F4 réel étendu aux quatre types produits (résultat CI du dernier HEAD), pas de qualification Android release. G/H restent ouverts, notamment la règle de paie : ne pas déduire celle-ci
+  du choix « mois partiels non facturés » des contrats de garde.
+- **Réserves D** : Docker non démarré ici, écart Compose PostgreSQL 16 / tests 18.4,
+  gate CI strict désormais raccordé via le runner existant (validé en PR #44 sur 955b9cd). Ne pas confondre preuve locale et déploiement.
 
 ---
 
@@ -84,47 +119,55 @@ l'audit initial contenait ~3 faux positifs et 3 claims non applicables (document
 > ([`BACKUP-RUNBOOK.md`](BACKUP-RUNBOOK.md)) + plan de rollback écrit **avant** de commencer.
 > Issue **#38**. Remarque : C5 n'est plus un prérequis (résolu en Phase C).
 
-### D0. Décision préalable (à trancher explicitement avec le client)
+### D0. Décision préalable (tranchée avec le client : aucune production déployée)
 
-- [ ] La prod contient-elle déjà de vraies données enfants ?
-      - **Non** → recréer la base proprement (beaucoup plus simple)
-      - **Oui** → correction en place, avec fenêtre de maintenance
-- [ ] Qui est propriétaire des tables aujourd'hui ? Si `creche_app` (superuser) l'est,
-      le transfert de propriété vers `creche_migrator`/`postgres` est un prérequis.
+- [x] Client : **pas de production déployée**, installation neuve. Aucune
+      suppression de volume existant autorisée par cette décision.
+- [x] Propriétaires/sauvegarde de production non applicables. Le bootstrap refuse
+      une propriété applicative historique ; ce cas exige une intervention dédiée.
 
 ### D1. Séparer les rôles : superuser ≠ migrateur ≠ applicatif
 
-Le dépôt prévoit déjà cette séparation (`infrastructure/database/roles.sql` : `creche_migrator`
-pour le DDL, `creche_app` en `NOBYPASSRLS`) — elle n'est jamais appliquée.
+Avant correction, le dépôt prévoyait déjà cette séparation (`infrastructure/database/roles.sql` : `creche_migrator`
+pour le DDL, `creche_app` en `NOBYPASSRLS`) — elle n'était jamais appliquée.
 
-- [ ] **Compose** : ne plus faire de l'utilisateur applicatif le superuser d'init
+- [x] **Compose** : ne plus faire de l'utilisateur applicatif le superuser d'init
       (`POSTGRES_USER: postgres` pour l'init seule, `DATABASE_URL` api/worker → `creche_app`).
-- [ ] **Câbler `roles.sql`** : service `bootstrap-roles` qui dépend de `postgres: healthy` et que
+- [x] **Câbler `roles.sql`** : service `bootstrap-roles` qui dépend de `postgres: healthy` et que
       `migrate` attend (préférable à `docker-entrypoint-initdb.d`, reproductible).
-- [ ] **Corriger `roles.sql`** : le `IF NOT EXISTS` actuel est un piège (C8-bis — le bloc est
+- [x] **Corriger `roles.sql`** : le `IF NOT EXISTS` actuel est un piège (C8-bis — le bloc est
       sauté silencieusement si le rôle existe déjà en superuser). Upsert idempotent qui garantit
       **l'état final** : `ELSE ALTER ROLE creche_app NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;`.
-- [ ] Mots de passe distincts `creche_app` / `creche_migrator` (secrets →
+- [x] Mots de passe distincts `creche_app` / `creche_migrator` (secrets →
       [`OPERATIONS-SECRETS.md`](OPERATIONS-SECRETS.md)).
-- [ ] `scripts/migrate.mjs` utilise `creche_migrator` ; api/worker `creche_app`.
+- [x] `scripts/migrate.mjs` utilise `creche_migrator` ; api/worker `creche_app`.
 
-### D2. Prouver que la RLS s'applique vraiment en prod
+### D2. Prouver la RLS avec les rôles de production
 
-- [ ] **Refus de démarrage** si le rôle applicatif est superuser/bypassrls en `production` :
+- [x] **Refus de démarrage** si le rôle applicatif est superuser/bypassrls en `production` :
       au boot de l'API, `SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user`
       → message explicite. Même check dans `migrate.mjs` (le migrateur PEUT avoir plus de droits,
       mais ne doit jamais être le rôle de l'app).
-- [ ] **GATE** : les **29 suites** de `tests/tenant-isolation/` tournent **avec les rôles de prod**
+- [x] **GATE LOCAL** : les **29 suites** de `tests/tenant-isolation/` tournent **avec les rôles de prod**
       (mêmes rôles, mêmes grants — pas le superuser). `schema-check` et `rls-behavior-check` (9/9
       attendu) avec `creche_app`. Tant que ce gate n'est pas vert, D n'est pas terminé.
 
 ### D3. Vérifier les grants
 
-- [ ] `GRANT … ON ALL TABLES IN SCHEMA public` : **rejouer après toute migration ajoutant une
+- [x] `GRANT … ON ALL TABLES IN SCHEMA public` : **rejouer après toute migration ajoutant une
       table** — automatiser en fin de `migrate.mjs`, sinon la 53e migration crée une table
       illisible pour `creche_app`. Vérifier les `GRANT EXECUTE` des fonctions `SECURITY DEFINER`
       (015, 016, 024, 042, 051…).
-- [ ] **Test** : après une migration ajoutant une table fictive, l'api la lit sans intervention manuelle.
+- [x] **Test** : après une migration ajoutant une table fictive, l'api la lit sans intervention manuelle.
+
+**D livré** : bootstrap transactionnel rejouable → migrateur NOSUPERUSER BYPASSRLS
+(fonctions SECURITY DEFINER sur FORCE RLS) → application NOBYPASSRLS. API **et
+worker** vérifient current_user/session_user, attributs, propriété, appartenance et
+CREATE. Seeds utilisent aussi le migrateur ; registre des migrations en lecture
+seule pour l'app. Grants dans chaque transaction de migration et sur run sans DDL.
+
+- [ ] Vérification Docker réelle et choix/validation du moteur cible (16 vs 18).
+- [ ] Câblage CI du nouveau gate (action humaine `workflows`).
 
 ---
 
@@ -135,70 +178,92 @@ pour le DDL, `creche_app` en `NOBYPASSRLS`) — elle n'est jamais appliquée.
 
 ### E1. Jobs orphelins (perte silencieuse de travail)
 
-- [ ] **Reaper** : `jobs_reap_stale(p_timeout interval)` — tout job `processing` dont `started_at`
-      est trop ancien repasse en `pending` (ou `failed` si `attempts >= max_attempts`). **Migration 053**.
-- [ ] **Arrêt gracieux** : `SIGTERM`/`SIGINT` dans `apps/worker/src/main.ts` (finir le job en cours,
+- [x] **Reaper** : `jobs_reap_stale(p_timeout interval)` — tout job `processing` dont le heartbeat
+      (ou `started_at` historique) est trop ancien repasse en `pending` (ou `failed` si `attempts >= max_attempts`). **Migration 053**.
+- [x] **Arrêt gracieux** : `SIGTERM`/`SIGINT` dans `apps/worker/src/job-runtime.ts` (finir le job en cours,
       ne plus réclamer, sortir). Vérifier `stop_grace_period` dans `docker-compose.prod.yml`.
-- [ ] Boucle de reaper périodique dans le worker (ou job dédié, voir E2).
-- [ ] **Test** : job long + SIGKILL du worker → le job est repris après le timeout. **Doit échouer
-      aujourd'hui.**
+- [x] Boucle de reaper périodique dans le worker (ou job dédié, voir E2).
+- [x] **Test** : job long + SIGKILL du worker → le job est repris après le timeout. **Rouge avant, vert après.**
 
-### E2. Le scheduler manquant — bug systémique
+**Compléments livrés** : bail UUID par tentative, heartbeat indépendant du
+handler, fencing des terminaisons tardives (même après reset du compteur par le
+support), reaper concurrent par batches de 500/SKIP LOCKED, deadline 45 s et
+stop_grace_period 60 s. At-least-once uniquement ; pas de mélange d'anciens et
+nouveaux workers au déploiement. Détails et résultats : [runbook E](PHASE_E_WORKER_RUNBOOK.md).
 
-4 handlers enregistrés (`retention_purge`, `video_clips_purge`, `payments_expire`,
-`send_monthly_invoices`), **0 producteur**. La purge DPIA 30 j (`video_clips_purge`) promise par
-`video.service.ts:23` et `:206` **n'existe pas** → vidéos d'enfants conservées indéfiniment
-(enjeu loi 25-11).
+### E2. Le scheduler manquant — reproduit et implémenté, gate supervision restant
 
-- [ ] **ADR** (`docs/adr/`) pour choisir le mécanisme : (1) boucle interne + verrou
-      `SELECT … FOR UPDATE SKIP LOCKED` sur `scheduler_ticks` (recommandé, mono-réplica) ;
-      (2) cron externe/K8s CronJob ; (3) pg_cron (extension absente de l'image standard).
-- [ ] Fréquences à valider avec le métier : `video_clips_purge` quotidien ; `retention_purge`
-      quotidien ; `payments_expire` horaire ; `send_monthly_invoices` mensuel (1er, idempotent) ;
-      `jobs_reap_stale` toutes les 5 min.
-- [ ] **Idempotence vérifiée** pour chacun avant planification (`send_monthly_invoices` déjà
-      documenté idempotent et testé `phase11-hardening.api.test.mjs:144`).
-- [ ] **GATE** : test qui avance l'horloge (ou injecte des `scheduled_at` passés) et vérifie que
-      chaque job **s'exécute réellement**. + alerte si un job planifié n'a pas tourné depuis N périodes.
+Avant correction : quatre handlers, aucun producteur ; les données vidéo,
+paiements et rétention expirées n'étaient pas traitées automatiquement.
 
-### E3. Faux statut de notification (HIGH-6)
+- [x] ADR-013 : boucle interne + ticks persistés + `FOR UPDATE SKIP LOCKED`.
+      Migration **056**, table FORCE RLS interne, aucun EXECUTE PUBLIC.
+- [x] Fréquences **validées par le client** : purges quotidiennes **02 h Alger**,
+      paiements chaque heure pleine, reaper 5 min. **Mensuelle automatique OFF**,
+      protégée par CHECK : pas d'activation implicite ni d'enqueue sans tenant.
+- [x] Retard coalescé et pas de doublon avec deux producteurs concurrents ; lots
+      vidéo/paiements de 500 drainés jusqu'à épuisement (501e ligne reproduite).
+- [x] Test : ticks passés injectés, trois handlers réellement exécutés, fichiers
+      et lignes expirées supprimés, paiement failed, aucune mensualité produite.
+- [x] Santé PostgreSQL lisible sans worker ; retard après **2 périodes** depuis
+      le dernier succès (2 h/48 h), exporter et règles Prometheus câblés.
+- [x] **GATE supervision technique validé en CI** : promtool 2.53.0, vrais
+      exporter/Prometheus/Alertmanager, aucune présence de worker, réception locale,
+      SMTP de test et requêtes SMS/WhatsApp simulées, résolutions et perte exporter.
+      PR #44, commit `955b9cd`, run `34826565565`, 9/9 checks verts.
+- [ ] **Activation d'exploitation** : coordonnées/credentials SMTP/Twilio, modèle
+      WhatsApp approuvé et essai sur destinations réelles. Aucune livraison réelle
+      revendiquée ; pas de déploiement. Voir `PHASE_E2_ALERTING_RUNBOOK.md`.
 
-`main.ts:487` appelle `notif_queue_finish($1, true, 'PUSH_NOT_CONFIGURED_OR_NO_DEVICE')` — la
-fonction (042) ignore le motif quand `p_success=true` et met `failure_reason=NULL`. Le commentaire
-de `main.ts:314-318` promet l'inverse.
 
-- [ ] **Décider la sémantique** : trois états `sent` / `failed` / `skipped`, ou conserver
-      `failure_reason` même quand `p_success=true`. Le commentaire décrit l'option 2 (intention
-      d'origine). **Migration 054** (042 est immuable).
-- [ ] **Test** : notification sans device configuré → statut **et** `failure_reason` cohérents en base.
+### E3. Notification non livrée — corrigé selon la décision client
 
-### E4. Dates d'export (HIGH-3)
+- [x] Statuts existants conservés, `failure_reason` conservé même si succès de
+      traitement. **Migration 054** (042/043 intactes).
+- [x] Notification sans device : `sent` + `PUSH_NOT_CONFIGURED_OR_NO_DEVICE`.
+      Avant : motif NULL. **sent = queue traitée, pas preuve de push livré.**
 
-- [ ] `main.ts:267` et `:293` : `String(row.date).slice(0,10)` → `"Sun Sep 13"`. Corriger par
-      **parseur pg dédié** (`pg.types.setTypeParser(1082, v => v)` — le `DATE` arrive déjà en
-      `YYYY-MM-DD`) ou formatage explicite. ⚠️ `.toISOString().slice(0,10)` (correct ligne 95 pour
-      un `timestamptz`) **décale d'un jour** un `DATE` en TZ négatif.
-- [ ] **Politique unique** de timezone (UTC+1 vs UTC éparpillé), helper centralisé
-      (`packages/` ?) — voir aussi H3.
-- [ ] **Test** : export avec un `DATE` au 1er du mois → cellule `YYYY-MM-01`, testé avec `TZ`
-      négatif **et** positif. Vérifier `pdf.ts:68` (`Échéance : ${data.dueDate}`) qui consomme la ligne 95.
+### E4. Calendrier DATE / heures — corrigé dans le périmètre worker
 
-### E5. Facturation mensuelle ignore `start_date` (HIGH-7)
+- [x] OID1082 pg dédié → chaîne ISO ; plus de `String(Date).slice(0,10)` ni de
+      conversion en instant pour une échéance. Déplacement au jour précédent
+      effectivement reproduit en **TZ positif** dans le PDF (correction du libellé
+      initial de l'audit qui mentionnait le TZ négatif).
+- [x] Helper calendrier partagé (`packages/prod-config/src/calendar.ts`) : dates
+      réelles, année bissextile, pas d'année zéro PostgreSQL, bornes de mois ;
+      horaires de présence explicitement en `Africa/Algiers`.
+- [x] Vrais PDF/XLSX : DATE au premier du mois, échéance exacte, tests TZ positif
+      **et** négatif ; sessions SQL à fuseaux différents pour les heures.
+- [ ] Harmonisation des autres modules H3 : **pas revendiquée comme faite**.
 
-- [ ] Confirmer : `sendMonthlyInvoices` (`main.ts:116`) itère les contrats actifs sans regarder
-      `start_date` (0 occurrence dans `main.ts`).
-- [ ] **Règle métier à décider AVEC LE CLIENT** : prorata ? mois entier ? rien le premier mois ?
-      (même question pour le payroll — « payroll sans prorata »). Vérifier
-      [`docs/regulatory/`](regulatory/) (décret 19-253).
-- [ ] Implémenter le prorata si retenu, en cohérence avec les triggers d'intégrité financière (C04)
-      et l'immuabilité des factures payées.
-- [ ] **Test** : contrat démarrant le 15/09 → facture de septembre au prorata (ou nulle), pas un
-      mois plein ; contrat démarrant le 01/10 → rien en septembre.
+### E5. Facturation mensuelle — corrigé, automatique toujours désactivée
 
-### E6. Export date-simple bloqué en `pending`
+- [x] Reproduction : contrats commençant le 15/09 ou le 01/10 facturés en septembre.
+- [x] Décision client : **pas de facture pour un mois partiellement couvert** ;
+      contrat actif du premier au dernier jour inclus. Aucun prorata de paie décidé.
+- [x] Échéance par défaut en fin de mois ; payload manuel explicite conservé par
+      compatibilité (interprétation documentée, pas validation client additionnelle).
+- [x] Après preuve rouge : facture/lignes/enqueue PDF dans la même transaction ;
+      repas/transport non doublés dans la ligne de garde. Centimes et C04 conservés.
+- [x] Tests de contrats partiels/futurs, échéance, total des lignes, échec enqueue
+      annulant la facture, rejeu sans doublon et facture payée intacte.
 
-- [ ] Reproduire (probablement même famille de bug que E4) ; ajouter timeout/statut `failed`
-      explicite — un export bloqué doit être **visible**, pas silencieux.
+### E6. Export date-simple et échecs silencieux — corrigé
+
+- [x] Reproduit : `2026-09-01` devient `2026-09-01-01`, le job échoue mais le
+      rapport reste pending. Date simple corrigée en `[jour,jour]`, périodes
+      invalides/inversées refusées avant enqueue.
+- [x] **057** : projection des échecs terminaux (finish, reaper, timeout), reprise
+      support et réconciliation d'attente. Deadline handler **2 min** ; pending
+      **30 min** (maintenance + API tenant, lots bornés de 500).
+- [x] Publication sous bail verrouillé, chemin `{tenant}/exports/{id}/{lease}.xlsx`.
+      PUT tardif : ni publication après perte de bail ni écrasement d'une nouvelle
+      tentative. Un crash peut laisser un objet orphelin : lifecycle séparé requis.
+- [x] Tests API → worker → fichiers, stockage défaillant, vrai blocage SQL,
+      timeout visible, attente sans worker/tenant B intact, reprise et S3 simulé.
+
+Voir le [runbook E](PHASE_E_WORKER_RUNBOOK.md) pour les commandes, limites, preuves
+et rollback. **Implémentation locale ≠ déploiement ni gate supervision complet.**
 
 ---
 
@@ -206,46 +271,108 @@ de `main.ts:314-318` promet l'inverse.
 
 > Issue **#40**. Le plus gros chantier. Dépend de B (fait) et E.
 
-### F0. Diagnostic complet du contrat (avant d'écrire du code)
+### F0. Diagnostic du contrat — reproduit
 
-- [ ] **`device_id` absent du client** : `SyncPushDto.device_id` / `SyncPullDto.device_id` =
-      `@IsUUID()` requis ; `device_id` = 0 occurrence dans `apps/staff-mobile/lib` et
-      `apps/parent-mobile/lib` → 400 systématique. Confirmer en lisant
-      `apps/staff-mobile/lib/core/sync/sync_engine.dart`.
-- [ ] **Aucun enregistrement d'appareil** côté client (l'API a `POST /devices`) — sinon
-      `sync_cursors(device_id, organization_id)` référence un device inconnu.
-- [ ] **Curseur renvoyé en string** : `SyncPullDto.cursor` = `@IsInt() @Min(0)` → vérifier le type
-      renvoyé par `pull()` (JSON number vs string casse le parse Dart).
-- [ ] **Aucun émetteur d'événements `child`** : vérifier qui écrit dans `sync_changelog` (C02).
-      Si rien n'émet pour `child`, le pull renvoie un jeu vide — **pire** qu'une erreur visible.
+- [x] Staff sans device_id : push et pull HTTP **400** sur la vraie API.
+- [x] Aucun enregistrement côté client staff ; `/devices` renvoie `{device_id}`.
+- [x] Curseurs : push number, pull non vide string, pull vide number ; BIGINT pg.
+- [x] Création enfant HTTP 201, mais **aucun événement child** au pull.
+- [x] Nuance : pas de moteur de sync parent ; endpoints staff seulement, ne pas
+      déduire un 400 de sync parent d'une simple absence de chaîne dans son code.
+
+Diagnostic : `tests/diagnostics/sync-f0.mjs`, résultat synthétique versionné,
+[analyse F0](PHASE_F_SYNC_DIAGNOSTIC.md). Requêtes reconstruites depuis le Dart,
+**pas de client Dart exécuté**. Idempotence API vérifiée une fois les appareils
+correctement enregistrés. Curseur local non scopé et autres risques à reproduire.
 
 ### F1. Établir le contrat comme artefact de première classe
 
-- [ ] Spécifier le contrat dans `docs/architecture/` : shape exact requêtes/réponses, types JSON
-      précis (number vs string), codes d'erreur, sémantique du curseur, ordre des opérations.
-- [ ] Générer le client Dart depuis la spec (openapi-generator dart, ou générateur maison minimal
-      pour le module sync) ; **au minimum** un schéma JSON partagé `packages/sync-contract/` validé
-      des deux côtés.
+Artefact versionné livré : [contrat v1](architecture/sync-contract.md).
 
-### F2. Corriger le client Dart
+- [x] Enveloppes exactes, erreurs, types et limites : `packages/sync-contract/`.
+      Curseur string int64 partout ; payloads métier/projections restent F3.
+- [x] Générateur maison minimal : client réseau Dart et validateur API utilisés
+      par le gate ; `--check` interdit les dérives. **Le moteur Flutter est maintenant branché en F2.**
+- **Gate F1 deux côtés** : `scripts/check-sync-contract.mjs` doit réussir en CI :
+  vrai Dart → six requêtes sérialisées → schéma AJV + vrais DTO TypeScript,
+  corpus commun de 49 cas. Local sans SDK : `--node-only` explicitement partiel.
+  Résultat de la dernière exécution : consulter PR #44 ; aucun skip Dart autorisé
+  sur GitHub. Ce transport enregistreur n'est **pas** le gate F4.
 
-- [ ] `device_id` stable (UUID persisté localement ou issu de `POST /devices`) envoyé dans
-      **chaque** push/pull ; enregistrement avant la première sync.
-- [ ] Parser le curseur dans le bon type ; stocker/rejouer via Drift (`app_database.dart`).
-- [ ] Gérer le 400/401 explicitement (aujourd'hui l'échec de sync est probablement silencieux).
+### F2. Client Dart/Drift — implémenté, gate Flutter strict
+
+Voir [runbook F2](PHASE_F2_CLIENT_RUNBOOK.md) pour les preuves avant correction,
+le rollback et les limites de projection. Le résultat du gate réel est celui de
+la dernière CI de la PR #44, pas celui du simple check historique `flutter-check`.
+
+- [x] Client réseau généré branché via SyncClient ; enregistrement avant toute
+      sync, fingerprint et device persistés ; retry serveur idempotent par scope.
+- [x] Namespace `(tenant, utilisateur)` dans fichiers Drift distincts ; ancien
+      fichier global préservé mais jamais réaffecté automatiquement.
+- [x] Curseur texte et application de page dans une transaction Drift ; séquence
+      locale persistée atomiquement avec la file ; aucune adoption du curseur push.
+- [x] 400/401/403 visibles, retries automatiques bloqués ; pending conservés.
+- [x] Garde single-flight avant connectivité, listeners/timers annulés ; client
+      API à token fixe par session, réponses tardives ignorées à la clôture.
+- [x] Pré-requis serveur : propriétaire du device exigé en push/pull et révocation
+      self-service ; 7/7 tests API après reproductions 1/6 puis 6/7.
+- **Gate F2** : vrai Flutter + Drift natif, tests de reprise/isolation/rollback/ACK,
+  puis analyse ; Flutter 3.47.1 et `pub get --enforce-lockfile`. Aucun SDK local
+  ni APK release revendiqué. Les tests de transport initiaux ont échoué **0/2**
+  sur le vrai Flutter avant correction ; voir les runs archivés dans le runbook.
+- **Ne pas déployer encore** : G/H2/H3 et Android release restent distincts.
+  Journal/media sont désormais des projections de métadonnées explicites (pas de
+  cache des dossiers/pièces jointes) ; validation du dernier HEAD obligatoire.
 
 ### F3. Corriger le serveur si nécessaire
 
-- [ ] Émetteurs d'événements pour les entités manquantes (`child`…) ; type de retour du curseur
-      cohérent avec la spec ; contrainte d'intégrité sur `device_id` (FK vers `devices` ?).
+- [x] Curseur cohérent string int64 : DTO sans Number, SQL sans cast int32,
+      pull vide/non vide et push ; erreurs 400 avant SQL. Suite `phase29` **26/26**.
+- [x] **F3b enfants** : producteur SQL transactionnel, projection minimale de 13 champs,
+      bootstrap initial et tombstones ; migration 059. API : 3/10 avant → 13/13 enrichis.
+      Flutter : 23/31 avant correction (8 vrais rouges), gate strict du dernier HEAD requis.
+      Voir [runbook F3b](PHASE_F3B_CHILDREN_RUNBOOK.md), limites et rollback.
+      La batterie contient désormais 35 suites/contrôles.
+- [x] **F3c publication** : 2/8 avant → 8/8 après ; migration 060, allocation après
+      verrou transactionnel par tenant (default BIGSERIAL retiré), journal append-only
+      pour les écrivains applicatifs. Suite enrichie 10/10 avec les projections présence.
+      [Runbook F3c/F4](PHASE_F3C_F4_RUNBOOK.md) ; batterie portée à 36 suites/contrôles.
+- [x] Scope utilisateur du device vérifié côté API en F2 ; FK simples depuis 006.
+- [x] Intégrité composite SQL : migration **061**, device/membership, opération/device/
+      propriétaire, curseur/tenant, origine/tenant. Reproduction `phase34` **1/10 → 10/10**
+      avec les deux défauts DATE journal. Contraintes validées, aucun effacement/cascade.
+- [x] Projections `daily_log` et `media` : métadonnées explicites, tous les types
+      actuellement produits, Drift v3 dans le même fichier scopé, migration v2 testée.
+      DATE journal corrigée côté publication/retour création ; anciennes publications
+      non réparées automatiquement. [Runbook clôture F/H1](PHASE_F_COMPLETION_H1_RUNBOOK.md).
+- [x] **F3a conflits/résultats** : 0/15 avant correction → 18/18 ciblés après ;
+      contrôle de version avant mutation, résultat persisté/rejoué, ACK après COMMIT,
+      retry concurrent sérialisé et rollback sur INTERNAL_ERROR. Migration additive 058.
+      Voir [runbook F3a](PHASE_F3A_OUTCOMES_RUNBOOK.md) ; batterie désormais 34 suites,
+      résultat complet/CI à consulter sur le dernier HEAD de la PR #44.
+      **F3 implémenté** pour les quatre types actuellement produits ; toute projection
+      inconnue/malformée reste bloquante atomiquement. Aucun contenu privé ajouté.
 
 ### F4. GATE — test bout-à-bout (le vrai livrable)
 
-- [ ] Intégration avec le **vrai client Dart contre la vraie API** : enregistrement device → push →
-      pull depuis un 2e appareil → curseur rejoué sans doublon → conflit conforme à la spec.
-- [ ] À défaut de Dart en CI : **test de contrat** (fixtures JSON réelles du client Dart validées
-      contre les DTO TypeScript).
-- [ ] **GATE** : la sync est démontrée fonctionnelle, pas seulement compilée.
+- [x] Gate réel implémenté et obligatoire en CI : **Flutter/SyncEngine/Drift/Dio → API**,
+      deux appareils, push/pull, rejeu, conflit, reprise disque et changement de tenant.
+      Pas de FakeApi ni de fixtures réseau reconstituées en Node. Inspection PG indépendante.
+- **Preuve avant correction** : 3/5 tests réels passent ; date de présence timestamp
+      au lieu de DATE, version miroir 0 au lieu de 1. Projections corrigées ; résultat
+      final des cinq tests/annotations `F4 Flutter API passed` à consulter dans la PR #44.
+- Le fallback de contrat F1 est conservé mais n'est **plus substitué** au parcours réel.
+- [x] Gate étendu aux **quatre projections produites** : sept tests réels, neuf types
+      journal, photos HTTP/sync et document sans enfant, reprise et isolation. Baseline
+      `33ab34e` : **4/7**, journal/media/reprise rouges avant correctif. Inspection PG
+      indépendante : 11 opérations, 9 événements journal, 3 médias, pas de doublons.
+      Batterie portée à **37 suites/contrôles** ; résultat de clôture du **dernier HEAD**
+      dans les checks PR #44 (`F4 Flutter API passed` requis, pas le seul job Flutter).
+      **7/7 + PG acquis sur d9d2720**, run `34855762767` ; 38/38 local. Le gate
+      global de ce run reste rouge pour les nouveaux défauts d'image H1 ci-dessous.
+- [ ] **Qualification de déploiement / Android APK release** : distincte de F fonctionnelle.
+      Journal/media sont des métadonnées, pas un téléchargement offline des dossiers.
+      G/H et revue confidentialité/stockage restent nécessaires avant déploiement.
 
 ---
 
@@ -255,38 +382,101 @@ de `main.ts:314-318` promet l'inverse.
 
 ### G1. Authentification
 
-- [ ] **`trust proxy`** : `app.set('trust proxy', 1)` dans `app.factory.ts`/`main.ts` (1 seul saut,
-      nginx devant ; **jamais** `true`). Sans ça, `rate-limit.guard.ts:25` voit l'IP de nginx pour
-      tout le monde → le premier rate-limité bloque l'auth de **tous**. Configurer nginx en conséquence.
-- [ ] **PIN/OTP parent sans check de statut** : compte suspendu obtient une session. Ajouter le
-      contrôle de statut dans le chemin OTP (`auth.service.ts:186-232`) **et** PIN.
-- [ ] **Compteurs de lockout non atomiques** : `UPDATE … SET failed_attempts = failed_attempts + 1
-      RETURNING` (une requête) — sinon le lockout 5 échecs/15 min est contournable en concurrence.
-- [ ] **Énumération de comptes** : uniformiser les réponses (401 générique), vérifier que le
-      rate-limit couvre la route.
-- [ ] **Tests** : rate-limit avec 2 IP clientes derrière proxy simulé (2 limites séparées) ; login
-      compte suspendu → 403 ; 10 échecs concurrents → lockout effectif.
+- [x] **G1a — implémentation reproduite**, CI **9/9** sur `68a187d` :
+      `trust proxy=1` (jamais true), nginx écrase XFF ; deux clients derrière un
+      proxy HTTP réel gardent des limites séparées. API impérativement privée derrière
+      un seul ingress ; démarrage nginx/topologie publique à qualifier avant déploiement.
+- [x] PIN/OTP : statut courant et verrou avant émission ; active/pending conservés
+      pour l'onboarding, suspended refusé 403. Parent supprimé refusé sans session.
+- [x] Compteur partagé mot de passe/PIN : UPDATE atomique, fenêtre renouvelée après
+      expiration du verrou, pas de prolongation par les échecs pendant un verrou.
+      Barrière PG : dix échecs donnaient un compteur de 1 avant correction.
+- [x] Mot de passe faux : 401 générique avant statut/verrou ; comparaison bcrypt pour
+      les inconnus, sans promesse de temps réseau constant. Routes déjà rate-limitées.
+- [x] OTP : consommation conditionnelle, une seule session pour un code vérifié en
+      concurrence ; coût bcrypt fourni par environnement converti en nombre.
+- [x] Ciblé HTTP/PG **10/26 → 26/26**, incluant 403 suspendu, lockout concurrent,
+      PIN, OTP et deux IP derrière proxy. Runner 46 suites et notice G1 obligatoire.
+      [Runbook G1](PHASE_G1_AUTH_RUNBOOK.md), CI **34913991948**, database
+      **104207497079**, notice G1 26 et H2/H1/F2/F4 confirmées en PR #44.
+- [x] **G1b refresh** : concurrence de rotation et réutilisation, état de session
+      périmé après attente, rotation partielle sur panne reproduits. Transaction
+      avec verrous compte→session, remplacement atomique ; révocation générale
+      committée avant erreur de réutilisation. **16/24 → 24/24**, HTTP/PG réels,
+      dont panne de stockage avec rollback et cas positifs client conservés.
+      Politique existante de réutilisation maintenue ; **les JWT d'accès déjà émis
+      ne sont pas invalidés globalement**. Strict **49/49**, CI **34934147034**, **9/9**
+      sur `cec88c9`, database **104268359780**, G1b=24 confirmé en PR #44. [Runbook G1b](PHASE_G1B_REFRESH_RUNBOOK.md).
+- [x] **G1c invitations / H2 exposition** : acceptation unique d'un compte pending,
+      tenant du lien conservé, profil/membership/session/audit atomiques ; expiration
+      revérifiée après attente. Créateur courant et périmètre tenant vérifiés.
+      **11/38 → 38/38**, dont courses et pannes PostgreSQL réelles.
+      Token remis uniquement en development ; transport absent → 503 avant écriture
+      hors development, jamais de faux envoi. Strict **50/50**, CI **34938519200**,
+      **9/9** sur `00a4831`, database **104281615425**, six notices vérifiées en PR #44. [Runbook G1c](PHASE_G1C_INVITATIONS_RUNBOOK.md).
+- [ ] **Livraison/réinvitation** : transport réel non implémenté, nonce/version pour
+      invalider un lien réémis absent, émission concurrente, compte déjà actif et
+      références site/room non qualifiés. Aucun ancien token exposé invalidé par G1c.
+- [x] **G1d gestion TOTP (périmètre local reproduit)** : secret activé non divulgué,
+      compte courant relu sous verrou, configuration/confirmation/annulation sérialisées,
+      audit minimal atomique. Compteur partagé des preuves invalides, expiration après
+      attente et limites HTTP réelles. **7/44 → 44/44**, dont deux cas RFC déjà verts ;
+      strict **51/51**, CI **34966272565**, **9/9** sur `4c36ad6`,
+      database **104371358901**, six notices vérifiées en PR #44.
+      [Runbook G1d](PHASE_G1D_TOTP_RUNBOOK.md).
+- [ ] **Suite MFA** : chiffrement du secret au repos, anti-rejeu TOTP persistant,
+      preuve récente avant préparation, récupération/rotation et obligation MFA sur
+      tous les canaux PIN/OTP parent non qualifiés. Secrets déjà divulgués non invalidés.
+- [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, autres frontières invitations,
+      MFA ci-dessus et demandes OTP concurrentes ; propriété/réassociation device_id et autres
+      courses refresh vs login/logout/mot de passe/révocations après vérification.
+      G1a/G1b/G1c/G1d ne ferment pas ces frontières.
+      Pas de qualification globale de l'auth ni de topologie de déploiement.
 
 ### G2. RLS
 
-- [ ] **`organization_id IS NULL OR …`** sur `feature_flags`/`background_jobs`/`outbox` :
-      reproduire (n'importe quel tenant peut écrire/supprimer des lignes globales ?), puis décider :
-      tables non tenantées (retirer le `GRANT` en écriture à l'app) **ou** RLS stricte.
-- [ ] **029 vs 018** : lire les deux migrations ; la 029 réintroduit-elle le pattern GUC que la 018
-      corrigeait ? Correctif éventuel en **055** (001–052 immuables).
-- [ ] **Race trigger 023** : pas de `FOR UPDATE` sur `payment` → deux allocations concurrentes
-      peuvent dépasser le montant. Reproduire avec 2 transactions parallèles, corriger en **055**.
-- [ ] **Tests** : les 3 scénarios dans `tests/tenant-isolation/`, exécutés avec le rôle `creche_app`
-      de prod (dépend de D2).
+- [x] **Lignes globales** : DML ordinaires hors tenant reproduits sur feature_flags,
+      background_jobs et outbox_events ; migration additive **055** sépare SELECT
+      (lectures globales conservées) et écritures strictement tenantées. Helpers
+      privilégiés worker/support conservés ; ce n'est pas une suppression de toute
+      capacité globale de l'application.
+- [x] **029 vs 018** : régression réelle du cast GUC ; les trois policies privacy
+      utilisent désormais app_tenant_id(), résultats vides après COMMIT/espaces au
+      lieu de 22P02. Contexte A/B et refus étrangers conservés.
+- [x] **Race trigger 023** : deux transactions allouaient 70+70 sur un paiement de
+      100 (140 committé) ; verrou du paiement FOR UPDATE dans **055**. 40+40 autorisé,
+      dépassement séquentiel déjà refusé. Aucun fichier de migration existant modifié.
+- [x] **Tests ciblés réels creche_app** : **52/113 → 113/113**, migration en place +
+      répétition sans dérive, snapshots de sept tables conservés ; installation
+      fraîche également verte. Strict local **47/47**, CI **34927109368**, **9/9** sur
+      `babbbba`, database **104247378113**, G1=26/G2=113 confirmés en PR #44.
+      [Runbook G2](PHASE_G2_RLS_INTEGRITY_RUNBOOK.md).
+- [ ] **Frontières restantes** : autorités des helpers privilégiés, UPDATE/DELETE
+      d'allocations, intégrité composite financière et anomalies historiques ne sont
+      pas qualifiées par le correctif des INSERT concurrents. Ne pas déclarer
+      l'intégrité financière globale ni la production closes.
 
 ### G3. Intégrité financière et conformité
 
-- [ ] Vérifier `jobs_finish($1, true, …)` systématiquement après le handler (`main.ts:349`) ;
-      confirmer que le drain (E3) est la seule voie et que `send_parent_notification` ne marque pas
-      « sent » trop tôt.
+- [x] Chaîne runtime relue contre E1/E3/H2b : handler attendu puis
+      `jobs_finish_leased` conditionné au bail ; send_parent_notification ne modifie
+      pas la file, notif_queue_finish appelé par le drain uniquement dans le runtime.
+      Contrats existants des suites 27/28/36 conservés : **sent = traité, pas livré**,
+      motif conservé (décision E). Pas de nouveau correctif ni de qualification
+      fournisseur réel ou des pouvoirs SQL privilégiés. Voir runbook G3a.
 - [ ] `next_org_sequence` non hashé → numéros de facture devinables. Décider : séquentiel est
       souvent **légalement requis** → si oui, **ADR de décision** ; sinon composant non devinable.
-- [ ] DPIA auto-approuvable sans audit : séparation des rôles (approbateur ≠ déclarant).
+- [x] **G3a DPIA** : auto-approbation refusée, compte/membership/rôle actuels
+      contrôlés pour les deux écritures ; première approbation conservée sous verrou,
+      audit minimal dans la même transaction. **11/33 → 33/33**, dont concurrence
+      réelle et panne de stockage d'audit avec rollback. Second responsable dans
+      les fixtures historiques ; aucun bypass des approbations positives.
+      Strict **48/48**, CI **34931752882**, **9/9** sur `74b24c2`, database
+      **104261231618**, G3=33 et H2/H1/F2/F4 confirmés en PR #44.
+      [Runbook G3a](PHASE_G3_DPIA_RUNBOOK.md).
+- [ ] Historique des décisions, workflow complet de renouvellement, indépendance
+      réelle des personnes/impersonation, révocation après contrôle et audit global
+      restent hors qualification G3a. Aucune ancienne décision modifiée.
 
 ---
 
@@ -294,31 +484,130 @@ de `main.ts:314-318` promet l'inverse.
 
 > Issue **#42**. Staging doit marcher **avant** le reste de H (il sert à valider tout le reste).
 
-### H1. Réparer staging
+### H1. Réparer staging et dev
 
-- [ ] `docker-compose.staging.yml:34-40` : le service `migrate` monte `scripts/`,
-      `infrastructure/database`, `package.json` — **pas `tests/`** — puis exécute
-      `node tests/tenant-isolation/schema-check.mjs` → échec → api/worker jamais lancés.
-      Option préférée : **sortir `schema-check.mjs` de `tests/` vers `scripts/`** (outil de
-      déploiement, pas un test). Vérifier `prod.yml` et `dev.yml`.
-- [ ] **GATE** : `docker compose -f docker-compose.staging.yml up` → api et worker healthy.
-- [ ] Job CI qui **démarre réellement** le compose staging (ce bug est invisible tant que personne
-      ne lance staging).
+- [x] Finding « tests non monté » : déjà corrigé par **c5cfab4** (D), dans staging
+      et production. Ne pas annoncer une nouvelle réparation fictive. Le chemin
+      `tests/tenant-isolation/schema-check.mjs` reste compatible avec les appels livrés.
+- [x] Nouveau défaut **reproduit en vrai** : pull `minio/minio:latest` refusé, runs
+      `34854334290` / `34854690262`. Image Quay versionnée + digest dans staging/prod/dev.
+      Contrat structurel : **8/11 → 11/11** ; le téléchargement reste vérifié en CI.
+- [x] Défauts runtime reproduits après restauration de MinIO : presigner AWS
+      absent après prune, puis bcryptjs non hoisté absent de l'image. Dépendances
+      API runtime déclarées, modules du workspace copiés ; garde `npm ci --omit=dev`
+      isolé rouge → vert. Lock : métadonnées uniquement, aucune version/intégrité changée.
+- [x] **GATE réel implémenté et obligatoire** dans le runner CI existant, aucun workflow
+      modifié : build images livrées → vrai compose staging → bootstrap/migrate/seed/
+      schema-check → HTTP health API + job worker réellement terminé → destruction
+      des volumes synthétiques. Un échec H1 garde le gate global rouge. Résultat du
+      dernier HEAD : notice `H1 staging passed` dans PR #44, pas un healthcheck simulé.
+- [x] Défauts dev reproduits : contextes hors monorepo, Dockerfile web absent,
+      npm install, montages masquants, identité migrateur refusée (`MIGRATION_ROLE_UNSAFE`),
+      proxy Vite HTTP 500 et Host Arena 403. Correctifs : npm ci racine, bootstrap
+      rôles séparés DEV_*, sources RO, proxy serveur vers `api:3000`, allowlist ciblée.
+      **9/9** nouveaux tests verts ; démarrage réel local Nest/Vite/ts-node et job worker
+      vérifiés, migration/seed/schema-check verts sur PostgreSQL jetable.
+- [x] **Qualification Docker dev confirmée en CI sur `0870317`** : gate `--dev` ajouté au runner
+      existant, sans workflow. Exige images livrées, bootstrap, migration/seed/schema-check,
+      vrai HTTP API, proxy/HTML web et job worker ; aucun override des commandes/montages.
+      CI **34868421539**, check **104057998864**, succès **21m50s**, **9/9 checks** :
+      notices `H1 dev passed`, `H1 staging passed`, F2 et F4 vérifiées. Docker absent
+      localement : cette preuve provient de la CI, pas des seuls tests locaux.
+      [Runbook dev](PHASE_H1_DEV_RUNBOOK.md) : lancement neuf, secrets locaux, rebuild,
+      worker sans watch, anciens volumes conservés. G/H2/H3 restent ouverts.
+- [ ] Revue de maintien/sécurité du stockage requise avant déploiement ; le pin MinIO
+      n'est pas une qualification CVE ni un choix définitif de fournisseur.
+- Voir [runbook F/H1](PHASE_F_COMPLETION_H1_RUNBOOK.md). G reste ouvert ; ce chantier
+      synthétique n'autorise aucun déploiement réel, ni à sauter H2/H3.
 
 ### H2. MEDIUM (par grappes homogènes)
 
-- [ ] **Confidentialité** : push sans check `can_view_journal` ; exports privacy incluant les notes
-      privées du journal ; accountant exportant des dossiers médicaux → appliquer la **matrice
-      d'autorisation** aux modules `journal`, `exports`, `privacy`, `notifications` (un seul chantier).
+- [ ] **Confidentialité — grappe commune en cours**, pas clôturée :
+  - [x] **H2a** : publication journal/push/WhatsApp/inbox et exports de droits corrigés
+        après reproduction réelle HTTP + PostgreSQL : **5/21 → 21/21** scénarios.
+        Opérateurs privacy limités à director/super_admin ; autres utilisateurs scopés
+        à leurs demandes et liens actuels. Notes privées/masquées exclues, projection
+        enfant explicite, droits journal/santé/factures recalculés à chaque export.
+        Le finding Excel médical est précisé : déjà refusé par `/exports`, fuite réelle
+        via `/privacy/requests/:id/export`. Exports financiers du comptable conservés.
+        [Matrice](architecture/authorization-matrix.md) et [runbook H2](PHASE_H2_CONFIDENTIALITY_RUNBOOK.md).
+  - [x] **H2b notifications** : prédicat partagé producteur/worker/inbox, droits
+        revalidés après claim et avant fournisseur, inbox filtrée avant LIMIT et
+        mark-read protégé. Anciennes queues WhatsApp sans références refusées avec
+        motif conservé, sans purge/retry automatique. **13/50 → 50/50** scénarios
+        réels API/PG/worker avec transports HTTP locaux, dont révocation après claim.
+        [Runbook H2b](PHASE_H2B_NOTIFICATION_RUNBOOK.md). Pas de qualification des
+        fournisseurs réels ni de rappel garanti des messages déjà en vol/livrés.
+  - [x] **H2c portail parent — accès enfant courants** : 13 routes protégées par
+        un prédicat commun de lien gardien/enfant, utilisateur et membership actuels.
+        Droits journal/santé/factures distincts, consentements liés conservés.
+        **107/156 → 156/156** scénarios HTTP/PG, dont écritures refusées sans mutation.
+        Les refus déjà effectifs sont des non-régressions, pas de nouveaux findings.
+        [Runbook H2c](PHASE_H2C_PARENT_ACCESS_RUNBOOK.md) ; résultat complet et CI
+        du SHA publié à vérifier en PR #44. Ni rappel d'URL signée ni révocation JWT globale.
+  - [x] **H2d projections financières parent** : listes/détails factures et reçus
+        à champs explicites, sans notes internes ni réponse brute passerelle ;
+        `pdf_ready` remplace la clé PDF dans le JSON, route PDF protégée conservée.
+        **32/44 → 44/44** HTTP/PG, dont vrai adaptateur de paiement avec initialisation
+        HTTP signée vers un fournisseur loopback. Accès comptable et données internes en base conservés.
+        [Runbook H2d](PHASE_H2D_FINANCIAL_PROJECTION_RUNBOOK.md) ; pas de qualification
+        SATIM réelle ni purge d'historique. Gates complets/CI à vérifier en PR #44.
+  - [x] **H2e journal/santé** : règle de visibilité partagée fil parent/nouveaux
+        exports de droits ; `temperature` et `health_observation` nécessitent santé
+        en plus du journal, avec filtrage avant LIMIT. Valeurs/événements autorisés
+        conservés, sources et snapshots antérieurs intacts. **28/36 → 36/36** HTTP/PG,
+        dont publication HTTP de 101 événements pour le test de pagination.
+        [Runbook H2e](PHASE_H2E_JOURNAL_HEALTH_RUNBOOK.md) ; gates complets/CI du SHA
+        publié à vérifier en PR #44. Pas de classification de tout texte libre ni de révocation JWT globale.
+  - [x] **H2f acteur des demandes privacy** : utilisateur agissant actif/non supprimé
+        et membership présente/active avant création, liste, détail, export et résolution.
+        Contrôle aussi pour les opérateurs, sans bloquer le traitement d'un demandeur
+        inactif par un opérateur actif. Historique personnel d'un demandeur actif conservé.
+        Reproduction finale **68/156 → 156/156**, **43/43 suites strictes** locales.
+        [Runbook H2f](PHASE_H2F_PRIVACY_ACTOR_RUNBOOK.md) ; CI **34903495839**,
+        **9/9 checks** sur `5814ed0`, database **104174698221** confirmé. Pas de revalidation des rôles ni révocation JWT globale (G).
+  - [x] **H2g consentements photo parent** : helper commun publication/nouvelle URL,
+        primaire inclus et participants dédupliqués, déclaration/flag vérifiés,
+        enfants du tenant non supprimés et derniers consentements accordés/non révoqués.
+        **35/58 → 58/58** HTTP/PG ; photos autorisées, retrait de visibilité et accès
+        interne staff conservés. Métadonnées historiques incohérentes refusées sans purge.
+        [Runbook H2g](PHASE_H2G_PHOTO_CONSENT_RUNBOOK.md) ; **44/44 suites strictes**
+        locales, rejeu final frais confirmé ; CI **34909569724**, **9/9** sur `361092c`,
+        notice H2g=58 et H1/F2/F4 confirmées. Ni analyse des octets, ni rappel des URLs déjà signées,
+        ni qualification du stockage réel ou de nouvelles politiques document/MIME.
+  - [ ] **Suite confidentialité** : autres projections santé/journal/médias et contrôles de gardien,
+        snapshots privacy historiques et routes registre/DPIA/violations. Révocation
+        globale des tokens et autres routes toujours à traiter en G. Pas de purge
+        masquante ; la grappe et l'aptitude à la production ne sont pas clôturées.
 - [ ] **`anonymize.sql`** : laisse `guardians`/`staff`/`messages`/`sessions` intacts (RGPD/loi 25-11).
-- [ ] **`/metrics` public** + totaux cross-tenant + format Prometheus invalide → authentifier (ou
-      restreindre au réseau interne) et valider le format avec un parseur Prometheus réel.
+- [x] **H2j `/metrics` accès et format** : administrateur plateforme courant requis,
+      pas d'accès anonyme/tenant ; labels échappés et routes inconnues regroupées,
+      histogrammes complets/ordonnés. **6/26 → 26/26**, HTTP/PG et parseur officiel
+      prometheus-client pin/hash vérifié. Runner **53**, strict/CI à confirmer en PR #44.
+      [Runbook H2j](PHASE_H2J_METRICS_RUNBOOK.md).
+- [ ] **Collecte API d'exploitation** : le scraper anonyme reçoit désormais 401.
+      Credential de service limité, provisionnement/rotation et ingestion réelle
+      restent à qualifier ; les JWT admin expirants ne sont pas un montage automatique.
+      Collecte E2 du SQL exporter distincte, pas de repli public pour la rétablir.
 - [ ] **OpenAPI** : « prétendu auto-généré, aucun swagger, < 10 % des endpoints » — vérifier ;
       soit générer réellement (prérequis F1), soit arrêter de le prétendre dans la doc.
-- [ ] **`STORAGE_BACKEND`** : défaut divergent config prod vs runtime → aligner, échouer au
-      démarrage si ambigu.
-- [ ] **Invitation token affiché sans garde `NODE_ENV`** → n'afficher qu'en `development`.
-- [ ] **Payroll sans prorata** → voir E5 (même règle métier).
+- [x] **H2i `STORAGE_BACKEND` — sélection et bootstrap** : écart reproduit et sélecteur
+      commun garde/API/worker ; backend explicite en production, défaut s3 conservé
+      ailleurs, valeurs inconnues/vide refusées. S3 sélectionné : credentials absents/
+      blancs/défauts refusés ; local : chemin absolu explicite non égal au défaut.
+      **14/48 → 48/48**, vrais entry points et rôle PG, I/O local et S3 loopback.
+      Runner **52 suites**, strict/CI à confirmer en PR #44.
+      [Runbook H2i](PHASE_H2I_STORAGE_SELECTION_RUNBOOK.md).
+- [ ] **Suite stockage** : média/signature toujours S3 même si PDF/exports locaux ;
+      configuration de ce cas, fournisseur réel, permissions/durabilité des volumes,
+      chiffrement et références historiques non qualifiés par H2i. Pas d'unification
+      implicite de tous les médias sur le backend local.
+- [x] **Invitation token hors development** : G1c, API réelle dans development/test/
+      staging/production/environnement absent ; seul development+provider none permet
+      la remise simulée. Ailleurs 503 avant écritures, car aucun transport réel n'est
+      livré. Défaut reproduit puis corrigé, matrice commune **11/38 → 38/38**.
+      Le gate de livraison reste ouvert : SMTP ANPDP ≠ invitations.
+- [ ] **Payroll sans prorata** : décision client encore nécessaire ; la règle E5 des contrats de garde ne se transpose pas implicitement à la paie.
 - [ ] **Reproductibilité du lockfile** : `pnpm-workspace.yaml` présent alors que la CI fait `npm ci` ;
       `npm install` refuse de re-résoudre même face à une contradiction. Uniformiser sur **un seul**
       gestionnaire ; vérifier qu'un `npm ci` sur clone vierge redonne exactement l'arbre committé.
@@ -326,8 +615,14 @@ de `main.ts:314-318` promet l'inverse.
       (platform-express ne déclare pas body-parser) ; `express.body-parser: 1.20.8` force un
       downgrade majeur (Express 5.2.1 veut `^2.2.1`) — c'est lui qui avait introduit `qs` 6.15.3.
       Décider : supprimer les deux (état naturel : body-parser 2.3.0 + qs 6.16.0) ou documenter le pin.
-- [ ] **`staff_documents.storage_key`** (`StaffService.createDocument`) : même défaut que C3
-      (pas de préfixe tenant) — appliquer la même garde.
+- [x] **H2h `staff_documents.storage_key`** : garde de préfixe tenant C3 partagée
+      avec les médias, après vérification du profil sous RLS et avant INSERT/audit.
+      Reproduction HTTP/PG **16/32 → 32/32** ; créations et audits refusés inchangés,
+      rôles/listes minimisées conservés. Une partie des anciennes erreurs 500 était
+      déjà bloquée par 049, pas une nouvelle fuite. [Runbook H2h](PHASE_H2H_STAFF_DOCUMENT_RUNBOOK.md).
+      H2h confirmé : **45/45** local, **9/9** CI **34911630478** sur `6e32830`,
+      database **104200182829**, H2h=32 et H1/F2/F4 relus.
+      Ni téléchargement d'objet démontré, ni réécriture des références historiques.
 - [ ] **Les 44 routes sans `@Roles`/`@Public`** (inventaire `npm run check:routes-inventory`) :
       revue module par module + justification écrite pour chaque route self-service conservée sans garde.
 
@@ -338,7 +633,7 @@ de `main.ts:314-318` promet l'inverse.
       manquant est un défaut fonctionnel pour le marché cible (priorité haute **dans** LOW).
 - [ ] Test parent-mobile = template compteur qui ne compile pas → remplacer par un vrai widget test
       (un test qui ne compile pas est pire qu'aucun test).
-- [ ] Timezone UTC+1 vs UTC éparpillé → traiter avec E4.
+- [ ] Timezone UTC+1 vs UTC éparpillé : E4 fixe worker/exports/factures ; auditer et harmoniser les autres modules séparément.
 - [ ] `flutter.zip` 142 MB + SDK hors du dépôt (vérifier `.gitignore`) ; jamais committer un SDK.
 
 ---
@@ -374,10 +669,11 @@ de `main.ts:314-318` promet l'inverse.
 
 | Migration | Objet | Phase |
 |---|---|---|
-| `053_jobs_reap_stale.sql` | reaper de jobs `processing` orphelins | E1 |
-| `054_notif_queue_finish_fix.sql` | conserver `failure_reason` / état « non délivré » | E3 |
-| `055_rls_and_race_fixes.sql` | pattern GUC (régression 029 vs 018) + `FOR UPDATE` trigger 023 | G2 |
-| `056_scheduler.sql` | table/verrou de scheduler si option (1) retenue | E2 |
+| `053_jobs_reap_stale.sql` | **créée** : reaper, baux et heartbeat de jobs orphelins | E1 |
+| `054_notif_queue_finish_fix.sql` | **créée** : conserver le motif, contrat de statut inchangé | E3 |
+| `055_rls_and_race_fixes.sql` | **créée** : DML global strict, GUC 029 robuste, verrou payment du trigger 023 | G2 |
+| `056_scheduler.sql` | **créée** : ticks, coordination, 3 producteurs et santé | E2 |
+| `057_export_lifecycle.sql` | **créée** : échecs, délais et reprise des exports | E6 |
 
 ### Annexe 2 — Issues GitHub
 
@@ -401,7 +697,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (29 suites) — gate local équivalent au job CI database
+# Batterie complète (53 suites/contrôles après H2j) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

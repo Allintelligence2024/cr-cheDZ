@@ -23,7 +23,7 @@ import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
-import { appUrl, ensureAppRole } from './helpers.mjs';
+import { APP_TEST_ROLE, appUrl, ensureAppRole } from './helpers.mjs';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const failures = [];
@@ -213,8 +213,8 @@ const main = async () => {
 
     // ── 11. Rôle NOBYPASSRLS (preuve) ───────────────────────────────────────
     console.log('\n11) Rôle NOBYPASSRLS');
-    const roleCheck = await db.query(`SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname='creche_app_test'`);
-    ok('API connectée en creche_app_test NOBYPASSRLS', roleCheck.rows[0]?.rolsuper === false && roleCheck.rows[0]?.rolbypassrls === false, JSON.stringify(roleCheck.rows[0]));
+    const roleCheck = await db.query(`SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname=$1`, [APP_TEST_ROLE]);
+    ok(`API connectée en ${APP_TEST_ROLE} NOBYPASSRLS`, roleCheck.rows[0]?.rolsuper === false && roleCheck.rows[0]?.rolbypassrls === false, JSON.stringify(roleCheck.rows[0]));
     const appConn = new pg.Client({ connectionString: appUrl() });
     await appConn.connect();
     try {
@@ -238,7 +238,6 @@ const main = async () => {
       await db.query(`DELETE FROM otp_codes WHERE target IN ($1,$2,$3)`, [phoneA, phoneB, phoneC]);
       await db.query(`DELETE FROM sync_operations WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
       await db.query(`DELETE FROM sync_cursors WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
-      await db.query(`DELETE FROM sync_changelog WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
       await db.query(`DELETE FROM media_access_logs WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
       await db.query(`DELETE FROM media_assets WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
       await db.query(`DELETE FROM notification_queue WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
@@ -258,6 +257,7 @@ const main = async () => {
       await db.query(`DELETE FROM room_moves WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
       await db.query(`DELETE FROM child_status_history WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
       await db.query(`DELETE FROM children WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
+      await db.query(`DELETE FROM sync_changelog WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
       await db.query(`DELETE FROM guardians WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
       await db.query(`DELETE FROM org_sequences WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);
       await db.query(`DELETE FROM memberships WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p7-%')`);

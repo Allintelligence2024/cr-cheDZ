@@ -1,10 +1,13 @@
+import { isAbsolute, resolve } from 'node:path';
+import { resolveStorageBackend, type StorageBackend } from './storage';
+
 /**
  * Garde de configuration de production (MISSION P1 — feat(config)).
  *
  * Module PARTAGÉ par l'API (`apps/api/src/main.ts`) et le worker
  * (`apps/worker/src/main.ts`) : exécuté au bootstrap UNIQUEMENT lorsque
- * NODE_ENV=production. En test/development la garde est INACTIVE (aucun
- * impact sur la validation locale/CI, NODE_ENV=test).
+ * NODE_ENV=production pour les secrets. Le sélecteur STORAGE_BACKEND est
+ * vérifié dans tous les environnements (s3 par défaut hors production).
  *
  * Refuse le démarrage avec un message EXPLICITE listant chaque variable
  * fautive :
@@ -54,16 +57,20 @@ export function validateProductionConfig(env: EnvLike = process.env): string[] {
   }
 
   // 3. Backend de stockage : secrets S3 par défaut ou répertoire local par défaut.
-  const storageBackend = env.STORAGE_BACKEND ?? 'local';
+  let storageBackend: StorageBackend | undefined;
+  try { storageBackend = resolveStorageBackend(env); }
+  catch (error) { problems.push((error as Error).message); }
   if (storageBackend === 's3') {
-    if (env.S3_ACCESS_KEY === DEV_S3_ACCESS_KEY || env.S3_SECRET_KEY === DEV_S3_SECRET_KEY) {
-      problems.push(
-        `STORAGE_BACKEND=s3: S3_ACCESS_KEY/S3_SECRET_KEY sont les défauts de développement ${DEV_S3_ACCESS_KEY}/${DEV_S3_SECRET_KEY}`,
-      );
+    for (const [name, fallback] of [['S3_ACCESS_KEY', DEV_S3_ACCESS_KEY], ['S3_SECRET_KEY', DEV_S3_SECRET_KEY]] as const) {
+      const value = env[name];
+      if (!value?.trim() || value === fallback) {
+        problems.push(`STORAGE_BACKEND=s3: ${name} absent, vide ou égal au défaut de développement`);
+      }
     }
   } else if (storageBackend === 'local') {
-    if ((env.STORAGE_LOCAL_DIR ?? DEV_STORAGE_LOCAL_DIR) === DEV_STORAGE_LOCAL_DIR) {
-      problems.push(`STORAGE_BACKEND=local: STORAGE_LOCAL_DIR est le défaut de développement ${DEV_STORAGE_LOCAL_DIR}`);
+    const dir = env.STORAGE_LOCAL_DIR;
+    if (!dir?.trim() || dir.trim() !== dir || !isAbsolute(dir) || resolve(dir) === DEV_STORAGE_LOCAL_DIR) {
+      problems.push(`STORAGE_BACKEND=local: STORAGE_LOCAL_DIR doit être absolu, non vide et différent du défaut de développement ${DEV_STORAGE_LOCAL_DIR}`);
     }
   }
 
@@ -81,10 +88,13 @@ export function validateProductionConfig(env: EnvLike = process.env): string[] {
 
 /**
  * Refuse le démarrage si NODE_ENV=production et que la config est fautive.
- * Inactive en test/development (retour immédiat).
+ * Hors production : seul le sélecteur de backend est contrôlé.
  */
 export function assertProductionConfig(env: EnvLike = process.env): void {
-  if (env.NODE_ENV !== 'production') return;
+  if (env.NODE_ENV !== 'production') {
+    resolveStorageBackend(env);
+    return;
+  }
   const problems = validateProductionConfig(env);
   if (problems.length === 0) return;
   throw new Error(
@@ -92,3 +102,11 @@ export function assertProductionConfig(env: EnvLike = process.env): void {
       + problems.map((p) => `  - ${p}`).join('\n'),
   );
 }
+
+export { assertApplicationDatabaseRole } from './database-role';
+
+export { BUSINESS_TIME_ZONE, dateOnly, monthBounds, exportRange } from './calendar';
+
+export { JOURNAL_NOTIFICATION_TYPES, NOTIFICATION_DENIED_REASON, NOTIFICATION_INBOX_ALLOWED_SQL, notificationAllowed } from './notification-access';
+
+export { resolveStorageBackend, type StorageBackend } from './storage';

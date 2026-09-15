@@ -42,7 +42,7 @@ export class CreateInvitationDto {
   @IsUUID('4', { each: true })
   room_ids?: string[];
 
-  /** Requis quand l'appelant est super_admin (pas de tenant) ; sinon ignoré. */
+  /** Requis pour un super_admin sans tenant ; un directeur ne peut cibler que son tenant. */
   @IsOptional()
   @IsUUID()
   organization_id?: string;

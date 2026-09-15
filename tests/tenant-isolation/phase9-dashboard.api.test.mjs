@@ -177,7 +177,6 @@ const main = async () => {
       await db.query(`DELETE FROM staff_profiles WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM daily_log_events WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM daily_summaries WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
-      await db.query(`DELETE FROM sync_changelog WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM sync_operations WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM sync_cursors WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM background_jobs WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
@@ -191,6 +190,7 @@ const main = async () => {
       await db.query(`DELETE FROM room_moves WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM child_status_history WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM children WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
+      await db.query(`DELETE FROM sync_changelog WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM guardians WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM org_sequences WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);
       await db.query(`DELETE FROM memberships WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p9-%')`);

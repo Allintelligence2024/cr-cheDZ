@@ -4,7 +4,7 @@
  * worker), sur PostgreSQL réel avec le rôle applicatif NOBYPASSRLS.
  *
  * Cas couverts :
- *   1. GET /metrics public : format Prometheus, compteurs HTTP, métriques
+ *   1. GET /metrics administrateur plateforme : format Prometheus, compteurs HTTP, métriques
  *      métier (jobs, notifications, factures impayées), AUCUNE donnée tenant ;
  *   2. rétention : lignes de logs > 5 ans purgées par le worker (job
  *      retention_purge), lignes récentes conservées — y compris
@@ -59,11 +59,16 @@ const main = async () => {
     // Une requête préalable (comptée par le middleware) puis DEUX scrapes :
     // le compteur d'une requête n'est incrémenté qu'au finish de celle-ci,
     // donc la requête /metrics n'apparaît qu'au scrape suivant.
+    const metricsEmail = `${tag}-metrics@test.dz`;
+    await db.query("INSERT INTO users(email,first_name,last_name,password_hash,status,is_super_admin) VALUES($1,'Metrics','Synthetic',$2,'active',true)", [metricsEmail, hash]);
+    const metricsLogin = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: metricsEmail, password }) });
+    if (metricsLogin.status !== 200) throw new Error('Metrics administrator login failed');
+    const metricsHeaders = { authorization: `Bearer ${(await metricsLogin.json()).access_token}` };
     await fetch(`${base}/health`).catch(() => undefined);
-    const metricsRes1 = await fetch(`${base}/metrics`);
+    const metricsRes1 = await fetch(`${base}/metrics`, { headers: metricsHeaders });
     const metricsText1 = await metricsRes1.text();
     ok('/metrics → 200 text/plain', metricsRes1.status === 200 && (metricsRes1.headers.get('content-type') ?? '').includes('text/plain'), `status=${metricsRes1.status}`);
-    const metricsRes2 = await fetch(`${base}/metrics`);
+    const metricsRes2 = await fetch(`${base}/metrics`, { headers: metricsHeaders });
     const metricsText = await metricsRes2.text();
     ok('Compteur http_requests_total présent (dont /health et /metrics)', metricsText.includes('http_requests_total{method="GET",route="/api/v1/health"') && metricsText.includes('http_requests_total{method="GET",route="/api/v1/metrics"'), metricsText.split('\n').filter((l) => l.startsWith('http_requests_total')).slice(0, 3).join(' | '));
     void metricsText1;
@@ -219,6 +224,7 @@ const main = async () => {
       await db.query(`DELETE FROM audit_logs WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p11-%')`);
       await db.query(`DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE email LIKE 'p11-%')`);
       await db.query(`DELETE FROM children WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p11-%')`);
+      await db.query(`DELETE FROM sync_changelog WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p11-%')`);
       await db.query(`DELETE FROM org_sequences WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p11-%')`);
       await db.query(`DELETE FROM memberships WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p11-%')`);
       await db.query(`DELETE FROM rooms WHERE organization_id IN (SELECT id FROM organizations WHERE slug LIKE 'p11-%')`);

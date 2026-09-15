@@ -1,0 +1,10 @@
+# postgres-exporter v0.15.0 ; aucune PII ni métrique exposée sur l'API publique.
+creche_worker_scheduler:
+  query: "SELECT job_type, overdue::int AS overdue FROM scheduler_health()"
+  metrics:
+    - job_type:
+        usage: "LABEL"
+        description: "Traitement planifié (trois types fixes, sans tenant)"
+    - overdue:
+        usage: "GAUGE"
+        description: "1 si aucune exécution réussie depuis deux périodes"

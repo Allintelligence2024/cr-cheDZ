@@ -9,18 +9,18 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-creche_staging}
-      POSTGRES_USER: ${POSTGRES_USER:-creche_app}
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}
     volumes:
       - postgres_staging_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-creche_app}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-creche_staging}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}
@@ -28,25 +28,46 @@ services:
     volumes:
       - minio_staging_data:/data
 
-  migrate:
-    image: node:20-alpine
+  # Bootstrap reproductible, pas seulement à la création du volume PostgreSQL.
+  bootstrap-roles:
+    image: ghcr.io/creche-saas/api:staging
     working_dir: /app
     volumes:
-      - ../../scripts:/app/scripts
-      - ../../infrastructure/database:/app/infrastructure/database
-      - ../../package.json:/app/package.json
+      - ../../scripts:/app/scripts:ro
+      - ../../infrastructure/database:/app/infrastructure/database:ro
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-creche_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-creche_staging}
-    command: sh -c "npm install --no-audit --no-fund pg >/dev/null 2>&1 && node scripts/migrate.mjs && node scripts/seed.mjs && node tests/tenant-isolation/schema-check.mjs"
+      BOOTSTRAP_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-creche_staging}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD requis}
+      MIGRATOR_DATABASE_PASSWORD: ${MIGRATOR_DATABASE_PASSWORD:?MIGRATOR_DATABASE_PASSWORD requis}
+    command: ["node", "scripts/bootstrap-roles.mjs"]
     depends_on:
       postgres:
         condition: service_healthy
+
+  migrate:
+    # Même image versionnée que l'API : pg vient du npm ci du build.
+    # Aucun npm install réseau/non reproductible au déploiement.
+    image: ghcr.io/creche-saas/api:staging
+    working_dir: /app
+    volumes:
+      - ../../scripts:/app/scripts:ro
+      - ../../infrastructure/database:/app/infrastructure/database:ro
+      - ../../tests:/app/tests:ro
+    environment:
+      NODE_ENV: staging
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL requis}
+      # schema-check lit avec l'app ; migrate/seed utilisent l'URL dédiée.
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
+    command: sh -c "node scripts/migrate.mjs && node scripts/seed.mjs && node tests/tenant-isolation/schema-check.mjs"
+    depends_on:
+      bootstrap-roles:
+        condition: service_completed_successfully
 
   api:
     image: ghcr.io/creche-saas/api:staging
     environment:
       NODE_ENV: staging
-      DATABASE_URL: postgresql://${POSTGRES_USER:-creche_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-creche_staging}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET requis}
       S3_ENDPOINT: http://minio:9000
@@ -60,8 +81,19 @@ services:
 
   worker:
     image: ghcr.io/creche-saas/worker:staging
+    # Le worker termine son travail en 45 s max ; Docker laisse 60 s avant SIGKILL.
+    stop_grace_period: 60s
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-creche_app}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-creche_staging}
+      WORKER_JOB_TIMEOUT_MS: ${WORKER_JOB_TIMEOUT_MS:-900000}
+      WORKER_HEARTBEAT_MS: ${WORKER_HEARTBEAT_MS:-30000}
+      WORKER_REAPER_INTERVAL_MS: ${WORKER_REAPER_INTERVAL_MS:-300000}
+      WORKER_SHUTDOWN_TIMEOUT_MS: "45000"
+      WORKER_SCHEDULER_ENABLED: ${WORKER_SCHEDULER_ENABLED:-true}
+      WORKER_SCHEDULER_POLL_MS: ${WORKER_SCHEDULER_POLL_MS:-60000}
+      WORKER_EXPORT_TIMEOUT_MS: ${WORKER_EXPORT_TIMEOUT_MS:-120000}
+      WORKER_EXPORT_MAX_AGE_MS: ${WORKER_EXPORT_MAX_AGE_MS:-1800000}
+      NODE_ENV: staging
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}

@@ -1,4 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { photoConsentsAllowed } from '../../shared/authorization/photo-consent';
+import { PARENT_INVOICE_FIELDS_SQL, PARENT_RECEIPT_FIELDS_SQL } from './financial-projection';
+import { CURRENT_GUARDIAN_LINK_SQL } from '../../shared/authorization/guardian-access';
+import { PARENT_JOURNAL_VISIBILITY_SQL } from '../../shared/authorization/journal-disclosure';
 import type { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -29,21 +33,27 @@ export class ParentsService {
        FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = cg.child_id
        WHERE g.user_id = $1 AND c.deleted_at IS NULL
-         AND cg.can_view_journal = true
+         AND cg.can_view_journal = true AND ${CURRENT_GUARDIAN_LINK_SQL}
        ORDER BY c.first_name_fr, c.last_name_fr`, [userId],
     )).rows);
   }
 
   async feed(userId: string, childId: string): Promise<Array<Record<string, unknown>>> {
     await this.assertPermission(userId, childId, 'can_view_journal');
-    return this.tenantContext.withTenantConnection(async (client) => (await client.query(
-      `SELECT id, event_type, occurred_at, meal_type, meal_quantity, nap_start_at, nap_end_at,
-              nap_quality, diaper_type, activity_name, activity_notes, incident_severity,
-              incident_description, visible_to_parents
-       FROM daily_log_events WHERE child_id = $1 AND visible_to_parents = true
-         AND (note_is_private = false OR note_is_private IS NULL)
-       ORDER BY occurred_at DESC LIMIT 100`, [childId],
-    )).rows);
+    return this.tenantContext.withTenantConnection(async (client) => {
+      const health = await client.query(
+        `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
+         WHERE cg.child_id = $1 AND g.user_id = $2 AND cg.can_view_health = true
+           AND ${CURRENT_GUARDIAN_LINK_SQL} LIMIT 1`, [childId, userId],
+      );
+      return (await client.query(
+        `SELECT id, event_type, occurred_at, meal_type, meal_quantity, nap_start_at, nap_end_at,
+                nap_quality, diaper_type, activity_name, activity_notes, incident_severity,
+                incident_description, visible_to_parents
+         FROM daily_log_events WHERE child_id = $1 AND ${PARENT_JOURNAL_VISIBILITY_SQL}
+         ORDER BY occurred_at DESC, id DESC LIMIT 100`, [childId, health.rows.length > 0],
+      )).rows;
+    });
   }
 
   async reportAbsence(userId: string, childId: string, reason?: string): Promise<Record<string, unknown>> {
@@ -65,7 +75,7 @@ export class ParentsService {
     return this.tenantContext.withTenantConnection(async (client) => {
       const guardian = await client.query(
         `SELECT cg.guardian_id FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
-         WHERE cg.child_id = $1 AND g.user_id = $2`, [dto.child_id, userId],
+         WHERE cg.child_id = $1 AND g.user_id = $2 AND ${CURRENT_GUARDIAN_LINK_SQL}`, [dto.child_id, userId],
       );
       if (!guardian.rows[0]) throw Errors.notFound();
       const row = await client.query(
@@ -117,30 +127,17 @@ export class ParentsService {
 
   async photoUrl(userId: string, childId: string, mediaId: string, ip?: string): Promise<{ url: string; key: string }> {
     await this.assertPermission(userId, childId, 'can_view_journal');
+    const tenantId = requireTenant(this.tenantContext);
     await this.tenantContext.withTenantConnection(async (client) => {
       // La révocation est effective immédiatement : une ancienne photo déjà
       // publiée ne peut plus obtenir d'URL si l'un des consentements manque.
       const r = await client.query(
-        `SELECT children_in_photo FROM media_assets
+        `SELECT child_id, children_in_photo, all_consents_checked FROM media_assets
          WHERE id=$1 AND child_id=$2 AND is_visible_to_parents=true AND deleted_at IS NULL`,
         [mediaId, childId],
       );
       if (!r.rows[0]) throw Errors.notFound();
-      const children = (r.rows[0].children_in_photo as string[] | null) ?? [childId];
-      // Seul le DERNIER consentement par enfant compte (append-only) : une
-      // révocation coupe immédiatement l'accès, même si un ancien
-      // consentement 'granted' existe encore dans l'historique.
-      const valid = await client.query(
-        `WITH latest AS (
-           SELECT DISTINCT ON (child_id) child_id, granted, revoked_at
-           FROM consent_records
-           WHERE child_id = ANY($1::uuid[]) AND consent_type = 'photo_individual'
-           ORDER BY child_id, created_at DESC
-         )
-         SELECT child_id FROM latest WHERE granted = true AND revoked_at IS NULL`,
-        [children],
-      );
-      if (valid.rows.length !== children.length) {
+      if (!await photoConsentsAllowed(client, tenantId, r.rows[0])) {
         throw new AppError('CONSENT_REVOKED', 'Le consentement photo a été retiré', 'تم سحب الموافقة على الصورة', 422);
       }
     });
@@ -152,15 +149,12 @@ export class ParentsService {
   async invoices(userId: string): Promise<Array<Record<string, unknown>>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => (await client.query(
-      `SELECT i.id, i.invoice_number, i.period_year, i.period_month, i.subtotal,
-              i.discount_amount, i.total_amount, i.paid_amount, i.balance,
-              i.status, i.due_date, i.pdf_url, i.created_at,
-              c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+      `SELECT ${PARENT_INVOICE_FIELDS_SQL}
        FROM invoices i
        JOIN child_guardians cg ON cg.child_id = i.child_id
        JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = i.child_id
-       WHERE g.user_id = $1 AND cg.can_receive_invoices = true
+       WHERE g.user_id = $1 AND ${CURRENT_GUARDIAN_LINK_SQL} AND cg.can_receive_invoices = true
        ORDER BY i.created_at DESC`, [userId],
     )).rows);
   }
@@ -169,7 +163,7 @@ export class ParentsService {
     await this.assertInvoicePermission(userId, invoiceId);
     return this.tenantContext.withTenantConnection(async (client) => {
       const invoice = (await client.query(
-        `SELECT i.*, c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+        `SELECT ${PARENT_INVOICE_FIELDS_SQL}
          FROM invoices i JOIN children c ON c.id = i.child_id WHERE i.id = $1`, [invoiceId],
       )).rows[0];
       const lines = (await client.query(
@@ -203,14 +197,12 @@ export class ParentsService {
   async receipts(userId: string): Promise<Array<Record<string, unknown>>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => (await client.query(
-      `SELECT p.id, p.reference_number, p.receipt_number, p.amount, p.method, p.status,
-              p.confirmed_at, p.notes,
-              c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+      `SELECT ${PARENT_RECEIPT_FIELDS_SQL}
        FROM payments p
        JOIN child_guardians cg ON cg.child_id = p.child_id
        JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = p.child_id
-       WHERE g.user_id = $1 AND cg.can_receive_invoices = true AND p.status = 'confirmed'
+       WHERE g.user_id = $1 AND ${CURRENT_GUARDIAN_LINK_SQL} AND cg.can_receive_invoices = true AND p.status = 'confirmed'
        ORDER BY p.confirmed_at DESC`, [userId],
     )).rows);
   }
@@ -219,7 +211,7 @@ export class ParentsService {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       const payment = (await client.query(
-        `SELECT p.*, c.first_name_fr AS child_first_name, c.last_name_fr AS child_last_name
+        `SELECT ${PARENT_RECEIPT_FIELDS_SQL}
          FROM payments p JOIN children c ON c.id = p.child_id WHERE p.id = $1`, [paymentId],
       )).rows[0];
       if (!payment) throw Errors.notFound();
@@ -232,7 +224,7 @@ export class ParentsService {
   private async canReceiveInvoices(client: PoolClient, userId: string, childId: string): Promise<boolean> {
     const r = await client.query(
       `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
-       WHERE cg.child_id = $1 AND g.user_id = $2 AND cg.can_receive_invoices = true`,
+       WHERE cg.child_id = $1 AND g.user_id = $2 AND ${CURRENT_GUARDIAN_LINK_SQL} AND cg.can_receive_invoices = true`,
       [childId, userId],
     );
     return Boolean(r.rows[0]);
@@ -263,7 +255,7 @@ export class ParentsService {
     const allowed = await this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
         `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id = cg.guardian_id
-         WHERE cg.child_id = $1 AND g.user_id = $2 AND cg.can_view_health = true`,
+         WHERE cg.child_id = $1 AND g.user_id = $2 AND ${CURRENT_GUARDIAN_LINK_SQL} AND cg.can_view_health = true`,
         [childId, userId],
       );
       return Boolean(res.rows[0]);
@@ -285,13 +277,13 @@ export class ParentsService {
   }
 
   private async assertLinked(userId: string, childId: string): Promise<void> { await this.assertPermission(userId, childId, 'guardian_id'); }
-  private async assertPermission(userId: string, childId: string, permission: string): Promise<void> {
+  private async assertPermission(userId: string, childId: string, permission: 'guardian_id' | 'can_view_journal'): Promise<void> {
     requireTenant(this.tenantContext);
     const allowed = await this.tenantContext.withTenantConnection(async (client) => {
       const column = permission === 'guardian_id' ? 'cg.guardian_id' : `cg.${permission}`;
       const res = await client.query(
         `SELECT 1 FROM child_guardians cg JOIN guardians g ON g.id=cg.guardian_id
-         WHERE cg.child_id=$1 AND g.user_id=$2 AND ${column}${permission === 'guardian_id' ? ' IS NOT NULL' : ' = true'}`,
+         WHERE cg.child_id=$1 AND g.user_id=$2 AND ${CURRENT_GUARDIAN_LINK_SQL} AND ${column}${permission === 'guardian_id' ? ' IS NOT NULL' : ' = true'}`,
         [childId, userId],
       );
       return Boolean(res.rows[0]);

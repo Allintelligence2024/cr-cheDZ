@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { NOTIFICATION_INBOX_ALLOWED_SQL, notificationAllowed } from '@creche/prod-config';
+import { JOURNAL_NOTIFICATION_TYPES } from '../../shared/authorization/disclosure-policy';
 import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -34,10 +36,13 @@ export class NotificationsService {
        JOIN guardians g ON g.id = cg.guardian_id
        JOIN children c ON c.id = cg.child_id
        WHERE cg.child_id = $1 AND cg.can_receive_push = true
-         AND g.user_id IS NOT NULL`,
-      [childId],
+         AND g.user_id IS NOT NULL AND g.deleted_at IS NULL AND c.deleted_at IS NULL
+         AND (NOT $2::boolean OR cg.can_view_journal = true)`,
+      [childId, JOURNAL_NOTIFICATION_TYPES.has(eventType)],
     );
     for (const g of guardians.rows) {
+      const data = { scope: 'child_event', child_id: childId, event_type: eventType, log_event_id: logEventId };
+      if (!await notificationAllowed(client, tenantId, g.user_id, data, 'inbox')) continue;
       await this.enqueue(client, tenantId, {
         userId: g.user_id,
         eventType,
@@ -45,12 +50,12 @@ export class NotificationsService {
         titleAr: EVENT_MESSAGES[eventType]?.ar ?? 'الحضانة',
         bodyFr: `${g.child_name} ${EVENT_MESSAGES[eventType]?.body_fr ?? '—'}`,
         bodyAr: `${g.child_name} ${EVENT_MESSAGES[eventType]?.body_ar ?? '—'}`,
-        data: { child_id: childId, event_type: eventType, log_event_id: logEventId },
+        data,
       });
       // WhatsApp (roadmap v2) : si le flag whatsapp_notifications est actif
       // pour le tenant et que le gardien a un téléphone, une notification
       // WhatsApp est mise en file (consommée par le worker).
-      await this.enqueueWhatsApp(client, tenantId, g.user_id, g.phone_primary, EVENT_MESSAGES[eventType], g.child_name);
+      await this.enqueueWhatsApp(client, tenantId, g.user_id, g.phone_primary, EVENT_MESSAGES[eventType], g.child_name, data);
     }
   }
 
@@ -62,24 +67,17 @@ export class NotificationsService {
     phone: string | null,
     event: { fr: string; ar: string; body_fr: string; body_ar: string } | undefined,
     childName: string,
+    eventData: Record<string, unknown>,
   ): Promise<void> {
     if (!phone) return;
-    const flag = await client.query(
-      `SELECT COALESCE(f_org.is_enabled, f_global.is_enabled, false) AS enabled
-       FROM (SELECT 1) x
-       LEFT JOIN feature_flags f_org
-         ON f_org.flag_key='whatsapp_notifications' AND f_org.organization_id=$1
-       LEFT JOIN feature_flags f_global
-         ON f_global.flag_key='whatsapp_notifications' AND f_global.organization_id IS NULL`,
-      [tenantId],
-    );
-    if (!flag.rows[0]?.enabled) return;
+    const data = { ...eventData, to: phone };
+    if (!await notificationAllowed(client, tenantId, userId, data, 'whatsapp')) return;
     await client.query(
       `INSERT INTO notification_queue (organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data)
        VALUES ($1, $2, 'whatsapp', $3, $4, $5, $6, $7)`,
       [tenantId, userId, event?.fr ?? 'Crèche', event?.ar ?? 'الحضانة',
        `${childName} ${event?.body_fr ?? '—'}`, `${childName} ${event?.body_ar ?? '—'}`,
-       JSON.stringify({ to: phone, event_type: 'whatsapp' })],
+       JSON.stringify(data)],
     );
   }
 
@@ -143,10 +141,11 @@ export class NotificationsService {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
-        `SELECT id, type, title_fr, title_ar, body_fr, body_ar, data, is_read, created_at
-         FROM notification_inbox
-         WHERE user_id = $1 AND organization_id = $2
-         ORDER BY created_at DESC
+        `SELECT n.id, n.type, n.title_fr, n.title_ar, n.body_fr, n.body_ar, n.data, n.is_read, n.created_at
+         FROM notification_inbox n
+         WHERE n.user_id = $1 AND n.organization_id = $2
+           AND ${NOTIFICATION_INBOX_ALLOWED_SQL}
+         ORDER BY n.created_at DESC, n.id DESC
          LIMIT 100`,
         [userId, tenantId],
       );
@@ -158,8 +157,8 @@ export class NotificationsService {
     requireTenant(this.tenantContext);
     await this.tenantContext.withTenantConnection(async (client) => {
       await client.query(
-        `UPDATE notification_inbox SET is_read = true, read_at = NOW()
-         WHERE id = $1 AND user_id = $2`,
+        `UPDATE notification_inbox n SET is_read = true, read_at = NOW()
+         WHERE n.id = $1 AND n.user_id = $2 AND ${NOTIFICATION_INBOX_ALLOWED_SQL}`,
         [notificationId, userId],
       );
     });

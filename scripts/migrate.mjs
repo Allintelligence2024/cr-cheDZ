@@ -12,13 +12,13 @@
  *   node scripts/migrate.mjs --check       # vérifie que dev == cible (drift detection)
  *   node scripts/migrate.mjs --reset       # DESTRUCTIF : drop schema public (dev uniquement)
  *
- * Env : DATABASE_URL (ou PG* classiques)
+ * Env : MIGRATION_DATABASE_URL requis en production/staging ; DATABASE_URL en dev
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
+import { connectMigrationClient } from './migration-connection.mjs';
 
 const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'infrastructure', 'database', 'migrations');
 
@@ -36,10 +36,10 @@ function listMigrations() {
     });
 }
 
-async function connect() {
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-  await client.connect();
-  return client;
+async function applyGrants(client) {
+  const { rowCount } = await client.query("SELECT 1 FROM pg_roles WHERE rolname = 'creche_app'");
+  // Compatibilité dev historique sans bootstrap ; prod a déjà vérifié son rôle.
+  if (rowCount) await client.query(readFileSync(join(MIGRATIONS_DIR, '..', 'grants.sql'), 'utf8'));
 }
 
 async function ensureTable(client) {
@@ -98,6 +98,7 @@ async function migrate(client) {
     try {
       await client.query(content);
       await client.query('INSERT INTO schema_migrations (filename, checksum) VALUES ($1, $2)', [file, checksum]);
+      await applyGrants(client);
       await client.query('COMMIT');
       appliedCount += 1;
     } catch (error) {
@@ -105,6 +106,8 @@ async function migrate(client) {
       throw new Error(`Échec de la migration ${file}: ${error.message}`);
     }
   }
+  // Rejouer même sans DDL nouveau : répare un GRANT manquant.
+  await applyGrants(client);
   console.log(appliedCount === 0 ? '✓ Aucune migration en attente.' : `✓ ${appliedCount} migration(s) appliquée(s).`);
 }
 
@@ -116,7 +119,10 @@ async function reset(client) {
 }
 
 const [,, flag] = process.argv;
-const client = await connect();
+if (flag === '--reset' && ['production', 'staging'].includes(process.env.NODE_ENV)) {
+  throw new Error('DATABASE_RESET_FORBIDDEN: --reset interdit en production/staging');
+}
+const client = await connectMigrationClient();
 try {
   if (flag === '--status' || flag === '--check') {
     await status(client);

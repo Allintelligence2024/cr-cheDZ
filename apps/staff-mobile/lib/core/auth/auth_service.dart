@@ -42,6 +42,7 @@ class AuthService {
 
   Future<void> logout() async {
     _accessToken = null;
+    _api.accessToken = null;
     isAuthenticated = false;
     await _storage.delete(key: _accessKey);
     await _storage.delete(key: _refreshKey);

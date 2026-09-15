@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/database/app_database.dart';
@@ -8,9 +9,10 @@ import 'child.dart';
 /// Liste des enfants d'une section (données locales Drift) avec statut de
 /// présence du jour et actions Arrivée/Départ (offline-first).
 class ChildrenListPage extends StatefulWidget {
-  const ChildrenListPage({super.key, required this.syncEngine});
+  const ChildrenListPage({super.key, required this.syncEngine, this.onLogout});
 
   final SyncEngine syncEngine;
+  final VoidCallback? onLogout;
 
   @override
   State<ChildrenListPage> createState() => _ChildrenListPageState();
@@ -20,11 +22,22 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
   List<Child> _children = [];
   Map<String, String> _statusByChild = {};
   bool _loading = true;
+  StreamSubscription<SyncStatus>? _syncSubscription;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _syncSubscription = widget.syncEngine.statusStream.listen((status) {
+      if (mounted && status == SyncStatus.idle) unawaited(_load());
+    });
+  }
+
+  @override
+  void dispose() {
+    final subscription = _syncSubscription;
+    if (subscription != null) unawaited(subscription.cancel());
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -48,6 +61,7 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
       entityType: 'attendance_session',
       payload: {'child_id': child.id, 'site_id': child.siteId},
     );
+    if (!mounted) return;
     setState(() => _statusByChild[child.id] = 'present');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -66,6 +80,7 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
       entityType: 'attendance_session',
       payload: {'child_id': child.id, 'site_id': child.siteId},
     );
+    if (!mounted) return;
     setState(() => _statusByChild[child.id] = 'departed');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -126,6 +141,7 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
       appBar: AppBar(
         title: const Text('Enfants de la section'),
         actions: [
+          if (widget.onLogout != null) IconButton(onPressed: widget.onLogout, icon: const Icon(Icons.logout), tooltip: 'Se déconnecter'),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Synchroniser',

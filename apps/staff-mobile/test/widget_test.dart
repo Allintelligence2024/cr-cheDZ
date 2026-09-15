@@ -9,7 +9,7 @@ void main() {
   testWidgets('L\'écran de connexion affiche le formulaire', (tester) async {
     final auth = AuthService(ApiClient(), const FlutterSecureStorage());
     await tester.pumpWidget(
-      MaterialApp(home: LoginPage(auth: auth, onAuthenticated: () {})),
+      MaterialApp(home: LoginPage(auth: auth, onAuthenticated: () async {})),
     );
     expect(find.text('Se connecter'), findsOneWidget);
     expect(find.text('Email'), findsOneWidget);
@@ -19,7 +19,7 @@ void main() {
   testWidgets('Validation : email vide → message requis', (tester) async {
     final auth = AuthService(ApiClient(), const FlutterSecureStorage());
     await tester.pumpWidget(
-      MaterialApp(home: LoginPage(auth: auth, onAuthenticated: () {})),
+      MaterialApp(home: LoginPage(auth: auth, onAuthenticated: () async {})),
     );
     await tester.tap(find.text('Se connecter'));
     await tester.pump();

@@ -1,0 +1,324 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://creche.dz/contracts/sync/v1",
+  "title": "Sync wire v1 \u2014 envelopes, not business payload validation",
+  "definitions": {
+    "Cursor": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,18})$",
+      "format": "sync-cursor"
+    },
+    "RegisterRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "device_fingerprint": {
+          "type": "string",
+          "minLength": 8
+        },
+        "platform": {
+          "type": "string",
+          "enum": [
+            "android",
+            "ios",
+            "web"
+          ]
+        },
+        "app_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fcm_token": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "apns_token": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "device_fingerprint",
+        "platform"
+      ],
+      "additionalProperties": false
+    },
+    "RegisterResponse": {
+      "type": "object",
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "device_id"
+      ],
+      "additionalProperties": false
+    },
+    "Operation": {
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "client_sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "command": {
+          "type": "string"
+        },
+        "entity_type": {
+          "type": "string"
+        },
+        "entity_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "base_version": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "occurred_at_device": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "client_sequence",
+        "schema_version",
+        "command",
+        "entity_type",
+        "payload",
+        "occurred_at_device"
+      ],
+      "additionalProperties": false
+    },
+    "PushRequest": {
+      "type": "object",
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Operation"
+          }
+        }
+      },
+      "required": [
+        "device_id",
+        "operations"
+      ],
+      "additionalProperties": false
+    },
+    "Rejection": {
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "reason",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "Conflict": {
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "current_version": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "event_id",
+        "reason",
+        "current_version"
+      ],
+      "additionalProperties": false
+    },
+    "PushResponse": {
+      "type": "object",
+      "properties": {
+        "accepted": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "rejected": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Rejection"
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Conflict"
+          }
+        },
+        "next_cursor": {
+          "$ref": "#/definitions/Cursor"
+        }
+      },
+      "required": [
+        "accepted",
+        "rejected",
+        "conflicts",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "PullQuery": {
+      "type": "object",
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "cursor": {
+          "$ref": "#/definitions/Cursor"
+        }
+      },
+      "required": [
+        "device_id",
+        "cursor"
+      ],
+      "additionalProperties": false
+    },
+    "Event": {
+      "type": "object",
+      "properties": {
+        "sync_seq": {
+          "$ref": "#/definitions/Cursor"
+        },
+        "type": {
+          "type": "string"
+        },
+        "aggregate_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "type": "string"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sync_seq",
+        "type",
+        "aggregate_id",
+        "event_type",
+        "payload",
+        "created_at"
+      ],
+      "additionalProperties": false
+    },
+    "PullResponse": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Event"
+          }
+        },
+        "next_cursor": {
+          "$ref": "#/definitions/Cursor"
+        }
+      },
+      "required": [
+        "events",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "statusCode": {
+          "type": "integer"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message_fr": {
+          "type": "string"
+        },
+        "message_ar": {
+          "type": "string"
+        },
+        "details": {},
+        "correlation_id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "statusCode",
+        "code",
+        "message_fr",
+        "message_ar",
+        "timestamp",
+        "path"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

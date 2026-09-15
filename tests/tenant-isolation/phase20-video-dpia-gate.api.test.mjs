@@ -27,6 +27,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { createDpiaReviewer } from '../fixtures/dpia-reviewer.mjs';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import { appUrl, ensureAppRole } from './helpers.mjs';
@@ -123,7 +124,8 @@ const main = async () => {
 
     // ── 5. Approbation → activation OK ──────────────────────────────────────
     console.log('\n5) DPIA approuvée');
-    const approve = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, tokenDirA, {});
+    const reviewerToken = await createDpiaReviewer(db, A.org, tag, api);
+    const approve = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, reviewerToken, {});
     ok('DPIA approuvée (review +365 j)', (approve.status === 200 || approve.status === 201) && approve.body.status === 'approved' && Boolean(approve.body.approved_at));
     const enabled = await api('POST', '/support/flags/video_surveillance', tokenSuper, { organization_id: A.org, is_enabled: true });
     ok('Après approbation : activation pour A réussie', enabled.status === 200 || enabled.status === 201, JSON.stringify(enabled.body));

@@ -30,20 +30,20 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB requis}
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:?POSTGRES_DB requis}"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}
@@ -54,20 +54,40 @@ services:
       - minio_prod_data:/data
     restart: unless-stopped
 
-  migrate:
-    image: node:20-alpine
+  # Bootstrap reproductible, pas seulement à la création du volume PostgreSQL.
+  bootstrap-roles:
+    image: ghcr.io/creche-saas/api:${VERSION}
     working_dir: /app
     volumes:
-      - ../../scripts:/app/scripts
-      - ../../infrastructure/database:/app/infrastructure/database
-      - ../../tests:/app/tests
-      - ../../package.json:/app/package.json
+      - ../../scripts:/app/scripts:ro
+      - ../../infrastructure/database:/app/infrastructure/database:ro
     environment:
-      DATABASE_URL: ${DATABASE_URL}
-    command: sh -c "npm install --no-audit --no-fund pg >/dev/null 2>&1 && node scripts/migrate.mjs && node scripts/seed.mjs && node tests/tenant-isolation/schema-check.mjs"
+      BOOTSTRAP_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB requis}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?APP_DATABASE_PASSWORD requis}
+      MIGRATOR_DATABASE_PASSWORD: ${MIGRATOR_DATABASE_PASSWORD:?MIGRATOR_DATABASE_PASSWORD requis}
+    command: ["node", "scripts/bootstrap-roles.mjs"]
     depends_on:
       postgres:
         condition: service_healthy
+
+  migrate:
+    # Même image versionnée que l'API : pg vient du npm ci du build.
+    # Aucun npm install réseau/non reproductible au déploiement.
+    image: ghcr.io/creche-saas/api:${VERSION}
+    working_dir: /app
+    volumes:
+      - ../../scripts:/app/scripts:ro
+      - ../../infrastructure/database:/app/infrastructure/database:ro
+      - ../../tests:/app/tests:ro
+    environment:
+      NODE_ENV: production
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:?MIGRATION_DATABASE_URL requis}
+      # schema-check lit avec l'app ; migrate/seed utilisent l'URL dédiée.
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
+    command: sh -c "node scripts/migrate.mjs && node scripts/seed.mjs && node tests/tenant-isolation/schema-check.mjs"
+    depends_on:
+      bootstrap-roles:
+        condition: service_completed_successfully
 
   api:
     image: ghcr.io/creche-saas/api:${VERSION}
@@ -75,7 +95,7 @@ services:
       NODE_ENV: production
       APP_PORT: "3000"
       APP_URL: ${APP_URL:-https://${DOMAIN}}
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
@@ -116,8 +136,17 @@ services:
 
   worker:
     image: ghcr.io/creche-saas/worker:${VERSION}
+    # Le worker termine son travail en 45 s max ; Docker laisse 60 s avant SIGKILL.
+    stop_grace_period: 60s
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      WORKER_JOB_TIMEOUT_MS: ${WORKER_JOB_TIMEOUT_MS:-900000}
+      WORKER_HEARTBEAT_MS: ${WORKER_HEARTBEAT_MS:-30000}
+      WORKER_REAPER_INTERVAL_MS: ${WORKER_REAPER_INTERVAL_MS:-300000}
+      WORKER_SHUTDOWN_TIMEOUT_MS: "45000"
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?PAYMENT_WEBHOOK_SECRET requis}
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
@@ -132,6 +161,10 @@ services:
       APNS_PRODUCTION: ${APNS_PRODUCTION:-false}
       SENTRY_DSN: ${SENTRY_DSN:-}
       RETENTION_DAYS: ${RETENTION_DAYS:-1825}
+      WORKER_SCHEDULER_ENABLED: ${WORKER_SCHEDULER_ENABLED:-true}
+      WORKER_SCHEDULER_POLL_MS: ${WORKER_SCHEDULER_POLL_MS:-60000}
+      WORKER_EXPORT_TIMEOUT_MS: ${WORKER_EXPORT_TIMEOUT_MS:-120000}
+      WORKER_EXPORT_MAX_AGE_MS: ${WORKER_EXPORT_MAX_AGE_MS:-1800000}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -153,6 +186,7 @@ services:
     image: prom/prometheus:v2.53.0
     volumes:
       - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -161,12 +195,56 @@ services:
       - api
     restart: unless-stopped
 
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    # Le fichier secret appartient à uid/gid 65534 et a le mode 0400 (runbook).
+    volumes:
+      - ../monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ${ALERT_WEBHOOK_TOKEN_FILE:?fichier secret requis}:/run/secrets/alert-webhook-token:ro
+      - alertmanager_data:/alertmanager
+    command: ['--config.file=/etc/alertmanager/alertmanager.yml', '--storage.path=/alertmanager', '--cluster.listen-address=']
+    restart: unless-stopped
+
+  alert-relay:
+    image: ghcr.io/creche-saas/api:${VERSION}
+    # Même UID que le lecteur du secret Alertmanager ; volume préinitialisé (runbook).
+    user: "65534:65534"
+    command: ['node', 'apps/api/operations/alert-relay.mjs']
+    environment:
+      NODE_ENV: production
+      ALERT_STATE_DIR: /var/lib/creche-alerts
+      ALERT_WEBHOOK_TOKEN_FILE: /run/secrets/alert-webhook-token
+      ALERT_CHANNELS: ${ALERT_CHANNELS:-local,email,sms,whatsapp}
+      ALERT_SMTP_HOST: ${ALERT_SMTP_HOST:-}
+      ALERT_SMTP_PORT: ${ALERT_SMTP_PORT:-587}
+      ALERT_SMTP_SECURE: ${ALERT_SMTP_SECURE:-false}
+      ALERT_SMTP_USER: ${ALERT_SMTP_USER:-}
+      ALERT_SMTP_PASS: ${ALERT_SMTP_PASS:-}
+      ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
+      ALERT_TWILIO_ACCOUNT_SID: ${ALERT_TWILIO_ACCOUNT_SID:-}
+      ALERT_TWILIO_AUTH_TOKEN: ${ALERT_TWILIO_AUTH_TOKEN:-}
+      ALERT_SMS_FROM: ${ALERT_SMS_FROM:-}
+      ALERT_SMS_TO: ${ALERT_SMS_TO:-}
+      ALERT_WHATSAPP_FROM: ${ALERT_WHATSAPP_FROM:-}
+      ALERT_WHATSAPP_TO: ${ALERT_WHATSAPP_TO:-}
+      ALERT_WHATSAPP_CONTENT_SID: ${ALERT_WHATSAPP_CONTENT_SID:-}
+    volumes:
+      - ${ALERT_WEBHOOK_TOKEN_FILE:?fichier secret requis}:/run/secrets/alert-webhook-token:ro
+      - alerts_data:/var/lib/creche-alerts
+    restart: unless-stopped
+
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     environment:
-      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+      DATA_SOURCE_NAME: ${DATABASE_URL:?DATABASE_URL creche_app requis}
+      PGSSLMODE: ${MONITORING_PGSSLMODE:?mode SSL explicite requis pour libpq}
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
+    volumes:
+      - ../monitoring/postgres-queries.yml:/etc/postgres-exporter/queries.yml:ro
     depends_on:
-      - postgres
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   grafana:
@@ -187,8 +265,8 @@ services:
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE requis (GPG symétrique)}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB requis}
       KEEP_DAYS: "7"
     volumes:
       - backup_data:/backups
@@ -215,5 +293,7 @@ volumes:
   postgres_prod_data:
   minio_prod_data:
   prometheus_data:
+  alertmanager_data:
+  alerts_data:
   grafana_data:
   backup_data:

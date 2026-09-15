@@ -24,7 +24,7 @@ class Child {
   final String? roomId;
   final String? allergiesSummary;
 
-  factory Child.fromLocal(LocalChildren row) {
+  factory Child.fromLocal(LocalChildrenData row) {
     return Child(
       id: row.id,
       organizationId: row.organizationId,

@@ -17,6 +17,34 @@ NODE_ENV=production node apps/api/dist/main.js
 # Si invalide → GARDE CONFIG PRODUCTION — démarrage REFUSÉ + liste variables
 ```
 
+## PostgreSQL — séparation obligatoire (Phase D)
+
+Sur installation neuve, générer **trois secrets distincts** (trois appels séparés
+à `openssl rand -hex 32`) et les conserver dans le coffre opérateur :
+
+| Secret / variable | Destinataire uniquement |
+|---|---|
+| `POSTGRES_PASSWORD` | PostgreSQL init `postgres` + `BOOTSTRAP_DATABASE_URL` du bootstrap |
+| `MIGRATOR_DATABASE_PASSWORD` | bootstrap ; même secret encodé dans `MIGRATION_DATABASE_URL` de migrate/seed |
+| `APP_DATABASE_PASSWORD` | bootstrap ; même secret encodé dans `DATABASE_URL` de l'API/worker et du contrôle de schéma |
+
+Les URLs doivent désigner **la même base**. Utiliser les exemples de
+`.env.prod.example` ; les mots de passe non hexadécimaux doivent être encodés dans
+les URLs (pas dans les variables de mot de passe du bootstrap). Ne pas transmettre
+les secrets bootstrap/migrateur aux environnements API/worker. Le rôle du
+migrateur est NOSUPERUSER **BYPASSRLS**, secret réservé au déploiement.
+
+Au boot production/staging, API et worker interrogent le catalogue et refusent
+un rôle dangereux (`DATABASE_ROLE_UNSAFE`) avant écoute/claim. Ne jamais contourner
+cette garde en changeant NODE_ENV. Le bootstrap refuse les propriétaires et
+appartenances applicatives historiques : suivre le
+[runbook Phase D](PHASE_D_ROLES_RUNBOOK.md), pas une rétrogradation improvisée.
+
+Rotation : arrêter API/worker, changer les secrets dans le coffre et toutes les
+URLs correspondantes, rejouer bootstrap puis migrate, recréer les conteneurs
+applicatifs. Les sessions PostgreSQL déjà ouvertes ne sont pas invalidées par un
+simple ALTER ROLE PASSWORD ; l'arrêt/recréation des pools est indispensable.
+
 ## Secrets à obtenir (ordre)
 
 ### 1. SATIM (paiement en ligne)
@@ -55,6 +83,18 @@ WHATSAPP_API_URL=https://graph.facebook.com/v19.0 # défaut
 - `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `ANPDP_EMAIL`
 - Test : `POST /privacy/violations` → `POST /privacy/violations/:id/anpdp-notify` (échéance +5j auto)
 
+### 5. Invitations — transport non livré (G1c)
+
+- Seul `NODE_ENV=development` avec `EMAIL_PROVIDER=none` autorise une simulation :
+  token remis au client, aucune transmission et aucun token/destinataire dans la console du simulateur.
+  Le resource_label e-mail de l’audit de création préexistant reste conservé.
+- `test`, `staging`, `production`, environnement absent ou fournisseur non implémenté :
+  **503 INVITATION_DELIVERY_UNAVAILABLE avant toute écriture de domaine**.
+- Le SMTP ANPDP ci-dessus est indépendant. `EMAIL_PROVIDER=smtp` ne branche pas un
+  transport d'invitations ; ne pas annoncer « envoyé » ni utiliser development en
+  production pour contourner ce refus. Livraison réelle à implémenter/qualifier avant
+  déploiement. [Runbook G1c](PHASE_G1C_INVITATIONS_RUNBOOK.md).
+
 ## .env.prod.example → .env.prod
 
 Copier `.env.prod.example` (documenté) → `.env.prod` (jamais commité) :
@@ -78,3 +118,30 @@ NODE_ENV=production node -e "require('./packages/prod-config/dist').assertProduc
 - [ ] Job `payments_expire` planifié (GLOBAL, org NULL)
 - [ ] Job `video_clips_purge` planifié par org (si flag vidéo actif)
 - [ ] Backup restore <30 min testé (voir BACKUP-RUNBOOK.md)
+
+### 6. Secret TOTP — portée G1d
+
+- Préparation `/auth/2fa/enable` : secret retourné uniquement tant que le facteur est
+  pending ; une fois activé, **409 TOTP_ALREADY_ENABLED** sans secret/URI. Désactivation
+  exige un code valide et supprime le secret ; pas de récupération par simple GET/setup.
+- Audit du changement atomique, booléens d'état seulement. Les échecs verify/disable
+  et TOTP du login mot de passe comptent dans `MAX_LOGIN_ATTEMPTS` (5 par défaut),
+  verrou `ACCOUNT_LOCK_MINUTES` (15). Limite HTTP supplémentaire 5/min/IP/route.
+- **Le secret reste en clair dans PostgreSQL.** Aucun chiffrement/gestion des clés
+  livré par G1d, aucune rotation des anciens secrets qui auraient été divulgués.
+  Ne pas prétendre que tous les canaux PIN/OTP imposent désormais la MFA, ni que le
+  code est à usage unique côté serveur. [Runbook et limites G1d](PHASE_G1D_TOTP_RUNBOOK.md).
+
+### 7. Choix du stockage — H2i
+
+- Les processus de production exigent `STORAGE_BACKEND=local` ou `s3` ; hors
+  production, l'absence conserve s3. Une faute, valeur vide ou casse différente
+  échoue au bootstrap au lieu de choisir un backend implicitement.
+- Backend s3 sélectionné en production : credentials non vides/non blancs et
+  non égaux aux défauts de développement. Local : `STORAGE_LOCAL_DIR` explicite,
+  absolu et non équivalent au défaut `/tmp/creche-pdf`.
+- Configuration identique pour API/worker ; volumes réellement partagés si local.
+  Le service média/signature reste S3, même si les PDF sont locaux : **ne pas
+  interpréter local comme une désactivation de S3 pour tous les médias**.
+- [Reproduction, exploitation et limites H2i](PHASE_H2I_STORAGE_SELECTION_RUNBOOK.md).
+  Pas de validation des credentials par un fournisseur réel, ni de migration d'objets.
