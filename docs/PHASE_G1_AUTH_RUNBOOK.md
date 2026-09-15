@@ -85,7 +85,11 @@ Aucun reset interne et aucun reset pendant une autre batterie.
 Ciblé frais **26/26**, typecheck/build, lint zéro avertissement, **27/27 unitaires** et
 audit production **0 vulnérabilité** verts. Runner **46 suites/contrôles**, seuil 26 et
 notice `G1 auth hardening passed` obligatoire. Les preuves H2 restent agrégées et le
-garde de budget des notices est vert. Batterie complète/CI à confirmer dans PR #44.
+garde de budget des notices est vert. Confirmation G1a : **9/9 checks** sur
+`68a187d22bd1bfd2ca6844ba93823a35d023d2c7`, [CI 34913991948](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34913991948),
+database **104207497079**, notice G1 26, H2/H1/F2/F4 relues. Le runner de 46 suites
+est qualifié en CI ; le dernier log local complet n'a pas survécu à la restauration,
+donc aucun résultat local complet supplémentaire n'est attribué. PR #44 non mergée.
 
 ## Non couvert et rollback
 

@@ -382,7 +382,7 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 
 ### G1. Authentification
 
-- [x] **G1a — implémentation reproduite**, qualification complète/CI en cours :
+- [x] **G1a — implémentation reproduite**, CI **9/9** sur `68a187d` :
       `trust proxy=1` (jamais true), nginx écrase XFF ; deux clients derrière un
       proxy HTTP réel gardent des limites séparées. API impérativement privée derrière
       un seul ingress ; démarrage nginx/topologie publique à qualifier avant déploiement.
@@ -397,22 +397,33 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       concurrence ; coût bcrypt fourni par environnement converti en nombre.
 - [x] Ciblé HTTP/PG **10/26 → 26/26**, incluant 403 suspendu, lockout concurrent,
       PIN, OTP et deux IP derrière proxy. Runner 46 suites et notice G1 obligatoire.
-      [Runbook G1](PHASE_G1_AUTH_RUNBOOK.md), résultat complet/CI dans PR #44.
+      [Runbook G1](PHASE_G1_AUTH_RUNBOOK.md), CI **34913991948**, database
+      **104207497079**, notice G1 26 et H2/H1/F2/F4 confirmées en PR #44.
 - [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, races refresh/
       invitations, TOTP et demandes OTP concurrentes ; G1a ne ferme pas ces frontières.
       Pas de qualification globale de l'auth ni de topologie de déploiement.
 
 ### G2. RLS
 
-- [ ] **`organization_id IS NULL OR …`** sur `feature_flags`/`background_jobs`/`outbox` :
-      reproduire (n'importe quel tenant peut écrire/supprimer des lignes globales ?), puis décider :
-      tables non tenantées (retirer le `GRANT` en écriture à l'app) **ou** RLS stricte.
-- [ ] **029 vs 018** : lire les deux migrations ; la 029 réintroduit-elle le pattern GUC que la 018
-      corrigeait ? Correctif éventuel en **055** (001–052 immuables).
-- [ ] **Race trigger 023** : pas de `FOR UPDATE` sur `payment` → deux allocations concurrentes
-      peuvent dépasser le montant. Reproduire avec 2 transactions parallèles, corriger en **055**.
-- [ ] **Tests** : les 3 scénarios dans `tests/tenant-isolation/`, exécutés avec le rôle `creche_app`
-      de prod (dépend de D2).
+- [x] **Lignes globales** : DML ordinaires hors tenant reproduits sur feature_flags,
+      background_jobs et outbox_events ; migration additive **055** sépare SELECT
+      (lectures globales conservées) et écritures strictement tenantées. Helpers
+      privilégiés worker/support conservés ; ce n'est pas une suppression de toute
+      capacité globale de l'application.
+- [x] **029 vs 018** : régression réelle du cast GUC ; les trois policies privacy
+      utilisent désormais app_tenant_id(), résultats vides après COMMIT/espaces au
+      lieu de 22P02. Contexte A/B et refus étrangers conservés.
+- [x] **Race trigger 023** : deux transactions allouaient 70+70 sur un paiement de
+      100 (140 committé) ; verrou du paiement FOR UPDATE dans **055**. 40+40 autorisé,
+      dépassement séquentiel déjà refusé. Aucun fichier de migration existant modifié.
+- [x] **Tests ciblés réels creche_app** : **52/113 → 113/113**, migration en place +
+      répétition sans dérive, snapshots de sept tables conservés ; installation
+      fraîche également verte. Runner 47 suites ; complet/CI à confirmer en PR #44.
+      [Runbook G2](PHASE_G2_RLS_INTEGRITY_RUNBOOK.md).
+- [ ] **Frontières restantes** : autorités des helpers privilégiés, UPDATE/DELETE
+      d'allocations, intégrité composite financière et anomalies historiques ne sont
+      pas qualifiées par le correctif des INSERT concurrents. Ne pas déclarer
+      l'intégrité financière globale ni la production closes.
 
 ### G3. Intégrité financière et conformité
 
@@ -597,7 +608,7 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 |---|---|---|
 | `053_jobs_reap_stale.sql` | **créée** : reaper, baux et heartbeat de jobs orphelins | E1 |
 | `054_notif_queue_finish_fix.sql` | **créée** : conserver le motif, contrat de statut inchangé | E3 |
-| `055_rls_and_race_fixes.sql` | pattern GUC (régression 029 vs 018) + `FOR UPDATE` trigger 023 | G2 |
+| `055_rls_and_race_fixes.sql` | **créée** : DML global strict, GUC 029 robuste, verrou payment du trigger 023 | G2 |
 | `056_scheduler.sql` | **créée** : ticks, coordination, 3 producteurs et santé | E2 |
 | `057_export_lifecycle.sql` | **créée** : échecs, délais et reprise des exports | E6 |
 
@@ -623,7 +634,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (46 suites/contrôles après G1a) — rôles stricts : voir runbook H2g
+# Batterie complète (47 suites/contrôles après G2) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

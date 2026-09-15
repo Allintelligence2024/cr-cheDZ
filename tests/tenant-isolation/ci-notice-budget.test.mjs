@@ -17,3 +17,11 @@ test('strict gate budgets notices for H1/F2/F4 and aggregates every H2 count', (
     assert.ok(aggregate.includes(lot + '=${' + counter + '[1]}'), `${lot} actual result missing from aggregate`);
   }
 });
+
+test('G evidence aggregates actual G1 and G2 counters without one notice per lot', () => {
+  const source = readFileSync(new URL('../../scripts/test-production-roles.mjs', import.meta.url), 'utf8');
+  const aggregate = source.split('\n').find(line => line.includes('::notice title=G security passed::'));
+  assert.ok(aggregate);
+  assert.ok(aggregate.includes('G1=${authHardening[1]}'));
+  assert.ok(aggregate.includes('G2=${rlsIntegrity[1]}'));
+});

@@ -124,8 +124,13 @@ console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}
 const authHardening = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase43-auth-hardening.api.test.log'), 'utf8')
   .match(/G1 auth hardening: (\d+) passed, 0 failed/);
 if (!authHardening || Number(authHardening[1]) < 26) throw new Error('G1 auth evidence missing or incomplete');
-console.log(`::notice title=G1 auth hardening passed::${authHardening[1]} HTTP/PostgreSQL scenarios passed: parent status and lockout, atomic failure counters and OTP consumption, generic wrong-secret errors, numeric bcrypt config, separate client limits behind a single overwriting proxy. Not global JWT/role revocation, refresh/invitation race or public direct-API deployment qualification.`);
-console.log('✓ GATE D : régressions Phase D + 46 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+console.log(`G1 auth hardening passed: ${authHardening[1]} HTTP/PostgreSQL scenarios passed: parent status and lockout, atomic failure counters and OTP consumption, generic wrong-secret errors, numeric bcrypt config, separate client limits behind a single overwriting proxy. Not global JWT/role revocation, refresh/invitation race or public direct-API deployment qualification.`);
+const rlsIntegrity = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase44-rls-integrity.pg.test.log'), 'utf8')
+  .match(/G2 RLS integrity: (\d+) passed, 0 failed/);
+if (!rlsIntegrity || Number(rlsIntegrity[1]) < 113) throw new Error('G2 RLS integrity evidence missing or incomplete');
+console.log(`G2 RLS integrity passed: ${rlsIntegrity[1]} application-role PostgreSQL scenarios: global rows read-only to ordinary DML, empty pooled tenant context safe, same-payment allocations serialized. Explicit privileged helpers retained; not a review of their complete authority or all financial mutation paths.`);
+console.log(`::notice title=G security passed::G1=${authHardening[1]}; G2=${rlsIntegrity[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG and G2 application-role SQL, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
+console.log('✓ GATE D : régressions Phase D + 47 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

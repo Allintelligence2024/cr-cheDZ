@@ -71,6 +71,7 @@ SUITES=(
   phase41-photo-consent-scope.api.test.mjs
   phase42-staff-document-scope.api.test.mjs
   phase43-auth-hardening.api.test.mjs
+  phase44-rls-integrity.pg.test.mjs
 )
 
 FILTER="${1:-}"

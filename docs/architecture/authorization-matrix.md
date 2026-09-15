@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v9 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h)
+# Matrice d'autorisation par module (v10 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G2)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -214,3 +214,18 @@ refusées, historique non réécrit. Les formes déjà bloquées par 049 ne cons
 de nouvelles fuites. Ni lecture d'objet, ni nouveau téléchargement, ni revalidation
 JWT/roles globale ; le support global n'est pas qualifié par le super_admin tenant
 utilisé dans le test. [Runbook H2h](../PHASE_H2H_STAFF_DOCUMENT_RUNBOOK.md).
+
+
+## G2 — policies SQL et capacités globales explicites
+
+La migration 055 limite les DML ordinaires sur `feature_flags`, `background_jobs`
+et `outbox_events` aux lignes du tenant courant. Les lignes NULL restent lisibles,
+mais ne peuvent être créées, mises à jour, adoptées ou supprimées par ces DML.
+Les fonctions privilégiées worker/support existantes restent des capacités explicites
+du serveur : leurs autorités HTTP/JWT sont un contrôle séparé, pas supprimé par RLS.
+
+Les trois policies privacy de 029 utilisent le helper GUC robuste de 018. Le trigger
+INSERT d'allocation verrouille aussi le paiement avant la somme, sans refonte des
+règles de facturation ni purge des anciennes données. **52/113 → 113/113** sous rôle
+applicatif réel ; [runbook G2](../PHASE_G2_RLS_INTEGRITY_RUNBOOK.md). Pas de qualification
+des autres mutations financières ou de la possession des identifiants DB par un acteur.
