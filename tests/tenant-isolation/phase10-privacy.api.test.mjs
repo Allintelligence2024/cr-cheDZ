@@ -22,6 +22,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { createDpiaReviewer } from '../fixtures/dpia-reviewer.mjs';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import { appUrl, ensureAppRole } from './helpers.mjs';
@@ -165,7 +166,8 @@ const main = async () => {
       mitigation_measures: ['urls signées', 'consentements'],
     });
     ok('DPIA créée (draft)', dpia.status === 201 && dpia.body.status === 'draft', JSON.stringify(dpia.body).slice(0, 100));
-    const approved = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, tokenA, {});
+    const reviewerToken = await createDpiaReviewer(db, A.org, tag, api);
+    const approved = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, reviewerToken, {});
     ok('DPIA approuvée', (approved.status === 200 || approved.status === 201) && approved.body.status === 'approved');
 
     // ── 9. Impersonation (support) ──────────────────────────────────────────

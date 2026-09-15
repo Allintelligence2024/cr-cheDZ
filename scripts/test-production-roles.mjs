@@ -129,8 +129,12 @@ const rlsIntegrity = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase44-rls
   .match(/G2 RLS integrity: (\d+) passed, 0 failed/);
 if (!rlsIntegrity || Number(rlsIntegrity[1]) < 113) throw new Error('G2 RLS integrity evidence missing or incomplete');
 console.log(`G2 RLS integrity passed: ${rlsIntegrity[1]} application-role PostgreSQL scenarios: global rows read-only to ordinary DML, empty pooled tenant context safe, same-payment allocations serialized. Explicit privileged helpers retained; not a review of their complete authority or all financial mutation paths.`);
-console.log(`::notice title=G security passed::G1=${authHardening[1]}; G2=${rlsIntegrity[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG and G2 application-role SQL, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
-console.log('✓ GATE D : régressions Phase D + 47 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const dpiaApproval = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase45-dpia-approval.api.test.log'), 'utf8')
+  .match(/G3 DPIA approval: (\d+) passed, 0 failed/);
+if (!dpiaApproval || Number(dpiaApproval[1]) < 33) throw new Error('G3 DPIA evidence missing or incomplete');
+console.log(`G3 DPIA approval passed: ${dpiaApproval[1]} HTTP/PostgreSQL scenarios: independent active reviewers, current privileged membership, atomic minimized audit, stable retries and overlapping approvals. Not global JWT revocation, historical approval remediation or production qualification.`);
+console.log(`::notice title=G security passed::G1=${authHardening[1]}; G2=${rlsIntegrity[1]}; G3=${dpiaApproval[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG and G2 application-role SQL and G3 independent DPIA approval/atomic audit, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
+console.log('✓ GATE D : régressions Phase D + 48 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

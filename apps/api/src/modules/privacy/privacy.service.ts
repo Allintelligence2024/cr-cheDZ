@@ -356,9 +356,24 @@ export class PrivacyService {
     )).rows);
   }
 
+  /** Revalidate these privileged writes, not the entire JWT/session surface. */
+  private async assertDpiaActor(client: PoolClient, actorId: string): Promise<void> {
+    const actor = await client.query(
+      `SELECT 1 FROM users u JOIN memberships m ON m.user_id=u.id
+       JOIN roles r ON r.id=m.role_id
+       WHERE u.id=$1 AND u.status='active' AND u.deleted_at IS NULL
+         AND m.organization_id=$2 AND m.is_active=true
+         AND r.slug IN ('director','super_admin') LIMIT 1`,
+      [actorId, requireTenant(this.tenantContext)],
+    );
+    if (!actor.rows[0]) throw new AppError('DPIA_ACTOR_FORBIDDEN',
+      'Un responsable actif de cette organisation est requis', 'يلزم مسؤول نشط في هذه المؤسسة', 403);
+  }
+
   async createDpia(userId: string, dto: { processing_registry_id: string; risk_assessment?: Record<string, unknown>; mitigation_measures?: string[] }): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
+      await this.assertDpiaActor(client, userId);
       const proc = (await client.query(`SELECT id FROM processing_registry WHERE id=$1`, [dto.processing_registry_id])).rows[0];
       if (!proc) throw Errors.notFound();
       const r = await client.query(
@@ -366,19 +381,38 @@ export class PrivacyService {
          VALUES ($1,$2,$3,$4,$5) RETURNING id, status, created_at`,
         [tenantId, dto.processing_registry_id, JSON.stringify(dto.risk_assessment ?? {}), dto.mitigation_measures ?? [], userId],
       );
+      await this.audit.logInTransaction(client, {
+        organizationId: tenantId, userId, action: 'create', resourceType: 'privacy_dpia', resourceId: r.rows[0].id,
+        newValues: { status: 'draft', processing_registry_id: dto.processing_registry_id },
+      });
       return r.rows[0];
     });
   }
 
   async approveDpia(dpiaId: string, actorId: string): Promise<Record<string, unknown>> {
-    requireTenant(this.tenantContext);
+    const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
-      const existing = (await client.query(`SELECT id FROM privacy_dpias WHERE id=$1`, [dpiaId])).rows[0];
+      await this.assertDpiaActor(client, actorId);
+      // Serialize reviewers so retries cannot replace the first approval/audit.
+      const existing = (await client.query(
+        `SELECT id, status, created_by, approved_at FROM privacy_dpias WHERE id=$1 FOR UPDATE`, [dpiaId],
+      )).rows[0];
       if (!existing) throw Errors.notFound();
+      if (existing.created_by === actorId) throw new AppError('DPIA_SELF_APPROVAL_FORBIDDEN',
+        'Le déclarant ne peut pas approuver sa propre analyse', 'لا يمكن للمصرح الموافقة على تحليله الخاص', 403);
+      if (existing.status === 'approved') {
+        return { id: existing.id, status: existing.status, approved_at: existing.approved_at };
+      }
+      if (!['draft', 'in_review'].includes(existing.status)) throw new AppError('DPIA_STATE_CONFLICT',
+        'Cette analyse ne peut pas être approuvée dans son état actuel', 'لا يمكن الموافقة على هذا التحليل في حالته الحالية', 409);
       const r = await client.query(
         `UPDATE privacy_dpias SET status='approved', approved_by=$2, approved_at=NOW(), review_date=CURRENT_DATE + 365
          WHERE id=$1 RETURNING id, status, approved_at`, [dpiaId, actorId],
       );
+      await this.audit.logInTransaction(client, {
+        organizationId: tenantId, userId: actorId, action: 'approve', resourceType: 'privacy_dpia', resourceId: dpiaId,
+        oldValues: { status: existing.status }, newValues: { status: 'approved' },
+      });
       return r.rows[0];
     });
   }

@@ -418,7 +418,8 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       dépassement séquentiel déjà refusé. Aucun fichier de migration existant modifié.
 - [x] **Tests ciblés réels creche_app** : **52/113 → 113/113**, migration en place +
       répétition sans dérive, snapshots de sept tables conservés ; installation
-      fraîche également verte. Runner 47 suites ; complet/CI à confirmer en PR #44.
+      fraîche également verte. Strict local **47/47**, CI **34927109368**, **9/9** sur
+      `babbbba`, database **104247378113**, G1=26/G2=113 confirmés en PR #44.
       [Runbook G2](PHASE_G2_RLS_INTEGRITY_RUNBOOK.md).
 - [ ] **Frontières restantes** : autorités des helpers privilégiés, UPDATE/DELETE
       d'allocations, intégrité composite financière et anomalies historiques ne sont
@@ -427,13 +428,24 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 
 ### G3. Intégrité financière et conformité
 
-- [ ] Vérifier la chaîne de terminaison après le handler (depuis E1 :
-      `jobs_finish_leased` dans `job-runtime.ts`, conditionné au bail) ;
-      confirmer que le drain (E3) est la seule voie et que `send_parent_notification` ne marque pas
-      « sent » trop tôt.
+- [x] Chaîne runtime relue contre E1/E3/H2b : handler attendu puis
+      `jobs_finish_leased` conditionné au bail ; send_parent_notification ne modifie
+      pas la file, notif_queue_finish appelé par le drain uniquement dans le runtime.
+      Contrats existants des suites 27/28/36 conservés : **sent = traité, pas livré**,
+      motif conservé (décision E). Pas de nouveau correctif ni de qualification
+      fournisseur réel ou des pouvoirs SQL privilégiés. Voir runbook G3a.
 - [ ] `next_org_sequence` non hashé → numéros de facture devinables. Décider : séquentiel est
       souvent **légalement requis** → si oui, **ADR de décision** ; sinon composant non devinable.
-- [ ] DPIA auto-approuvable sans audit : séparation des rôles (approbateur ≠ déclarant).
+- [x] **G3a DPIA** : auto-approbation refusée, compte/membership/rôle actuels
+      contrôlés pour les deux écritures ; première approbation conservée sous verrou,
+      audit minimal dans la même transaction. **11/33 → 33/33**, dont concurrence
+      réelle et panne de stockage d'audit avec rollback. Second responsable dans
+      les fixtures historiques ; aucun bypass des approbations positives.
+      Runner **48 suites**, complet/CI à confirmer en PR #44.
+      [Runbook G3a](PHASE_G3_DPIA_RUNBOOK.md).
+- [ ] Historique des décisions, workflow complet de renouvellement, indépendance
+      réelle des personnes/impersonation, révocation après contrôle et audit global
+      restent hors qualification G3a. Aucune ancienne décision modifiée.
 
 ---
 
@@ -634,7 +646,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (47 suites/contrôles après G2) — rôles stricts : voir runbook H2g
+# Batterie complète (48 suites/contrôles après G3a) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

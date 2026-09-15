@@ -27,6 +27,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createDpiaReviewer } from '../fixtures/dpia-reviewer.mjs';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import { appUrl, ensureAppRole } from './helpers.mjs';
@@ -100,7 +101,9 @@ const main = async () => {
         risk_assessment: { level: 'moderate', reference: 'docs/regulatory/DPIA-VIDEOSURVEILLANCE.md' },
         mitigation_measures: ['accès restreint', 'purge 30 j', 'visionnage journalisé'],
       });
-      await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, tokenDir, {});
+      const reviewerToken = await createDpiaReviewer(db, orgId, tag, api);
+      const approval = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, reviewerToken, {});
+      ok('DPIA approuvée par un responsable distinct', approval.status === 201 && approval.body.status === 'approved');
       await api('POST', '/support/flags/video_surveillance', tokenSuper, { organization_id: orgId, is_enabled: true });
     };
 

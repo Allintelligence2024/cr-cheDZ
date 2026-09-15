@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v10 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G2)
+# Matrice d'autorisation par module (v11 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G2/G3a)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -229,3 +229,19 @@ INSERT d'allocation verrouille aussi le paiement avant la somme, sans refonte de
 règles de facturation ni purge des anciennes données. **52/113 → 113/113** sous rôle
 applicatif réel ; [runbook G2](../PHASE_G2_RLS_INTEGRITY_RUNBOOK.md). Pas de qualification
 des autres mutations financières ou de la possession des identifiants DB par un acteur.
+
+
+## G3a — Déclaration et approbation DPIA
+
+POST /privacy/dpias et POST /privacy/dpias/:id/approve conservent leurs rôles HTTP
+**director/super_admin** ; les écritures vérifient également le compte actif,
+non supprimé, et un membership actif du tenant portant actuellement l'un de ces
+rôles. Un JWT antérieur à un déclassement ne suffit pas pour ces opérations.
+
+L'approbateur doit être un **autre compte** que le déclarant, même si tous deux ont
+le rôle director. Première approbation sérialisée, réessais sans remplacement de
+métadonnées ni double audit. Mutation et audit minimal atomiques ; panne d'audit =
+rollback. Les lectures DPIA, l'audit best-effort des autres domaines et les anciennes
+décisions ne sont pas modifiés. Pas de preuve d'indépendance de deux personnes,
+de contrôle global d'impersonation ou de révocation concurrente après vérification.
+**11/33 → 33/33**, [runbook G3a](../PHASE_G3_DPIA_RUNBOOK.md).

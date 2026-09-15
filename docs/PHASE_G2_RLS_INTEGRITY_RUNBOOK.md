@@ -90,7 +90,10 @@ avec URLs admin/migrateur/application distinctes. Pas de reset pendant une autre
 Ciblé **113/113**, typecheck/build, lint zéro avertissement, **27/27 unitaires**, audit
 production **0 vulnérabilité** et garde de budget des notices verts. Runner **47 suites**,
 seuil 113 ; G1/G2 regroupés dans `G security passed` avec leurs compteurs réels, détails
-en stdout, pour éviter le plafond d'annotations. Batterie complète/CI à confirmer en PR #44.
+en stdout, pour éviter le plafond d'annotations. Qualification finale : strict local
+**47/47**, [CI 34927109368](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34927109368)
+**9/9** sur `babbbba37f9883f082a0794a4eb5fd3ad2b10fc7`, database **104247378113**,
+annotations G1=26/G2=113, H2/H1/F2/F4 réellement relues et consignées en PR #44.
 
 ## Limites et rollback
 

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { Inject } from '@nestjs/common';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { redact } from '../../shared/redact';
@@ -37,6 +37,8 @@ export interface DataAccessEntry {
  * Utilise la pool DIRECTEMENT (pas le contexte tenant) : l'audit doit
  * toujours fonctionner ; audit_logs/data_access_logs sont des tables
  * système sans RLS, accès DPO/super_admin uniquement.
+ * Exception explicite : logInTransaction utilise le client du métier et propage
+ * les erreurs (DPIA), pour rendre mutation et audit atomiques.
  * Les valeurs sont masquées (ADR-010) : aucune PII dans old/new_values.
  */
 @Injectable()
@@ -47,32 +49,43 @@ export class AuditService {
 
   async log(entry: AuditEntry): Promise<void> {
     try {
-      await this.pool.query(
-        `INSERT INTO audit_logs
-           (organization_id, user_id, device_id, session_id, action,
-            resource_type, resource_id, resource_label,
-            old_values, new_values, ip_address, user_agent, correlation_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-        [
-          entry.organizationId ?? null,
-          entry.userId ?? null,
-          entry.deviceId ?? null,
-          entry.sessionId ?? null,
-          entry.action,
-          entry.resourceType,
-          entry.resourceId ?? null,
-          entry.resourceLabel ?? null,
-          entry.oldValues ? JSON.stringify(redact(entry.oldValues)) : null,
-          entry.newValues ? JSON.stringify(redact(entry.newValues)) : null,
-          entry.ipAddress ?? null,
-          entry.userAgent ?? null,
-          entry.correlationId ?? null,
-        ],
-      );
+      await this.writeEntry(this.pool, entry);
     } catch (error) {
       // L'audit ne doit jamais faire échouer l'action métier.
       this.logger.error(`Échec écriture audit: ${(error as Error).message}`);
     }
+  }
+
+  /** Security-sensitive caller owns BEGIN/COMMIT: audit failure must roll back
+   * the business mutation. Unlike log(), errors are deliberately propagated.
+   */
+  async logInTransaction(client: PoolClient, entry: AuditEntry): Promise<void> {
+    await this.writeEntry(client, entry);
+  }
+
+  private async writeEntry(client: Pick<PoolClient, 'query'>, entry: AuditEntry): Promise<void> {
+    await client.query(
+      `INSERT INTO audit_logs
+         (organization_id, user_id, device_id, session_id, action,
+          resource_type, resource_id, resource_label,
+          old_values, new_values, ip_address, user_agent, correlation_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        entry.organizationId ?? null,
+        entry.userId ?? null,
+        entry.deviceId ?? null,
+        entry.sessionId ?? null,
+        entry.action,
+        entry.resourceType,
+        entry.resourceId ?? null,
+        entry.resourceLabel ?? null,
+        entry.oldValues ? JSON.stringify(redact(entry.oldValues)) : null,
+        entry.newValues ? JSON.stringify(redact(entry.newValues)) : null,
+        entry.ipAddress ?? null,
+        entry.userAgent ?? null,
+        entry.correlationId ?? null,
+      ],
+    );
   }
 
   /** Carnet d'accès aux données sensibles (dossier médical, photos…). */
