@@ -108,7 +108,12 @@ Azure sont inaccessibles ici (EOF/TLS), donc pas de qualification H2g par cette 
 et la présence des sept compteurs réels dans une seule notice agrégée H2. Les sept
 seuils et refus de résultat incomplet restent inchangés. Le runner passe à **5 notices**
 dans cette étape : H1 dev/staging, F2, F4 et H2 agrégée. Aucun workflow modifié.
-Le garde est intégré avant la batterie stricte ; nouvelle CI du SHA publié à confirmer.
+Le garde est intégré avant la batterie stricte. Confirmation finale sur
+`361092c800cc98f99a5b346f5f421a805e9d20db` : [CI 34909569724](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34909569724),
+**9/9 checks**, database **104193817961** ; H2g=58 dans l'agrégat H2 et les résultats
+H2a–H2f, F2 51, F4 7 + PG, H1 dev/staging effectivement relus. Dernier rejeu local
+**44/44** terminé après reprise de connexion, sans relancer/resetter le processus.
+PR #44 actualisée, non mergée. Les mentions pré-push ci-dessus sont historiques.
 
 ## Limites et rollback
 

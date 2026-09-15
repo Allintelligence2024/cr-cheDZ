@@ -114,10 +114,14 @@ const photoConsent = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase41-pho
   .match(/H2g photo consent: (\d+) passed, 0 failed/);
 if (!photoConsent || Number(photoConsent[1]) < 58) throw new Error('H2g photo consent evidence missing or incomplete');
 console.log(`H2g photo consent passed: ${photoConsent[1]} real HTTP/PostgreSQL scenarios passed: shared publication/parent-signing consent perimeter includes primary child, deduplicates participants and refuses unverifiable metadata. Authorized photos and staff access retained. Local signatures only, not image-content recognition, live storage delivery or signed-URL recall.`);
+const staffDocuments = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase42-staff-document-scope.api.test.log'), 'utf8')
+  .match(/H2h staff document scope: (\d+) passed, 0 failed/);
+if (!staffDocuments || Number(staffDocuments[1]) < 32) throw new Error('H2h staff document evidence missing or incomplete');
+console.log(`H2h staff document scope passed: ${staffDocuments[1]} real HTTP/PostgreSQL scenarios passed: tenant-prefix guard shared with media, refused staff-document writes leave documents and audit unchanged. Existing role/RLS and minimized reads retained. Not object existence, storage download, historical rewrite or global role revocation qualification.`);
 // All subprocesses share one workflow step (ten notices maximum). Keep full
 // per-lot details in stdout, but aggregate H2 so later lots are not silently lost.
-console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}. All HTTP/PostgreSQL scenario thresholds verified, zero failures. Local provider doubles/signatures only; no global JWT revocation, signed-URL recall or production qualification. Per-lot details remain in the job log and runbooks.`);
-console.log('✓ GATE D : régressions Phase D + 44 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}; H2h=${staffDocuments[1]}. All HTTP/PostgreSQL scenario thresholds verified, zero failures. Local provider doubles/signatures only; no global JWT revocation, signed-URL recall or production qualification. Per-lot details remain in the job log and runbooks.`);
+console.log('✓ GATE D : régressions Phase D + 45 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

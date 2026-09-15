@@ -510,7 +510,8 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
         **35/58 → 58/58** HTTP/PG ; photos autorisées, retrait de visibilité et accès
         interne staff conservés. Métadonnées historiques incohérentes refusées sans purge.
         [Runbook H2g](PHASE_H2G_PHOTO_CONSENT_RUNBOOK.md) ; **44/44 suites strictes**
-        locales, rejeu final frais confirmé ; CI du SHA publié à confirmer. Ni analyse des octets, ni rappel des URLs déjà signées,
+        locales, rejeu final frais confirmé ; CI **34909569724**, **9/9** sur `361092c`,
+        notice H2g=58 et H1/F2/F4 confirmées. Ni analyse des octets, ni rappel des URLs déjà signées,
         ni qualification du stockage réel ou de nouvelles politiques document/MIME.
   - [ ] **Suite confidentialité** : autres projections santé/journal/médias et contrôles de gardien,
         snapshots privacy historiques et routes registre/DPIA/violations. Révocation
@@ -532,8 +533,13 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       (platform-express ne déclare pas body-parser) ; `express.body-parser: 1.20.8` force un
       downgrade majeur (Express 5.2.1 veut `^2.2.1`) — c'est lui qui avait introduit `qs` 6.15.3.
       Décider : supprimer les deux (état naturel : body-parser 2.3.0 + qs 6.16.0) ou documenter le pin.
-- [ ] **`staff_documents.storage_key`** (`StaffService.createDocument`) : même défaut que C3
-      (pas de préfixe tenant) — appliquer la même garde.
+- [x] **H2h `staff_documents.storage_key`** : garde de préfixe tenant C3 partagée
+      avec les médias, après vérification du profil sous RLS et avant INSERT/audit.
+      Reproduction HTTP/PG **16/32 → 32/32** ; créations et audits refusés inchangés,
+      rôles/listes minimisées conservés. Une partie des anciennes erreurs 500 était
+      déjà bloquée par 049, pas une nouvelle fuite. [Runbook H2h](PHASE_H2H_STAFF_DOCUMENT_RUNBOOK.md).
+      Runner 45 suites, agrégat H2h=32 ; batterie complète/CI à confirmer en PR #44.
+      Ni téléchargement d'objet démontré, ni réécriture des références historiques.
 - [ ] **Les 44 routes sans `@Roles`/`@Public`** (inventaire `npm run check:routes-inventory`) :
       revue module par module + justification écrite pour chaque route self-service conservée sans garde.
 
@@ -608,7 +614,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (44 suites/contrôles après H2g) — rôles stricts : voir runbook H2g
+# Batterie complète (45 suites/contrôles après H2h) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

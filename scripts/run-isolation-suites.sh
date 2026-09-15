@@ -69,6 +69,7 @@ SUITES=(
   phase39-journal-health-disclosure.api.test.mjs
   phase40-privacy-actor-revocation.api.test.mjs
   phase41-photo-consent-scope.api.test.mjs
+  phase42-staff-document-scope.api.test.mjs
 )
 
 FILTER="${1:-}"

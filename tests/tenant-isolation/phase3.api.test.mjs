@@ -287,7 +287,7 @@ async function main() {
     const docA = await api('POST', `/staff/${staffA.body.id}/documents`, dirAToken, {
       document_type: 'diploma',
       title: 'Diplôme éducatrice',
-      storage_key: 'staff/diplome-a.pdf',
+      storage_key: `${orgA.body.id}/staff/diplome-a.pdf`,
       expiry_date: docExpiryDate,
       alert_days_before: 30,
     });

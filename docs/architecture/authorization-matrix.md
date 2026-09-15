@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v8 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g)
+# Matrice d'autorisation par module (v9 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -37,8 +37,8 @@
   payroll — à revalider avec le métier.
 - Les 44 routes sans garde explicite (inventaire) : revue module par module + justification
   écrite pour chaque route self-service conservée sans `@Roles`.
-- `staff_documents.storage_key` (création) : même défaut de préfixe tenant que C3 — à corriger
-  avec la dette H2.
+- `staff_documents.storage_key` (création) : préfixe tenant C3 appliqué dans H2h ;
+  existence/contenu des objets et anciennes références non qualifiés.
 
 ## H2a — demandes de droits et publication de journal
 
@@ -199,3 +199,18 @@ Pas de purge/réécriture des sources, reconnaissance des personnes dans les oct
 rappel d'URLs signées, sérialisation concurrente, arbitrage multi-gardiens ou changement
 de politique document/MIME. Autres projections médias et revalidation des rôles/JWT
 restent ouvertes. Voir le [runbook H2g](../PHASE_H2G_PHOTO_CONSENT_RUNBOOK.md).
+
+
+## H2h — clés des documents du personnel
+
+`POST /staff/:id/documents` conserve ses rôles director/super_admin et sa recherche
+du profil sous RLS. La clé doit ensuite commencer par `<tenant courant>/` via le
+helper partagé `shared/authorization/storage-key.ts`, sinon 400 sans INSERT ni audit
+de création. Profil absent/hors tenant : 404 inchangé ; autres rôles : 403 inchangé.
+Les listes direction/comptabilité restent minimisées, sans clé de stockage.
+
+**16/32 → 32/32** HTTP/PG : clés propres conservées à l'identique, clés hors périmètre
+refusées, historique non réécrit. Les formes déjà bloquées par 049 ne constituent pas
+de nouvelles fuites. Ni lecture d'objet, ni nouveau téléchargement, ni revalidation
+JWT/roles globale ; le support global n'est pas qualifié par le super_admin tenant
+utilisé dans le test. [Runbook H2h](../PHASE_H2H_STAFF_DOCUMENT_RUNBOOK.md).
