@@ -75,6 +75,7 @@ SUITES=(
   phase45-dpia-approval.api.test.mjs
   phase46-refresh-rotation.api.test.mjs
   phase47-invitations.api.test.mjs
+  phase48-totp-management.api.test.mjs
 )
 
 FILTER="${1:-}"

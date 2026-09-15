@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v13 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G1b/G1c/G2/G3a)
+# Matrice d'autorisation par module (v14 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G1b/G1c/G1d/G2/G3a)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -276,3 +276,18 @@ Le token donne le tenant cible, pas une autorisation de choisir un ancien member
 **11/38 → 38/38**, [runbook G1c](../PHASE_G1C_INVITATIONS_RUNBOOK.md). Pas de nonce
 révoquant une ancienne réinvitation, de livraison réelle, de qualification de toutes
 les courses d'émission ou de révocation globale des JWT. GET invitations inchangé.
+
+
+## G1d — Gestion du facteur TOTP
+
+Les trois POST /auth/2fa/{enable,verify,disable} sont self-service : compte du JWT,
+pas de rôle de tenant nécessaire. Compte non supprimé, active/pending et non verrouillé
+revérifié après users FOR UPDATE ; état suspendu/refus et disparition du secret pendant
+attente respectés. Préparation déjà activée : 409 sans secret. Secret pending stable,
+confirmation/annulation sérialisées avec audit minimal atomique. Preuves invalides
+committées dans le compteur partagé ; limite HTTP 5/min/IP/route en complément.
+
+**7/44 → 44/44**, [runbook G1d](../PHASE_G1D_TOTP_RUNBOOK.md), incluant deux cas RFC
+cryptographiques déjà conformes. Chiffrement au repos, anti-rejeu du code, step-up
+avant préparation, MFA de tous les canaux PIN/OTP et révocation globale des JWT restent
+ouverts. Le facteur est une propriété du compte, pas une nouvelle autorisation tenant.

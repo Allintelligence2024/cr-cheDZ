@@ -118,3 +118,16 @@ NODE_ENV=production node -e "require('./packages/prod-config/dist').assertProduc
 - [ ] Job `payments_expire` planifié (GLOBAL, org NULL)
 - [ ] Job `video_clips_purge` planifié par org (si flag vidéo actif)
 - [ ] Backup restore <30 min testé (voir BACKUP-RUNBOOK.md)
+
+### 6. Secret TOTP — portée G1d
+
+- Préparation `/auth/2fa/enable` : secret retourné uniquement tant que le facteur est
+  pending ; une fois activé, **409 TOTP_ALREADY_ENABLED** sans secret/URI. Désactivation
+  exige un code valide et supprime le secret ; pas de récupération par simple GET/setup.
+- Audit du changement atomique, booléens d'état seulement. Les échecs verify/disable
+  et TOTP du login mot de passe comptent dans `MAX_LOGIN_ATTEMPTS` (5 par défaut),
+  verrou `ACCOUNT_LOCK_MINUTES` (15). Limite HTTP supplémentaire 5/min/IP/route.
+- **Le secret reste en clair dans PostgreSQL.** Aucun chiffrement/gestion des clés
+  livré par G1d, aucune rotation des anciens secrets qui auraient été divulgués.
+  Ne pas prétendre que tous les canaux PIN/OTP imposent désormais la MFA, ni que le
+  code est à usage unique côté serveur. [Runbook et limites G1d](PHASE_G1D_TOTP_RUNBOOK.md).

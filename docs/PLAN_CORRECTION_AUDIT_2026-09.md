@@ -412,15 +412,24 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       revérifiée après attente. Créateur courant et périmètre tenant vérifiés.
       **11/38 → 38/38**, dont courses et pannes PostgreSQL réelles.
       Token remis uniquement en development ; transport absent → 503 avant écriture
-      hors development, jamais de faux envoi. Runner **50 suites**, strict/CI à confirmer
-      en PR #44. [Runbook G1c](PHASE_G1C_INVITATIONS_RUNBOOK.md).
+      hors development, jamais de faux envoi. Strict **50/50**, CI **34938519200**,
+      **9/9** sur `00a4831`, database **104281615425**, six notices vérifiées en PR #44. [Runbook G1c](PHASE_G1C_INVITATIONS_RUNBOOK.md).
 - [ ] **Livraison/réinvitation** : transport réel non implémenté, nonce/version pour
       invalider un lien réémis absent, émission concurrente, compte déjà actif et
       références site/room non qualifiés. Aucun ancien token exposé invalidé par G1c.
+- [x] **G1d gestion TOTP (périmètre local reproduit)** : secret activé non divulgué,
+      compte courant relu sous verrou, configuration/confirmation/annulation sérialisées,
+      audit minimal atomique. Compteur partagé des preuves invalides, expiration après
+      attente et limites HTTP réelles. **7/44 → 44/44**, dont deux cas RFC déjà verts ;
+      runner **51 suites**, strict/CI à confirmer en PR #44.
+      [Runbook G1d](PHASE_G1D_TOTP_RUNBOOK.md).
+- [ ] **Suite MFA** : chiffrement du secret au repos, anti-rejeu TOTP persistant,
+      preuve récente avant préparation, récupération/rotation et obligation MFA sur
+      tous les canaux PIN/OTP parent non qualifiés. Secrets déjà divulgués non invalidés.
 - [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, autres frontières invitations,
-      TOTP et demandes OTP concurrentes ; propriété/réassociation device_id et autres
+      MFA ci-dessus et demandes OTP concurrentes ; propriété/réassociation device_id et autres
       courses refresh vs login/logout/mot de passe/révocations après vérification.
-      G1a/G1b/G1c ne ferment pas ces frontières.
+      G1a/G1b/G1c/G1d ne ferment pas ces frontières.
       Pas de qualification globale de l'auth ni de topologie de déploiement.
 
 ### G2. RLS
@@ -671,7 +680,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (50 suites/contrôles après G1c) — rôles stricts : voir runbook H2g
+# Batterie complète (51 suites/contrôles après G1d) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

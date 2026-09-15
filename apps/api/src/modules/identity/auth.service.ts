@@ -101,6 +101,7 @@ export class AuthService {
 
     if (user.totp_enabled) {
       if (!totpCode || !user.totp_secret || !this.totp.verify(user.totp_secret, totpCode)) {
+        await this.recordFailedAttempt(user.id, email);
         throw Errors.totpInvalid();
       }
     }
@@ -513,44 +514,81 @@ export class AuthService {
   // ── 2FA ─────────────────────────────────────────────────────────────────
 
   async enableTotp(userId: string): Promise<{ secret: string; otpauth_url: string }> {
-    const res = await this.pool.query<UserRow>(`SELECT email, totp_secret FROM users WHERE id = $1`, [userId]);
-    const user = res.rows[0];
-    const secret = user?.totp_secret ?? this.totp.generateSecret();
-    await this.pool.query(
-      `UPDATE users SET totp_secret = $2, version = version + 1 WHERE id = $1`,
-      [userId, secret],
-    );
-    return {
-      secret,
-      otpauth_url: this.totp.otpauthUrl(secret, user?.email ?? userId),
-    };
+    return this.withTotpAccount(userId, async (client, user) => {
+      // A bearer token alone must never reveal an already activated factor.
+      if (user.totp_enabled) throw Errors.totpAlreadyEnabled();
+      const secret = user.totp_secret ?? this.totp.generateSecret();
+      if (!user.totp_secret) {
+        await client.query('UPDATE users SET totp_secret=$2, version=version+1 WHERE id=$1', [userId, secret]);
+        await this.audit.logInTransaction(client, {
+          userId, action: 'update', resourceType: 'user', resourceId: userId,
+          newValues: { totp_setup: true },
+        });
+      }
+      return { secret, otpauth_url: this.totp.otpauthUrl(secret, user.email ?? userId) };
+    });
   }
 
   async verifyTotp(userId: string, code: string): Promise<{ enabled: boolean }> {
-    const res = await this.pool.query<UserRow>(`SELECT totp_secret, totp_enabled FROM users WHERE id = $1`, [userId]);
-    const user = res.rows[0];
-    if (!user?.totp_secret || !this.totp.verify(user.totp_secret, code)) {
-      throw Errors.totpInvalid();
-    }
-    if (!user.totp_enabled) {
-      await this.pool.query(`UPDATE users SET totp_enabled = true, version = version + 1 WHERE id = $1`, [userId]);
-      await this.audit.log({ userId, action: 'update', resourceType: 'user', resourceId: userId, newValues: { totp_enabled: true } });
-    }
-    return { enabled: true };
+    return this.changeTotp(userId, code, true);
   }
 
   async disableTotp(userId: string, code: string): Promise<{ enabled: boolean }> {
-    const res = await this.pool.query<UserRow>(`SELECT totp_secret, totp_enabled FROM users WHERE id = $1`, [userId]);
-    const user = res.rows[0];
-    if (!user?.totp_secret || !this.totp.verify(user.totp_secret, code)) {
-      throw Errors.totpInvalid();
+    return this.changeTotp(userId, code, false);
+  }
+
+  private async changeTotp(userId: string, code: string, enabled: boolean): Promise<{ enabled: boolean }> {
+    return this.withTotpAccount(userId, async (client, user) => {
+      if (!user.totp_secret) return Errors.totpInvalid();
+      if (!this.totp.verify(user.totp_secret, code)) {
+        await this.recordFailedAttempt(userId, user.email ?? '', client);
+        // Returned, not thrown: persist the failed proof before emitting 401.
+        return Errors.totpInvalid();
+      }
+      if (!enabled || !user.totp_enabled) {
+        await client.query(
+          `UPDATE users SET totp_enabled=$2,
+             totp_secret=CASE WHEN $2 THEN totp_secret ELSE NULL END,
+             failed_attempts=0, locked_until=NULL, version=version+1 WHERE id=$1`,
+          [userId, enabled],
+        );
+        await this.audit.logInTransaction(client, {
+          userId, action: 'update', resourceType: 'user', resourceId: userId,
+          newValues: { totp_enabled: enabled },
+        });
+      } else if (user.failed_attempts || user.locked_until) {
+        await client.query('UPDATE users SET failed_attempts=0, locked_until=NULL, version=version+1 WHERE id=$1', [userId]);
+      }
+      return { enabled };
+    });
+  }
+
+  /** Account-scoped settings: current state and secret are checked AFTER the
+   * user lock. Keep factor mutation and minimal audit on this same connection.
+   * AppError values commit failed-proof counters; thrown errors roll back.
+   */
+  private async withTotpAccount<T>(
+    userId: string,
+    operation: (client: PoolClient, user: UserRow) => Promise<T | AppError>,
+  ): Promise<T> {
+    const client = await this.pool.connect();
+    let result: T | AppError;
+    try {
+      await client.query('BEGIN');
+      const res = await client.query<UserRow>('SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [userId]);
+      const user = res.rows[0];
+      if (!user) throw Errors.invalidCredentials();
+      this.assertLoginAllowed(user);
+      result = await operation(client, user);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
-    await this.pool.query(
-      `UPDATE users SET totp_enabled = false, totp_secret = NULL, version = version + 1 WHERE id = $1`,
-      [userId],
-    );
-    await this.audit.log({ userId, action: 'update', resourceType: 'user', resourceId: userId, newValues: { totp_enabled: false } });
-    return { enabled: false };
+    if (result instanceof AppError) throw result;
+    return result;
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -590,20 +628,21 @@ export class AuthService {
     }
   }
 
-  private async recordFailedAttempt(userId: string | null, email: string): Promise<void> {
+  private async recordFailedAttempt(userId: string | null, email: string, client: Pick<PoolClient, 'query'> = this.pool): Promise<void> {
     if (!userId) return;
     const max = Number(this.config.get<number>('MAX_LOGIN_ATTEMPTS', 5));
     const lockMinutes = Number(this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15));
     // One row-serialized update. Concurrent failures cannot overwrite increments;
     // an expired lock starts a fresh window, an active lock is not prolonged.
-    await this.pool.query(
+    // Use statement time: a caller transaction may have waited on the user lock.
+    await client.query(
       `UPDATE users SET
-         failed_attempts = CASE WHEN locked_until<=NOW() THEN 1 ELSE failed_attempts+1 END,
+         failed_attempts = CASE WHEN locked_until<=statement_timestamp() THEN 1 ELSE failed_attempts+1 END,
          locked_until = CASE
-           WHEN (CASE WHEN locked_until<=NOW() THEN 1 ELSE failed_attempts+1 END)>=$2
-             THEN NOW() + ($3 * INTERVAL '1 minute') ELSE NULL END,
+           WHEN (CASE WHEN locked_until<=statement_timestamp() THEN 1 ELSE failed_attempts+1 END)>=$2
+             THEN statement_timestamp() + ($3 * INTERVAL '1 minute') ELSE NULL END,
          version = version+1
-       WHERE id=$1 AND (locked_until IS NULL OR locked_until<=NOW())
+       WHERE id=$1 AND (locked_until IS NULL OR locked_until<=statement_timestamp())
        RETURNING failed_attempts, locked_until`,
       [userId, max, lockMinutes],
     );

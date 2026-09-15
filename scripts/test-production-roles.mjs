@@ -141,8 +141,12 @@ const invitations = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase47-invi
   .match(/G1c invitations: (\d+) passed, 0 failed/);
 if (!invitations || Number(invitations[1]) < 38) throw new Error('G1c invitation evidence missing or incomplete');
 console.log(`G1c invitations passed: ${invitations[1]} HTTP/PostgreSQL scenarios: scoped current creators, serialized pending-account acceptance with atomic audit/session, token handoff only in development; unavailable delivery fails before writes. Not real email delivery, token-specific reinvitation invalidation or global JWT revocation.`);
-console.log(`::notice title=G security passed::G1=${authHardening[1]}; G1b=${refreshRotation[1]}; G1c=${invitations[1]}; G2=${rlsIntegrity[1]}; G3=${dpiaApproval[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG, G1b atomic refresh rotation, G1c scoped invitations and G2 application-role SQL and G3 independent DPIA approval/atomic audit, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
-console.log('✓ GATE D : régressions Phase D + 50 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const totpManagement = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase48-totp-management.api.test.log'), 'utf8')
+  .match(/G1d TOTP management: (\d+) passed, 0 failed/);
+if (!totpManagement || Number(totpManagement[1]) < 44) throw new Error('G1d TOTP management evidence missing or incomplete');
+console.log(`G1d TOTP management passed: ${totpManagement[1]} HTTP/PG and RFC-vector scenarios: no activated-secret disclosure, current account state after locks, serialized enrollment/confirmation/cancellation, strict audit rollback, shared failed-proof lockout and HTTP limits. Not encrypted-at-rest secrets, cross-channel MFA enforcement, one-time TOTP replay protection or global JWT revocation.`);
+console.log(`::notice title=G security passed::G1=${authHardening[1]}; G1b=${refreshRotation[1]}; G1c=${invitations[1]}; G1d=${totpManagement[1]}; G2=${rlsIntegrity[1]}; G3=${dpiaApproval[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG, G1b atomic refresh rotation, G1c scoped invitations, G1d TOTP management and G2 application-role SQL and G3 independent DPIA approval/atomic audit, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
+console.log('✓ GATE D : régressions Phase D + 51 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

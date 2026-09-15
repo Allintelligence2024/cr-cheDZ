@@ -93,12 +93,14 @@ export class AuthController {
   }
 
   @Post('2fa/enable')
+  @RateLimit(5, 60_000)
   @HttpCode(HttpStatus.OK)
   async enable2fa(@CurrentUser() user: CurrentUserPayload): Promise<{ secret: string; otpauth_url: string }> {
     return this.authService.enableTotp(user.sub);
   }
 
   @Post('2fa/verify')
+  @RateLimit(5, 60_000)
   @HttpCode(HttpStatus.OK)
   async verify2fa(
     @Body() dto: TotpDto,
@@ -108,6 +110,7 @@ export class AuthController {
   }
 
   @Post('2fa/disable')
+  @RateLimit(5, 60_000)
   @HttpCode(HttpStatus.OK)
   async disable2fa(
     @Body() dto: TotpDto,

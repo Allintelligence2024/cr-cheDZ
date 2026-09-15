@@ -42,6 +42,8 @@ export const Errors = {
     new AppError('ACCOUNT_SUSPENDED', 'Compte désactivé', 'الحساب معطل', 403),
   totpRequired: () =>
     new AppError('TOTP_REQUIRED', 'Code de vérification requis', 'رمز التحقق مطلوب', 401),
+  totpAlreadyEnabled: () =>
+    new AppError('TOTP_ALREADY_ENABLED', 'La double authentification est déjà activée', 'المصادقة الثنائية مفعّلة بالفعل', 409),
   totpInvalid: () =>
     new AppError('TOTP_INVALID', 'Code de vérification incorrect', 'رمز التحقق غير صحيح', 401),
   sessionReuseDetected: () =>
