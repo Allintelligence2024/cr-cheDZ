@@ -1,3 +1,4 @@
+import { resolveStorageBackend, type StorageBackend } from '@creche/prod-config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFile } from 'node:fs/promises';
@@ -27,12 +28,18 @@ import { CreateCameraDto, ListClipsQuery, PresignClipDto, RegisterClipDto, Updat
  */
 @Injectable()
 export class VideoService {
+  private readonly backend: StorageBackend;
   constructor(
     private readonly tenantContext: TenantContextService,
     private readonly config: ConfigService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
-  ) {}
+  ) {
+    this.backend = resolveStorageBackend({
+      NODE_ENV: this.config.get<string>('NODE_ENV'),
+      STORAGE_BACKEND: this.config.get<string>('STORAGE_BACKEND'),
+    });
+  }
 
   // ── Verrou de conformité : flag org actif exigé ───────────────────────────
 
@@ -275,7 +282,7 @@ export class VideoService {
    * refusé en production (stockage local = dev/test uniquement).
    */
   private resolveStorageBackend(): 'local' | 's3' {
-    const backend = this.config.get<string>('STORAGE_BACKEND', 's3') === 'local' ? 'local' : 's3';
+    const backend = this.backend;
     if (backend === 'local' && this.config.get<string>('NODE_ENV') === 'production') {
       throw new AppError(
         'STORAGE_POLICY',

@@ -421,7 +421,8 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       compte courant relu sous verrou, configuration/confirmation/annulation sérialisées,
       audit minimal atomique. Compteur partagé des preuves invalides, expiration après
       attente et limites HTTP réelles. **7/44 → 44/44**, dont deux cas RFC déjà verts ;
-      runner **51 suites**, strict/CI à confirmer en PR #44.
+      strict **51/51**, CI **34966272565**, **9/9** sur `4c36ad6`,
+      database **104371358901**, six notices vérifiées en PR #44.
       [Runbook G1d](PHASE_G1D_TOTP_RUNBOOK.md).
 - [ ] **Suite MFA** : chiffrement du secret au repos, anti-rejeu TOTP persistant,
       preuve récente avant préparation, récupération/rotation et obligation MFA sur
@@ -583,8 +584,17 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       restreindre au réseau interne) et valider le format avec un parseur Prometheus réel.
 - [ ] **OpenAPI** : « prétendu auto-généré, aucun swagger, < 10 % des endpoints » — vérifier ;
       soit générer réellement (prérequis F1), soit arrêter de le prétendre dans la doc.
-- [ ] **`STORAGE_BACKEND`** : défaut divergent config prod vs runtime → aligner, échouer au
-      démarrage si ambigu.
+- [x] **H2i `STORAGE_BACKEND` — sélection et bootstrap** : écart reproduit et sélecteur
+      commun garde/API/worker ; backend explicite en production, défaut s3 conservé
+      ailleurs, valeurs inconnues/vide refusées. S3 sélectionné : credentials absents/
+      blancs/défauts refusés ; local : chemin absolu explicite non égal au défaut.
+      **14/48 → 48/48**, vrais entry points et rôle PG, I/O local et S3 loopback.
+      Runner **52 suites**, strict/CI à confirmer en PR #44.
+      [Runbook H2i](PHASE_H2I_STORAGE_SELECTION_RUNBOOK.md).
+- [ ] **Suite stockage** : média/signature toujours S3 même si PDF/exports locaux ;
+      configuration de ce cas, fournisseur réel, permissions/durabilité des volumes,
+      chiffrement et références historiques non qualifiés par H2i. Pas d'unification
+      implicite de tous les médias sur le backend local.
 - [x] **Invitation token hors development** : G1c, API réelle dans development/test/
       staging/production/environnement absent ; seul development+provider none permet
       la remise simulée. Ailleurs 503 avant écritures, car aucun transport réel n'est
@@ -680,7 +690,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (51 suites/contrôles après G1d) — rôles stricts : voir runbook H2g
+# Batterie complète (52 suites/contrôles après H2i) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

@@ -9,7 +9,7 @@ import { buildInvoicePdf, deleteFile, storePdf } from './pdf';
 
 // MISSION P1 (feat(config)) : garde de config au boot — en production, un
 // secret par défaut / une config partielle empêche le démarrage (message
-// explicite listant chaque variable fautive). Inactive en test/dev.
+// explicite listant chaque variable fautive). Hors production, seul le choix du backend est contrôlé.
 try {
   assertProductionConfig();
 } catch (error) {

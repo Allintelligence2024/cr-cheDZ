@@ -131,3 +131,17 @@ NODE_ENV=production node -e "require('./packages/prod-config/dist').assertProduc
   livré par G1d, aucune rotation des anciens secrets qui auraient été divulgués.
   Ne pas prétendre que tous les canaux PIN/OTP imposent désormais la MFA, ni que le
   code est à usage unique côté serveur. [Runbook et limites G1d](PHASE_G1D_TOTP_RUNBOOK.md).
+
+### 7. Choix du stockage — H2i
+
+- Les processus de production exigent `STORAGE_BACKEND=local` ou `s3` ; hors
+  production, l'absence conserve s3. Une faute, valeur vide ou casse différente
+  échoue au bootstrap au lieu de choisir un backend implicitement.
+- Backend s3 sélectionné en production : credentials non vides/non blancs et
+  non égaux aux défauts de développement. Local : `STORAGE_LOCAL_DIR` explicite,
+  absolu et non équivalent au défaut `/tmp/creche-pdf`.
+- Configuration identique pour API/worker ; volumes réellement partagés si local.
+  Le service média/signature reste S3, même si les PDF sont locaux : **ne pas
+  interpréter local comme une désactivation de S3 pour tous les médias**.
+- [Reproduction, exploitation et limites H2i](PHASE_H2I_STORAGE_SELECTION_RUNBOOK.md).
+  Pas de validation des credentials par un fournisseur réel, ni de migration d'objets.

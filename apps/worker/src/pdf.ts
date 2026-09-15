@@ -1,3 +1,4 @@
+import { resolveStorageBackend } from '@creche/prod-config';
 /**
  * Génération de PDF de facture + stockage (backend local ou S3/MinIO).
  *
@@ -153,7 +154,7 @@ export function localPath(key: string): string {
 
 /** Stocke un fichier : backend local (répertoire) ou S3/MinIO (objet). */
 export async function storeFile(key: string, data: Buffer, contentType: string): Promise<void> {
-  const backend = process.env.STORAGE_BACKEND ?? 's3';
+  const backend = resolveStorageBackend();
   if (backend === 'local') {
     const filePath = localPath(key);
     mkdirSync(dirname(filePath), { recursive: true });

@@ -1,3 +1,4 @@
+import { resolveStorageBackend, type StorageBackend } from '@creche/prod-config';
 import { exportRange } from '@creche/prod-config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,10 +18,16 @@ import { AppError, Errors } from '../../shared/errors';
  */
 @Injectable()
 export class ExportsService {
+  private readonly backend: StorageBackend;
   constructor(
     private readonly tenantContext: TenantContextService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    this.backend = resolveStorageBackend({
+      NODE_ENV: this.config.get<string>('NODE_ENV'),
+      STORAGE_BACKEND: this.config.get<string>('STORAGE_BACKEND'),
+    });
+  }
 
   /** Crée la demande d'export (ligne pending + job worker). */
   async request(userId: string, dto: { report_type: string; period: string }): Promise<Record<string, unknown>> {
@@ -81,7 +88,7 @@ export class ExportsService {
       );
     }
     const filename = `export-${row.report_type}-${String(row.period_label).replace(/[^0-9-]/g, '_')}.xlsx`;
-    if (this.config.get<string>('STORAGE_BACKEND', 's3') === 'local') {
+    if (this.backend === 'local') {
       // Garde anti path-traversal (audit) : resolve() + containment sous la
       // racine de stockage, et clé sous le préfixe du tenant demandeur —
       // aucune lecture disque avant ces contrôles.

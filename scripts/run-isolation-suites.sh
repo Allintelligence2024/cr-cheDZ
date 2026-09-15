@@ -76,6 +76,7 @@ SUITES=(
   phase46-refresh-rotation.api.test.mjs
   phase47-invitations.api.test.mjs
   phase48-totp-management.api.test.mjs
+  phase49-storage-selection.test.mjs
 )
 
 FILTER="${1:-}"

@@ -120,7 +120,11 @@ if (!staffDocuments || Number(staffDocuments[1]) < 32) throw new Error('H2h staf
 console.log(`H2h staff document scope passed: ${staffDocuments[1]} real HTTP/PostgreSQL scenarios passed: tenant-prefix guard shared with media, refused staff-document writes leave documents and audit unchanged. Existing role/RLS and minimized reads retained. Not object existence, storage download, historical rewrite or global role revocation qualification.`);
 // All subprocesses share one workflow step (ten notices maximum). Keep full
 // per-lot details in stdout, but aggregate H2 so later lots are not silently lost.
-console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}; H2h=${staffDocuments[1]}. All HTTP/PostgreSQL scenario thresholds verified, zero failures. Local provider doubles/signatures only; no global JWT revocation, signed-URL recall or production qualification. Per-lot details remain in the job log and runbooks.`);
+const storageSelection = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase49-storage-selection.test.log'), 'utf8')
+  .match(/H2i storage selection: (\d+) passed, 0 failed/);
+if (!storageSelection || Number(storageSelection[1]) < 48) throw new Error('H2i storage selection evidence missing or incomplete');
+console.log(`H2i storage selection passed: ${storageSelection[1]} config/service, real entrypoint/PG and filesystem/loopback HTTP scenarios: common backend selection, early refusal of ambiguous production storage and missing selected-S3 credentials, valid local/S3 startup retained. Not real S3 service qualification, media-local support, encryption or production deployment.`);
+console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}; H2h=${staffDocuments[1]}; H2i=${storageSelection[1]}. All HTTP/PostgreSQL and config/entrypoint/storage scenario thresholds verified, zero failures. Local provider doubles/signatures only; no global JWT revocation, signed-URL recall or production qualification. Per-lot details remain in the job log and runbooks.`);
 const authHardening = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase43-auth-hardening.api.test.log'), 'utf8')
   .match(/G1 auth hardening: (\d+) passed, 0 failed/);
 if (!authHardening || Number(authHardening[1]) < 26) throw new Error('G1 auth evidence missing or incomplete');
@@ -146,7 +150,7 @@ const totpManagement = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase48-t
 if (!totpManagement || Number(totpManagement[1]) < 44) throw new Error('G1d TOTP management evidence missing or incomplete');
 console.log(`G1d TOTP management passed: ${totpManagement[1]} HTTP/PG and RFC-vector scenarios: no activated-secret disclosure, current account state after locks, serialized enrollment/confirmation/cancellation, strict audit rollback, shared failed-proof lockout and HTTP limits. Not encrypted-at-rest secrets, cross-channel MFA enforcement, one-time TOTP replay protection or global JWT revocation.`);
 console.log(`::notice title=G security passed::G1=${authHardening[1]}; G1b=${refreshRotation[1]}; G1c=${invitations[1]}; G1d=${totpManagement[1]}; G2=${rlsIntegrity[1]}; G3=${dpiaApproval[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG, G1b atomic refresh rotation, G1c scoped invitations, G1d TOTP management and G2 application-role SQL and G3 independent DPIA approval/atomic audit, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
-console.log('✓ GATE D : régressions Phase D + 51 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+console.log('✓ GATE D : régressions Phase D + 52 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 
