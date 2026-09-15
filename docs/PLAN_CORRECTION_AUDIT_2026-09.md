@@ -405,12 +405,22 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       committée avant erreur de réutilisation. **16/24 → 24/24**, HTTP/PG réels,
       dont panne de stockage avec rollback et cas positifs client conservés.
       Politique existante de réutilisation maintenue ; **les JWT d'accès déjà émis
-      ne sont pas invalidés globalement**. Runner **49 suites**, strict/CI à confirmer
-      en PR #44. [Runbook G1b](PHASE_G1B_REFRESH_RUNBOOK.md).
-- [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, invitations,
+      ne sont pas invalidés globalement**. Strict **49/49**, CI **34934147034**, **9/9**
+      sur `cec88c9`, database **104268359780**, G1b=24 confirmé en PR #44. [Runbook G1b](PHASE_G1B_REFRESH_RUNBOOK.md).
+- [x] **G1c invitations / H2 exposition** : acceptation unique d'un compte pending,
+      tenant du lien conservé, profil/membership/session/audit atomiques ; expiration
+      revérifiée après attente. Créateur courant et périmètre tenant vérifiés.
+      **10/37 → 37/37**, dont courses et pannes PostgreSQL réelles.
+      Token remis uniquement en development ; transport absent → 503 avant écriture
+      hors development, jamais de faux envoi. Runner **50 suites**, strict/CI à confirmer
+      en PR #44. [Runbook G1c](PHASE_G1C_INVITATIONS_RUNBOOK.md).
+- [ ] **Livraison/réinvitation** : transport réel non implémenté, nonce/version pour
+      invalider un lien réémis absent, émission concurrente, compte déjà actif et
+      références site/room non qualifiés. Aucun ancien token exposé invalidé par G1c.
+- [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, autres frontières invitations,
       TOTP et demandes OTP concurrentes ; propriété/réassociation device_id et autres
       courses refresh vs login/logout/mot de passe/révocations après vérification.
-      G1a/G1b ne ferment pas ces frontières.
+      G1a/G1b/G1c ne ferment pas ces frontières.
       Pas de qualification globale de l'auth ni de topologie de déploiement.
 
 ### G2. RLS
@@ -566,7 +576,11 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       soit générer réellement (prérequis F1), soit arrêter de le prétendre dans la doc.
 - [ ] **`STORAGE_BACKEND`** : défaut divergent config prod vs runtime → aligner, échouer au
       démarrage si ambigu.
-- [ ] **Invitation token affiché sans garde `NODE_ENV`** → n'afficher qu'en `development`.
+- [x] **Invitation token hors development** : G1c, API réelle dans development/test/
+      staging/production/environnement absent ; seul development+provider none permet
+      la remise simulée. Ailleurs 503 avant écritures, car aucun transport réel n'est
+      livré. Défaut reproduit puis corrigé, matrice commune **10/37 → 37/37**.
+      Le gate de livraison reste ouvert : SMTP ANPDP ≠ invitations.
 - [ ] **Payroll sans prorata** : décision client encore nécessaire ; la règle E5 des contrats de garde ne se transpose pas implicitement à la paie.
 - [ ] **Reproductibilité du lockfile** : `pnpm-workspace.yaml` présent alors que la CI fait `npm ci` ;
       `npm install` refuse de re-résoudre même face à une contradiction. Uniformiser sur **un seul**
@@ -657,7 +671,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (49 suites/contrôles après G1b) — rôles stricts : voir runbook H2g
+# Batterie complète (50 suites/contrôles après G1c) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

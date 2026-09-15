@@ -83,6 +83,17 @@ WHATSAPP_API_URL=https://graph.facebook.com/v19.0 # défaut
 - `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`, `ANPDP_EMAIL`
 - Test : `POST /privacy/violations` → `POST /privacy/violations/:id/anpdp-notify` (échéance +5j auto)
 
+### 5. Invitations — transport non livré (G1c)
+
+- Seul `NODE_ENV=development` avec `EMAIL_PROVIDER=none` autorise une simulation :
+  token remis au client, aucune transmission et aucun token/ destinataire journalisé.
+- `test`, `staging`, `production`, environnement absent ou fournisseur non implémenté :
+  **503 INVITATION_DELIVERY_UNAVAILABLE avant toute écriture de domaine**.
+- Le SMTP ANPDP ci-dessus est indépendant. `EMAIL_PROVIDER=smtp` ne branche pas un
+  transport d'invitations ; ne pas annoncer « envoyé » ni utiliser development en
+  production pour contourner ce refus. Livraison réelle à implémenter/qualifier avant
+  déploiement. [Runbook G1c](PHASE_G1C_INVITATIONS_RUNBOOK.md).
+
 ## .env.prod.example → .env.prod
 
 Copier `.env.prod.example` (documenté) → `.env.prod` (jamais commité) :

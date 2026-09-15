@@ -45,6 +45,9 @@ async function main() {
   await ensureAppRole(admin);
   process.env.DATABASE_URL = appUrl();
   process.env.RATE_LIMIT_DISABLED = 'true';
+  // Invitation tokens are an explicit development-only handoff, not a test/prod transport.
+  process.env.NODE_ENV = 'development';
+  process.env.EMAIL_PROVIDER = 'none';
 
   const { createApp } = await import(pathToFileURL(join(REPO, 'apps/api/dist/app.factory.js')).href);
   const app = await createApp();

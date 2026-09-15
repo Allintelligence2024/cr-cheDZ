@@ -90,7 +90,9 @@ invalidation immédiate de tous les accès ou une protection complète des appar
   **27/27 unitaires**, audit production **0 vulnérabilité** et budget notices verts.
   Avertissement Node préexistant de type de module de la config ESLint distinct.
 - Runner **49 suites**, seuil G1b 24 ; compteur agrégé dans G security passed avec
-  G1/G2/G3, pas de notice supplémentaire. Strict complet et CI à confirmer en PR #44.
+  G1/G2/G3, pas de notice supplémentaire. Qualification finale : strict local **49/49**,
+  CI **34934147034**, **9/9** sur `cec88c983a2e0e6018ed83de128d6f0b673be56b`, database
+  **104268359780**, G1=26/G1b=24/G2=113/G3=33 et H2/H1/F2/F4 relus en PR #44.
 
 ```sh
 npm ci

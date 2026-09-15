@@ -137,8 +137,12 @@ const refreshRotation = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase46-
   .match(/G1b refresh rotation: (\d+) passed, 0 failed/);
 if (!refreshRotation || Number(refreshRotation[1]) < 24) throw new Error('G1b refresh evidence missing or incomplete');
 console.log(`G1b refresh rotation passed: ${refreshRotation[1]} HTTP/PostgreSQL scenarios: serialized same-user refresh/replay, session state reloaded after locks, atomic replacement and rollback on storage failure. Existing all-session reuse policy retained; not global access-JWT revocation, device binding or every concurrent revocation path.`);
-console.log(`::notice title=G security passed::G1=${authHardening[1]}; G1b=${refreshRotation[1]}; G2=${rlsIntegrity[1]}; G3=${dpiaApproval[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG, G1b atomic refresh rotation and G2 application-role SQL and G3 independent DPIA approval/atomic audit, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
-console.log('✓ GATE D : régressions Phase D + 49 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const invitations = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase47-invitations.api.test.log'), 'utf8')
+  .match(/G1c invitations: (\d+) passed, 0 failed/);
+if (!invitations || Number(invitations[1]) < 37) throw new Error('G1c invitation evidence missing or incomplete');
+console.log(`G1c invitations passed: ${invitations[1]} HTTP/PostgreSQL scenarios: scoped current creators, serialized pending-account acceptance with atomic audit/session, token handoff only in development; unavailable delivery fails before writes. Not real email delivery, token-specific reinvitation invalidation or global JWT revocation.`);
+console.log(`::notice title=G security passed::G1=${authHardening[1]}; G1b=${refreshRotation[1]}; G1c=${invitations[1]}; G2=${rlsIntegrity[1]}; G3=${dpiaApproval[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG, G1b atomic refresh rotation, G1c scoped invitations and G2 application-role SQL and G3 independent DPIA approval/atomic audit, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
+console.log('✓ GATE D : régressions Phase D + 50 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { isUUID } from 'class-validator';
 import { randomInt } from 'node:crypto';
 import { Pool, PoolClient } from 'pg';
 import * as bcrypt from 'bcryptjs';
@@ -397,7 +398,7 @@ export class AuthService {
     profile: { firstName: string; lastName: string; password: string },
     ctx: { deviceId?: string; ipAddress?: string; userAgent?: string },
   ): Promise<LoginResult> {
-    let payload: { purpose?: string; sub?: string; orgId?: string; role?: string };
+    let payload: { purpose?: string; sub?: string; orgId?: string; role?: string; email?: string };
     try {
       // C4 (audit 2026-09) : vérification avec le JwtService d'INVITATION
       // (secret dérivé) — un access token ne peut plus être confondu ici,
@@ -406,45 +407,68 @@ export class AuthService {
     } catch {
       throw new AppError('INVALID_INVITATION', 'Lien d\'invitation invalide ou expiré', 'رابط الدعوة غير صالح أو منتهي', 400);
     }
-    if (payload.purpose !== 'invitation' || !payload.sub || !payload.orgId) {
+    if (payload.purpose !== 'invitation' || typeof payload.sub !== 'string' || !isUUID(payload.sub)
+      || typeof payload.orgId !== 'string' || !isUUID(payload.orgId)) {
       throw new AppError('INVALID_INVITATION', 'Lien d\'invitation invalide ou expiré', 'رابط الدعوة غير صالح أو منتهي', 400);
     }
 
-    const res = await this.pool.query<UserRow>(
-      `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,
-      [payload.sub],
-    );
-    const user = res.rows[0];
-    if (!user) {
-      throw new AppError('INVALID_INVITATION', 'Lien d\'invitation invalide ou expiré', 'رابط الدعوة غير صالح أو منتهي', 400);
-    }
-    if (user.status === 'active') {
-      throw new AppError('INVITATION_ALREADY_USED', 'Cette invitation a déjà été utilisée', 'تم استخدام هذه الدعوة بالفعل', 400);
-    }
-
+    const invalid = () => new AppError('INVALID_INVITATION',
+      'Lien d’invitation invalide ou expiré', 'رابط الدعوة غير صالح أو منتهي', 400);
+    // Compute the expensive hash before taking locks; all checks run again inside.
     const hash = await bcrypt.hash(profile.password, Number(this.config.get<number>('BCRYPT_ROUNDS', 12)));
-    await this.pool.query(
-      `UPDATE users
-       SET first_name = $2, last_name = $3, password_hash = $4,
-           status = 'active', email_verified_at = NOW(), failed_attempts = 0,
-           version = version + 1
-       WHERE id = $1`,
-      [user.id, profile.firstName, profile.lastName, hash],
-    );
-    await this.pool.query(`SELECT invite_accept($1, $2)`, [user.id, payload.orgId]);
-
-    await this.audit.log({
-      organizationId: payload.orgId,
-      userId: user.id,
-      action: 'approve',
-      resourceType: 'membership',
-      resourceLabel: 'invitation_accept',
-      newValues: { role: payload.role },
-      ipAddress: ctx.ipAddress,
-      userAgent: ctx.userAgent,
-    });
-
-    return this.issueTokenPair(user, ctx);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.tenant_id',$1,true), set_config('app.user_id',$2,true)`, [payload.orgId, payload.sub]);
+      const user = (await client.query<UserRow>(
+        `SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [payload.sub],
+      )).rows[0];
+      if (!user) throw invalid();
+      if (user.status === 'active') throw new AppError('INVITATION_ALREADY_USED',
+        'Cette invitation a déjà été utilisée', 'تم استخدام هذه الدعوة بالفعل', 400);
+      if (user.status !== 'pending' || user.email !== payload.email) throw invalid();
+      this.assertLoginAllowed(user);
+      const org = await client.query(`SELECT id FROM organizations WHERE id=$1 AND is_active=true`, [payload.orgId]);
+      if (!org.rows[0]) throw invalid();
+      const invited = (await client.query(
+        `SELECT m.id, m.is_active, m.joined_at, r.slug FROM memberships m JOIN roles r ON r.id=m.role_id
+         WHERE m.user_id=$1 AND m.organization_id=$2 FOR UPDATE OF m`, [user.id, payload.orgId],
+      )).rows[0];
+      if (!invited || !invited.is_active || invited.joined_at || invited.slug !== payload.role) throw invalid();
+      // A request can outlive the JWT while waiting for an account/membership lock.
+      try { await this.invitationJwtService.verifyAsync(token); } catch { throw invalid(); }
+      const activated = (await client.query<UserRow>(
+        `UPDATE users SET first_name=$2,last_name=$3,password_hash=$4,status='active',
+          email_verified_at=NOW(),failed_attempts=0,locked_until=NULL,version=version+1
+         WHERE id=$1 RETURNING *`, [user.id, profile.firstName, profile.lastName, hash],
+      )).rows[0];
+      await client.query(`UPDATE memberships SET joined_at=NOW() WHERE id=$1`, [invited.id]);
+      // The invitation's tenant is explicit, never the account's oldest membership.
+      const membership = (await client.query<MembershipRow>(
+        `SELECT * FROM auth_get_memberships($1) WHERE organization_id=$2`, [user.id, payload.orgId],
+      )).rows[0];
+      if (!membership) throw invalid();
+      const session = await this.sessions.createSession({
+        userId: user.id, organizationId: payload.orgId, deviceId: ctx.deviceId,
+        ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+      }, client);
+      const accessToken = await this.signAccessToken(activated, membership, client);
+      await this.audit.logInTransaction(client, {
+        organizationId: payload.orgId, userId: user.id, action: 'approve',
+        resourceType: 'membership', resourceId: invited.id, resourceLabel: 'invitation_accept',
+        newValues: { role: invited.slug }, ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
+      });
+      await client.query('COMMIT');
+      return {
+        access_token: accessToken, refresh_token: session.refreshToken, expires_in: 15 * 60,
+        user: { id: user.id, first_name: activated.first_name, last_name: activated.last_name,
+          email: activated.email, organization_id: membership.organization_id,
+          role: membership.role_slug, is_super_admin: activated.is_super_admin },
+      };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { client.release(); }
   }
 
   /** Construit une session complète (access + refresh) pour un utilisateur. */
@@ -452,8 +476,8 @@ export class AuthService {
     user: UserRow,
     ctx: { deviceId?: string; ipAddress?: string; userAgent?: string },
   ): Promise<LoginResult> {
-    // Parent PIN/OTP and invitation completion share this issuance boundary.
-    // Refresh the row: invitation acceptance has just activated its old snapshot.
+    // Parent PIN/OTP issuance: refresh status after the initial account lookup.
+    // Invitation acceptance uses its own atomic transaction above.
     const current = await this.pool.query<UserRow>(
       `SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL`, [user.id],
     );

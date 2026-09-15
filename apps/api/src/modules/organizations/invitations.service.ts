@@ -1,9 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Pool } from 'pg';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
-import { AppError } from '../../shared/errors';
+import { AppError, Errors } from '../../shared/errors';
 import { assertRoleAssignable } from '../../shared/roles/assignable-roles';
 import { INVITATION_JWT_SERVICE } from '../../shared/auth/invitation-jwt.module';
 import { INVITATION_TOKEN_PURPOSE } from '../../shared/auth/jwt-token-options';
@@ -21,7 +22,8 @@ export interface InvitationResult {
 
 /**
  * Invitations : création d'un utilisateur pending + membership +
- * token signé (7 j) envoyé par email ; acceptation via POST /auth/accept-invitation.
+ * token signé (7 j), remis seulement en development ; transport réel non livré.
+ * Acceptation via POST /auth/accept-invitation.
  */
 @Injectable()
 export class InvitationsService {
@@ -31,13 +33,25 @@ export class InvitationsService {
     @Inject(INVITATION_JWT_SERVICE) private readonly invitationJwtService: JwtService,
     private readonly email: EmailService,
     private readonly audit: AuditService,
+    private readonly config: ConfigService,
   ) {}
 
   async create(
     dto: CreateInvitationDto,
     actorId: string,
   ): Promise<InvitationResult> {
-    const orgId = dto.organization_id ?? this.tenantContext.getTenantIdOrNull();
+    const tenantId = this.tenantContext.getTenantIdOrNull();
+    const actor = (await this.pool.query(
+      `SELECT is_super_admin FROM users WHERE id=$1 AND status='active' AND deleted_at IS NULL`, [actorId],
+    )).rows[0];
+    if (!actor) throw Errors.forbidden();
+    if (!actor.is_super_admin) {
+      if (!tenantId || (dto.organization_id && dto.organization_id !== tenantId)) throw Errors.forbidden();
+      const memberships = await this.pool.query(`SELECT * FROM auth_get_memberships($1) WHERE organization_id=$2`, [actorId, tenantId]);
+      const roles = await this.pool.query(`SELECT role_slug FROM auth_user_roles($1) WHERE organization_id=$2`, [actorId, tenantId]);
+      if (!memberships.rows[0] || !roles.rows.some(r => r.role_slug === 'director')) throw Errors.forbidden();
+    }
+    const orgId = dto.organization_id ?? tenantId;
     if (!orgId) {
       throw new AppError(
         'ORGANIZATION_REQUIRED',
@@ -65,6 +79,8 @@ export class InvitationsService {
       throw new AppError('ROLE_NOT_FOUND', 'Rôle inconnu', 'الدور غير معروف', 400);
     }
 
+    // No domain write before verifying that the delivered transport is available.
+    this.email.assertInvitationDeliveryAvailable();
     const email = dto.email.toLowerCase().trim();
 
     // Utilisateur existant ou création (status pending).
@@ -131,7 +147,7 @@ export class InvitationsService {
       email,
       role_slug: role.rows[0].slug,
       status: userStatus === 'active' ? 'already_member' : 'invited',
-      invitation_token: token,
+      ...(this.config.get<string>('NODE_ENV') === 'development' ? { invitation_token: token } : {}),
     };
   }
 

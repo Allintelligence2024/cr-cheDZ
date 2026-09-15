@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v12 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G1b/G2/G3a)
+# Matrice d'autorisation par module (v13 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G1b/G1c/G2/G3a)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -258,3 +258,21 @@ conformément à la politique existante. Audit best-effort hors de ce commit.
 **16/24 → 24/24**, [runbook G1b](../PHASE_G1B_REFRESH_RUNBOOK.md). Ce contrôle ne
 révoque pas les JWT d'accès existants et ne ferme ni la sélection globale de tenant,
 ni la propriété/réassociation d'appareil, ni toutes les courses de révocation.
+
+
+## G1c — Invitations
+
+POST /invitations conserve director/super_admin mais revérifie l'acteur actif et
+son autorité actuelle. Le directeur reste dans son tenant (rôle principal ou
+additionnel) ; seul un vrai administrateur plateforme peut cibler une autre organisation.
+Token de développement uniquement. Aucun transport réel livré : 503 sans écriture
+hors development, et non un succès annonçant un e-mail envoyé.
+
+POST /auth/accept-invitation reste public, avec JWT dédié signé et non expiré après
+attente. Compte pending, e-mail et rôle conformes, organisation/membership actifs,
+non rejoints ; transaction compte→membership avec profil/session/audit atomiques.
+Le token donne le tenant cible, pas une autorisation de choisir un ancien membership.
+
+**10/37 → 37/37**, [runbook G1c](../PHASE_G1C_INVITATIONS_RUNBOOK.md). Pas de nonce
+révoquant une ancienne réinvitation, de livraison réelle, de qualification de toutes
+les courses d'émission ou de révocation globale des JWT. GET invitations inchangé.
