@@ -40,18 +40,19 @@ export class InvitationsService {
     dto: CreateInvitationDto,
     actorId: string,
   ): Promise<InvitationResult> {
-    const tenantId = this.tenantContext.getTenantIdOrNull();
+    const tenantId = this.tenantContext.getTenantIdOrNull()?.toLowerCase() ?? null;
+    const requestedOrgId = dto.organization_id?.toLowerCase();
     const actor = (await this.pool.query(
       `SELECT is_super_admin FROM users WHERE id=$1 AND status='active' AND deleted_at IS NULL`, [actorId],
     )).rows[0];
     if (!actor) throw Errors.forbidden();
     if (!actor.is_super_admin) {
-      if (!tenantId || (dto.organization_id && dto.organization_id !== tenantId)) throw Errors.forbidden();
+      if (!tenantId || (requestedOrgId && requestedOrgId !== tenantId)) throw Errors.forbidden();
       const memberships = await this.pool.query(`SELECT * FROM auth_get_memberships($1) WHERE organization_id=$2`, [actorId, tenantId]);
       const roles = await this.pool.query(`SELECT role_slug FROM auth_user_roles($1) WHERE organization_id=$2`, [actorId, tenantId]);
       if (!memberships.rows[0] || !roles.rows.some(r => r.role_slug === 'director')) throw Errors.forbidden();
     }
-    const orgId = dto.organization_id ?? tenantId;
+    const orgId = requestedOrgId ?? tenantId;
     if (!orgId) {
       throw new AppError(
         'ORGANIZATION_REQUIRED',

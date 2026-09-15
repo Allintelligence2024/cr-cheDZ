@@ -9,7 +9,7 @@ Fetch explicite Arena, HEAD local/remote identiques, arbre propre. G1b confirmé
 strict **49/49**, [CI 34934147034](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34934147034)
 **9/9**, database **104268359780**, notices G1=26/G1b=24/G2=113/G3=33 et H2/H1/F2/F4.
 
-`phase47-invitations.api.test.mjs` : **10/37 avant → 37/37 après**. HTTP et PostgreSQL
+`phase47-invitations.api.test.mjs` : **11/38 avant → 38/38 après**. HTTP et PostgreSQL
 réels sous creche_app NOBYPASSRLS, aucun mock du service de sessions ou d'audit.
 
 Les **27 scénarios rouges**, pas 27 vulnérabilités indépendantes :
@@ -27,14 +27,18 @@ Les **27 scénarios rouges**, pas 27 vulnérabilités indépendantes :
   production/environnement absent ; fournisseur development non implémenté échouant
   après les écritures avec erreur 500.
 
-Dix non-régressions : réutilisation séquentielle, compte supprimé, séparation des
+Onze non-régressions : réutilisation séquentielle, compte supprimé, séparation des
 familles access/invitation, expiration initiale, directeur B chez lui, plateforme
-cross-tenant, educator refusé, super_admin non attribuable et director additionnel.
+cross-tenant, educator refusé, super_admin non attribuable director additionnel et UUID tenant représenté en majuscules.
 
 Une erreur de fixture d'expiration a été corrigée avant la preuve finale :
 `expiresIn: undefined` était rejeté par jsonwebtoken. Un vrai token court est signé,
 son expiration est lue dans le token, puis dépassée après observation de l'attente.
 Ce défaut de fixture n'est pas présenté comme un finding de l'application.
+
+Revue finale : régression introduite sur les UUID de tenant en majuscules, reproduite
+**37/38 → 38/38** ; comparaison normalisée, refus étrangers conservés. Baseline complète
+rejouée contre cec88c9 : **11/38 → 38/38**. Premier SHA edb46c6 supplanté par ce correctif.
 
 ## Acceptation
 
@@ -75,7 +79,8 @@ Le code précédent retournait un token et annonçait « envoyé » avec EMAIL_P
 un autre fournisseur jetait une erreur après création du compte/membership.
 
 - `NODE_ENV=development` **et** `EMAIL_PROVIDER=none` : simulation explicite, token
-  remis dans invitation_token. Aucune transmission. Ni token ni destinataire dans le log.
+  remis dans invitation_token. Aucune transmission. Ni token ni destinataire dans la console du simulateur.
+  Le resource_label e-mail de l’audit de création préexistant est conservé.
 - Tout autre environnement (test/staging/production/absent) ou fournisseur :
   **503 INVITATION_DELIVERY_UNAVAILABLE avant les écritures de domaine**, pas de token
   exposé, pas de faux succès d'envoi.
@@ -97,12 +102,12 @@ Les connexions restent creche_app avec les grants livrés dans toutes ces varian
 - Jeton expirant pendant l'attente : requête observée bloquée puis refusée sans mutation.
 - Snapshots utilisateurs/memberships/sessions/audits conservés pour les refus et pannes.
   Triggers PostgreSQL de panne ciblés aux fixtures, retirés en finally.
-- Rejeu des trois services à cec88c9, build et reset/migrate/seed frais → **10/37** ;
-  correctif restauré, rebuild, base fraîche → **37/37**. Pas de purge masquant les findings.
+- Rejeu des trois services à cec88c9, build et reset/migrate/seed frais → **11/38** ;
+  correctif restauré, rebuild, base fraîche → **38/38**. Pas de purge masquant les findings.
 - Typecheck/build tous workspaces, lint zéro avertissement ESLint, **27/27 unitaires**,
   audit production **0 vulnérabilité** et budget notices verts. Avertissement Node
   préexistant sur le type de module de la config ESLint, distinct.
-- Runner **50 suites**, seuil G1c 37, compteur dans la notice G security passed
+- Runner **50 suites**, seuil G1c 38, compteur dans la notice G security passed
   existante (G1/G1b/G1c/G2/G3). Strict complet et CI à confirmer en PR #44.
 
 ```sh

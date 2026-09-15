@@ -86,7 +86,8 @@ WHATSAPP_API_URL=https://graph.facebook.com/v19.0 # défaut
 ### 5. Invitations — transport non livré (G1c)
 
 - Seul `NODE_ENV=development` avec `EMAIL_PROVIDER=none` autorise une simulation :
-  token remis au client, aucune transmission et aucun token/ destinataire journalisé.
+  token remis au client, aucune transmission et aucun token/destinataire dans la console du simulateur.
+  Le resource_label e-mail de l’audit de création préexistant reste conservé.
 - `test`, `staging`, `production`, environnement absent ou fournisseur non implémenté :
   **503 INVITATION_DELIVERY_UNAVAILABLE avant toute écriture de domaine**.
 - Le SMTP ANPDP ci-dessus est indépendant. `EMAIL_PROVIDER=smtp` ne branche pas un

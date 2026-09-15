@@ -368,7 +368,7 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       indépendante : 11 opérations, 9 événements journal, 3 médias, pas de doublons.
       Batterie portée à **37 suites/contrôles** ; résultat de clôture du **dernier HEAD**
       dans les checks PR #44 (`F4 Flutter API passed` requis, pas le seul job Flutter).
-      **7/7 + PG acquis sur d9d2720**, run `34855762767` ; 37/37 local. Le gate
+      **7/7 + PG acquis sur d9d2720**, run `34855762767` ; 38/38 local. Le gate
       global de ce run reste rouge pour les nouveaux défauts d'image H1 ci-dessous.
 - [ ] **Qualification de déploiement / Android APK release** : distincte de F fonctionnelle.
       Journal/media sont des métadonnées, pas un téléchargement offline des dossiers.
@@ -410,7 +410,7 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 - [x] **G1c invitations / H2 exposition** : acceptation unique d'un compte pending,
       tenant du lien conservé, profil/membership/session/audit atomiques ; expiration
       revérifiée après attente. Créateur courant et périmètre tenant vérifiés.
-      **10/37 → 37/37**, dont courses et pannes PostgreSQL réelles.
+      **11/38 → 38/38**, dont courses et pannes PostgreSQL réelles.
       Token remis uniquement en development ; transport absent → 503 avant écriture
       hors development, jamais de faux envoi. Runner **50 suites**, strict/CI à confirmer
       en PR #44. [Runbook G1c](PHASE_G1C_INVITATIONS_RUNBOOK.md).
@@ -579,7 +579,7 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 - [x] **Invitation token hors development** : G1c, API réelle dans development/test/
       staging/production/environnement absent ; seul development+provider none permet
       la remise simulée. Ailleurs 503 avant écritures, car aucun transport réel n'est
-      livré. Défaut reproduit puis corrigé, matrice commune **10/37 → 37/37**.
+      livré. Défaut reproduit puis corrigé, matrice commune **11/38 → 38/38**.
       Le gate de livraison reste ouvert : SMTP ANPDP ≠ invitations.
 - [ ] **Payroll sans prorata** : décision client encore nécessaire ; la règle E5 des contrats de garde ne se transpose pas implicitement à la paie.
 - [ ] **Reproductibilité du lockfile** : `pnpm-workspace.yaml` présent alors que la CI fait `npm ci` ;

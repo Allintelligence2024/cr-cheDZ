@@ -152,6 +152,10 @@ try {
     await check(`${table} restored: same invitation remains usable`, async () => { assert.equal((await accept(f)).status, 200); });
   }
   await check('director cannot invite into another tenant via body override', () => noWrite(() => invite(director, b), 403, 'FORBIDDEN'));
+  await check('director retains own-tenant invitation with uppercase UUID representation', async () => {
+    const r = await invite(director, a.toUpperCase()); assert.equal(r.status, 201);
+    const m = (await db.query('SELECT organization_id FROM memberships WHERE id=$1', [r.body.invitation_id])).rows[0]; assert.equal(m.organization_id, a);
+  });
   await check('other director can invite into own tenant', async () => { assert.equal((await invite(foreign, b)).status, 201); });
   await check('platform administrator retains cross-tenant invitation', async () => { assert.equal((await invite(admin, b)).status, 201); });
   await check('educator cannot invite', () => noWrite(() => invite(educator), 403));

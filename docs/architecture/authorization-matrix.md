@@ -273,6 +273,6 @@ attente. Compte pending, e-mail et rôle conformes, organisation/membership acti
 non rejoints ; transaction compte→membership avec profil/session/audit atomiques.
 Le token donne le tenant cible, pas une autorisation de choisir un ancien membership.
 
-**10/37 → 37/37**, [runbook G1c](../PHASE_G1C_INVITATIONS_RUNBOOK.md). Pas de nonce
+**11/38 → 38/38**, [runbook G1c](../PHASE_G1C_INVITATIONS_RUNBOOK.md). Pas de nonce
 révoquant une ancienne réinvitation, de livraison réelle, de qualification de toutes
 les courses d'émission ou de révocation globale des JWT. GET invitations inchangé.
