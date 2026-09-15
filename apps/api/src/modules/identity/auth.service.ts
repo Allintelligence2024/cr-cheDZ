@@ -14,6 +14,9 @@ import { TotpService } from './totp.service';
 import { SmsService } from '../../shared/sms/sms.service';
 import { WhatsAppService } from '../../shared/whatsapp/whatsapp.service';
 
+// Work factor for unknown accounts; not a promise of constant network latency.
+const DUMMY_PASSWORD_HASH = '$2b$12$0BIuseBWXKjyHtdMOE3Rk.hzrgIz6M3nCdfBu/VftHWG5Vd6IXDAu';
+
 interface MembershipRow {
   organization_id: string;
   organization_name: string;
@@ -86,33 +89,14 @@ export class AuthService {
     );
     const user = res.rows[0];
 
-    // Anti-énumération (audit — commentaire corrigé) : la protection réelle
-    // est le MESSAGE D'ERREUR UNIFIÉ (INVALID_CREDENTIALS FR/AR identique que
-    // l'email existe ou non — même statut, même code, même durée de réponse).
-    // recordFailedAttempt(null, ·) est un NO-OP : aucun compteur n'est tenu
-    // pour un email inconnu (pas de table dédiée, pas de ligne gardée).
-    if (!user) {
-      await this.recordFailedAttempt(null, email);
+    // Verify the secret before disclosing status/lockout. Unknown accounts
+    // receive the same public error and still perform a bcrypt comparison.
+    const passwordOk = await bcrypt.compare(password, user?.password_hash ?? DUMMY_PASSWORD_HASH);
+    if (!user?.password_hash || !passwordOk) {
+      await this.recordFailedAttempt(user?.id ?? null, email);
       throw Errors.invalidCredentials();
     }
-
-    if (user.locked_until && user.locked_until > new Date()) {
-      throw Errors.accountLocked(this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15));
-    }
-    // Choix produit (documenté, volontaire) : les comptes 'pending' (invités
-    // pas encore onboardés) peuvent se connecter — l'onboarding termine
-    // l'activation. Seuls 'suspended' (et les statuts hors active/pending)
-    // sont refusés (ACCOUNT_SUSPENDED).
-    if (user.status !== 'active' && user.status !== 'pending') {
-      throw Errors.accountSuspended();
-    }
-
-    const passwordOk =
-      user.password_hash != null && (await bcrypt.compare(password, user.password_hash));
-    if (!passwordOk) {
-      await this.recordFailedAttempt(user.id, email);
-      throw Errors.invalidCredentials();
-    }
+    this.assertLoginAllowed(user);
 
     if (user.totp_enabled) {
       if (!totpCode || !user.totp_secret || !this.totp.verify(user.totp_secret, totpCode)) {
@@ -189,7 +173,7 @@ export class AuthService {
     await this.pool.query(`UPDATE otp_codes SET used_at = NOW() WHERE target = $1 AND purpose = 'parent_login' AND used_at IS NULL`, [target]);
     await this.pool.query(
       `INSERT INTO otp_codes (target, code_hash, purpose, channel, expires_at) VALUES ($1,$2,'parent_login',$3,NOW() + INTERVAL '10 minutes')`,
-      [target, await bcrypt.hash(code, this.config.get<number>('BCRYPT_ROUNDS', 12)), channel],
+      [target, await bcrypt.hash(code, Number(this.config.get<number>('BCRYPT_ROUNDS', 12))), channel],
     );
     if (channel === 'whatsapp') {
       await this.sendOTPByWhatsApp(target, code);
@@ -236,10 +220,14 @@ export class AuthService {
     );
     const row = otp.rows[0];
     if (!row || row.attempts >= 5 || !(await bcrypt.compare(code, row.code_hash))) {
-      if (row) await this.pool.query(`UPDATE otp_codes SET attempts=attempts+1 WHERE id=$1`, [row.id]);
+      if (row) await this.pool.query(`UPDATE otp_codes SET attempts=attempts+1 WHERE id=$1 AND used_at IS NULL AND attempts<5`, [row.id]);
       throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     }
-    await this.pool.query(`UPDATE otp_codes SET used_at=NOW() WHERE id=$1`, [row.id]);
+    const consumed = await this.pool.query(
+      `UPDATE otp_codes SET used_at=NOW()
+       WHERE id=$1 AND used_at IS NULL AND attempts<5 AND expires_at>NOW() RETURNING id`, [row.id],
+    );
+    if (consumed.rowCount !== 1) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     // Bootstrap RLS : guardians est une table tenant ; la fonction SECURITY
     // DEFINER (migration 025) fait la recherche hors contexte tenant.
     const found = await this.pool.query<UserRow>(
@@ -247,12 +235,12 @@ export class AuthService {
       [target],
     );
     const user = found.rows[0];
-    if (!user) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
+    if (!user?.id) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     return this.issueTokenPair(user, ctx);
   }
 
   async setParentPin(userId: string, pin: string): Promise<void> {
-    await this.pool.query(`UPDATE users SET parent_pin_hash=$2, version=version+1 WHERE id=$1`, [userId, await bcrypt.hash(pin, this.config.get<number>('BCRYPT_ROUNDS', 12))]);
+    await this.pool.query(`UPDATE users SET parent_pin_hash=$2, version=version+1 WHERE id=$1`, [userId, await bcrypt.hash(pin, Number(this.config.get<number>('BCRYPT_ROUNDS', 12)))]);
   }
 
   async loginParentPin(phone: string, pin: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
@@ -264,6 +252,7 @@ export class AuthService {
     );
     const user = res.rows[0];
     if (!user?.parent_pin_hash || !(await bcrypt.compare(pin, user.parent_pin_hash))) {
+      await this.recordFailedAttempt(user?.id ?? null, phone);
       throw new AppError('INVALID_PARENT_PIN', 'PIN incorrect', 'رمز PIN غير صحيح', 401);
     }
     return this.issueTokenPair(user, ctx);
@@ -374,7 +363,7 @@ export class AuthService {
     if (!user || user.password_hash == null || !(await bcrypt.compare(oldPassword, user.password_hash))) {
       throw new AppError('INVALID_CREDENTIALS', 'Mot de passe actuel incorrect', 'كلمة المرور الحالية غير صحيحة', 400);
     }
-    const hash = await bcrypt.hash(newPassword, this.config.get<number>('BCRYPT_ROUNDS', 12));
+    const hash = await bcrypt.hash(newPassword, Number(this.config.get<number>('BCRYPT_ROUNDS', 12)));
     await this.pool.query(
       `UPDATE users SET password_hash = $2, version = version + 1 WHERE id = $1`,
       [userId, hash],
@@ -427,7 +416,7 @@ export class AuthService {
       throw new AppError('INVITATION_ALREADY_USED', 'Cette invitation a déjà été utilisée', 'تم استخدام هذه الدعوة بالفعل', 400);
     }
 
-    const hash = await bcrypt.hash(profile.password, this.config.get<number>('BCRYPT_ROUNDS', 12));
+    const hash = await bcrypt.hash(profile.password, Number(this.config.get<number>('BCRYPT_ROUNDS', 12)));
     await this.pool.query(
       `UPDATE users
        SET first_name = $2, last_name = $3, password_hash = $4,
@@ -457,7 +446,16 @@ export class AuthService {
     user: UserRow,
     ctx: { deviceId?: string; ipAddress?: string; userAgent?: string },
   ): Promise<LoginResult> {
+    // Parent PIN/OTP and invitation completion share this issuance boundary.
+    // Refresh the row: invitation acceptance has just activated its old snapshot.
+    const current = await this.pool.query<UserRow>(
+      `SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL`, [user.id],
+    );
+    user = current.rows[0];
+    if (!user) throw Errors.invalidCredentials();
+    this.assertLoginAllowed(user);
     const membership = await this.membershipFor(user);
+    await this.pool.query(`UPDATE users SET failed_attempts=0, locked_until=NULL WHERE id=$1`, [user.id]);
     const session = await this.sessions.createSession({
       userId: user.id,
       organizationId: membership?.organization_id ?? null,
@@ -554,20 +552,30 @@ export class AuthService {
     });
   }
 
+  private assertLoginAllowed(user: UserRow): void {
+    // Existing onboarding contract: active and pending may authenticate.
+    if (user.status !== 'active' && user.status !== 'pending') throw Errors.accountSuspended();
+    if (user.locked_until && user.locked_until > new Date()) {
+      throw Errors.accountLocked(Number(this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15)));
+    }
+  }
+
   private async recordFailedAttempt(userId: string | null, email: string): Promise<void> {
     if (!userId) return;
-    const max = this.config.get<number>('MAX_LOGIN_ATTEMPTS', 5);
-    const lockMinutes = this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15);
-    const res = await this.pool.query<UserRow>(
-      `SELECT failed_attempts, locked_until FROM users WHERE id = $1`,
-      [userId],
-    );
-    const current = res.rows[0];
-    const attempts = (current?.failed_attempts ?? 0) + 1;
-    const lockUntil = attempts >= max ? new Date(Date.now() + lockMinutes * 60_000) : null;
+    const max = Number(this.config.get<number>('MAX_LOGIN_ATTEMPTS', 5));
+    const lockMinutes = Number(this.config.get<number>('ACCOUNT_LOCK_MINUTES', 15));
+    // One row-serialized update. Concurrent failures cannot overwrite increments;
+    // an expired lock starts a fresh window, an active lock is not prolonged.
     await this.pool.query(
-      `UPDATE users SET failed_attempts = $2, locked_until = $3, version = version + 1 WHERE id = $1`,
-      [userId, attempts, lockUntil],
+      `UPDATE users SET
+         failed_attempts = CASE WHEN locked_until<=NOW() THEN 1 ELSE failed_attempts+1 END,
+         locked_until = CASE
+           WHEN (CASE WHEN locked_until<=NOW() THEN 1 ELSE failed_attempts+1 END)>=$2
+             THEN NOW() + ($3 * INTERVAL '1 minute') ELSE NULL END,
+         version = version+1
+       WHERE id=$1 AND (locked_until IS NULL OR locked_until<=NOW())
+       RETURNING failed_attempts, locked_until`,
+      [userId, max, lockMinutes],
     );
     void email;
   }

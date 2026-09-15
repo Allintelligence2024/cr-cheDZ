@@ -382,17 +382,25 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 
 ### G1. Authentification
 
-- [ ] **`trust proxy`** : `app.set('trust proxy', 1)` dans `app.factory.ts`/`main.ts` (1 seul saut,
-      nginx devant ; **jamais** `true`). Sans ça, `rate-limit.guard.ts:25` voit l'IP de nginx pour
-      tout le monde → le premier rate-limité bloque l'auth de **tous**. Configurer nginx en conséquence.
-- [ ] **PIN/OTP parent sans check de statut** : compte suspendu obtient une session. Ajouter le
-      contrôle de statut dans le chemin OTP (`auth.service.ts:186-232`) **et** PIN.
-- [ ] **Compteurs de lockout non atomiques** : `UPDATE … SET failed_attempts = failed_attempts + 1
-      RETURNING` (une requête) — sinon le lockout 5 échecs/15 min est contournable en concurrence.
-- [ ] **Énumération de comptes** : uniformiser les réponses (401 générique), vérifier que le
-      rate-limit couvre la route.
-- [ ] **Tests** : rate-limit avec 2 IP clientes derrière proxy simulé (2 limites séparées) ; login
-      compte suspendu → 403 ; 10 échecs concurrents → lockout effectif.
+- [x] **G1a — implémentation reproduite**, qualification complète/CI en cours :
+      `trust proxy=1` (jamais true), nginx écrase XFF ; deux clients derrière un
+      proxy HTTP réel gardent des limites séparées. API impérativement privée derrière
+      un seul ingress ; démarrage nginx/topologie publique à qualifier avant déploiement.
+- [x] PIN/OTP : statut courant et verrou avant émission ; active/pending conservés
+      pour l'onboarding, suspended refusé 403. Parent supprimé refusé sans session.
+- [x] Compteur partagé mot de passe/PIN : UPDATE atomique, fenêtre renouvelée après
+      expiration du verrou, pas de prolongation par les échecs pendant un verrou.
+      Barrière PG : dix échecs donnaient un compteur de 1 avant correction.
+- [x] Mot de passe faux : 401 générique avant statut/verrou ; comparaison bcrypt pour
+      les inconnus, sans promesse de temps réseau constant. Routes déjà rate-limitées.
+- [x] OTP : consommation conditionnelle, une seule session pour un code vérifié en
+      concurrence ; coût bcrypt fourni par environnement converti en nombre.
+- [x] Ciblé HTTP/PG **10/26 → 26/26**, incluant 403 suspendu, lockout concurrent,
+      PIN, OTP et deux IP derrière proxy. Runner 46 suites et notice G1 obligatoire.
+      [Runbook G1](PHASE_G1_AUTH_RUNBOOK.md), résultat complet/CI dans PR #44.
+- [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, races refresh/
+      invitations, TOTP et demandes OTP concurrentes ; G1a ne ferme pas ces frontières.
+      Pas de qualification globale de l'auth ni de topologie de déploiement.
 
 ### G2. RLS
 
@@ -538,7 +546,8 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       Reproduction HTTP/PG **16/32 → 32/32** ; créations et audits refusés inchangés,
       rôles/listes minimisées conservés. Une partie des anciennes erreurs 500 était
       déjà bloquée par 049, pas une nouvelle fuite. [Runbook H2h](PHASE_H2H_STAFF_DOCUMENT_RUNBOOK.md).
-      Runner 45 suites, agrégat H2h=32 ; batterie complète/CI à confirmer en PR #44.
+      H2h confirmé : **45/45** local, **9/9** CI **34911630478** sur `6e32830`,
+      database **104200182829**, H2h=32 et H1/F2/F4 relus.
       Ni téléchargement d'objet démontré, ni réécriture des références historiques.
 - [ ] **Les 44 routes sans `@Roles`/`@Public`** (inventaire `npm run check:routes-inventory`) :
       revue module par module + justification écrite pour chaque route self-service conservée sans garde.
@@ -614,7 +623,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (45 suites/contrôles après H2h) — rôles stricts : voir runbook H2g
+# Batterie complète (46 suites/contrôles après G1a) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

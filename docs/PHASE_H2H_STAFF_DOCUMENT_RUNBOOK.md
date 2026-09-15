@@ -77,8 +77,12 @@ Typecheck/build tous workspaces, lint zéro avertissement, **27/27 unitaires**, 
 production **0 vulnérabilité**, ciblé frais **32/32** et garde du budget des notices verts.
 Runner porté à **45 suites/contrôles** ; seuil obligatoire 32 et zéro échec ; annotation
 unique H2 enrichie de `H2h=32` sans nouvelle notice (toujours cinq dans l'étape CI).
-Batterie stricte complète et CI du SHA publié en cours de qualification : consulter
-la confirmation finale dans la PR #44. Docker/Flutter réels restent des gates CI.
+Confirmation finale H2h : **45/45** local et **9/9** checks sur
+`6e328301b1cbbedcd39981ea440329e42e201fe3`, [CI 34911630478](https://github.com/Allintelligence2024/cr-cheDZ/actions/runs/34911630478),
+database **104200182829**. H2h=32, H2a–H2g, F2 51, F4 7 + PG, H1 dev/staging
+relus. Six notices effectives avec un retry registre H1 2/3 sur la même image
+(cinq nominales hors retry), aucune troncature. PR #44 non mergée.
+Docker/Flutter réels restent des gates CI.
 
 ## Limites et rollback
 

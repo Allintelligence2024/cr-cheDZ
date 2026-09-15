@@ -70,6 +70,7 @@ SUITES=(
   phase40-privacy-actor-revocation.api.test.mjs
   phase41-photo-consent-scope.api.test.mjs
   phase42-staff-document-scope.api.test.mjs
+  phase43-auth-hardening.api.test.mjs
 )
 
 FILTER="${1:-}"

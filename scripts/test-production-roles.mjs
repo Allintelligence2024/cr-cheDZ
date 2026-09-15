@@ -121,7 +121,11 @@ console.log(`H2h staff document scope passed: ${staffDocuments[1]} real HTTP/Pos
 // All subprocesses share one workflow step (ten notices maximum). Keep full
 // per-lot details in stdout, but aggregate H2 so later lots are not silently lost.
 console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}; H2h=${staffDocuments[1]}. All HTTP/PostgreSQL scenario thresholds verified, zero failures. Local provider doubles/signatures only; no global JWT revocation, signed-URL recall or production qualification. Per-lot details remain in the job log and runbooks.`);
-console.log('✓ GATE D : régressions Phase D + 45 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const authHardening = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase43-auth-hardening.api.test.log'), 'utf8')
+  .match(/G1 auth hardening: (\d+) passed, 0 failed/);
+if (!authHardening || Number(authHardening[1]) < 26) throw new Error('G1 auth evidence missing or incomplete');
+console.log(`::notice title=G1 auth hardening passed::${authHardening[1]} HTTP/PostgreSQL scenarios passed: parent status and lockout, atomic failure counters and OTP consumption, generic wrong-secret errors, numeric bcrypt config, separate client limits behind a single overwriting proxy. Not global JWT/role revocation, refresh/invitation race or public direct-API deployment qualification.`);
+console.log('✓ GATE D : régressions Phase D + 46 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 
