@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { randomInt } from 'node:crypto';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import * as bcrypt from 'bcryptjs';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { AppError, Errors } from '../../shared/errors';
@@ -267,72 +267,78 @@ export class AuthService {
     userAgent?: string,
   ): Promise<LoginResult> {
     const hash = SessionsService.hashRefreshToken(refreshToken);
-    const res = await this.pool.query(
-      `SELECT * FROM auth_refresh_lookup($1)`,
-      [hash],
-    );
-    const row = res.rows[0];
-    if (!row) throw Errors.invalidRefreshToken();
+    const client = await this.pool.connect();
+    let reused: { userId: string; organizationId: string | null } | undefined;
+    try {
+      await client.query('BEGIN');
+      const initial = (await client.query(`SELECT * FROM auth_refresh_lookup($1)`, [hash])).rows[0];
+      if (!initial) throw Errors.invalidRefreshToken();
 
-    if (row.session_revoked_at) {
-      // Session révoquée à cause de la révocation de l'appareil → message dédié,
-      // pas de suspicion de compromission.
-      if (row.revoked_reason === 'device_revoked') throw Errors.deviceRevoked();
+      // Same-user refreshes (including replay on another session) share one lock.
+      // Lock user BEFORE session consistently; reload session state after waiting.
+      const user = (await client.query<UserRow>(
+        `SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [initial.user_id],
+      )).rows[0];
+      if (!user) throw Errors.invalidRefreshToken();
+      await client.query(`SELECT id FROM sessions WHERE id=$1 FOR UPDATE`, [initial.session_id]);
+      const row = (await client.query(`SELECT * FROM auth_refresh_lookup($1)`, [hash])).rows[0];
+      if (!row) throw Errors.invalidRefreshToken();
 
-      // Réutilisation d'un refresh déjà révoqué → compromission présumée :
-      // on révoque toutes les sessions de l'utilisateur.
-      await this.sessions.revokeAllForUser(row.user_id, 'reuse_detected');
-      await this.audit.log({
-        organizationId: row.organization_id,
-        userId: row.user_id,
-        action: 'revoke',
-        resourceType: 'session',
-        resourceLabel: 'reuse_detected',
-      });
-      throw Errors.sessionReuseDetected();
+      if (row.session_revoked_at) {
+        if (row.revoked_reason === 'device_revoked') throw Errors.deviceRevoked();
+        // Preserve existing reuse policy: revoke ALL this user's refresh sessions.
+        // Commit this security effect before reporting failure to the caller.
+        await this.sessions.revokeAllForUser(row.user_id, 'reuse_detected', client);
+        await client.query('COMMIT');
+        reused = { userId: row.user_id, organizationId: row.organization_id };
+      } else {
+        if (new Date(row.expires_at).getTime() <= Date.now()) throw Errors.sessionExpired();
+        if (row.device_id && row.device_revoked) throw Errors.deviceRevoked();
+        if (user.status !== 'active') throw Errors.accountSuspended();
+
+        await client.query(
+          `UPDATE sessions SET revoked_at=NOW(), revoked_reason='rotated' WHERE id=$1`, [row.session_id],
+        );
+        const membership = await this.membershipFor(user, client);
+        const session = await this.sessions.createSession({
+          userId: user.id,
+          organizationId: membership?.organization_id ?? null,
+          deviceId: deviceId ?? row.device_id,
+          ipAddress,
+          userAgent,
+        }, client);
+        const accessToken = await this.signAccessToken(user, membership, client);
+        await client.query('COMMIT');
+        return {
+          access_token: accessToken,
+          refresh_token: session.refreshToken,
+          expires_in: 15 * 60,
+          user: {
+            id: user.id,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            email: user.email,
+            organization_id: membership?.organization_id ?? null,
+            role: user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none'),
+            is_super_admin: user.is_super_admin,
+          },
+        };
+      }
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
     }
-    if (new Date(row.expires_at) < new Date()) throw Errors.sessionExpired();
-    if (row.device_id && row.device_revoked) throw Errors.deviceRevoked();
-    if (row.user_status !== 'active') throw Errors.accountSuspended();
-
-    // Rotation : la session courante est révoquée, une nouvelle est créée.
-    await this.pool.query(
-      `UPDATE sessions SET revoked_at = NOW(), revoked_reason = 'rotated'
-       WHERE id = $1 AND revoked_at IS NULL`,
-      [row.session_id],
-    );
-
-    const userRes = await this.pool.query<UserRow>(
-      `SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL`,
-      [row.user_id],
-    );
-    const user = userRes.rows[0];
-    if (!user) throw Errors.invalidRefreshToken();
-
-    const membership = await this.membershipFor(user);
-    const session = await this.sessions.createSession({
-      userId: user.id,
-      organizationId: membership?.organization_id ?? null,
-      deviceId: deviceId ?? row.device_id,
-      ipAddress,
-      userAgent,
+    // Legacy best-effort audit is deliberately outside the committed revocation.
+    if (reused) await this.audit.log({
+      organizationId: reused.organizationId,
+      userId: reused.userId,
+      action: 'revoke',
+      resourceType: 'session',
+      resourceLabel: 'reuse_detected',
     });
-
-    const accessToken = await this.signAccessToken(user, membership);
-    return {
-      access_token: accessToken,
-      refresh_token: session.refreshToken,
-      expires_in: 15 * 60,
-      user: {
-        id: user.id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        email: user.email,
-        organization_id: membership?.organization_id ?? null,
-        role: user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none'),
-        is_super_admin: user.is_super_admin,
-      },
-    };
+    throw Errors.sessionReuseDetected();
   }
 
   async logout(refreshToken: string, userId: string, ipAddress?: string, userAgent?: string): Promise<void> {
@@ -525,22 +531,22 @@ export class AuthService {
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
-  private async membershipFor(user: UserRow): Promise<MembershipRow | null> {
+  private async membershipFor(user: UserRow, client: Pick<PoolClient, 'query'> = this.pool): Promise<MembershipRow | null> {
     if (user.is_super_admin) return null;
-    const res = await this.pool.query<MembershipRow>(`SELECT * FROM auth_get_memberships($1)`, [user.id]);
+    const res = await client.query<MembershipRow>(`SELECT * FROM auth_get_memberships($1)`, [user.id]);
     return res.rows[0] ?? null;
   }
 
   /** Rôles effectifs (principal + additions) pour le JWT — multi-rôles (040). */
-  private async effectiveRoles(userId: string, membership: MembershipRow | null): Promise<string[]> {
+  private async effectiveRoles(userId: string, membership: MembershipRow | null, client: Pick<PoolClient, 'query'> = this.pool): Promise<string[]> {
     if (!membership) return [];
-    const res = await this.pool.query<{ role_slug: string }>(`SELECT role_slug FROM auth_user_roles($1) WHERE organization_id = $2`, [userId, membership.organization_id]);
+    const res = await client.query<{ role_slug: string }>(`SELECT role_slug FROM auth_user_roles($1) WHERE organization_id = $2`, [userId, membership.organization_id]);
     return res.rows.map((r) => r.role_slug);
   }
 
-  private async signAccessToken(user: UserRow, membership: MembershipRow | null): Promise<string> {
+  private async signAccessToken(user: UserRow, membership: MembershipRow | null, client: Pick<PoolClient, 'query'> = this.pool): Promise<string> {
     const role = user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none');
-    const roles = user.is_super_admin ? ['super_admin'] : await this.effectiveRoles(user.id, membership);
+    const roles = user.is_super_admin ? ['super_admin'] : await this.effectiveRoles(user.id, membership, client);
     return this.jwtService.sign({
       purpose: ACCESS_TOKEN_PURPOSE,
       sub: user.id,

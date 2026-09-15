@@ -78,7 +78,9 @@ complet de révision périodique reste à valider séparément.
   audit production **0 vulnérabilité**. Avertissement Node préexistant sur le type
   de module de la configuration ESLint distinct des avertissements ESLint.
 - Runner **48 suites**, seuil G3 33, notice `G security passed` agrégée G1/G2/G3 ;
-  budget des notices testé. Batterie stricte complète et CI à confirmer en PR #44.
+  budget des notices testé. Qualification finale : strict local **48/48**, CI
+  **34931752882**, **9/9** sur `74b24c29008c7832fe7a6b778efe83b83fc09683`, database
+  **104261231618** ; G1=26/G2=113/G3=33 et H2/H1/F2/F4 relus en PR #44.
 
 ```sh
 npm ci

@@ -399,8 +399,18 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       PIN, OTP et deux IP derrière proxy. Runner 46 suites et notice G1 obligatoire.
       [Runbook G1](PHASE_G1_AUTH_RUNBOOK.md), CI **34913991948**, database
       **104207497079**, notice G1 26 et H2/H1/F2/F4 confirmées en PR #44.
-- [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, races refresh/
-      invitations, TOTP et demandes OTP concurrentes ; G1a ne ferme pas ces frontières.
+- [x] **G1b refresh** : concurrence de rotation et réutilisation, état de session
+      périmé après attente, rotation partielle sur panne reproduits. Transaction
+      avec verrous compte→session, remplacement atomique ; révocation générale
+      committée avant erreur de réutilisation. **16/24 → 24/24**, HTTP/PG réels,
+      dont panne de stockage avec rollback et cas positifs client conservés.
+      Politique existante de réutilisation maintenue ; **les JWT d'accès déjà émis
+      ne sont pas invalidés globalement**. Runner **49 suites**, strict/CI à confirmer
+      en PR #44. [Runbook G1b](PHASE_G1B_REFRESH_RUNBOOK.md).
+- [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, invitations,
+      TOTP et demandes OTP concurrentes ; propriété/réassociation device_id et autres
+      courses refresh vs login/logout/mot de passe/révocations après vérification.
+      G1a/G1b ne ferment pas ces frontières.
       Pas de qualification globale de l'auth ni de topologie de déploiement.
 
 ### G2. RLS
@@ -441,7 +451,8 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       audit minimal dans la même transaction. **11/33 → 33/33**, dont concurrence
       réelle et panne de stockage d'audit avec rollback. Second responsable dans
       les fixtures historiques ; aucun bypass des approbations positives.
-      Runner **48 suites**, complet/CI à confirmer en PR #44.
+      Strict **48/48**, CI **34931752882**, **9/9** sur `74b24c2`, database
+      **104261231618**, G3=33 et H2/H1/F2/F4 confirmés en PR #44.
       [Runbook G3a](PHASE_G3_DPIA_RUNBOOK.md).
 - [ ] Historique des décisions, workflow complet de renouvellement, indépendance
       réelle des personnes/impersonation, révocation après contrôle et audit global
@@ -646,7 +657,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (48 suites/contrôles après G3a) — rôles stricts : voir runbook H2g
+# Batterie complète (49 suites/contrôles après G1b) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

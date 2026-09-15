@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v11 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G2/G3a)
+# Matrice d'autorisation par module (v12 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G1b/G2/G3a)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -245,3 +245,16 @@ rollback. Les lectures DPIA, l'audit best-effort des autres domaines et les anci
 décisions ne sont pas modifiés. Pas de preuve d'indépendance de deux personnes,
 de contrôle global d'impersonation ou de révocation concurrente après vérification.
 **11/33 → 33/33**, [runbook G3a](../PHASE_G3_DPIA_RUNBOOK.md).
+
+
+## G1b — Rotation des refresh tokens
+
+/auth/refresh reste public et rate-limité : le refresh opaque est sa preuve
+présentée. Verrous compte→session et transaction commune empêchent les doubles
+rotations et les remplacements partiels. L'état de session est relu après attente.
+Une réutilisation révoque les refresh sessions du compte avant de répondre en erreur,
+conformément à la politique existante. Audit best-effort hors de ce commit.
+
+**16/24 → 24/24**, [runbook G1b](../PHASE_G1B_REFRESH_RUNBOOK.md). Ce contrôle ne
+révoque pas les JWT d'accès existants et ne ferme ni la sélection globale de tenant,
+ni la propriété/réassociation d'appareil, ni toutes les courses de révocation.
