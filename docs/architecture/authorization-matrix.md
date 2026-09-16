@@ -311,3 +311,34 @@ instantanée en base ni de JWT admin à rallonge. 9/24 → 24/24, suite
 `phase51-metrics-collector.api.test.mjs` ; ingestion réelle par
 `scripts/test-metrics-collector-stack.mjs`. La voie E2 (exporter SQL, sans API
 ni auth) est inchangée ; aucune autorité de collecteur sur d'autres tables.
+
+
+## G4 — Révocabilité globale des principaux (époque de token)
+
+Tout access JWT porte le claim `epoch` = `users.token_epoch` (migration 062)
+et les gardes d'entrée (`JwtAuthGuard`, `MetricsAccessGuard` voie admin)
+relisent l'époque courante à chaque requête : une révocation — mot de passe,
+statut, super-adminité, suppression douce, membership (inactive/absente,
+rôle principal, périmètre) ou rôle additionnel — frappe TOUTES les routes
+immédiatement, sans attendre l'expiration de 15 minutes ni un re-contrôle
+d'endpoint. L'incrément est porté par DÉCLENCHEURS sur les trois tables :
+les écritures SQL d'exploitation (correctifs, imports, décréts) sont soumises
+aux mêmes règles que les endpoints ; seuls les changements réels de valeurs
+bumpent (un no-op idempotent ne déconnecte personne) ; la restauration d'un
+état force symétriquement la reconnexion.
+
+Échec de lecture = refus (fail-closed) ; token sans claim = époque 0
+(coexistence d'instances pendant le déploiement, jusqu'à la première
+révocation du principal). La voie `refresh` relit déjà le compte (G1b) et
+réémet l'époque courante ; la révocabilité des refresh reste portée par
+`sessions`. La déchéance d'un administrateur plateforme vaut désormais 401 au
+garde de `/metrics` là où le service répondait 403 après relecture ; la
+relecture du service reste en profondeur de défense pour le verrouillage de
+login (non révocatoire).
+
+**4/17 → 17/17** (`phase53`, HTTP+PG réels), huit suites recalées sur le
+contrat élargi, [runbook G4](../PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md).
+Limites assumées : fenêtre garde→commit d'une requête en cours (pas de lock
+du principal par mutation), facteurs TOTP non révocatoires par conception,
+statut d'ORGANISATION hors périmètre, migration 062 obligatoire avant
+redéploiement.

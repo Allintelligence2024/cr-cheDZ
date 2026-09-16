@@ -43,6 +43,8 @@ interface UserRow {
   is_super_admin: boolean;
   failed_attempts: number;
   locked_until: Date | null;
+  /** G4 (audit 2026-09) : époque de révocation (users.token_epoch, mig. 062). */
+  token_epoch?: string | number;
 }
 
 export interface LoginResult {
@@ -609,6 +611,15 @@ export class AuthService {
   private async signAccessToken(user: UserRow, membership: MembershipRow | null, client: Pick<PoolClient, 'query'> = this.pool): Promise<string> {
     const role = user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none');
     const roles = user.is_super_admin ? ['super_admin'] : await this.effectiveRoles(user.id, membership, client);
+    // G4 : l'époque est relue au moment de la signature (dans la transaction
+    // courante) — les bumps déclencheurs intervenus pendant la requête (ex.
+    // acceptation d'invitation qui met à jour users ET memberships) sont
+    // reflétés, jamais l'ancienne valeur de la ligne chargée en amont.
+    const epochRes = await client.query<{ token_epoch: string | number | null }>(
+      'SELECT token_epoch FROM users WHERE id = $1',
+      [user.id],
+    );
+    const epoch = Number(epochRes.rows[0]?.token_epoch ?? 0);
     return this.jwtService.sign({
       purpose: ACCESS_TOKEN_PURPOSE,
       sub: user.id,
@@ -617,6 +628,7 @@ export class AuthService {
       roles,
       isSuperAdmin: user.is_super_admin,
       email: user.email,
+      epoch,
     });
   }
 

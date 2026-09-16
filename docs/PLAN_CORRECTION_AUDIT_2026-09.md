@@ -7,7 +7,7 @@
 
 ---
 
-## Suivi de cette session (v3.1) — H2k collecte des métriques
+## Suivi de cette session (v3.2) — H2k, H2l, OpenAPI, G4
 
 - **H2k livré** : credential de collecteur Prometheus à privilège limité pour
   `/api/v1/metrics` (digests SHA-256 en env API, token brut dans un fichier
@@ -21,17 +21,42 @@
   [Runbook H2j/H2k](PHASE_H2J_METRICS_RUNBOOK.md).
   **État de livraison** : commits locaux `dffefee`+ sur
   `arena/01a0a573-cr-chedz` ; gate strict local 55/55, unit 32/32, lint/
-  typecheck/builds/audit verts. **Push et PR #45 en attente** — l'authentification
-  GitHub de la session a expiré en cours de route ; à la reprise : reconnecter
-  GitHub dans Arena, `git push origin arena/01a0a573-cr-chedz`, ouvrir la PR,
-  consigner ici les runs CI du SHA exact et relire les notices par REST.
+  typecheck/builds/audit verts. **PR #45 ouverte** depuis
+  `arena/01a0a573-cr-chedz` (https://github.com/Allintelligence2024/cr-cheDZ/pull/45)
+  — l'authentification GitHub avait expiré en cours de session, puis s'est
+  rétablie ; le push a réussi et la PR porte les trois lots. **Reste à
+  consigner** : runs CI sur le SHA exact de la PR et relecture REST des six
+  notices (merge soumis à autorisation client, non effectué).
+  **Suivi G4** : lot complet, gate strict local **56/56 exit 0** (notices
+  agrégées avec G4=17, unit 38/38, lint/typecheck/builds/audit 0, inventaire
+  inchangé). Un reset du sandbox a décroché la branche de ses commits locaux
+  sans perdre l'arbre ; rattachement sur le tip distant puis nouveau commit —
+  G4 est poussé sur `arena/01a0a573-cr-chedz` et intégré à la PR #45.
+  **Reste à consigner après CI** : runs/checks du SHA exact, relecture REST
+  des six notices (H1/H2/G/F2/F4/OpenAPI), IDs ici et dans les runbooks
+  H2j/H2l (mentions « à consigner en PR #45 »). Le merge reste soumis à
+  autorisation client.
 - **H2l livré** : `scripts/anonymize.sql` audités contre le schéma actuel
   (61 migrations) et étendu — tuteurs, personnel, messages, sessions,
   devices/tokens, IP, sites, miroirs JSONB ; garde anti-prod, auto-vérif
   transactionnelle, idempotence. Rouge **4/14** (old script) → vert **14/14** ;
-  batterie **55 suites/contrôles**. [Runbook H2l](PHASE_H2L_ANONYMIZATION_RUNBOOK.md).
+  batterie **55 suites/contrôles** (56 avec G4). [Runbook H2l](PHASE_H2L_ANONYMIZATION_RUNBOOK.md).
   Résidus assumés et documentés (objets S3, tokens vendor, date_of_birth) :
   aucune conformité RGPD globale n'est revendue par ce lot.
+- **G4 livré** : révocabilité GLOBALE des principaux — `users.token_epoch`
+  (migration 062) porté en claim `epoch` signé (login/refresh/invitation/
+  impersonation) et revérifié aux gardes d'entrée (`JwtAuthGuard`,
+  `MetricsAccessGuard`) ; incrément par DÉCLENCHEURS DB sur `users` (statut,
+  super-adminité, mot de passe, suppression douce), `memberships` et
+  `role_assignments` (diff réel uniquement — pas de faux positifs sur no-op),
+  donc effectifs aussi pour les écritures SQL d'exploitation. Rouge **4/17 →
+  vert 17/17** (`phase53`, HTTP+PG réels, baseline `47bac1a`) ; suites
+  préexistantes recalées sur le contrat élargi (refus ANTÉRIEUR et GLOBAL ;
+  refus sans mutation toujours vérifié) : phase15/37/40/45/47/48/50/51.
+  Limites documentées dans le [runbook G4](PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md) :
+  fenêtre garde→commit d'une requête en cours, TOTP seul non révocatoire,
+  statut d'organisation hors périmètre, ordre migration-avant-redéploiement
+  (fail-closed sinon).
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md),
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md) et à la [matrice d'autorisation](architecture/authorization-matrix.md).
 
@@ -455,10 +480,20 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
 - [ ] **Suite MFA** : chiffrement du secret au repos, anti-rejeu TOTP persistant,
       preuve récente avant préparation, récupération/rotation et obligation MFA sur
       tous les canaux PIN/OTP parent non qualifiés. Secrets déjà divulgués non invalidés.
-- [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, autres frontières invitations,
-      MFA ci-dessus et demandes OTP concurrentes ; propriété/réassociation device_id et autres
+- [x] **G4 révocabilité globale** : revalidation à l'entrée de l'époque de
+      principal (JWT en vol) contre `users.token_epoch`, bumpée par déclencheurs
+      sur users/memberships/role_assignments — migration 062, suite phase53
+      **4/17 → 17/17**, huit suites recalées, gate **56 suites/contrôles** ;
+      la voie admin `/metrics` refuse désormais le JWT déchu à l'entrée (401)
+      au lieu du 403 différé. Limites assumées au runbook
+      [PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md](PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md)
+      (fenêtre garde→commit, TOTP seul, statut d'organisation). Les mentions
+      « global JWT revocation unqualified » des notices H2j/G1x sont résolues
+      par ce lot ; les suites individuelles conservent leurs limites propres.
+- [ ] **Suite G auth (reste)** : autres frontières invitations, MFA ci-dessus
+      et demandes OTP concurrentes ; propriété/réassociation device_id et autres
       courses refresh vs login/logout/mot de passe/révocations après vérification.
-      G1a/G1b/G1c/G1d ne ferment pas ces frontières.
+      G1a/G1b/G1c/G1d/G4 ne ferment pas ces frontières.
       Pas de qualification globale de l'auth ni de topologie de déploiement.
 
 ### G2. RLS

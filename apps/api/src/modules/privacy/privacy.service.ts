@@ -438,6 +438,13 @@ export class PrivacyService {
     }
     const membership = (await this.pool.query(`SELECT * FROM auth_get_memberships($1)`, [user.id])).rows[0] ?? null;
     const role = user.is_super_admin ? 'super_admin' : (membership?.role_slug ?? 'none');
+    // G4 : le token d'impersonation est soumis à la même révocabilité que les
+    // tokens de login — époque courante du compte cible au moment de la
+    // signature (toute révocation ultérieure frappe la session simulée).
+    const epochRes = await this.pool.query<{ token_epoch: string | number | null }>(
+      'SELECT token_epoch FROM users WHERE id = $1',
+      [user.id],
+    );
     const accessToken = this.jwt.sign({
       purpose: ACCESS_TOKEN_PURPOSE,
       sub: user.id,
@@ -445,6 +452,7 @@ export class PrivacyService {
       role,
       isSuperAdmin: user.is_super_admin,
       email: user.email,
+      epoch: Number(epochRes.rows[0]?.token_epoch ?? 0),
     });
     await this.audit.log({
       userId: actorId,

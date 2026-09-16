@@ -1,21 +1,32 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import type { Pool } from 'pg';
 import type { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { Errors } from '../errors';
+import { PG_POOL } from '../database/database.provider';
 import { TenantContextService } from '../database/tenant-context.service';
+import { principalEpochMatches, readPrincipalEpoch } from '../auth/principal-epoch';
 import type { CurrentUserPayload } from '../decorators/current-user.decorator';
 
 /**
  * JwtAuthGuard — authentification JWT (access token 15 min).
  * Injecte le contexte tenant (organization_id + user_id) dans le
  * TenantContextService pour la durée de la requête (Partie 3.3).
+ *
+ * G4 (audit 2026-09) : révocabilité globale — le claim `epoch` du token est
+ * comparé à users.token_epoch (courant) AVANT toute exécution de route. Une
+ * révocation (mot de passe, statut, super-adminité, suppression, membership,
+ * rôles) frappe donc immédiatement toutes les routes, au lieu d'attendre
+ * l'expiration JWT. Échec DB ou époque absente/null ⇒ refus (fail-closed) :
+ * cette voie ne peut jamais accorder par accident.
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly tenantContext: TenantContextService,
+    @Inject(PG_POOL) private readonly pool: Pool,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -29,13 +40,18 @@ export class JwtAuthGuard implements CanActivate {
     if (!token) throw Errors.unauthorized();
 
     try {
-      const payload = await this.jwtService.verifyAsync<CurrentUserPayload & { purpose?: string }>(token);
+      const payload = await this.jwtService.verifyAsync<CurrentUserPayload & { purpose?: string; epoch?: number }>(token);
       // C4 (audit 2026-09) : seuls les tokens d'accès (purpose='access')
       // passent ce garde. Un token d'invitation (7 j) — même signé — ne doit
       // jamais ouvrir de session sur une route protégée. Les routes qui
       // consomment d'autres familles de tokens (accept-invitation) sont
       // @Public() et vérifient elles-mêmes le purpose attendu.
       if (payload.purpose !== 'access') {
+        throw Errors.unauthorized();
+      }
+      // G4 : époque du principal — mismatch ou compte disparu ⇒ 401.
+      const epoch = await readPrincipalEpoch(this.pool, payload.sub);
+      if (!principalEpochMatches(payload.epoch, epoch)) {
         throw Errors.unauthorized();
       }
       request.user = payload;

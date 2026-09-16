@@ -18,7 +18,7 @@ test('strict gate budgets notices for H1/F2/F4 and aggregates every H2 count', (
   }
 });
 
-test('G evidence aggregates actual G1/G1b/G1c/G1d/G2/G3 counters without one notice per lot', () => {
+test('G evidence aggregates actual G1/G1b/G1c/G1d/G2/G3/G4 counters without one notice per lot', () => {
   const source = readFileSync(new URL('../../scripts/test-production-roles.mjs', import.meta.url), 'utf8');
   const aggregate = source.split('\n').find(line => line.includes('::notice title=G security passed::'));
   assert.ok(aggregate);
@@ -28,4 +28,8 @@ test('G evidence aggregates actual G1/G1b/G1c/G1d/G2/G3 counters without one not
   assert.ok(aggregate.includes('G1d=${totpManagement[1]}'));
   assert.ok(aggregate.includes('G2=${rlsIntegrity[1]}'));
   assert.ok(aggregate.includes('G3=${dpiaApproval[1]}'));
+  assert.ok(aggregate.includes('G4=${principalRevocation[1]}'));
+  // G4 : l'épreuve d'exactitude de la ligne agrégée (clé présente, seuil vérifié dans le gate).
+  const g4line = source.split('\n').find(line => line.includes("G4 principal revocation: (\\d+) passed, 0 failed"));
+  assert.ok(g4line, 'evidence regex must match the suite summary line');
 });

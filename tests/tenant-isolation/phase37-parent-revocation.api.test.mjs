@@ -100,10 +100,17 @@ try {
         const before = write ? await count() : null;
         const response = await req(method, path, user, body);
         const after = write ? await count() : null;
+        // G4 (migration 062) : « membership inactive » et « user suspended »
+        // sont révocatoires — le garde d'entrée refuse le JWT dépassé (401)
+        // avant l'endpoint ; les états de données (guardian/child/link/capability)
+        // ne touchent pas l'époque et gardent leurs refus métier 403/404/200-vide.
+        const guardRevoked = state === 'membership inactive' || state === 'user suspended';
         if (denied && kind === 'list') {
-          assert.equal(response.status, 200); assert.deepEqual(response.body, []);
+          if (guardRevoked) assert.equal(response.status, 401, JSON.stringify({ status: response.status, before, after }));
+          else { assert.equal(response.status, 200); assert.deepEqual(response.body, []); }
         } else if (denied) {
-          assert.ok([403, 404].includes(response.status), JSON.stringify({ status: response.status, before, after }));
+          if (guardRevoked) assert.equal(response.status, 401, JSON.stringify({ status: response.status, before, after }));
+          else assert.ok([403, 404].includes(response.status), JSON.stringify({ status: response.status, before, after }));
           if (write) assert.equal(after, before, 'refused request cannot mutate business records');
           assert.ok(!JSON.stringify(response.body).includes('H2C_'));
         } else {
@@ -125,6 +132,11 @@ try {
       await db.query("UPDATE users SET status='active' WHERE id=$1", [parent.id]);
       if (state === 'link removed') await db.query('INSERT INTO child_guardians SELECT * FROM json_populate_record(NULL::child_guardians,$1::json)', [JSON.stringify(linkRow)]);
       await db.query('UPDATE child_guardians SET can_view_journal=true,can_view_health=true,can_receive_invoices=true WHERE id=$1', [link]);
+      if (state === 'membership inactive' || state === 'user suspended') {
+        // G4 : la restauration est un changement réel (bump) — reconnexion.
+        const r = await req('POST', '/auth/login', null, { email: parent.email, password });
+        assert.equal(r.status, 200, `${state}: relogin after restore`); parent.token = r.body.access_token;
+      }
     }
   }
 } finally {

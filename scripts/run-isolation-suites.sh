@@ -80,6 +80,7 @@ SUITES=(
   phase50-metrics.api.test.mjs
   phase51-metrics-collector.api.test.mjs
   phase52-anonymization.pg.test.mjs
+  phase53-principal-revocation.api.test.mjs
 )
 
 FILTER="${1:-}"

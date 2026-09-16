@@ -264,8 +264,14 @@ try {
     const userId = (await db.query("INSERT INTO users(email,first_name,last_name,password_hash,status,is_super_admin) VALUES($1,'H2k','Fallen',$2,'active',true) RETURNING id", [email, hash])).rows[0].id;
     const login = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password }) });
     const staleToken = (await login.json()).access_token;
+    // G4 (migration 062) : la déchéance de super-adminité dépasse l'époque du
+    // token — le MetricsAccessGuard refuse DÈS L'ENTRÉE (401), sans jamais
+    // lire l'exposition. La relecture d'autorité du service reste en profondeur
+    // de défense pour les états non révocatoires (ex. verrouillage de login).
     await db.query('UPDATE users SET is_super_admin=false WHERE id=$1', [userId]);
-    assert.equal((await request('/metrics', bearer(staleToken))).status, 403);
+    const fallen = await request('/metrics', bearer(staleToken));
+    assert.equal(fallen.status, 401);
+    assert.equal(fallen.text.includes('http_requests_total'), false);
   });
   await check('anonymous scraping stays 401 forever: the collector is additive, not a public fallback', async () => {
     const r = await request('/metrics', null);

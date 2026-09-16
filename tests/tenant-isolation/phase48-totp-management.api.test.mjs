@@ -60,8 +60,12 @@ try {
     if (code) assert.equal(r.body.code, code);
     assert.equal(r.body.secret, undefined); assert.equal(r.body.otpauth_url, undefined); assert.deepEqual(await snapshot(u), before);
   }
+  const relogin = async u => { const r = await req('login', null, { email: u.email, password }); assert.equal(r.status, 200); u.token = r.body.access_token; };
   for (const status of ['active','pending']) {
     const u = await fixture(false, null); await db.query('UPDATE users SET status=$2 WHERE id=$1', [u.id, status]);
+    // G4 (migration 062) : la transition active→pending est un changement
+    // révocatoire (epoch dépassée) — le setup MFA exige une reconnexion.
+    if (status !== 'active') await relogin(u);
     let secret;
     await check(`${status}: initial setup has a real secret and minimized audit`, async () => {
       const r = await settings('enable', u); assert.equal(r.status, 200); secret = r.body.secret;
@@ -85,8 +89,13 @@ try {
     const u = await fixture(true); await denied(u, 'enable', 409, 'TOTP_ALREADY_ENABLED');
   });
   for (const [name, sql, status, code] of [
-    ['suspended', "UPDATE users SET status='suspended' WHERE id=$1", 403, 'ACCOUNT_SUSPENDED'],
-    ['deleted', 'UPDATE users SET deleted_at=NOW() WHERE id=$1', 401, 'INVALID_CREDENTIALS'],
+    // G4 : suspension et suppression douce sont des événements révocatoires —
+    // le garde d'entrée refuse (401) avant que le service ne voie l'état
+    // (403 ACCOUNT_SUSPENDED / 401 INVALID_CREDENTIALS avant la 062).
+    // Le verrouillage de login n'est PAS un bump d'époque : le refus reste
+    // 423/ACCOUNT_LOCKED vu par le service.
+    ['suspended', "UPDATE users SET status='suspended' WHERE id=$1", 401, 'UNAUTHORIZED'],
+    ['deleted', 'UPDATE users SET deleted_at=NOW() WHERE id=$1', 401, 'UNAUTHORIZED'],
     ['locked', "UPDATE users SET locked_until=NOW()+INTERVAL '10 minutes' WHERE id=$1", 423, 'ACCOUNT_LOCKED'],
   ]) for (const action of ['enable','verify','disable']) await check(`${name}: ${action} refused with no secret or mutation`, async () => {
     const u = await fixture(action === 'disable'); await db.query(sql, [u.id]); await denied(u, action, status, code);

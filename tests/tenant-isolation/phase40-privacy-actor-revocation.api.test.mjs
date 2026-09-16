@@ -78,8 +78,15 @@ try {
         const response = await req(method, path, user, body);
         const after = await stateInDb(user.request);
         const denied = inactive || (name === 'resolve' && !['director', 'super_admin'].includes(user.role));
+        // G4 (migration 062) : membership inactive/absent, suspension et
+        // suppression douce sont des événements révocatoires — l'époque du JWT
+        // est dépassée par le déclencheur DB et le refus survient AU GARDE
+        // D'ENTRÉE (401), plus tôt que le 403 métier de l'endpoint. Les deux
+        // codes restent des refus SANS mutation, ce que le snapshot prouve.
+        const guardRevoked = ['membership inactive', 'membership absent', 'user suspended', 'user deleted'].includes(state);
         if (denied) {
-          assert.equal(response.status, 403, JSON.stringify({ status: response.status, before, after }));
+          if (guardRevoked) assert.equal(response.status, 401, JSON.stringify({ status: response.status, before, after }));
+          else assert.equal(response.status, 403, JSON.stringify({ status: response.status, before, after }));
           assert.deepEqual(after, before, 'denied calls cannot create requests/exports or resolve a request');
           assert.ok(!JSON.stringify(response.body).includes('H2F_'));
         } else {
@@ -98,6 +105,13 @@ try {
       await db.query("UPDATE users SET status='active',deleted_at=NULL WHERE id=$1", [user.id]);
       if (state === 'membership absent') await db.query('INSERT INTO memberships SELECT * FROM json_populate_record(NULL::memberships,$1::json)', [JSON.stringify(user.membership)]);
       await db.query('UPDATE memberships SET is_active=true WHERE organization_id=$1 AND user_id=$2', [org, user.id]);
+      // G4 : le rétablissement bump aussi l'époque (changement réel) —
+      // reconnexion exigée pour la suite du matrix ; sans flip, no-op (le
+      // déclencheur ne frappe que les différences de valeurs).
+      if (['membership inactive', 'membership absent', 'user suspended', 'user deleted'].includes(state)) {
+        const r = await req('POST', '/auth/login', null, { email: user.email, password });
+        assert.equal(r.status, 200, `${state}: relogin after restore`); user.token = r.body.access_token;
+      }
     }
   }
   await check('active requester can retain own case history after guardian deletion, not fresh child access', async () => {
