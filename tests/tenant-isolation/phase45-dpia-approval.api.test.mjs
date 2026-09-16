@@ -114,9 +114,18 @@ try {
   ]) {
     await db.query(change, [reviewer.id]);
     try {
-      await check(`${label}: cannot create`, () => denied(() => create(reviewer), 403, 'DPIA_ACTOR_FORBIDDEN'));
-      await check(`${label}: cannot approve`, () => denied(() => approve(reviewer, pending), 403, 'DPIA_ACTOR_FORBIDDEN'));
-    } finally { await db.query(restore, [reviewer.id]); }
+      // G4 (migration 062) : ces états sont révocatoires — l'époque du token
+      // est dépassée et le garde d'entrée refuse AVANT l'endpoint (401, plus
+      // de 403 métier). Le refus sans mutation attendu par le lot reste vérifié.
+      await check(`${label}: cannot create`, () => denied(() => create(reviewer), 401));
+      await check(`${label}: cannot approve`, () => denied(() => approve(reviewer, pending), 401));
+    } finally {
+      await db.query(restore, [reviewer.id]);
+      // Le rétablissement bump aussi l'époque : reconnexion obligatoire, puis
+      // le reviewer redevient un acteur normal pour les checks suivants.
+      const re = await req('POST', '/auth/login', null, { email: reviewer.email, password });
+      assert.equal(re.status, 200); reviewer.token = re.body.access_token;
+    }
   }
   for (const [label, u] of [['accountant', accountant], ['educator', educator], ['parent', parent]]) {
     await check(`${label}: creation still forbidden`, () => denied(() => create(u), 403));

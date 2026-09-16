@@ -145,3 +145,56 @@ NODE_ENV=production node -e "require('./packages/prod-config/dist').assertProduc
   interpréter local comme une désactivation de S3 pour tous les médias**.
 - [Reproduction, exploitation et limites H2i](PHASE_H2I_STORAGE_SELECTION_RUNBOOK.md).
   Pas de validation des credentials par un fournisseur réel, ni de migration d'objets.
+
+### 8. Credential de collecte Prometheus — H2k
+
+- `/api/v1/metrics` accepte le JWT d'accès administrateur plateforme (H2j) **ou** un
+  credential de collecteur à privilège limité : un secret opaque de 32 octets dont
+  l'API ne connaît **que le digest SHA-256** (`METRICS_COLLECTOR_TOKEN_HASHES`,
+  liste séparée par virgules). Le token brut ne vit que dans le fichier lu par
+  Prometheus (`authorization.credentials_file`, monté en lecture seule).
+- Générer le couple, hors dépôt :
+  `node scripts/provision-metrics-collector.mjs --out-file /etc/creche/secrets/metrics-collector-token`
+  puis coller le digest imprimé dans `.env.prod`. Permissions 0600 (0400 + chown
+  65534 comme le secret Alertmanager si le conteneur Prometheus tourne en nobody).
+- **Rotation** : générer un nouveau couple → ajouter le nouveau digest à la liste
+  (les deux coexistent pendant la bascule) → remplacer le fichier côté Prometheus →
+  retirer l'ancien digest. **Révocation** : retirer le digest (et le fichier) ; un
+  redéploiement suffit — aucun secret n'est encodé dans un JWT, aucune session
+  utilisateur n'est créée, et la suppression n'ouvre rien : la voie admin reste.
+- Liste **malformée** = entrée non-SHA-256 : démarrage refusé en production et
+  chemin collecteur désactivé (fail-closed) ; liste absente = seul H2j.
+  **Jamais** d'accès anonyme rétabli pour « réparer » un scraper.
+- Le collecteur ouvre exactement le scrape : 401 sur toute autre route, réponse
+  identique à celle de l'admin (mêmes agrégats globaux, jamais de PII ni de
+  contenu tenant) — c'est une **fuite d'agrégats potentielle** si le fichier
+  filtre : le traiter comme un secret d'infrastructure à durée non limitée.
+- Preuves et limites : [runbook H2j/H2k](PHASE_H2J_METRICS_RUNBOOK.md) ; ingestion
+  réelle qualifiée par le gate `scripts/test-metrics-collector-stack.mjs` (vrai
+  Prometheus 2.53.0). La voie E2 (exporter SQL, sans API) reste distincte.
+
+### 9. Clé de chiffrement des secrets TOTP — G5
+
+- `TOTP_ENCRYPTION_KEY` protège **uniquement** `users.totp_secret` au repos
+  (AES-256-GCM, AAD = identifiant utilisateur → un scellé arraché d'une ligne
+  et collé sur une autre ne se déchiffre pas). Ce n'est ni le `JWT_SECRET`, ni
+  l'`ENCRYPTION_KEY` métier existant ; ne jamais les réutiliser l'un pour l'autre.
+- Format : 32 octets — hexadécimal 64 caractères (`openssl rand -hex 32`) ou
+  base64/base64url. **Rotation** : liste `courante,ancienne` ; la première scelle,
+  toutes déchiffrent ; chaque usage rescelle la ligne à la courante — une fois
+  tous les comptes actifs passés (ou après le délai de rétention souhaité), on
+  retire l'ancienne et seule la courante reste.
+- Fail-closed : valeur scellée indéchiffrable (clé retirée trop tôt, octet
+  altéré) ⇒ `403 MFA_SECRET_UNREADABLE`, aucune session, compteur de verrouillage
+  de l'utilisateur non touché — c'est une erreur d'exploitation, pas une faute
+  de l'utilisateur. **Ne jamais** « réparer » en repassant en mode clair ni en
+  effaçant le secret de la victime.
+- Production : absence de clé = **démarrage refusé** (garde `@creche/prod-config`).
+  Clé présente mais malformée = refus dans tous les environnements. test/dev sans
+  clé = mode historique explicite (clair en base) — l'anti-rejeu persistant des
+  codes (`users.totp_last_step`, migration 063) s'applique de toute façon.
+- Après un rollback applicatif pré-G5 : conserver la clé (les lignes déjà
+  scellées restent illisibles sans elle) et ne pas supprimer la colonne 063.
+- Preuves et limites : [runbook G5](PHASE_G5_MFA_RUNBOOK.md) ; suite `phase54`
+  (18 scénarios HTTP+PG réels, rotation incluse). Les codes de récupération MFA
+  relèvent d'une décision client explicite (non implémentés, non revendiqués).

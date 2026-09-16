@@ -59,6 +59,27 @@ export class TotpService {
     return code;
   }
 
+  /** G5 : pas courant (epoch/30) — référence de l'anti-rejeu persistant. */
+  currentStep(): number {
+    return Math.floor(Date.now() / STEP_MS);
+  }
+
+  /**
+   * G5 : comme verify() mais renvoie en plus le PAS accepté (le plus récent
+   * de la fenêtre) pour que l'appelant l'enregistre contre rejeu. Renvoie
+   * null si aucun candidat de la fenêtre ne correspond.
+   */
+  matchStep(secret: string, token: string, window = 1): number | null {
+    if (!/^\d{6}$/.test(token)) return null;
+    const current = Math.floor(Date.now() / STEP_MS);
+    for (let w = window; w >= -window; w -= 1) {
+      const step = current + w;
+      const expected = this.generate(secret, step);
+      if (timingSafeEqual(Buffer.from(token), Buffer.from(expected))) return step;
+    }
+    return null;
+  }
+
   /** Vérification avec fenêtre ±window pas de 30 s (tolère l'horloge). */
   verify(secret: string, token: string, window = 1): boolean {
     if (!/^\d{6}$/.test(token)) return false;

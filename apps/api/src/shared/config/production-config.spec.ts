@@ -28,12 +28,27 @@ const safeEnv = {
   SATIM_MERCHANT_ID: 'merchant-prod',
   SATIM_SECRET: 'satim-prod-secret',
   SATIM_GATEWAY_URL: 'https://pay.satim.dz/rest',
+  // G5 : chiffrement au repos des secrets TOTP — clé de 32 octets (hex) requise en production.
+  TOTP_ENCRYPTION_KEY: 'b'.repeat(64),
 };
 
 describe('@creche/prod-config — garde de configuration (NODE_ENV=production)', () => {
   test('config sûre : validate() vide et assert() ne jette pas', () => {
     expect(validateProductionConfig(safeEnv)).toEqual([]);
     expect(() => assertProductionConfig(safeEnv)).not.toThrow();
+  });
+
+  test('G5 : TOTP_ENCRYPTION_KEY absent → bloquée (variable nommée, pas de clair en prod)', () => {
+    const { TOTP_ENCRYPTION_KEY: _omitted, ...env } = safeEnv;
+    expect(validateProductionConfig(env).join('\n')).toMatch(/TOTP_ENCRYPTION_KEY/);
+    expect(() => assertProductionConfig(env)).toThrow(/TOTP_ENCRYPTION_KEY/);
+  });
+
+  test('G5 : TOTP_ENCRYPTION_KEY malformée → bloquée partout ; liste de rotation admise', () => {
+    expect(() => assertProductionConfig({ ...safeEnv, TOTP_ENCRYPTION_KEY: 'trop-court' })).toThrow(/TOTP_ENCRYPTION_KEY/);
+    expect(() => assertProductionConfig({ ...safeEnv, TOTP_ENCRYPTION_KEY: 'y'.repeat(20) })).toThrow(/TOTP_ENCRYPTION_KEY/);
+    expect(validateProductionConfig({ ...safeEnv, TOTP_ENCRYPTION_KEY: `${'c'.repeat(64)},${'b'.repeat(64)}` })).toEqual([]);
+    expect(() => assertProductionConfig({ ...safeEnv, NODE_ENV: 'test', TOTP_ENCRYPTION_KEY: 'nope' })).toThrow(/TOTP_ENCRYPTION_KEY/);
   });
 
   test('PAYMENT_WEBHOOK_SECRET absent → bloquée (variable nommée)', () => {

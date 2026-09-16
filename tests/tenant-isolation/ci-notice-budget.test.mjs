@@ -13,12 +13,12 @@ test('strict gate budgets notices for H1/F2/F4 and aggregates every H2 count', (
     `${directNotices + 4} notices in one step exceed GitHub's ten-notice limit`);
   const aggregate = source.split('\n').find(line => line.includes('::notice title=H2 confidentiality passed::'));
   assert.ok(aggregate, 'one verifiable H2 annotation required');
-  for (const [lot, counter] of Object.entries({ H2a: 'confidentiality', H2b: 'revocation', H2c: 'parentAccess', H2d: 'financialProjection', H2e: 'journalHealth', H2f: 'privacyActor', H2g: 'photoConsent', H2h: 'staffDocuments', H2i: 'storageSelection', H2j: 'metricsEvidence' })) {
+  for (const [lot, counter] of Object.entries({ H2a: 'confidentiality', H2b: 'revocation', H2c: 'parentAccess', H2d: 'financialProjection', H2e: 'journalHealth', H2f: 'privacyActor', H2g: 'photoConsent', H2h: 'staffDocuments', H2i: 'storageSelection', H2j: 'metricsEvidence', H2k: 'collectorEvidence', H2l: 'anonymizationEvidence' })) {
     assert.ok(aggregate.includes(lot + '=${' + counter + '[1]}'), `${lot} actual result missing from aggregate`);
   }
 });
 
-test('G evidence aggregates actual G1/G1b/G1c/G1d/G2/G3 counters without one notice per lot', () => {
+test('G evidence aggregates actual G1/G1b/G1c/G1d/G2/G3/G4/G5 counters without one notice per lot', () => {
   const source = readFileSync(new URL('../../scripts/test-production-roles.mjs', import.meta.url), 'utf8');
   const aggregate = source.split('\n').find(line => line.includes('::notice title=G security passed::'));
   assert.ok(aggregate);
@@ -28,4 +28,12 @@ test('G evidence aggregates actual G1/G1b/G1c/G1d/G2/G3 counters without one not
   assert.ok(aggregate.includes('G1d=${totpManagement[1]}'));
   assert.ok(aggregate.includes('G2=${rlsIntegrity[1]}'));
   assert.ok(aggregate.includes('G3=${dpiaApproval[1]}'));
+  assert.ok(aggregate.includes('G4=${principalRevocation[1]}'));
+  // G4 : l'épreuve d'exactitude de la ligne agrégée (clé présente, seuil vérifié dans le gate).
+  const g4line = source.split('\n').find(line => line.includes("G4 principal revocation: (\\d+) passed, 0 failed"));
+  assert.ok(g4line, 'evidence regex must match the suite summary line');
+  assert.ok(aggregate.includes('G5=${mfaHardening[1]}'));
+  // G5 : même exactitude — la clé de lecture et le seuil 18 sont vérifiés au gate.
+  const g5line = source.split('\n').find(line => line.includes("G5 MFA hardening: (\\d+) passed, 0 failed"));
+  assert.ok(g5line, 'evidence regex must match the suite summary line');
 });

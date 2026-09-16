@@ -1,9 +1,100 @@
-# PLAN DE REPRISE — Audit 2026-09, phases D→H (v3.0)
+# PLAN DE REPRISE — Audit 2026-09, phases D→H (v3.1)
 
 > **Document de pilotage pour la prochaine session agent.**
 > Remplace la v1.x du même fichier (historique : voir `git log -- docs/PLAN_CORRECTION_AUDIT_2026-09.md`).
-> **Version** : 3.0 — 2026-09-14. Reprend la v2.0 mergée par la PR #43 (`d2bd1f9`)
-> et ajoute le suivi local D/E1–E6 sur `arena/01a09e7f-cr-chedz` (pas encore mergé).
+> **Version** : 3.1 — 2026-09-15. Reprend la v3.0 mergée par la PR #44 (`47bac1a`)
+> et ajoute le suivi de cette session (`arena/01a0a573-cr-chedz`).
+
+---
+
+## Suivi de cette session (v3.3) — H2k, H2l, OpenAPI, G4, G5
+
+- **H2k livré** : credential de collecteur Prometheus à privilège limité pour
+  `/api/v1/metrics` (digests SHA-256 en env API, token brut dans un fichier
+  monté en lecture seule ; refus/rotation/révocation qualifiés). Reproduction
+  rouge **9/24 → 24/24** (baseline `47bac1a`), gate d'**ingestion réelle** par
+  `prom/prometheus:v2.53.0` câblé au strict gate (bloc monitoring, comme E2) —
+  résultat CI **CONSIGNÉ** (voir bloc « CONSIGNÉ » ci-dessous — le gate
+  d'ingestion réelle a d'abord dû être corrigé quatre fois sur des défauts du
+  gate lui-même, jamais du produit).
+  Preuves closes PR #44 au passage : strict local 53/53, CI `34974936706` et
+  **post-merge 9/9 sur `47bac1a`** (run `34980118615`, docker `34980118624`,
+  flutter `34980118653`). H2i et H2j « à confirmer en PR #44 » : confirmés.
+  [Runbook H2j/H2k](PHASE_H2J_METRICS_RUNBOOK.md).
+  **État de livraison** : commits locaux `dffefee`+ sur
+  `arena/01a0a573-cr-chedz` ; gate strict local 55/55, unit 32/32, lint/
+  typecheck/builds/audit verts. **PR #45 ouverte** depuis
+  `arena/01a0a573-cr-chedz` (https://github.com/Allintelligence2024/cr-cheDZ/pull/45)
+  — l'authentification GitHub avait expiré en cours de session, puis s'est
+  rétablie ; le push a réussi et la PR porte les trois lots. **Reste à
+  consigner** : runs CI sur le SHA exact de la PR et relecture REST des six
+  notices (merge soumis à autorisation client, non effectué).
+  **Suivi G4** : lot complet, gate strict local **56/56 exit 0** (notices
+  agrégées avec G4=17, unit 38/38, lint/typecheck/builds/audit 0, inventaire
+  inchangé). Un reset du sandbox a décroché la branche de ses commits locaux
+  sans perdre l'arbre ; rattachement sur le tip distant puis nouveau commit —
+  G4 est poussé sur `arena/01a0a573-cr-chedz` et intégré à la PR #45.
+  **CONSIGNÉ le 2026-09-16 — SHA `6f96367` (code+tests ; commits de docs
+  ultérieurs non fonctionnels)** : runs ci `35072902044`, docker `35072902070`,
+  flutter `35072901808` — **9/9 success**, job `database` check
+  `104718362609`. Six notices relues par REST sur ce SHA exact : H2 agrégée
+  `H2a=21; H2b=50; H2c=156; H2d=44; H2e=36; H2f=156; H2g=58; H2h=32; H2i=48;
+  H2j=26; H2k=24; H2l=14` ; G agrégée `G1=26; G1b=24; G1c=38; G1d=44; G2=113;
+  G3=33; G4=17; G5=18` ; F2 (51 tests Flutter réels) ; F4 (7 tests Drift réels) ;
+  H1 staging ; H1 dev. La batterie complète des 57 suites a ainsi tourné pour la
+  première fois en CI (PG16 + Docker + rôles réels) depuis la casse du gate H2k.
+  Le merge reste soumis à autorisation client.
+  **Suivi G5 (MFA)** : lot complet — `TOTP_ENCRYPTION_KEY` (scellage AES-256-GCM
+  des secrets au repos, AAD par compte, rotation listée, rescellage à l'usage),
+  anti-rejeu persistant `users.totp_last_step` (migration 063) sur les cinq
+  canaux consommateurs de code, facteur exigé sur PIN/OTP/pose-de-PIN parent,
+  fail-closed `403 MFA_SECRET_UNREADABLE`. RED **2/18** (baseline `ac1a420`,
+  vulnérabilité downgrader reproduite : PIN → 200 sans facteur) → GREEN
+  **18/18** (phase54) ; phase48 **44/44** et `isolation` recalibrés sur le
+  contrat « code à usage unique par compte » ; unit **45/45** ; gate strict
+  local **57 suites/contrôles** attendu. Requalification du rouge CI : le job
+  `database` est rouge **depuis `5e08145` déjà** (donc né du bloc H2k
+  d'ingestion réelle — premier exécuteur CI, avant même la batterie ; aucune
+  annotation de suite en échec, le gate meurt avant les suites) — pas du lot
+  G4/G5 lui-même. Logs bruts inaccessibles à l'agent (portée Actions, blob
+  Azure, rerun refusé) : diagnostic autoporteur ajouté (annotation `::error`
+  du `run()` du gate nommant la commande coupable + handlers d'erreur des deux
+  stacks), et une annotation nommant la suite en échec dans le runner.
+  **Résolu** : la boucle d'auto-diagnostic a révélé quatre assertions fautives
+  EXCLUSIVEMENT dans `scripts/test-metrics-collector-stack.mjs` — (1) champ
+  `scrapeSeriesCount` inexistant dans l'API `/targets` de Prometheus 2.53
+  (remplacé par un comptage par requête d'index réelle), (2) lecture du
+  self-comptage du scrape avant le scrape suivant (course ~1 s → `until`),
+  (3) `stopApi()` testait `exitCode` seul alors qu'un enfant tué par signal a
+  `signalCode` défini (faux timeout ; escalade SIGKILL ajoutée), (4) la scène
+  de révocation montait le fichier sur le token courant (jamais DOWN ; monté
+  depuis sur le token révoqué). **Aucun défaut de produit** — l'ingestion
+  réelle passait dès le premier franchissement. Suite à quoi CI **9/9** sur
+  `6f96367` avec la batterie 57 suites exécutée intégralement en CI pour la
+  première fois (bloc « CONSIGNÉ » ci-dessus). Le merge reste soumis à
+  autorisation client.
+  [Runbook G5](PHASE_G5_MFA_RUNBOOK.md).
+- **H2l livré** : `scripts/anonymize.sql` audités contre le schéma actuel
+  (61 migrations) et étendu — tuteurs, personnel, messages, sessions,
+  devices/tokens, IP, sites, miroirs JSONB ; garde anti-prod, auto-vérif
+  transactionnelle, idempotence. Rouge **4/14** (old script) → vert **14/14** ;
+  batterie **55 suites/contrôles** (56 avec G4). [Runbook H2l](PHASE_H2L_ANONYMIZATION_RUNBOOK.md).
+  Résidus assumés et documentés (objets S3, tokens vendor, date_of_birth) :
+  aucune conformité RGPD globale n'est revendue par ce lot.
+- **G4 livré** : révocabilité GLOBALE des principaux — `users.token_epoch`
+  (migration 062) porté en claim `epoch` signé (login/refresh/invitation/
+  impersonation) et revérifié aux gardes d'entrée (`JwtAuthGuard`,
+  `MetricsAccessGuard`) ; incrément par DÉCLENCHEURS DB sur `users` (statut,
+  super-adminité, mot de passe, suppression douce), `memberships` et
+  `role_assignments` (diff réel uniquement — pas de faux positifs sur no-op),
+  donc effectifs aussi pour les écritures SQL d'exploitation. Rouge **4/17 →
+  vert 17/17** (`phase53`, HTTP+PG réels, baseline `47bac1a`) ; suites
+  préexistantes recalées sur le contrat élargi (refus ANTÉRIEUR et GLOBAL ;
+  refus sans mutation toujours vérifié) : phase15/37/40/45/47/48/50/51.
+  Limites documentées dans le [runbook G4](PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md) :
+  fenêtre garde→commit d'une requête en cours, TOTP seul non révocatoire,
+  statut d'organisation hors périmètre, ordre migration-avant-redéploiement
+  (fail-closed sinon).
 > Fait suite à [`PLAN_EXECUTION_PROCHAINES_PHASES.md`](PLAN_EXECUTION_PROCHAINES_PHASES.md),
 > [`PROMPT_FIX_AUDIT.md`](PROMPT_FIX_AUDIT.md) et à la [matrice d'autorisation](architecture/authorization-matrix.md).
 
@@ -424,13 +515,31 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       strict **51/51**, CI **34966272565**, **9/9** sur `4c36ad6`,
       database **104371358901**, six notices vérifiées en PR #44.
       [Runbook G1d](PHASE_G1D_TOTP_RUNBOOK.md).
-- [ ] **Suite MFA** : chiffrement du secret au repos, anti-rejeu TOTP persistant,
-      preuve récente avant préparation, récupération/rotation et obligation MFA sur
-      tous les canaux PIN/OTP parent non qualifiés. Secrets déjà divulgués non invalidés.
-- [ ] **Suite G auth** : revalidation globale des rôles/JWT/membership, autres frontières invitations,
-      MFA ci-dessus et demandes OTP concurrentes ; propriété/réassociation device_id et autres
+- [x] **Suite MFA (durcissement G5)** : secret TOTP scellé AES-256-GCM au repos
+      (AAD par compte, rotation « courante,anciennes », rescellage à l'usage,
+      boot production refusé sans clé), anti-rejeu TOTP PERSISTANT
+      (`users.totp_last_step`, mig. 063 — une seule consommation par pas, tous
+      canaux, prouvée sous course PG réelle) et obligation du facteur sur login
+      PIN, verify OTP et pose de PIN parent (refus uniquement après preuve
+      principale correcte). RED 2/18 → GREEN 18/18 (phase54), phase48 44/44 et
+      isolation recalés. **Non fermés volontairement** : les codes de
+      récupération MFA (décision client explicite) et l'invalidation des secrets
+      éventuellement divulgués avant le lot (les comptes à risque doivent
+      ré-enrôler — procédure au runbook). [Runbook G5](PHASE_G5_MFA_RUNBOOK.md).
+- [x] **G4 révocabilité globale** : revalidation à l'entrée de l'époque de
+      principal (JWT en vol) contre `users.token_epoch`, bumpée par déclencheurs
+      sur users/memberships/role_assignments — migration 062, suite phase53
+      **4/17 → 17/17**, huit suites recalées, gate **56 suites/contrôles** ;
+      la voie admin `/metrics` refuse désormais le JWT déchu à l'entrée (401)
+      au lieu du 403 différé. Limites assumées au runbook
+      [PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md](PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md)
+      (fenêtre garde→commit, TOTP seul, statut d'organisation). Les mentions
+      « global JWT revocation unqualified » des notices H2j/G1x sont résolues
+      par ce lot ; les suites individuelles conservent leurs limites propres.
+- [ ] **Suite G auth (reste)** : autres frontières invitations (nonce/livraison),
+      demandes OTP concurrentes ; propriété/réassociation device_id et autres
       courses refresh vs login/logout/mot de passe/révocations après vérification.
-      G1a/G1b/G1c/G1d ne ferment pas ces frontières.
+      G1a/G1b/G1c/G1d/G4/G5 ne ferment pas ces frontières.
       Pas de qualification globale de l'auth ni de topologie de déploiement.
 
 ### G2. RLS
@@ -579,24 +688,51 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
         snapshots privacy historiques et routes registre/DPIA/violations. Révocation
         globale des tokens et autres routes toujours à traiter en G. Pas de purge
         masquante ; la grappe et l'aptitude à la production ne sont pas clôturées.
-- [ ] **`anonymize.sql`** : laisse `guardians`/`staff`/`messages`/`sessions` intacts (RGPD/loi 25-11).
+- [x] **H2l `anonymize.sql` — finding confirmé puis corrigé** : le script
+      historique laissait bien `guardians`/`staff`/`messages`/`sessions` (et
+      devices/tokens push, sites, IP, miroirs JSONB de sync, hachés de mots de
+      passe réels) intacts. Réécriture complète déterministe, UPDATE-only,
+      garde de nom de base, auto-vérification transactionnelle (20 contrôles),
+      idempotence. **4/14 → 14/14** (scan canari de TOUTES les colonnes
+      texte/jsonb, vrai login API post-anonymisation). Batteries portées à
+      **55 suites/contrôles**. Binaires S3, tokens vendor déjà transmis,
+      `date_of_birth` et `settings` restent des limites documentées — aucune
+      conformité globale revendue. [Runbook H2l](PHASE_H2L_ANONYMIZATION_RUNBOOK.md).
 - [x] **H2j `/metrics` accès et format** : administrateur plateforme courant requis,
       pas d'accès anonyme/tenant ; labels échappés et routes inconnues regroupées,
       histogrammes complets/ordonnés. **6/26 → 26/26**, HTTP/PG et parseur officiel
-      prometheus-client pin/hash vérifié. Runner **53**, strict/CI à confirmer en PR #44.
+      prometheus-client pin/hash vérifié. Runner **53** à la livraison ; strict 53/53
+      et CI vérifiés en PR #44 (`34974936706`, check `database` `104400172633`) ;
+      re-confirmation post-merge 9/9 sur `47bac1a` (`34980118615`).
       [Runbook H2j](PHASE_H2J_METRICS_RUNBOOK.md).
-- [ ] **Collecte API d'exploitation** : le scraper anonyme reçoit désormais 401.
-      Credential de service limité, provisionnement/rotation et ingestion réelle
-      restent à qualifier ; les JWT admin expirants ne sont pas un montage automatique.
-      Collecte E2 du SQL exporter distincte, pas de repli public pour la rétablir.
-- [ ] **OpenAPI** : « prétendu auto-généré, aucun swagger, < 10 % des endpoints » — vérifier ;
-      soit générer réellement (prérequis F1), soit arrêter de le prétendre dans la doc.
+- [x] **H2k Collecte API d'exploitation** : credential de collecteur à privilège
+      limité livré (digests SHA-256 côté API, fichier `credentials_file` côté
+      Prometheus ; provisionnement CLI hors dépôt ; rotation par liste transitoire ;
+      révocation = retrait du digest). Reproduction **9/24 → 24/24** HTTP/PG ;
+      refus tenant/anonyme/malformés inchangés ; **gate d'ingestion réelle**
+      `scripts/test-metrics-collector-stack.mjs` (vrai `prom/prometheus:v2.53.0`
+      sur la config livrée : UP/401/rotation/révocation observés par le serveur,
+      secret absent des logs), câblé au strict gate sans modifier les workflows.
+      Aucun JWT admin prolongé, aucun mot de passe dans Prometheus, jamais de repli
+      public ; collecte E2 du SQL exporter distincte et préservée. Runbook H2j/H2k.
+- [x] **OpenAPI — vérifié et claims corrigés** : constat exact après audit —
+      `packages/api-contracts/openapi.yaml` **existe** mais est écrite à la main,
+      couvre **13 paths** (auth, devices, me, rooms, health) sur ~172 routes, n'est
+      **pas générée depuis le code** ; le générateur de types web fonctionne à la
+      demande (`openapi-typescript`, dist git-ignore) mais n'est branché ni au
+      build ni au client web écrit à la main. Les affirmations « régénéré à chaque
+      build » (ADR-004, README, PLAN_*) ont été **corrigées plutôt qu'implémentées
+      sans décision** ; contrat de sync F1 distinct et non confondu. Nouveau test
+      structurel `tests/tenant-isolation/openapi-contract.test.mjs` (5 scénarios ;
+      rouge sur toute ré-enflure de claim). Extension de couverture = tâche à
+      décider par le client, non revendiquée.
 - [x] **H2i `STORAGE_BACKEND` — sélection et bootstrap** : écart reproduit et sélecteur
       commun garde/API/worker ; backend explicite en production, défaut s3 conservé
       ailleurs, valeurs inconnues/vide refusées. S3 sélectionné : credentials absents/
       blancs/défauts refusés ; local : chemin absolu explicite non égal au défaut.
       **14/48 → 48/48**, vrais entry points et rôle PG, I/O local et S3 loopback.
-      Runner **52 suites**, strict/CI à confirmer en PR #44.
+      Runner **52 suites** à la livraison ; strict et CI confirmés en PR #44
+      (`34974936706`, six notices relues).
       [Runbook H2i](PHASE_H2I_STORAGE_SELECTION_RUNBOOK.md).
 - [ ] **Suite stockage** : média/signature toujours S3 même si PDF/exports locaux ;
       configuration de ce cas, fournisseur réel, permissions/durabilité des volumes,
@@ -697,7 +833,7 @@ export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 # Base fraîche AVANT la batterie (phase3/isolation/phase4 supposent une base vierge)
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 
-# Batterie complète (53 suites/contrôles après H2j) — rôles stricts : voir runbook H2g
+# Batterie complète (55 suites/contrôles après H2l) — rôles stricts : voir runbook H2g
 bash scripts/run-isolation-suites.sh
 
 # Suite Phase C seule

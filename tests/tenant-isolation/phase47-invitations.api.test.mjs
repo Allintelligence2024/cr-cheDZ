@@ -166,12 +166,17 @@ try {
     ['downgraded creator role', "UPDATE memberships SET role_id=(SELECT id FROM roles WHERE slug='educator') WHERE user_id=$1", "UPDATE memberships SET role_id=(SELECT id FROM roles WHERE slug='director') WHERE user_id=$1"],
   ]) {
     await db.query(sql, [director.id]);
-    try { await check(`${name}: old JWT cannot create invitations`, () => noWrite(() => invite(director), 403, 'FORBIDDEN')); }
-    finally { await db.query(restore, [director.id]); }
+    try {
+      // G4 (migration 062) : suspension/révocation/déclassement dépassent
+      // l'époque du JWT — refus AU GARDE D'ENTRÉE (401), plus tôt que le
+      // 403 métier d'avant. Le refus sans écriture d'invitation reste vérifié.
+      await check(`${name}: old JWT cannot create invitations`, () => noWrite(() => invite(director), 401, 'UNAUTHORIZED'));
+    }
+    finally { await db.query(restore, [director.id]); await login(director); }
   }
   await db.query('UPDATE users SET is_super_admin=false WHERE id=$1', [admin.id]);
-  try { await check('removed platform privilege: old JWT cannot target another tenant', () => noWrite(() => invite(admin, b), 403, 'FORBIDDEN')); }
-  finally { await db.query('UPDATE users SET is_super_admin=true WHERE id=$1', [admin.id]); }
+  try { await check('removed platform privilege: old JWT cannot target another tenant', () => noWrite(() => invite(admin, b), 401, 'UNAUTHORIZED')); }
+  finally { await db.query('UPDATE users SET is_super_admin=true WHERE id=$1', [admin.id]); await login(admin); }
   const multi = await actor('educator');
   await db.query("INSERT INTO role_assignments(organization_id,user_id,role_id) SELECT $1,$2,id FROM roles WHERE slug='director'", [a, multi.id]); await login(multi);
   await check('additional director role remains valid for invitations', async () => { assert.equal((await invite(multi)).status, 201); });

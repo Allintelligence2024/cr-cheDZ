@@ -37,10 +37,38 @@ function run(command, args, overrides = {}) {
   const result = spawnSync(command, args, { env: { ...env, ...overrides }, stdio: 'inherit' });
   if (result.error || result.status !== 0) {
     console.error(`Gate D interrompu : ${command} ${args.join(' ')} (exit ${result.status})`);
+    // CI : les logs bruts ne sont pas toujours lisibles (portée Actions) —
+    // l'annotation publie le coupable + la dernière ligne stderr utile,
+    // accessibles via l'API check-runs/annotations.
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      const tail = String(result.stderr ?? '').trim().split('\n').filter(Boolean).slice(-2).join(' | ').slice(0, 300);
+      console.log(`::error title=Gate D interrompu::${command} ${args.join(' ')} (exit ${result.status})${tail ? ' — ' + tail : ''}`);
+    }
     process.exit(result.status || 1);
   }
 }
-run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs']);
+// G5 diagnostic : variante qui CAPTE la sortie des gates de stack (docker-only,
+// jamais exécutés localement) — rejeu mot pour mot dans le log, plus annotation
+// GitHub de la ligne d'erreur si le sous-processus échoue. Couvre aussi les
+// échecs antérieurs au grand try de ces scripts (TLA reject ne passe par aucun
+// handler 'unhandledRejection' en Node ≥ 15).
+function runCapture(command, args) {
+  const result = spawnSync(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 });
+  const out = String(result.stdout ?? '');
+  const err = String(result.stderr ?? '');
+  if (out) process.stdout.write(out);
+  if (err) process.stderr.write(err);
+  if (result.error || result.status !== 0) {
+    console.error(`Gate D interrompu : ${command} ${args.join(' ')} (exit ${result.status})`);
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      const lines = (err + '\n' + out).trim().split('\n').map((l) => l.trim()).filter(Boolean);
+      const culprit = [...lines].reverse().find((l) => /Error|Timeout|assert|expected/.test(l)) ?? lines.at(-1) ?? '';
+      console.log(`::error title=Gate D (sortie capturée)::${args.join(' ')} (exit ${result.status}) — ${culprit.slice(0, 700)}`);
+    }
+    process.exit(result.status || 1);
+  }
+}
+run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs', 'tests/tenant-isolation/openapi-contract.test.mjs']);
 // Fast production-layout reproduction before the slower Docker/Flutter gates.
 run(process.execPath, ['scripts/check-api-runtime.mjs']);
 // H1 is independent: collect its failure but still run the sync regressions.
@@ -76,7 +104,9 @@ if (env.GITHUB_ACTIONS === 'true' || env.RUN_SYNC_E2E === '1') {
 }
 // Retour rapide sur le gate E2 réseau AVANT les suites API longues.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_MONITORING_STACK === '1') {
-  run(process.execPath, ['scripts/test-worker-monitoring-stack.mjs']);
+  runCapture(process.execPath, ['scripts/test-worker-monitoring-stack.mjs']);
+  // H2k : ingestion réelle du scrape API (vrai Prometheus, config livrée).
+  runCapture(process.execPath, ['scripts/test-metrics-collector-stack.mjs']);
   // Le test d'alerte vieillit les ticks : restaurer du neuf pour phase3/4.
   run(process.execPath, ['scripts/migrate.mjs', '--reset']);
   run(process.execPath, ['scripts/migrate.mjs']);
@@ -127,8 +157,16 @@ console.log(`H2i storage selection passed: ${storageSelection[1]} config/service
 const metricsEvidence = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase50-metrics.api.test.log'), 'utf8')
   .match(/H2j metrics: (\d+) passed, 0 failed/);
 if (!metricsEvidence || Number(metricsEvidence[1]) < 26) throw new Error('H2j metrics evidence missing or incomplete');
-console.log(`H2j metrics passed: ${metricsEvidence[1]} real HTTP/PG and official Prometheus client parser scenarios: current platform administrator, no anonymous/tenant access, bounded unmatched-route labels, escaped labels, complete ordered histograms. No production scraper credential provisioning or global JWT revocation qualification.`);
-console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}; H2h=${staffDocuments[1]}; H2i=${storageSelection[1]}; H2j=${metricsEvidence[1]}. All HTTP/PostgreSQL and config/entrypoint/storage scenario thresholds verified, zero failures. Local provider doubles/signatures only; no global JWT revocation, signed-URL recall or production qualification. Per-lot details remain in the job log and runbooks.`);
+const collectorEvidence = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase51-metrics-collector.api.test.log'), 'utf8')
+  .match(/H2k metrics collector: (\d+) passed, 0 failed/);
+if (!collectorEvidence || Number(collectorEvidence[1]) < 24) throw new Error('H2k metrics collector evidence missing or incomplete');
+const anonymizationEvidence = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase52-anonymization.pg.test.log'), 'utf8')
+  .match(/H2l anonymization: (\d+) passed, 0 failed/);
+if (!anonymizationEvidence || Number(anonymizationEvidence[1]) < 14) throw new Error('H2l anonymization evidence missing or incomplete');
+console.log(`H2l anonymization passed: ${anonymizationEvidence[1]} whole-database canary-scan, no-purge, referential, deterministic-rewrite, real-login, idempotence, transactional self-check and DB-name guard scenarios on scripts/anonymize.sql. Storage-object binaries and vendor-side deliveries remain explicitly out of scope.`);
+console.log(`H2k metrics collector passed: ${collectorEvidence[1]} real HTTP/PG, shared-config, provisioning-tool and delivered-configuration scenarios: provisioned collector digest scrapes with zero user authority, refusal/revocation/rotation via digest list only, tenant and anonymous paths unchanged, no inline secret in Prometheus config, no raw token in API env, read-only secret mount.`);
+console.log(`H2j metrics passed: ${metricsEvidence[1]} real HTTP/PG and official Prometheus client parser scenarios: current platform administrator, no anonymous/tenant access, bounded unmatched-route labels, escaped labels, complete ordered histograms. Global JWT revocation of stale admin sessions is now enforced at the entry guard (G4, migration 062); operational scraper credential is covered separately by H2k.`);
+console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}; H2h=${staffDocuments[1]}; H2i=${storageSelection[1]}; H2j=${metricsEvidence[1]}; H2k=${collectorEvidence[1]}; H2l=${anonymizationEvidence[1]}. All HTTP/PostgreSQL and config/entrypoint/storage scenario thresholds verified, zero failures. Local provider doubles/signatures only; global in-flight JWT revocation is qualified separately by G4 (see G notice); signed-URL recall and production deployment remain out of scope. Per-lot details remain in the job log and runbooks.`);
 const authHardening = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase43-auth-hardening.api.test.log'), 'utf8')
   .match(/G1 auth hardening: (\d+) passed, 0 failed/);
 if (!authHardening || Number(authHardening[1]) < 26) throw new Error('G1 auth evidence missing or incomplete');
@@ -152,9 +190,17 @@ console.log(`G1c invitations passed: ${invitations[1]} HTTP/PostgreSQL scenarios
 const totpManagement = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase48-totp-management.api.test.log'), 'utf8')
   .match(/G1d TOTP management: (\d+) passed, 0 failed/);
 if (!totpManagement || Number(totpManagement[1]) < 44) throw new Error('G1d TOTP management evidence missing or incomplete');
-console.log(`G1d TOTP management passed: ${totpManagement[1]} HTTP/PG and RFC-vector scenarios: no activated-secret disclosure, current account state after locks, serialized enrollment/confirmation/cancellation, strict audit rollback, shared failed-proof lockout and HTTP limits. Not encrypted-at-rest secrets, cross-channel MFA enforcement, one-time TOTP replay protection or global JWT revocation.`);
-console.log(`::notice title=G security passed::G1=${authHardening[1]}; G1b=${refreshRotation[1]}; G1c=${invitations[1]}; G1d=${totpManagement[1]}; G2=${rlsIntegrity[1]}; G3=${dpiaApproval[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG, G1b atomic refresh rotation, G1c scoped invitations, G1d TOTP management and G2 application-role SQL and G3 independent DPIA approval/atomic audit, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
-console.log('✓ GATE D : régressions Phase D + 53 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+const principalRevocation = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase53-principal-revocation.api.test.log'), 'utf8')
+  .match(/G4 principal revocation: (\d+) passed, 0 failed/);
+if (!principalRevocation || Number(principalRevocation[1]) < 17) throw new Error('G4 principal revocation evidence missing or incomplete');
+console.log(`G4 principal revocation passed: ${principalRevocation[1]} real HTTP/PostgreSQL scenarios: in-flight access tokens are invalidated immediately by password change, account status, soft deletion, membership and role-assignment changes (DB triggers also cover direct operational SQL writes), re-establishment forces re-login, refresh re-mints at the current epoch, legacy claim-less tokens stay compatible at epoch 0 until first revocation, and the metrics guard refuses a stripped administrator at entry. TOTP-only factor changes and the guard-to-commit window inside a single request remain documented limits; not a production-deployment qualification.`);
+const mfaHardening = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase54-mfa-hardening.api.test.log'), 'utf8')
+  .match(/G5 MFA hardening: (\d+) passed, 0 failed/);
+if (!mfaHardening || Number(mfaHardening[1]) < 18) throw new Error('G5 MFA hardening evidence missing or incomplete');
+console.log(`G5 MFA hardening passed: ${mfaHardening[1]} real HTTP/PostgreSQL scenarios: TOTP secrets sealed AES-256-GCM at rest with per-user AAD (never plaintext once a key is active, upgrade-on-use for legacy rows), persistent single-use code consumption shared by ALL channels (password login, parent PIN, parent OTP, confirm, disable) with exactly-one-wins under real PG concurrency, fail-closed 403 on unreadable/tampered material, live key rotation across app restarts and production boot refusal without a key. Recovery codes are a deliberate client decision (not silently claimed closed); SMS/OTP delivery itself stays untouched.`);
+console.log(`G1d TOTP management passed: ${totpManagement[1]} HTTP/PG and RFC-vector scenarios: no activated-secret disclosure, current account state after locks, serialized enrollment/confirmation/cancellation, strict audit rollback, shared failed-proof lockout and HTTP limits. At-rest encryption, cross-channel enforcement and replay protection are covered by G5 (phase54), not by this suite.`);
+console.log(`::notice title=G security passed::G1=${authHardening[1]}; G1b=${refreshRotation[1]}; G1c=${invitations[1]}; G1d=${totpManagement[1]}; G2=${rlsIntegrity[1]}; G3=${dpiaApproval[1]}; G4=${principalRevocation[1]}; G5=${mfaHardening[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG, G1b atomic refresh rotation, G1c scoped invitations, G1d TOTP management, G2 application-role SQL, G3 independent DPIA approval/atomic audit, G4 global in-flight JWT revocation (epoch revalidated at entry guards, DB triggers for direct SQL) and G5 MFA hardening (at-rest sealed TOTP secrets, persistent single-use codes across all channels, cross-channel factor obligation, rotation + prod boot guard); remaining limits per runbooks (TOTP-only changes still not revocatory, single-request guard-to-commit window, recovery codes pending client decision); not privileged-helper authorization or production deployment qualification.`);
+console.log('✓ GATE D : régressions Phase D + 57 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 

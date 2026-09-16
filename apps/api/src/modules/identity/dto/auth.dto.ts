@@ -59,6 +59,11 @@ export class ParentOtpVerifyDto extends ParentOtpRequestDto {
   @Matches(/^\d{6}$/, { message: 'code à 6 chiffres' })
   code!: string;
 
+  /** G5 : requis côté serveur dès que le compte a le second facteur actif. */
+  @IsOptional()
+  @Matches(/^\d{6}$/, { message: 'code TOTP à 6 chiffres' })
+  totp_code?: string;
+
   @IsOptional()
   @IsString()
   device_id?: string;
@@ -67,11 +72,21 @@ export class ParentOtpVerifyDto extends ParentOtpRequestDto {
 export class ParentPinDto {
   @Matches(/^\d{4,6}$/, { message: 'PIN à 4 à 6 chiffres requis' })
   pin!: string;
+
+  /** G5 : un compte MFA ne peut pas poser/remplacer son PIN sans prouver le facteur. */
+  @IsOptional()
+  @Matches(/^\d{6}$/, { message: 'code TOTP à 6 chiffres' })
+  totp_code?: string;
 }
 
 export class ParentPinLoginDto extends ParentOtpRequestDto {
   @Matches(/^\d{4,6}$/, { message: 'PIN à 4 à 6 chiffres requis' })
   pin!: string;
+
+  /** G5 : second facteur obligatoire dès que totp_enabled, avec anti-rejeu partagé. */
+  @IsOptional()
+  @Matches(/^\d{6}$/, { message: 'code TOTP à 6 chiffres' })
+  totp_code?: string;
 
   @IsOptional()
   @IsString()

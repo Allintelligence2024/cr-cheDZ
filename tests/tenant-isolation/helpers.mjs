@@ -49,6 +49,8 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION invite_get_membership(uuid, uuid) TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION invite_upsert_membership(uuid, uuid, uuid, uuid, uuid[]) TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION invite_accept(uuid, uuid) TO creche_app_test');
+  // G4 (migration 062) : révocabilité globale — lecture d'époque par les gardes.
+  await admin.query('GRANT EXECUTE ON FUNCTION auth_principal_epoch(uuid) TO creche_app_test');
   // Séquence de référence enfants (migration 017)
   await admin.query('GRANT EXECUTE ON FUNCTION next_org_sequence(uuid) TO creche_app_test');
   // Helper RLS (migration 018) — utilisé par toutes les politiques

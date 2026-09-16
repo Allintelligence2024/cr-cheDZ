@@ -1,6 +1,7 @@
-# H2j — Métriques : accès plateforme et exposition Prometheus
+# H2j — Métriques : accès plateforme et exposition Prometheus · H2k — collecte d'exploitation
 
-2026-09-15 · baseline `872f84fe53e20bcd47fe3587775794553b36e4fb` · PR #44.
+H2j : 2026-09-15, baseline `872f84fe53e20bcd47fe3587775794553b36e4fb`, PR #44 (mergée).
+H2k : 2026-09-15, baseline `47bac1a69fccabfac697bc0bef391d74ce8a51a1` (main post-merge), PR #45.
 Données synthétiques, installation neuve ; aucun merge ni déploiement.
 
 ## Reproduction et portée
@@ -74,27 +75,94 @@ ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
 ```
 
 Aucun reset en parallèle de la batterie stricte. Phase11 utilise maintenant un
-vrai login administrateur, pas un bypass du garde pour les tests. Runner **53
-suites/contrôles**, seuil H2j **26**, compteur dans la notice H2 existante : six
-notices attendues au total. Résultats stricts et CI exact-SHA à consigner en PR #44.
+vrai login administrateur, pas un bypass du garde pour les tests. Runner **55
+suites/contrôles** (phase51/H2k, puis phase52/H2l ajoutée depuis), seuil H2j **26**, compteur dans
+la notice H2 existante. **Preuves closes** : strict local 53/53 et CI vérifiées
+sur le SHA exact de la PR #44 (run `34974936706`, check `database`
+`104400172633`), puis **CI post-merge 9/9 sur `47bac1a`** (run `34980118615`,
+docker `34980118624`, flutter `34980118653`) et six notices relues sur le SHA.
 Ne pas attribuer la CI H2i à ce lot.
 
-## Collecte d'exploitation : point séparé, encore ouvert
+## Collecte d'exploitation — H2k, livré
 
-**Changement incompatible pour les scrapers anonymes.** Le target API existant de
-`infrastructure/monitoring/prometheus.yml` ne provisionne aucun credential : il
-recevra désormais 401. La collecte E2 du SQL exporter/worker est distincte et ne
-s'appuie pas sur cette authentification API.
+**Problème reproduit** : après H2j, le scraper anonyme de
+`infrastructure/monitoring/prometheus.yml` recevait **401** ; aucun
+provisionnement, montage ou renouvellement de credential n'existait. Baseline
+H2k : suite `phase51-metrics-collector.api.test.mjs` **9/24 avant** correction
+(les 15 rouges : chemin collecteur inexistant, config de collecte non livrée,
+outil de provisionnement absent) ; la voie admin H2j et le refus anonyme étaient
+déjà verts et restent intacts — un credential de plus, jamais un repli public.
 
-Un scrape manuel autorisé utilise un JWT d'accès récent ; ne pas enregistrer le
-token en Git, dans les logs ou une commande partagée. Pour Prometheus,
-`authorization.credentials_file` peut lire un bearer depuis un fichier externe,
-mais un JWT d'accès expire (15 min nominales). **Aucun provisionnement, montage ou
-renouvellement automatique de ce fichier n'est livré ici.** Ne pas stocker un
-mot de passe administrateur dans prometheus.yml et ne pas prolonger les JWT pour
-contourner cette limite. Un credential de service limité à la lecture de métriques
-ou un collecteur interne avec délégation dédiée doit être conçu/qualifié avant
-l'exploitation ; ne pas déclarer le target API opérationnel sur cette seule preuve.
+**Conception (privilège limité)** :
+
+- L'API ne connaît que des **digests SHA-256**
+  (`METRICS_COLLECTOR_TOKEN_HASHES`, liste séparée par virgules) ; le token brut
+  (32 octets, base64url) ne vit que dans le fichier monté en lecture seule, lu
+  par `authorization.credentials_file` côté Prometheus. Aucun mot de passe
+  administrateur dans la config de collecte, aucun JWT d'accès prolongé, aucun
+  enregistrement de bearer en Git ou en logs.
+- Le collecteur **n'est pas un principal API** : aucune route métier, pas de
+  tenant, pas de session, pas de refresh. La comparution du digest se fait en
+  temps constant. Liste vide → chemin désactivé ; liste malformée → échec
+  d'ouverture du chemin **et** refus de démarrage en production (garde partagée
+  `@creche/prod-config`), jamais un partiel silencieux.
+- **Rotation** : nouveau couple → les deux digests coexistent (fenêtre de grâce)
+  → le fichier Prometheus est remplacé → l'ancien digest sort de la liste →
+  l'ancien collecteur reçoit 401 sans corps. **Révocation** : retrait du digest
+  (redéploiement/rechargement de la config) ; qualifié par ingestion réelle.
+- Provisionnement hors dépôt :
+  `node scripts/provision-metrics-collector.mjs --out-file <chemin-absolu-hors-dépôt>`
+  (écrit le fichier en 0600, imprime le digest à coller ; refuse d'écrire dans le
+  dépôt, refuse un secret < 32 caractères ; `--hash-file` audite un fichier
+  existant, permissions incluses).
+
+**Preuves H2k** : suite HTTP/PG réelle **9/24 → 24/24** (acceptation, HEAD,
+galbe du digest vs réponse admin, refus inconnu/absent/malformé/schéma
+incorrect, périmètre « scrape only » sur routes métier et refresh, rôle tenant
+403 conservé, JWT expiré 401, relecture admin sous verrou, NaN jamais 0,
+aucun secret dans la sortie, rotation+grâce+révocation, garde prod partagée,
+outil de provisioning, structure des fichiers livrés, E2 exporter inchangé).
+**Ingestion par un vrai serveur Prometheus** (le parseur officiel ne prouvait
+que le format) : `scripts/test-metrics-collector-stack.mjs` démarre
+`prom/prometheus:v2.53.0` (l'image épinglée en prod) sur la **config livrée** et
+exige : target `api` UP avec `credentials_file`, série `creche_jobs_pending`
+requêtable = COUNT SQL réel, target DOWN `401` sur token non provisionné puis
+après rotation/révocation, voie admin intacte, aucun token dans la config montée
+ni dans les logs du serveur. Gate obligatoire en CI (bloc `RUN_MONITORING_STACK`
+du gate strict, comme E2) ; localement sans Docker ni `PROMETHEUS_BIN`
+(version ≥ 2.53 vérifiée), il s'annonce NON EXÉCUTÉ — jamais un skip silencieux.
+
+**Premier vrai run CI du gate d'ingestion — consigné** : le job `database` était
+rouge depuis l'arrivée de ce gate (5e08145) ; la boucle d'auto-diagnostic par
+annotations (le gate `run()` annote la commande coupable ; les stacks annotent
+leur erreur via `writeSync`) a révélé **quatre assertions fautives dans le
+script du gate lui-même**, aucune dans le produit ni la config livrée :
+champ `scrapeSeriesCount` inexistant dans l'API Prometheus `/targets` (→ comptage
+par requête d'index réelle) ; lecture du self-comptage du scrape au lieu du
+scrapé suivant (→ `until`) ; `stopApi()` testant `exitCode` seul alors qu'un fils
+tué par signal a `signalCode` défini (→ suivi corrigé + escalade SIGKILL) ;
+scène de révocation montant le fichier sur le token courant au lieu du révoqué
+(→ le DOWN 401 est désormais observé par ingestion réelle). **CI 9/9 success sur
+`6f96367`** (run ci `35072902044`, job `database` `104718362609`) : ingestion
+réelle UP/DOWN/rotation/grâce/révocation, voie admin H2j intacte, zéro secret en
+logs — notice H2 lue par REST avec `H2k=24`. La batterie 57 suites a tourné
+intégralement en CI sur ce même SHA.
+
+**Rejouer** :
+
+```sh
+npm run build --workspace @creche/prod-config --workspace @creche/api
+PRODUCTION_ROLE_TESTS=1 node tests/tenant-isolation/phase51-metrics-collector.api.test.mjs
+# ingestion réelle (CI ou PROMETHEUS_BIN) :
+ALLOW_DATABASE_RESET=1 PRODUCTION_ROLE_TESTS=1 RUN_MONITORING_STACK=1 \
+  node scripts/test-metrics-collector-stack.mjs
+```
+
+**Montage d'exploitation (prod)** : `METRICS_COLLECTOR_TOKEN_FILE` (compose)
+pointe le fichier hôte vers `/run/secrets/metrics-collector-token:ro` du service
+`prometheus`, même convention que le secret Alertmanager (0400, uid 65534) ;
+`METRICS_COLLECTOR_TOKEN_HASHES` alimente l'API. Staging ne livre pas de
+Prometheus : la variable y est un simple passe-plat optionnel, sans montage.
 
 ## Limites et rollback
 
@@ -105,6 +173,16 @@ l'exploitation ; ne pas déclarer le target API opérationnel sur cette seule pr
 - Le helper SECURITY DEFINER et ses grants restent inchangés. Sémantique métier de
   chaque jauge et sécurité des credentials DB ne sont pas réauditées par ce lot.
 - Anonymisation, OpenAPI, MFA complète, autres G/H, paie/numérotation restent ouverts.
+- Le credential de collecte est à durée non limitée par conception (secret
+  d'infrastructure) : ni expiration intégrée ni historique de scrape dans la
+  réponse ; la discipline repose sur la rotation documentée. La révocation est
+  appliquée à la relecture de la config (redéploiement), pas instantanément en
+  base ; aucune liste de révocation en PostgreSQL n'est livrée par H2k.
+- Rollback H2k : vider `METRICS_COLLECTOR_TOKEN_HASHES` et redéployer l'API → le
+  chemin collecteur se ferme (401), la voie H2j admin reste ; retirer le
+  `authorization:` du job `api` rend le scrape 401 sans ouvrir la route. Aucun
+  rollback ne doit rétablir un accès anonyme, et aucun secret n'est à purger du
+  dépôt (jamais écrit dedans) — supprimer seulement le fichier hors dépôt.
 - Aucun workflow, migration, grant, lockfile ou dépendance npm modifié.
 
 Aucune migration. Avant tout rollback du premier déploiement, bloquer `/metrics`

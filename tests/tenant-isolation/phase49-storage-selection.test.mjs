@@ -18,7 +18,7 @@ import { VideoService } from '../../apps/api/dist/modules/video/video.service.js
 import { storeFile } from '../../apps/worker/dist/pdf.js';
 
 const original = { ...process.env }, root = await mkdtemp(join(tmpdir(), 'h2i-storage-'));
-const safe = { NODE_ENV: 'production', JWT_SECRET: 'synthetic-h2i-jwt-0123456789abcdef0123456789', PAYMENT_WEBHOOK_SECRET: 'synthetic-h2i-webhook-0123456789abcdef0123456789', STORAGE_BACKEND: 's3', STORAGE_LOCAL_DIR: root, S3_ACCESS_KEY: 'synthetic-h2i-access', S3_SECRET_KEY: 'synthetic-h2i-secret', SENTRY_DSN: '', SATIM_MERCHANT_ID: '', SATIM_SECRET: '', SATIM_GATEWAY_URL: '', FIREBASE_SERVICE_ACCOUNT_JSON: '', WORKER_SCHEDULER_ENABLED: 'false', WORKER_SHUTDOWN_TIMEOUT_MS: '1500', APP_PORT: '0' };
+const safe = { NODE_ENV: 'production', JWT_SECRET: 'synthetic-h2i-jwt-0123456789abcdef0123456789', PAYMENT_WEBHOOK_SECRET: 'synthetic-h2i-webhook-0123456789abcdef0123456789', TOTP_ENCRYPTION_KEY: 'c'.repeat(64), STORAGE_BACKEND: 's3', STORAGE_LOCAL_DIR: root, S3_ACCESS_KEY: 'synthetic-h2i-access', S3_SECRET_KEY: 'synthetic-h2i-secret', SENTRY_DSN: '', SATIM_MERCHANT_ID: '', SATIM_SECRET: '', SATIM_GATEWAY_URL: '', FIREBASE_SERVICE_ACCOUNT_JSON: '', WORKER_SCHEDULER_ENABLED: 'false', WORKER_SHUTDOWN_TIMEOUT_MS: '1500', APP_PORT: '0' };
 let passed = 0, failed = 0, connections = 0;
 async function check(name, fn) { try { await fn(); passed++; console.log(`✓ ${name}`); } catch (e) { failed++; console.error(`✗ ${name}: ${e.stack}`); } }
 const trap = tcpServer(socket => { connections++; socket.destroy(); });

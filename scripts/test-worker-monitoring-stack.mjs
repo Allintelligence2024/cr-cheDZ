@@ -7,11 +7,25 @@ import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {createServer} from 'node:net';
 import {mkdtemp,writeFile,readFile,chmod} from 'node:fs/promises';
+import {writeSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
 import pg from 'pg';
 import {fixture,token} from '../tests/monitoring/relay-fixture.mjs';
+
+// G5 diagnostic : les logs bruts des jobs privés ne sont pas lisibles par
+// l'agent (portée Actions) — la première erreur non traitée est publiée en
+// annotation GitHub (message tronqué, jamais de secret) pour rendre le
+// prochain échec diagnostiquable via l'API check-runs/annotations.
+process.on('unhandledRejection', (error) => {
+  // G5 diagnostic : sortie SYNCHRONE (console.log + exit perdaient le
+  // message, pipe non vidé), jamais de secret, message tronqué.
+  const detail = String(error?.message ?? error).replace(/\r?\n/g, ' | ').slice(0, 900);
+  if (process.env.GITHUB_ACTIONS === 'true') writeSync(2, `::error title=E2 stack interrompue::${detail}\n`);
+  console.error(error);
+  process.exitCode = 1;
+});
 
 assert.equal(process.env.ALLOW_DATABASE_RESET,'1','Cluster jetable requis');
 assert.equal(process.env.PRODUCTION_ROLE_TESTS,'1','Gate exige les vrais rôles de production');
@@ -50,8 +64,13 @@ try {
   await writeFile(join(dir,'alertmanager.yml'),am);
   const prom=(await readFile('infrastructure/monitoring/prometheus.yml','utf8'))
     .replaceAll('15s','1s').replace('/etc/prometheus/alerts.yml','/etc/e2/alerts.yml')
-    .replace('postgres-exporter:9187',`127.0.0.1:${exporterPort}`).replace('alertmanager:9093',`127.0.0.1:${amPort}`);
+    .replace('postgres-exporter:9187',`127.0.0.1:${exporterPort}`).replace('alertmanager:9093',`127.0.0.1:${amPort}`)
+    // H2k : le job api référence un credentials_file hors dépôt. Prometheus lit
+    // ce fichier au chargement de la config ; un placeholder suffit — ce gate
+    // N'A pas d'API et ne collecte que la voie E2 (exporter SQL), inchangée.
+    .replace('/run/secrets/metrics-collector-token','/etc/e2/metrics-collector-token');
   await writeFile(join(dir,'prometheus.yml'),prom);
+  await writeFile(join(dir,'metrics-collector-token'),'e2-gate-placeholder-not-a-real-credential\n',{mode:0o600});
   run('exporter','prometheuscommunity/postgres-exporter:v0.15.0',[`--web.listen-address=127.0.0.1:${exporterPort}`],['--env-file',join(dir,'exporter.env')]);
   await until(async()=>{const text=await(await fetch(`http://127.0.0.1:${exporterPort}/metrics`)).text();return (text.match(/^creche_worker_scheduler_overdue\{/gm)??[]).length===3;},'3 métriques SQL réelles');
   run('am','prom/alertmanager:v0.27.0',['--config.file=/etc/e2/alertmanager.yml','--storage.path=/tmp/am',`--web.listen-address=127.0.0.1:${amPort}`,'--cluster.listen-address=']);
@@ -68,6 +87,14 @@ try {
   execFileSync('docker',['stop',names[0]],{stdio:'ignore'});
   await until(async()=>(await journal()).some(x=>x.status==='firing'&&x.name==='DatabaseMetricsUnavailable'),'perte exporter signalée');
   console.log('✓ E2 STACK : SQL app → exporter → Prometheus → Alertmanager → local/SMTP/SMS/WhatsApp ; firing/résolution/perte exporter. Aucun worker, aucun envoi externe.');
+} catch (error) {
+  // G5 diagnostic : les rejets de top-level await court-circuitent
+  // 'unhandledRejection' (Node ≥ 15) — c'est ici que la cause précise est
+  // publiée en annotation GitHub (tronquée, sans secret), puis relancée
+  // inchangée pour le log complet du job. Le catch ne masque rien.
+  const detail = String(error?.message ?? error).replace(/\r?\n/g, ' | ').slice(0, 900);
+  if (process.env.GITHUB_ACTIONS === 'true') writeSync(2, `::error title=E2 stack::${detail}\n`);
+  throw error;
 } finally {
   for(const name of names){const logs=spawnSync('docker',['logs',name],{encoding:'utf8'});await writeFile(join(dir,`${name}.log`),(logs.stdout??'')+(logs.stderr??''));spawnSync('docker',['rm','-f',name],{stdio:'ignore'});}
   await f.close();await app.end();await db.end();

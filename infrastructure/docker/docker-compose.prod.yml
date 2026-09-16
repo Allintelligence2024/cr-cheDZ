@@ -97,6 +97,12 @@ services:
       APP_URL: ${APP_URL:-https://${DOMAIN}}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
+      # H2k — uniquement des DIGESTS SHA-256 des tokens de collecte autorisés
+      # à lire /api/v1/metrics (jamais le secret brut ici, jamais de repli public).
+      METRICS_COLLECTOR_TOKEN_HASHES: ${METRICS_COLLECTOR_TOKEN_HASHES:-}
+      # G5 — clé de chiffrement au repos des secrets TOTP ; la garde de boot
+      # production (@creche/prod-config) est partagée api+worker : absence = refus.
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY requis (G5 — 32 octets hex ou base64)}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
@@ -146,6 +152,8 @@ services:
       NODE_ENV: production
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?PAYMENT_WEBHOOK_SECRET requis}
+      # G5 : garde de boot partagée — le worker exige la même clé que l'api.
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY requis (G5 — 32 octets hex ou base64)}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
@@ -187,6 +195,10 @@ services:
     volumes:
       - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      # H2k — token de collecte lu par authorization.credentials_file ; généré
+      # par scripts/provision-metrics-collector.mjs, hors dépôt, mode 0400 uid 65534
+      # comme le secret Alertmanager (même convention d'exploitation).
+      - ${METRICS_COLLECTOR_TOKEN_FILE:?fichier secret requis pour la collecte API}:/run/secrets/metrics-collector-token:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'

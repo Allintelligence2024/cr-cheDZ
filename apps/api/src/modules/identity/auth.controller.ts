@@ -38,13 +38,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @RateLimit(10, 60_000)
   async verifyParentOtp(@Body() dto: ParentOtpVerifyDto, @Req() req: Request): Promise<LoginResult> {
-    return this.authService.verifyParentOtp(dto.phone, dto.code, { deviceId: dto.device_id, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    return this.authService.verifyParentOtp(dto.phone, dto.code, { deviceId: dto.device_id, ipAddress: req.ip, userAgent: req.headers['user-agent'] }, dto.totp_code);
   }
 
   @Post('parent/pin')
   @HttpCode(HttpStatus.NO_CONTENT)
   async setParentPin(@Body() dto: ParentPinDto, @CurrentUser() user: CurrentUserPayload): Promise<void> {
-    await this.authService.setParentPin(user.sub, dto.pin);
+    await this.authService.setParentPin(user.sub, dto.pin, dto.totp_code);
   }
 
   @Public()
@@ -52,7 +52,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @RateLimit(5, 60_000)
   async loginParentPin(@Body() dto: ParentPinLoginDto, @Req() req: Request): Promise<LoginResult> {
-    return this.authService.loginParentPin(dto.phone, dto.pin, { deviceId: dto.device_id, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
+    return this.authService.loginParentPin(dto.phone, dto.pin, { deviceId: dto.device_id, ipAddress: req.ip, userAgent: req.headers['user-agent'] }, dto.totp_code);
   }
 
   @Public()

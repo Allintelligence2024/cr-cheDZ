@@ -76,6 +76,9 @@ const productionEnv = (url) => ({
   ...process.env, NODE_ENV: 'production', DATABASE_URL: url, APP_PORT: '0',
   JWT_SECRET: 'phase-d-only-jwt-secret-32-characters-minimum',
   PAYMENT_WEBHOOK_SECRET: 'phase-d-only-webhook-secret-32-characters',
+  // G5 : la garde production exige désormais la clé de chiffrement des secrets
+  // TOTP — fixture synthétique au format attendu (32 octets hex).
+  TOTP_ENCRYPTION_KEY: 'a'.repeat(64),
   STORAGE_BACKEND: 'local', STORAGE_LOCAL_DIR: '/tmp/phase-d-storage',
   SENTRY_DSN: '', FIREBASE_SERVICE_ACCOUNT_JSON: '',
 });

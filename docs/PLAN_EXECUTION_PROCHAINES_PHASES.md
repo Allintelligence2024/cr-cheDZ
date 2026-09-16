@@ -43,7 +43,7 @@
 - [x] Filtre d'erreurs global FR/AR + correlation_id ; AuditService + masquage PII
 - [x] Migration 015 : fonctions SECURITY DEFINER (bootstrap auth sous RLS)
 - [x] **Test d'isolation API : 31/31 assertions vertes** (`test:api-isolation`, CI postgres:16)
-- [x] Spec OpenAPI documentée (auth, devices, me, rooms)
+- [x] Spec OpenAPI documentée (auth, devices, me, rooms) — **partielle** : 13 paths écrits à la main, génération de types à la demande, non branchée au build (correction de claim PR #45)
 
 ### Phase 3 — Organisations, invitations, sites/salles, staff, web (FAITE et VALIDÉE, sprint S3)
 - [x] CRUD organisations (super_admin) + sites + salles (tenant, 404 cross-tenant)
@@ -98,7 +98,7 @@ testé de bout en bout — aucun accès cross-tenant possible.
 | 2.9 | Rate limiting applicatif par IP+route (fenêtre fixe, désactivable via `RATE_LIMIT_DISABLED` pour les tests) | `shared/guards/rate-limit.*` | ✅ |
 | 2.10 | **Migration 015** : fonctions SECURITY DEFINER `auth_get_memberships` / `auth_refresh_lookup` / `auth_get_device` (bootstrap auth sous RLS) | `infrastructure/database/migrations/015_auth_functions.sql` | ✅ |
 | 2.11 | **Test d'isolation API** : `tests/tenant-isolation/isolation.api.test.mjs` (31 assertions, toutes vertes) | `tests/tenant-isolation/` | ✅ |
-| 2.12 | Spec OpenAPI 3.1 documentée (auth, devices, me, rooms, erreurs FR/AR) | `packages/api-contracts/openapi.yaml` | ✅ |
+| 2.12 | Spec OpenAPI 3.1 documentée (auth, devices, me, rooms, erreurs FR/AR) — 13 paths écrits à la main, couverture NON exhaustive (≈172 routes réelles), génération des types web à la demande | `packages/api-contracts/openapi.yaml` | ✅ (revue 2026-09) |
 
 ### Détail des corrections faites en cours de sprint
 1. **AsyncLocalStorage** au lieu de Scope.REQUEST pour le contexte tenant —

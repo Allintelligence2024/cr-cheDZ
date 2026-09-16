@@ -297,5 +297,76 @@ ouverts. Le facteur est une propriété du compte, pas une nouvelle autorisation
 GET/HEAD /metrics : JWT d'accès avec rôle super_admin **et** compte plateforme courant
 actif, non supprimé/non verrouillé. Refus sans exposition des compteurs ; autorisation
 avant le helper global, pas une politique RLS tenant ajoutée au helper. Health reste
-public. 6/26 → 26/26, [runbook H2j](../PHASE_H2J_METRICS_RUNBOOK.md). Collecte de service,
-rotation du bearer et révocation post-contrôle restent ouvertes.
+public. 6/26 → 26/26, [runbook H2j](../PHASE_H2J_METRICS_RUNBOOK.md).
+
+**H2k — collecte d'exploitation** : la même route admet, en plus et sans rien
+ouvrir d'autre, un **credential de collecteur** à privilège limité (secret opaque
+dont l'API ne détient que les digests SHA-256 ; comparaison temps constant ;
+aucun contexte utilisateur). Autorité « collecteur » = GET/HEAD `/metrics`
+uniquement — 401 partout ailleurs ; refus/anonymes/tenant restent 401/403 comme
+en H2j. Provisionnement `scripts/provision-metrics-collector.mjs` ; rotation par
+liste transitoire de digests ; révocation = retrait du digest (redéploiement),
+visible comme 401 réel par le gate d'ingestion Prometheus. Pas de révocation
+instantanée en base ni de JWT admin à rallonge. 9/24 → 24/24, suite
+`phase51-metrics-collector.api.test.mjs` ; ingestion réelle par
+`scripts/test-metrics-collector-stack.mjs`. La voie E2 (exporter SQL, sans API
+ni auth) est inchangée ; aucune autorité de collecteur sur d'autres tables.
+
+
+## G4 — Révocabilité globale des principaux (époque de token)
+
+Tout access JWT porte le claim `epoch` = `users.token_epoch` (migration 062)
+et les gardes d'entrée (`JwtAuthGuard`, `MetricsAccessGuard` voie admin)
+relisent l'époque courante à chaque requête : une révocation — mot de passe,
+statut, super-adminité, suppression douce, membership (inactive/absente,
+rôle principal, périmètre) ou rôle additionnel — frappe TOUTES les routes
+immédiatement, sans attendre l'expiration de 15 minutes ni un re-contrôle
+d'endpoint. L'incrément est porté par DÉCLENCHEURS sur les trois tables :
+les écritures SQL d'exploitation (correctifs, imports, décréts) sont soumises
+aux mêmes règles que les endpoints ; seuls les changements réels de valeurs
+bumpent (un no-op idempotent ne déconnecte personne) ; la restauration d'un
+état force symétriquement la reconnexion.
+
+Échec de lecture = refus (fail-closed) ; token sans claim = époque 0
+(coexistence d'instances pendant le déploiement, jusqu'à la première
+révocation du principal). La voie `refresh` relit déjà le compte (G1b) et
+réémet l'époque courante ; la révocabilité des refresh reste portée par
+`sessions`. La déchéance d'un administrateur plateforme vaut désormais 401 au
+garde de `/metrics` là où le service répondait 403 après relecture ; la
+relecture du service reste en profondeur de défense pour le verrouillage de
+login (non révocatoire).
+
+**4/17 → 17/17** (`phase53`, HTTP+PG réels), huit suites recalées sur le
+contrat élargi, [runbook G4](../PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md).
+Limites assumées : fenêtre garde→commit d'une requête en cours (pas de lock
+du principal par mutation), facteurs TOTP non révocatoires par conception,
+statut d'ORGANISATION hors périmètre, migration 062 obligatoire avant
+redéploiement.
+
+## G5 — Second facteur : au repos chiffré, codes à usage unique, tous canaux
+
+Le secret TOTP ne dort plus en clair : `users.totp_secret` est scellé
+AES-256-GCM (`v1gcm.*`, AAD = identifiant du compte) sous
+`TOTP_ENCRYPTION_KEY` ; la rotation est une liste ordonnée
+`courante,anciennes` avec rescellage à la courante au premier usage, les
+lignes legacy en clair restent lisibles puis sont mises à niveau à l'usage, et
+une valeur indéchiffrable refuse la connexion (`403 MFA_SECRET_UNREADABLE`,
+sans session, sans compteur utilisateur) plutôt que de retomber sur « pas de
+facteur ». Production : boot refusé sans clé valide.
+
+Chaque code accepté CONSOMME son pas (`users.totp_last_step`, migration 063)
+sous verrou de ligne : un pas déjà utilisé est refusé sur les cinq canaux —
+login mot de passe, login PIN parent, verify OTP parent, `2fa/verify`,
+`2fa/disable` — y compris entre canaux (le PIN ne peut plus rejouer un code
+fraîchement utilisé au login) et sous concurrence réelle (une seule requête
+gagne le pas). Corollaires de matrice : `parent_pin_hash` n'est plus JAMAIS un
+contournement du facteur (pose/remplacement du PIN lui-même soumis à preuve
+Totp valide dès que le compte a le facteur), et `totp_enabled=false` reste un
+état explicite — pas un repli silencieux sur secret illisible.
+
+**2/18 → 18/18** (`phase54`, HTTP+PG+redémarrages réels), phase48 **44/44** et
+`isolation` recalibrés sur le contrat « code à usage unique »,
+[runbook G5](../PHASE_G5_MFA_RUNBOOK.md). Limites : codes de récupération =
+décision client (non implémentés) ; l'activation/désactivation du facteur ne
+bump pas l'époque G4 (inchangé) ; OTP SMS/WhatsApp gardent leur consommation
+atomique propre (`otp_codes.used_at`).

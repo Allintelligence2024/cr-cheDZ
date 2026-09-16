@@ -129,7 +129,12 @@ const main = async () => {
 
     // ── 8. /me + auth_user_roles ────────────────────────────────────────────
     console.log('\n8) /me inchangé + auth_user_roles');
-    const me = await api('GET', '/me', tokenEduA);
+    // G4 (migration 062) : le retrait de rôle a dépasse l'époque du JWT —
+    // l'ANCIEN token (pré-relogin) est désormais refusé au garde d'entrée ;
+    // le /me de référence s'évalue avec le token reémis, mêmes droits.
+    const meStale = await api('GET', '/me', tokenEduA);
+    ok('Retrait : ancien JWT éducateur révoqué globalement (G4) → 401', meStale.status === 401, `status=${meStale.status}`);
+    const me = await api('GET', '/me', relogin2.access_token);
     ok('/me : membership unique (educator)', me.status === 200 && me.body.memberships?.length === 1 && me.body.memberships[0].role_slug === 'educator', JSON.stringify(me.body.memberships).slice(0, 120));
     const direct = await db.query(`SELECT role_slug, is_primary FROM auth_user_roles($1) WHERE organization_id=$2`, [A.educator, A.org]);
     ok('auth_user_roles : principal + additions', direct.rows.length === 1 && direct.rows[0].is_primary === true, JSON.stringify(direct.rows));

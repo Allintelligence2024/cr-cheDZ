@@ -227,7 +227,7 @@ Ajouter `room_moves` (append-only : `child_id`, `room_id_from`, `room_id_to`, `m
 1. `memberships UNIQUE(org, user)` → **1 rôle par utilisateur et par organisation** (MVP) ; multi-rôles = phase ultérieure (table `role_assignments`).
 2. Dévise : **DZD uniquement** pour le MVP (colonne `currency` présente, figée à `DZD`).
 3. Paiement en ligne (CIB/Edahabia via SATIM) : **feature flag `online_payment` off** jusqu'à validation du MVP.
-4. Client API : **TypeScript généré** pour le web (openapi-typescript), **clients Dart écrits à la main** typés (pas de codegen Dart — décision pragmatique).
+4. Client API : générateur TypeScript web **configuré et exécuté à la demande** (openapi-typescript ; le client web reste écrit à la main, non branché au build), **clients Dart écrits à la main** typés (pas de codegen Dart — décision pragmatique).
 5. Worker : application **NestJS standalone** (`NestFactory.createApplicationContext`) partageant les modules métier, pas un script brut.
 6. Monorepo : **pnpm workspaces + Turborepo** (apps npm) ; les apps Flutter hors workspace pnpm (gérées par le même repo git, CI séparée).
 
@@ -658,7 +658,7 @@ pointage 12 enfants 0,09 s (limite 180 s) · repas groupé 0,037 s (limite 30 s)
 1. **Git** : `main` (prod) ← `develop` (staging) ← `feature/*` ; Conventional Commits ; PR ≤ 400 lignes, revue par un pair, checklist DoD dans le template.
 2. **Tests** : `tests/` contient tenant-isolation, sync, financial, e2e (+ security, regulatory) ; la suite complète s'exécute dans CI en < 15 min ; tout bug corrigé = test de régression ajouté.
 3. **Sécurité** : aucune PII dans les logs ; secrets uniquement via variables d'environnement/vault ; `npm audit` vert avant merge.
-4. **Contrats** : la spec OpenAPI 3.1 (`packages/api-contracts/openapi.yaml`) est générée à chaque build et versionnée ; le client TS du web est régénéré ; toute modification d'endpoint exige la mise à jour de la spec et des messages d'erreur FR/AR.
+4. **Contrats** : la spec OpenAPI 3.1 (`packages/api-contracts/openapi.yaml`) est **écrite à la main et versionnée** (13 paths — auth, devices, me, rooms, health ; elle n'est PAS générée depuis le code et ne couvre pas les ~172 routes) ; le générateur de types web (`npm run generate --workspace @creche/api-contracts`) s'exécute **à la demande**, non branché au build ; toute modification d'un endpoint couvert exige la mise à jour de la spec et des messages FR/AR. (Correction d'affirmation : audit 2026-09, PR #45 — vérifié par `tests/tenant-isolation/openapi-contract.test.mjs`.)
 5. **Réunions** : daily 15 min ; démo interne chaque vendredi ; rétrospective à chaque fin de phase ; revue de code le jeudi (calqué sur le plan d'origine).
 6. **Documentation** : ADR pour toute décision structurante ; le présent plan est le document de pilotage — mise à jour après chaque phase avec le taux de complétion des checklists.
 

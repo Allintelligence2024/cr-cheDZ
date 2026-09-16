@@ -1,5 +1,7 @@
 import { isAbsolute, resolve } from 'node:path';
 import { resolveStorageBackend, type StorageBackend } from './storage';
+import { validateMetricsCollectorConfig } from './metrics-collector';
+import { validateTotpEncryptionKey, validateTotpEncryptionKeyProduction } from './totp-key';
 
 /**
  * Garde de configuration de production (MISSION P1 — feat(config)).
@@ -21,6 +23,9 @@ import { resolveStorageBackend, type StorageBackend } from './storage';
  *    signée par le JwtModule avec `JWT_SECRET` et, s'il est absent, un
  *    DÉFAUT DE DÉVELOPPEMENT en clair est utilisé. Couvert pareillement :
  *    absent, < 32 caractères ou égal au défaut → démarrage refusé.
+ *  - H2k METRICS_COLLECTOR_TOKEN_HASHES : chaque entrée doit être un digest
+ *    SHA-256 (64 hex) ; toute entrée invalide bloque le démarrage — jamais un
+ *    silence qui laisserait croire qu'un collecteur est révoqué ou actif.
  */
 
 /** Défaut de développement du JwtModule (identity.module.ts) — jamais en prod. */
@@ -83,6 +88,14 @@ export function validateProductionConfig(env: EnvLike = process.env): string[] {
     );
   }
 
+  // 5. H2k : liste de digests du collecteur Prometheus — une entrée malformée
+  //    bloque le démarrage en production, sans jamais activer de repli public.
+  problems.push(...validateMetricsCollectorConfig(env));
+
+  // 6. G5 : clé de chiffrement au repos des secrets TOTP — présence exigée en
+  //    production (jamais de secret base32 en clair), format vérifié partout.
+  problems.push(...validateTotpEncryptionKeyProduction(env));
+
   return problems;
 }
 
@@ -93,6 +106,12 @@ export function validateProductionConfig(env: EnvLike = process.env): string[] {
 export function assertProductionConfig(env: EnvLike = process.env): void {
   if (env.NODE_ENV !== 'production') {
     resolveStorageBackend(env);
+    // G5 : hors production, seule la FORME d'une clé présente est bloquante
+    // (l'absence = mode historique explicite test/dev, jamais un contournement).
+    const totpProblems = validateTotpEncryptionKey(env);
+    if (totpProblems.length > 0) {
+      throw new Error(`GARDE CONFIG — démarrage refusé :\n${totpProblems.map((p) => `  - ${p}`).join('\n')}`);
+    }
     return;
   }
   const problems = validateProductionConfig(env);
@@ -110,3 +129,16 @@ export { BUSINESS_TIME_ZONE, dateOnly, monthBounds, exportRange } from './calend
 export { JOURNAL_NOTIFICATION_TYPES, NOTIFICATION_DENIED_REASON, NOTIFICATION_INBOX_ALLOWED_SQL, notificationAllowed } from './notification-access';
 
 export { resolveStorageBackend, type StorageBackend } from './storage';
+
+export {
+  METRICS_COLLECTOR_HASHES_ENV,
+  parseMetricsCollectorConfig,
+  validateMetricsCollectorConfig,
+  type MetricsCollectorConfig,
+} from './metrics-collector';
+
+export {
+  TOTP_ENCRYPTION_KEY_ENV,
+  validateTotpEncryptionKey,
+  validateTotpEncryptionKeyProduction,
+} from './totp-key';

@@ -48,13 +48,17 @@ try {
   for (const role of ['director','accountant','educator','parent']) await check(`${role}: tenant role cannot read platform totals`, async () => { await denied((await actor(role)).token,403); });
   await check('expired access token is refused', () => denied(jwt.sign({ purpose:'access', sub:admin.id, role:'super_admin', isSuperAdmin:true }, { expiresIn:-1 }),401));
   await check('non-access token purpose is refused', () => denied(jwt.sign({ purpose:'invitation', sub:admin.id, role:'super_admin', isSuperAdmin:true }),401));
-  for (const [name, sql] of [
-    ['privilege removed', 'UPDATE users SET is_super_admin=false WHERE id=$1'],
-    ['suspended', "UPDATE users SET status='suspended' WHERE id=$1"],
-    ['pending', "UPDATE users SET status='pending' WHERE id=$1"],
-    ['deleted', 'UPDATE users SET deleted_at=NOW() WHERE id=$1'],
-    ['locked', "UPDATE users SET locked_until=NOW()+INTERVAL '10 minutes' WHERE id=$1"],
-  ]) await check(`stale administrator JWT: ${name} is refused`, async () => { const u = await actor(); await db.query(sql,[u.id]); await denied(u.token,403); });
+  // G4 (migration 062) : les états révocatoires (super-adminité, statut,
+  // suppression douce) dépassent l'époque du token => refus AU GARDE (401),
+  // avant même la relecture du service. Le verrouillage de login n'est pas un
+  // état de révocation (pas de bump) : il reste vu par le service (403).
+  for (const [name, sql, code] of [
+    ['privilege removed', 'UPDATE users SET is_super_admin=false WHERE id=$1', 401],
+    ['suspended', "UPDATE users SET status='suspended' WHERE id=$1", 401],
+    ['pending', "UPDATE users SET status='pending' WHERE id=$1", 401],
+    ['deleted', 'UPDATE users SET deleted_at=NOW() WHERE id=$1', 401],
+    ['locked', "UPDATE users SET locked_until=NOW()+INTERVAL '10 minutes' WHERE id=$1", 403],
+  ]) await check(`stale administrator JWT: ${name} is refused`, async () => { const u = await actor(); await db.query(sql,[u.id]); await denied(u.token,code); });
   await check('active platform administrator keeps access to global gauges', async () => {
     const r = await request('/metrics',admin.token); assert.equal(r.status,200); assert.match(r.headers.get('content-type'),/text\/plain;.*version=0.0.4/); assert.match(r.text,/creche_jobs_pending \d+/);
   });
