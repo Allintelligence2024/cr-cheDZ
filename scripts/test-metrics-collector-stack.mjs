@@ -148,9 +148,19 @@ async function startApi(hashEnv) {
   await until(async () => (await fetch(`http://127.0.0.1:${apiPort}/api/v1/health`)).ok, 'API prête');
 }
 async function stopApi() {
-  if (!apiChild || apiChild.exitCode !== null) return;
+  if (!apiChild) return;
+  // Un enfant tué par signal a exitCode === null ET signalCode défini :
+  // tester uniquement exitCode fait « pendre » un arrêt parfaitement sain
+  // (c'est ce qui tuait le gate en CI, pas l'API). Éscalade SIGKILL ensuite.
+  const dead = () => apiChild.exitCode !== null || apiChild.signalCode !== null;
+  if (dead()) { await delay(600); return; }
   apiChild.kill('SIGTERM');
-  await until(async () => apiChild.exitCode !== null, 'API arrêtée', 15000);
+  try {
+    await until(dead, 'API arrêtée (SIGTERM)', 15000);
+  } catch {
+    apiChild.kill('SIGKILL');
+    await until(dead, 'API tuée (SIGKILL)', 5000);
+  }
   await delay(600); // relâchement du port avant le redéploiement
 }
 
