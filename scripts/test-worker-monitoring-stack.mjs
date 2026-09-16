@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {createServer} from 'node:net';
 import {mkdtemp,writeFile,readFile,chmod} from 'node:fs/promises';
+import {writeSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -18,10 +19,12 @@ import {fixture,token} from '../tests/monitoring/relay-fixture.mjs';
 // annotation GitHub (message tronqué, jamais de secret) pour rendre le
 // prochain échec diagnostiquable via l'API check-runs/annotations.
 process.on('unhandledRejection', (error) => {
-  const message = String(error?.message ?? error).replace(/\r?\n/g, ' | ').slice(0, 400);
-  if (process.env.GITHUB_ACTIONS === 'true') console.log(`::error title=E2 stack interrompue::${message}`);
+  // G5 diagnostic : sortie SYNCHRONE (console.log + exit perdaient le
+  // message, pipe non vidé), jamais de secret, message tronqué.
+  const detail = String(error?.message ?? error).replace(/\r?\n/g, ' | ').slice(0, 900);
+  if (process.env.GITHUB_ACTIONS === 'true') writeSync(2, `::error title=E2 stack interrompue::${detail}\n`);
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });
 
 assert.equal(process.env.ALLOW_DATABASE_RESET,'1','Cluster jetable requis');

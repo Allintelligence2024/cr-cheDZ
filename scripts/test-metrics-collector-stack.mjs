@@ -24,7 +24,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync, spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { chmodSync, copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, mkdtempSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -36,10 +36,12 @@ import bcrypt from 'bcryptjs';
 // annotation GitHub (message tronqué, jamais de secret) pour rendre le
 // prochain échec diagnostiquable via l'API check-runs/annotations.
 process.on('unhandledRejection', (error) => {
-  const message = String(error?.message ?? error).replace(/\r?\n/g, ' | ').slice(0, 400);
-  if (process.env.GITHUB_ACTIONS === 'true') console.log(`::error title=H2k stack interrompue::${message}`);
+  // G5 diagnostic : sortie SYNCHRONE (console.log + exit perdaient le
+  // message, pipe non vidé), jamais de secret, message tronqué.
+  const detail = String(error?.message ?? error).replace(/\r?\n/g, ' | ').slice(0, 900);
+  if (process.env.GITHUB_ACTIONS === 'true') writeSync(2, `::error title=H2k stack interrompue::${detail}\n`);
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });
 
 assert.equal(process.env.ALLOW_DATABASE_RESET, '1', 'Cluster jetable requis');
@@ -78,11 +80,20 @@ async function port() {
 }
 async function until(check, label, ms = 90000) {
   const deadline = Date.now() + ms;
+  let lastCheckError = null;
   while (Date.now() < deadline) {
-    try { if (await check()) return; } catch { /* démarrage / refus */ }
+    try { if (await check()) return; } catch (e) { lastCheckError = e; }
     await delay(400);
   }
-  throw new Error(`Timeout: ${label}`);
+  // G5 diagnostic : un timeout nu ne dit rien — porter la dernière erreur de
+  // sonde + les queues de logs api/prometheus (aucun token : les logs serveur
+  // sont déjà filtrés côté API ; les nôtres ne contiennent que du texte de boot).
+  const context = [
+    lastCheckError ? `sonde=${String(lastCheckError.message).slice(0, 160)}` : '',
+    `logs-locaux=${promLogs.slice(-4).join(' ~ ').slice(0, 320)}`,
+    useDocker ? `logs-prom=${readPromLogs().split('\n').filter(Boolean).slice(-4).join(' ~ ').slice(0, 320)}` : '',
+  ].filter(Boolean).join(' | ');
+  throw new Error(`Timeout: ${label} :: ${context}`);
 }
 function launchPrometheus() {
   if (useDocker) {

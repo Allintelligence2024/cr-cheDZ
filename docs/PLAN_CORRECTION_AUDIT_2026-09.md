@@ -44,12 +44,17 @@
   vulnérabilité downgrader reproduite : PIN → 200 sans facteur) → GREEN
   **18/18** (phase54) ; phase48 **44/44** et `isolation` recalibrés sur le
   contrat « code à usage unique par compte » ; unit **45/45** ; gate strict
-  local **57 suites/contrôles** attendu. Le CI `database` de `ac1a420`
-  (run `35053833498`) est rouge sans logs lisibles côté agent (portée
-  Actions insuffisante, blob inaccessible, rerun refusé) — le run du SHA G5
-  tranchera ; une annotation `::error` nommant la suite en échec a été ajoutée
-  au runner pour rendre le prochain diagnostic lisible via l'API. Les codes de
-  récupération MFA relèvent d'une **décision client** (non implémentés).
+  local **57 suites/contrôles** attendu. Requalification du rouge CI : le job
+  `database` est rouge **depuis `5e08145` déjà** (donc né du bloc H2k
+  d'ingestion réelle — premier exécuteur CI, avant même la batterie ; aucune
+  annotation de suite en échec, le gate meurt avant les suites) — pas du lot
+  G4/G5 lui-même. Logs bruts inaccessibles à l'agent (portée Actions, blob
+  Azure, rerun refusé) : diagnostic autoporteur ajouté (annotation `::error`
+  du `run()` du gate nommant la commande coupable + handlers d'erreur des deux
+  stacks), et une annotation nommant la suite en échec dans le runner. Le run
+  du SHA G5+diagnostic tranchera ; les suites individuelles dont phase53
+  restent vertes localement (57/57, gate exit 0). Le merge reste soumis à
+  autorisation client.
   [Runbook G5](PHASE_G5_MFA_RUNBOOK.md).
 - **H2l livré** : `scripts/anonymize.sql` audités contre le schéma actuel
   (61 migrations) et étendu — tuteurs, personnel, messages, sessions,
