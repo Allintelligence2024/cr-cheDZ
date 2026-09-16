@@ -246,6 +246,14 @@ try {
   assert.equal(serverLogs.includes(first.token), false);
 
   console.log('✓ H2k STACK : vrai serveur Prometheus sur la config livrée — UP avec credentials_file, série requêtable = COUNT SQL réel, DOWN 401 sur token non provisionné, rotation et révocation qualifiées par ingestion réelle, voie admin H2j intacte, aucun secret dans config montée ni logs. Gate E2 (exporter SQL) non modifié.');
+} catch (error) {
+  // G5 diagnostic : les rejets de top-level await court-circuitent
+  // 'unhandledRejection' (Node ≥ 15) — c'est ici que la cause précise est
+  // publiée en annotation GitHub (tronquée, sans secret), puis relancée
+  // inchangée pour le log complet du job. Le catch ne masque rien.
+  const detail = String(error?.message ?? error).replace(/\r?\n/g, ' | ').slice(0, 900);
+  if (process.env.GITHUB_ACTIONS === 'true') writeSync(2, `::error title=H2k stack::${detail}\n`);
+  throw error;
 } finally {
   if (promProcess && promProcess.exitCode === null) promProcess.kill('SIGTERM');
   if (useDocker) {

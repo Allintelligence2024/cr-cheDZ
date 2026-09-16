@@ -87,6 +87,14 @@ try {
   execFileSync('docker',['stop',names[0]],{stdio:'ignore'});
   await until(async()=>(await journal()).some(x=>x.status==='firing'&&x.name==='DatabaseMetricsUnavailable'),'perte exporter signalée');
   console.log('✓ E2 STACK : SQL app → exporter → Prometheus → Alertmanager → local/SMTP/SMS/WhatsApp ; firing/résolution/perte exporter. Aucun worker, aucun envoi externe.');
+} catch (error) {
+  // G5 diagnostic : les rejets de top-level await court-circuitent
+  // 'unhandledRejection' (Node ≥ 15) — c'est ici que la cause précise est
+  // publiée en annotation GitHub (tronquée, sans secret), puis relancée
+  // inchangée pour le log complet du job. Le catch ne masque rien.
+  const detail = String(error?.message ?? error).replace(/\r?\n/g, ' | ').slice(0, 900);
+  if (process.env.GITHUB_ACTIONS === 'true') writeSync(2, `::error title=E2 stack::${detail}\n`);
+  throw error;
 } finally {
   for(const name of names){const logs=spawnSync('docker',['logs',name],{encoding:'utf8'});await writeFile(join(dir,`${name}.log`),(logs.stdout??'')+(logs.stderr??''));spawnSync('docker',['rm','-f',name],{stdio:'ignore'});}
   await f.close();await app.end();await db.end();

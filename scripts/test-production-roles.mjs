@@ -47,6 +47,27 @@ function run(command, args, overrides = {}) {
     process.exit(result.status || 1);
   }
 }
+// G5 diagnostic : variante qui CAPTE la sortie des gates de stack (docker-only,
+// jamais exécutés localement) — rejeu mot pour mot dans le log, plus annotation
+// GitHub de la ligne d'erreur si le sous-processus échoue. Couvre aussi les
+// échecs antérieurs au grand try de ces scripts (TLA reject ne passe par aucun
+// handler 'unhandledRejection' en Node ≥ 15).
+function runCapture(command, args) {
+  const result = spawnSync(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 });
+  const out = String(result.stdout ?? '');
+  const err = String(result.stderr ?? '');
+  if (out) process.stdout.write(out);
+  if (err) process.stderr.write(err);
+  if (result.error || result.status !== 0) {
+    console.error(`Gate D interrompu : ${command} ${args.join(' ')} (exit ${result.status})`);
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      const lines = (err + '\n' + out).trim().split('\n').map((l) => l.trim()).filter(Boolean);
+      const culprit = [...lines].reverse().find((l) => /Error|Timeout|assert|expected/.test(l)) ?? lines.at(-1) ?? '';
+      console.log(`::error title=Gate D (sortie capturée)::${args.join(' ')} (exit ${result.status}) — ${culprit.slice(0, 700)}`);
+    }
+    process.exit(result.status || 1);
+  }
+}
 run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs', 'tests/tenant-isolation/openapi-contract.test.mjs']);
 // Fast production-layout reproduction before the slower Docker/Flutter gates.
 run(process.execPath, ['scripts/check-api-runtime.mjs']);
@@ -83,9 +104,9 @@ if (env.GITHUB_ACTIONS === 'true' || env.RUN_SYNC_E2E === '1') {
 }
 // Retour rapide sur le gate E2 réseau AVANT les suites API longues.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_MONITORING_STACK === '1') {
-  run(process.execPath, ['scripts/test-worker-monitoring-stack.mjs']);
+  runCapture(process.execPath, ['scripts/test-worker-monitoring-stack.mjs']);
   // H2k : ingestion réelle du scrape API (vrai Prometheus, config livrée).
-  run(process.execPath, ['scripts/test-metrics-collector-stack.mjs']);
+  runCapture(process.execPath, ['scripts/test-metrics-collector-stack.mjs']);
   // Le test d'alerte vieillit les ticks : restaurer du neuf pour phase3/4.
   run(process.execPath, ['scripts/migrate.mjs', '--reset']);
   run(process.execPath, ['scripts/migrate.mjs']);
