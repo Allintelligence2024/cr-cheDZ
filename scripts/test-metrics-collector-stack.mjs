@@ -245,6 +245,10 @@ try {
   assert.equal(legacy.status, 200, "pendant la fenêtre de grâce, l'ancien digest accepte encore l'ancien token");
 
   // Révocation : l'ancien digest sort de la liste → coupé partout, admin intact.
+  // Le fichier monté doit présenter le token RÉVOQUÉ (sinon Prometheus scrape
+  // avec le token toujours valide : un DOWN exigé ici serait une attente
+  // d'un événement que le scénario ne produit pas).
+  writeFileSync(join(dir, 'collector-token'), `${first.token}\n`, { mode: 0o600 });
   await stopApi();
   await startApi(rotated.digest);
   await until(async () => {
