@@ -78,6 +78,8 @@ SUITES=(
   phase48-totp-management.api.test.mjs
   phase49-storage-selection.test.mjs
   phase50-metrics.api.test.mjs
+  phase51-metrics-collector.api.test.mjs
+  phase52-anonymization.pg.test.mjs
 )
 
 FILTER="${1:-}"

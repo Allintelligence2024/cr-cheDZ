@@ -13,7 +13,7 @@ Monorepo du SaaS de gestion de crèche : présences offline, journal quotidien, 
 | Stockage médias | MinIO / S3 |
 | Jobs | Worker NestJS standalone + `background_jobs` |
 | CI/CD | GitHub Actions |
-| Contrats API | OpenAPI 3.1 |
+| Contrats API | OpenAPI 3.1 **partiel** : spec écrite à la main (13 paths, auth/devices/me/rooms/health), types web générables `npm run generate` — non branchés au build. Contrat de sync : `docs/architecture/sync-contract.md` |
 
 ## Structure
 

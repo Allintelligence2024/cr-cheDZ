@@ -59,6 +59,21 @@ export class MetricsService {
        AND (locked_until IS NULL OR locked_until<=clock_timestamp())`, [userId],
     );
     if (!actor.rowCount) throw Errors.forbidden();
+    return this.exposition();
+  }
+
+  /**
+   * H2k — scrape autorisé par un credential de collecteur provisionné (digests
+   * SHA-256 en env). Pas de relecture de compte : le collecteur N'EST pas un
+   * utilisateur ; son autorité vient du garde (digest valide, route metrics
+   * uniquement). Les agrégats exposés restent les mêmes totaux globaux que la
+   * voie administrateur — aucune projection tenant, aucun contenu PII.
+   */
+  async scrapeCollector(): Promise<string> {
+    return this.exposition();
+  }
+
+  private async exposition(): Promise<string> {
     const out: string[] = [];
     const gauges = await this.dbGauges();
     const gauge = (name: string): string => (gauges.has(name) ? String(gauges.get(name)) : 'NaN'); // absent = indisponible (jamais de faux 0)

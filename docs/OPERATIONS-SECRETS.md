@@ -145,3 +145,30 @@ NODE_ENV=production node -e "require('./packages/prod-config/dist').assertProduc
   interpréter local comme une désactivation de S3 pour tous les médias**.
 - [Reproduction, exploitation et limites H2i](PHASE_H2I_STORAGE_SELECTION_RUNBOOK.md).
   Pas de validation des credentials par un fournisseur réel, ni de migration d'objets.
+
+### 8. Credential de collecte Prometheus — H2k
+
+- `/api/v1/metrics` accepte le JWT d'accès administrateur plateforme (H2j) **ou** un
+  credential de collecteur à privilège limité : un secret opaque de 32 octets dont
+  l'API ne connaît **que le digest SHA-256** (`METRICS_COLLECTOR_TOKEN_HASHES`,
+  liste séparée par virgules). Le token brut ne vit que dans le fichier lu par
+  Prometheus (`authorization.credentials_file`, monté en lecture seule).
+- Générer le couple, hors dépôt :
+  `node scripts/provision-metrics-collector.mjs --out-file /etc/creche/secrets/metrics-collector-token`
+  puis coller le digest imprimé dans `.env.prod`. Permissions 0600 (0400 + chown
+  65534 comme le secret Alertmanager si le conteneur Prometheus tourne en nobody).
+- **Rotation** : générer un nouveau couple → ajouter le nouveau digest à la liste
+  (les deux coexistent pendant la bascule) → remplacer le fichier côté Prometheus →
+  retirer l'ancien digest. **Révocation** : retirer le digest (et le fichier) ; un
+  redéploiement suffit — aucun secret n'est encodé dans un JWT, aucune session
+  utilisateur n'est créée, et la suppression n'ouvre rien : la voie admin reste.
+- Liste **malformée** = entrée non-SHA-256 : démarrage refusé en production et
+  chemin collecteur désactivé (fail-closed) ; liste absente = seul H2j.
+  **Jamais** d'accès anonyme rétabli pour « réparer » un scraper.
+- Le collecteur ouvre exactement le scrape : 401 sur toute autre route, réponse
+  identique à celle de l'admin (mêmes agrégats globaux, jamais de PII ni de
+  contenu tenant) — c'est une **fuite d'agrégats potentielle** si le fichier
+  filtre : le traiter comme un secret d'infrastructure à durée non limitée.
+- Preuves et limites : [runbook H2j/H2k](PHASE_H2J_METRICS_RUNBOOK.md) ; ingestion
+  réelle qualifiée par le gate `scripts/test-metrics-collector-stack.mjs` (vrai
+  Prometheus 2.53.0). La voie E2 (exporter SQL, sans API) reste distincte.

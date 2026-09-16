@@ -9,15 +9,24 @@ rule_files:
   - /etc/prometheus/alerts.yml
 
 scrape_configs:
-  # H2j: /metrics requires a current platform-admin access JWT. This example
-  # does NOT provision/rotate it: anonymous scraping now returns 401.
-  # Production collector credentials/least-privilege delegation remain unqualified.
-  # See docs/PHASE_H2J_METRICS_RUNBOOK.md; never restore public access as a workaround.
+  # H2j : /api/v1/metrics exige un JWT d'accès d'administrateur plateforme.
+  # H2k : un credential de COLLECTEUR à privilège limité (lecture du scrape,
+  # aucune autre route) est provisionné hors bande :
+  #   node scripts/provision-metrics-collector.mjs --out-file <chemin-hors-dépôt>
+  # → le DIGEST est collé dans METRICS_COLLECTOR_TOKEN_HASHES côté API ; le
+  # fichier (ce chemin, monté en lecture seule par Prometheus) porte le token.
+  # Rotation/révocation : voir docs/PHASE_H2J_METRICS_RUNBOOK.md — l'accès
+  # anonyme reste 401 et ne doit JAMAIS être rétabli pour « réparer » le scraper ;
+  # ne jamais mettre ici un mot de passe administrateur ni un JWT à expiration.
   - job_name: 'api'
     metrics_path: /api/v1/metrics
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/metrics-collector-token
     static_configs:
       - targets: ['api:3000']
 
+  # E2 — voie SQL exporter distincte de l'authentification API : inchangée.
   - job_name: 'postgres'
     static_configs:
       - targets: ['postgres-exporter:9187']
