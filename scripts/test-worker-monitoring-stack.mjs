@@ -50,8 +50,13 @@ try {
   await writeFile(join(dir,'alertmanager.yml'),am);
   const prom=(await readFile('infrastructure/monitoring/prometheus.yml','utf8'))
     .replaceAll('15s','1s').replace('/etc/prometheus/alerts.yml','/etc/e2/alerts.yml')
-    .replace('postgres-exporter:9187',`127.0.0.1:${exporterPort}`).replace('alertmanager:9093',`127.0.0.1:${amPort}`);
+    .replace('postgres-exporter:9187',`127.0.0.1:${exporterPort}`).replace('alertmanager:9093',`127.0.0.1:${amPort}`)
+    // H2k : le job api référence un credentials_file hors dépôt. Prometheus lit
+    // ce fichier au chargement de la config ; un placeholder suffit — ce gate
+    // N'A pas d'API et ne collecte que la voie E2 (exporter SQL), inchangée.
+    .replace('/run/secrets/metrics-collector-token','/etc/e2/metrics-collector-token');
   await writeFile(join(dir,'prometheus.yml'),prom);
+  await writeFile(join(dir,'metrics-collector-token'),'e2-gate-placeholder-not-a-real-credential\n',{mode:0o600});
   run('exporter','prometheuscommunity/postgres-exporter:v0.15.0',[`--web.listen-address=127.0.0.1:${exporterPort}`],['--env-file',join(dir,'exporter.env')]);
   await until(async()=>{const text=await(await fetch(`http://127.0.0.1:${exporterPort}/metrics`)).text();return (text.match(/^creche_worker_scheduler_overdue\{/gm)??[]).length===3;},'3 métriques SQL réelles');
   run('am','prom/alertmanager:v0.27.0',['--config.file=/etc/e2/alertmanager.yml','--storage.path=/tmp/am',`--web.listen-address=127.0.0.1:${amPort}`,'--cluster.listen-address=']);

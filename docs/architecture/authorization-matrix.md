@@ -297,5 +297,17 @@ ouverts. Le facteur est une propriété du compte, pas une nouvelle autorisation
 GET/HEAD /metrics : JWT d'accès avec rôle super_admin **et** compte plateforme courant
 actif, non supprimé/non verrouillé. Refus sans exposition des compteurs ; autorisation
 avant le helper global, pas une politique RLS tenant ajoutée au helper. Health reste
-public. 6/26 → 26/26, [runbook H2j](../PHASE_H2J_METRICS_RUNBOOK.md). Collecte de service,
-rotation du bearer et révocation post-contrôle restent ouvertes.
+public. 6/26 → 26/26, [runbook H2j](../PHASE_H2J_METRICS_RUNBOOK.md).
+
+**H2k — collecte d'exploitation** : la même route admet, en plus et sans rien
+ouvrir d'autre, un **credential de collecteur** à privilège limité (secret opaque
+dont l'API ne détient que les digests SHA-256 ; comparaison temps constant ;
+aucun contexte utilisateur). Autorité « collecteur » = GET/HEAD `/metrics`
+uniquement — 401 partout ailleurs ; refus/anonymes/tenant restent 401/403 comme
+en H2j. Provisionnement `scripts/provision-metrics-collector.mjs` ; rotation par
+liste transitoire de digests ; révocation = retrait du digest (redéploiement),
+visible comme 401 réel par le gate d'ingestion Prometheus. Pas de révocation
+instantanée en base ni de JWT admin à rallonge. 9/24 → 24/24, suite
+`phase51-metrics-collector.api.test.mjs` ; ingestion réelle par
+`scripts/test-metrics-collector-stack.mjs`. La voie E2 (exporter SQL, sans API
+ni auth) est inchangée ; aucune autorité de collecteur sur d'autres tables.

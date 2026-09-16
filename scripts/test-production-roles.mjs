@@ -40,7 +40,7 @@ function run(command, args, overrides = {}) {
     process.exit(result.status || 1);
   }
 }
-run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs']);
+run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs', 'tests/tenant-isolation/openapi-contract.test.mjs']);
 // Fast production-layout reproduction before the slower Docker/Flutter gates.
 run(process.execPath, ['scripts/check-api-runtime.mjs']);
 // H1 is independent: collect its failure but still run the sync regressions.
@@ -77,6 +77,8 @@ if (env.GITHUB_ACTIONS === 'true' || env.RUN_SYNC_E2E === '1') {
 // Retour rapide sur le gate E2 réseau AVANT les suites API longues.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_MONITORING_STACK === '1') {
   run(process.execPath, ['scripts/test-worker-monitoring-stack.mjs']);
+  // H2k : ingestion réelle du scrape API (vrai Prometheus, config livrée).
+  run(process.execPath, ['scripts/test-metrics-collector-stack.mjs']);
   // Le test d'alerte vieillit les ticks : restaurer du neuf pour phase3/4.
   run(process.execPath, ['scripts/migrate.mjs', '--reset']);
   run(process.execPath, ['scripts/migrate.mjs']);
@@ -127,8 +129,16 @@ console.log(`H2i storage selection passed: ${storageSelection[1]} config/service
 const metricsEvidence = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase50-metrics.api.test.log'), 'utf8')
   .match(/H2j metrics: (\d+) passed, 0 failed/);
 if (!metricsEvidence || Number(metricsEvidence[1]) < 26) throw new Error('H2j metrics evidence missing or incomplete');
-console.log(`H2j metrics passed: ${metricsEvidence[1]} real HTTP/PG and official Prometheus client parser scenarios: current platform administrator, no anonymous/tenant access, bounded unmatched-route labels, escaped labels, complete ordered histograms. No production scraper credential provisioning or global JWT revocation qualification.`);
-console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}; H2h=${staffDocuments[1]}; H2i=${storageSelection[1]}; H2j=${metricsEvidence[1]}. All HTTP/PostgreSQL and config/entrypoint/storage scenario thresholds verified, zero failures. Local provider doubles/signatures only; no global JWT revocation, signed-URL recall or production qualification. Per-lot details remain in the job log and runbooks.`);
+const collectorEvidence = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase51-metrics-collector.api.test.log'), 'utf8')
+  .match(/H2k metrics collector: (\d+) passed, 0 failed/);
+if (!collectorEvidence || Number(collectorEvidence[1]) < 24) throw new Error('H2k metrics collector evidence missing or incomplete');
+const anonymizationEvidence = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase52-anonymization.pg.test.log'), 'utf8')
+  .match(/H2l anonymization: (\d+) passed, 0 failed/);
+if (!anonymizationEvidence || Number(anonymizationEvidence[1]) < 14) throw new Error('H2l anonymization evidence missing or incomplete');
+console.log(`H2l anonymization passed: ${anonymizationEvidence[1]} whole-database canary-scan, no-purge, referential, deterministic-rewrite, real-login, idempotence, transactional self-check and DB-name guard scenarios on scripts/anonymize.sql. Storage-object binaries and vendor-side deliveries remain explicitly out of scope.`);
+console.log(`H2k metrics collector passed: ${collectorEvidence[1]} real HTTP/PG, shared-config, provisioning-tool and delivered-configuration scenarios: provisioned collector digest scrapes with zero user authority, refusal/revocation/rotation via digest list only, tenant and anonymous paths unchanged, no inline secret in Prometheus config, no raw token in API env, read-only secret mount.`);
+console.log(`H2j metrics passed: ${metricsEvidence[1]} real HTTP/PG and official Prometheus client parser scenarios: current platform administrator, no anonymous/tenant access, bounded unmatched-route labels, escaped labels, complete ordered histograms. Global JWT revocation remains unqualified; operational scraper credential is covered separately by H2k.`);
+console.log(`::notice title=H2 confidentiality passed::H2a=${confidentiality[1]}; H2b=${revocation[1]}; H2c=${parentAccess[1]}; H2d=${financialProjection[1]}; H2e=${journalHealth[1]}; H2f=${privacyActor[1]}; H2g=${photoConsent[1]}; H2h=${staffDocuments[1]}; H2i=${storageSelection[1]}; H2j=${metricsEvidence[1]}; H2k=${collectorEvidence[1]}; H2l=${anonymizationEvidence[1]}. All HTTP/PostgreSQL and config/entrypoint/storage scenario thresholds verified, zero failures. Local provider doubles/signatures only; no global JWT revocation, signed-URL recall or production qualification. Per-lot details remain in the job log and runbooks.`);
 const authHardening = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase43-auth-hardening.api.test.log'), 'utf8')
   .match(/G1 auth hardening: (\d+) passed, 0 failed/);
 if (!authHardening || Number(authHardening[1]) < 26) throw new Error('G1 auth evidence missing or incomplete');
@@ -154,7 +164,7 @@ const totpManagement = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase48-t
 if (!totpManagement || Number(totpManagement[1]) < 44) throw new Error('G1d TOTP management evidence missing or incomplete');
 console.log(`G1d TOTP management passed: ${totpManagement[1]} HTTP/PG and RFC-vector scenarios: no activated-secret disclosure, current account state after locks, serialized enrollment/confirmation/cancellation, strict audit rollback, shared failed-proof lockout and HTTP limits. Not encrypted-at-rest secrets, cross-channel MFA enforcement, one-time TOTP replay protection or global JWT revocation.`);
 console.log(`::notice title=G security passed::G1=${authHardening[1]}; G1b=${refreshRotation[1]}; G1c=${invitations[1]}; G1d=${totpManagement[1]}; G2=${rlsIntegrity[1]}; G3=${dpiaApproval[1]}. All scenario thresholds verified with zero failures. G1 HTTP/proxy/PG, G1b atomic refresh rotation, G1c scoped invitations, G1d TOTP management and G2 application-role SQL and G3 independent DPIA approval/atomic audit, including overlapping transactions; not complete JWT/role revocation, privileged-helper authorization or production deployment qualification.`);
-console.log('✓ GATE D : régressions Phase D + 53 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
+console.log('✓ GATE D : régressions Phase D + 55 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.');
 
 if (stackFailed) { console.error('H1 staging/dev failed; overall gate remains RED.'); process.exit(1); }
 
