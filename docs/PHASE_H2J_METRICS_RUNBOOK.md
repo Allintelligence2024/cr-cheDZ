@@ -132,6 +132,22 @@ ni dans les logs du serveur. Gate obligatoire en CI (bloc `RUN_MONITORING_STACK`
 du gate strict, comme E2) ; localement sans Docker ni `PROMETHEUS_BIN`
 (version ≥ 2.53 vérifiée), il s'annonce NON EXÉCUTÉ — jamais un skip silencieux.
 
+**Premier vrai run CI du gate d'ingestion — consigné** : le job `database` était
+rouge depuis l'arrivée de ce gate (5e08145) ; la boucle d'auto-diagnostic par
+annotations (le gate `run()` annote la commande coupable ; les stacks annotent
+leur erreur via `writeSync`) a révélé **quatre assertions fautives dans le
+script du gate lui-même**, aucune dans le produit ni la config livrée :
+champ `scrapeSeriesCount` inexistant dans l'API Prometheus `/targets` (→ comptage
+par requête d'index réelle) ; lecture du self-comptage du scrape au lieu du
+scrapé suivant (→ `until`) ; `stopApi()` testant `exitCode` seul alors qu'un fils
+tué par signal a `signalCode` défini (→ suivi corrigé + escalade SIGKILL) ;
+scène de révocation montant le fichier sur le token courant au lieu du révoqué
+(→ le DOWN 401 est désormais observé par ingestion réelle). **CI 9/9 success sur
+`6f96367`** (run ci `35072902044`, job `database` `104718362609`) : ingestion
+réelle UP/DOWN/rotation/grâce/révocation, voie admin H2j intacte, zéro secret en
+logs — notice H2 lue par REST avec `H2k=24`. La batterie 57 suites a tourné
+intégralement en CI sur ce même SHA.
+
 **Rejouer** :
 
 ```sh

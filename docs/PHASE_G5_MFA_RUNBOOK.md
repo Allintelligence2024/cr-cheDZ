@@ -1,6 +1,6 @@
 # Runbook PHASE G5 — durcissement MFA : secret chiffré au repos, codes à usage unique, facteur obligatoire sur tous les canaux
 
-**Statut : implémenté et prouvé localement (RED 2/18 → GREEN 18/18) ; à consigner en PR #45 (runs CI + notice agrégée relue via REST sur le SHA final) avant toute clôture de lot. Aucune qualification de déploiement production.**
+**Statut : implémenté, prouvé localement (RED 2/18 → GREEN 18/18) et CONSIGNÉ en CI — gate strict **9/9 success sur le SHA `6f96367`** (run ci `35072902044`, job `database` check `104718362609`), notice G agrégée relue par REST (`G5=18`, `G4=17`) ; voir §Suivi du plan. La qualification de déploiement production reste hors périmètre.**
 
 ## 1. Constat d'audit vérifié (avant correction)
 
@@ -99,5 +99,6 @@
   premier facteur (mot de passe/PIN/OTP) garde le verrouillage G1d partagé.
 - Pas d'anti-rejeu sur les OTP SMS/WhatsApp : déjà consommés atomiquement
   (`otp_codes.used_at`, verrou 5 tentatives) — inchangé, volontaire.
-- Preuve locale (PG embarqué 18.4 + HTTP réel) ; la qualification CI (PG16) et
-  staging reste du ressort des runs GitHub — à consigner en PR #45.
+- Preuve locale (PG embarqué 18.4 + HTTP réel) ; CI PG16 réelle consignée
+  (batterie complète verte sur `6f96367`) ; staging applicatif reste du
+  ressort des runs dédiés H1 (non re-exécutés pour G5 hors batterie).

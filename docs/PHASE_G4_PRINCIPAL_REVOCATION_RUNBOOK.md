@@ -1,7 +1,10 @@
 # Runbook G4 — révocabilité globale des principaux (époque de token)
 
 Migration 062 (`062_principal_token_epoch.sql`) · lot livré en PR #45 (suite)
-après les lots H2k/H2l. Audit 2026-09, ligne G4 : « la révocation de rôles,
+après les lots H2k/H2l · **CI consignée : 9/9 sur `6f96367`** (run ci
+`35072902044`, job `database` `104718362609`, notice G relue par REST
+`G4=17`) — le rouge antérieur du job datait du gate H2k (quatre corrections
+du gate lui-même, voir §Suivi du plan), jamais de G4. Audit 2026-09, ligne G4 : « la révocation de rôles,
 d'appartenance ou d'état de compte ne devient effective qu'à l'expiration du
 JWT d'accès (15 min) ou par re-contrôles épars d'endpoints ».
 

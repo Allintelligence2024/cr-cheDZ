@@ -60,7 +60,10 @@ réel, scan dynamique **de toutes les colonnes texte/jsonb du schéma** pour
 les canaris (le scan voit aussi le résidu assumé `organizations.settings`,
 preuve qu'il n'est pas vacueux). BATTERIE : `run-isolation-suites.sh` porté
 à **55 suites/contrôles** (phase51 puis phase52 en fin de course — la suite
-réécrit les données, elle doit rester dernière).
+réécrit les données, elle doit rester dernière) ; **57** aujourd'hui (G4, G5).
+CI consignée : job `database` `104718362609` sur `6f96367` (run ci
+`35072902044`, 9/9), notice H2 relue par REST avec `H2l=14` — la phase52 a
+donc aussi tourné intégralement en CI sur ce SHA.
 
 ## Limites ASSUMÉES — aucune conformité globale n'est revendiquée
 

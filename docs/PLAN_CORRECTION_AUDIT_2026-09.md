@@ -14,7 +14,9 @@
   monté en lecture seule ; refus/rotation/révocation qualifiés). Reproduction
   rouge **9/24 → 24/24** (baseline `47bac1a`), gate d'**ingestion réelle** par
   `prom/prometheus:v2.53.0` câblé au strict gate (bloc monitoring, comme E2) —
-  résultat CI sur le SHA exact à consigner en PR #45 et notices relues par REST.
+  résultat CI **CONSIGNÉ** (voir bloc « CONSIGNÉ » ci-dessous — le gate
+  d'ingestion réelle a d'abord dû être corrigé quatre fois sur des défauts du
+  gate lui-même, jamais du produit).
   Preuves closes PR #44 au passage : strict local 53/53, CI `34974936706` et
   **post-merge 9/9 sur `47bac1a`** (run `34980118615`, docker `34980118624`,
   flutter `34980118653`). H2i et H2j « à confirmer en PR #44 » : confirmés.
@@ -32,10 +34,16 @@
   inchangé). Un reset du sandbox a décroché la branche de ses commits locaux
   sans perdre l'arbre ; rattachement sur le tip distant puis nouveau commit —
   G4 est poussé sur `arena/01a0a573-cr-chedz` et intégré à la PR #45.
-  **Reste à consigner après CI** : runs/checks du SHA exact, relecture REST
-  des six notices (H1/H2/G/F2/F4/OpenAPI), IDs ici et dans les runbooks
-  H2j/H2l (mentions « à consigner en PR #45 »). Le merge reste soumis à
-  autorisation client.
+  **CONSIGNÉ le 2026-09-16 — SHA `6f96367` (code+tests ; commits de docs
+  ultérieurs non fonctionnels)** : runs ci `35072902044`, docker `35072902070`,
+  flutter `35072901808` — **9/9 success**, job `database` check
+  `104718362609`. Six notices relues par REST sur ce SHA exact : H2 agrégée
+  `H2a=21; H2b=50; H2c=156; H2d=44; H2e=36; H2f=156; H2g=58; H2h=32; H2i=48;
+  H2j=26; H2k=24; H2l=14` ; G agrégée `G1=26; G1b=24; G1c=38; G1d=44; G2=113;
+  G3=33; G4=17; G5=18` ; F2 (51 tests Flutter réels) ; F4 (7 tests Drift réels) ;
+  H1 staging ; H1 dev. La batterie complète des 57 suites a ainsi tourné pour la
+  première fois en CI (PG16 + Docker + rôles réels) depuis la casse du gate H2k.
+  Le merge reste soumis à autorisation client.
   **Suivi G5 (MFA)** : lot complet — `TOTP_ENCRYPTION_KEY` (scellage AES-256-GCM
   des secrets au repos, AAD par compte, rotation listée, rescellage à l'usage),
   anti-rejeu persistant `users.totp_last_step` (migration 063) sur les cinq
@@ -51,9 +59,19 @@
   G4/G5 lui-même. Logs bruts inaccessibles à l'agent (portée Actions, blob
   Azure, rerun refusé) : diagnostic autoporteur ajouté (annotation `::error`
   du `run()` du gate nommant la commande coupable + handlers d'erreur des deux
-  stacks), et une annotation nommant la suite en échec dans le runner. Le run
-  du SHA G5+diagnostic tranchera ; les suites individuelles dont phase53
-  restent vertes localement (57/57, gate exit 0). Le merge reste soumis à
+  stacks), et une annotation nommant la suite en échec dans le runner.
+  **Résolu** : la boucle d'auto-diagnostic a révélé quatre assertions fautives
+  EXCLUSIVEMENT dans `scripts/test-metrics-collector-stack.mjs` — (1) champ
+  `scrapeSeriesCount` inexistant dans l'API `/targets` de Prometheus 2.53
+  (remplacé par un comptage par requête d'index réelle), (2) lecture du
+  self-comptage du scrape avant le scrape suivant (course ~1 s → `until`),
+  (3) `stopApi()` testait `exitCode` seul alors qu'un enfant tué par signal a
+  `signalCode` défini (faux timeout ; escalade SIGKILL ajoutée), (4) la scène
+  de révocation montait le fichier sur le token courant (jamais DOWN ; monté
+  depuis sur le token révoqué). **Aucun défaut de produit** — l'ingestion
+  réelle passait dès le premier franchissement. Suite à quoi CI **9/9** sur
+  `6f96367` avec la batterie 57 suites exécutée intégralement en CI pour la
+  première fois (bloc « CONSIGNÉ » ci-dessus). Le merge reste soumis à
   autorisation client.
   [Runbook G5](PHASE_G5_MFA_RUNBOOK.md).
 - **H2l livré** : `scripts/anonymize.sql` audités contre le schéma actuel
