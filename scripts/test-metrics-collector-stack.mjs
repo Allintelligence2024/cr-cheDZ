@@ -209,9 +209,14 @@ try {
     const value = Number(q.data.result[0]?.value?.[1]);
     return Number.isFinite(value) && value === expectedPending;
   }, `creche_jobs_pending = ${expectedPending} via /api/v1/query (ingestion réelle, pas un parseur)`);
-  const series = await (await fetch(`http://127.0.0.1:${promPort}/api/v1/series?match%5B%5D=http_requests_total`)).json();
-  assert.equal(series.status, 'success');
-  assert.ok(series.data.some((s) => s.route === '/api/v1/metrics'), 'le scrape lui-même est compté (route template, jamais un chemin privé)');
+  // Le self-comptage du scrape n'est visible qu'AU SCRAPE SUIVANT (le hook
+  // finish s'exécute après sérialisation de l'exposition) : sans re-tentative,
+  // cette lecture gagnait ou perdait une course de ~1 s selon la machine.
+  await until(async () => {
+    const series = await (await fetch(`http://127.0.0.1:${promPort}/api/v1/series?match%5B%5D=http_requests_total`)).json();
+    assert.equal(series.status, 'success');
+    return series.data.some((s) => s.route === '/api/v1/metrics');
+  }, 'le scrape lui-même est compté (route template, jamais un chemin privé)', 30000);
 
   // Refus réel : le fichier monté présente un token inconnu → DOWN avec 401.
   writeFileSync(join(dir, 'collector-token'), 'token-non-provisionne-0123456789abcdef\n', { mode: 0o600 });
