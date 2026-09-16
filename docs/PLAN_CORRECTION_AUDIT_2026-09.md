@@ -19,6 +19,12 @@
   **post-merge 9/9 sur `47bac1a`** (run `34980118615`, docker `34980118624`,
   flutter `34980118653`). H2i et H2j « à confirmer en PR #44 » : confirmés.
   [Runbook H2j/H2k](PHASE_H2J_METRICS_RUNBOOK.md).
+  **État de livraison** : commits locaux `dffefee`+ sur
+  `arena/01a0a573-cr-chedz` ; gate strict local 55/55, unit 32/32, lint/
+  typecheck/builds/audit verts. **Push et PR #45 en attente** — l'authentification
+  GitHub de la session a expiré en cours de route ; à la reprise : reconnecter
+  GitHub dans Arena, `git push origin arena/01a0a573-cr-chedz`, ouvrir la PR,
+  consigner ici les runs CI du SHA exact et relire les notices par REST.
 - **H2l livré** : `scripts/anonymize.sql` audités contre le schéma actuel
   (61 migrations) et étendu — tuteurs, personnel, messages, sessions,
   devices/tokens, IP, sites, miroirs JSONB ; garde anti-prod, auto-vérif
