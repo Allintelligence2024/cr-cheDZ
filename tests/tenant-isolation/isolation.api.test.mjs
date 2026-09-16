@@ -272,6 +272,21 @@ async function main() {
       && enable2fa.body.secret && enable2fa.body.otpauth_url.startsWith('otpauth://'),
       JSON.stringify(enable2fa.body)?.slice(0, 120));
 
+    // G5 : les codes TOTP sont à usage unique par compte (users.totp_last_step) —
+    // chaque code fourni doit être dans la fenêtre ±1 ET strictement postérieur
+    // au dernier pas consommé ; aux frontières d'horloge, on attend le pas utile.
+    const freshTotp = async (secret, email) => {
+      for (let i = 0; i < 130; i++) {
+        const last = Number((await admin.query(
+          'SELECT COALESCE(totp_last_step, -1) AS s FROM users WHERE email=$1', [email],
+        )).rows[0].s);
+        const cur = totp.currentStep();
+        const s = Math.max(cur - 1, last + 1);
+        if (s <= cur + 1) return totp.generate(secret, s);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      throw new Error('fenêtre TOTP introuvable pour un pas frais');
+    };
     const code = totp.generate(enable2fa.body.secret);
     const verify2fa = await api('POST', '/auth/2fa/verify', loginA2.body.access_token, { code });
     check('2FA verify → enabled', verify2fa.status === 200 && verify2fa.body.enabled === true);
@@ -280,7 +295,9 @@ async function main() {
     check('Login sans code 2FA → 401 TOTP_INVALID', loginNoCode.status === 401
       && loginNoCode.body.code === 'TOTP_INVALID');
 
-    const freshCode = totp.generate(enable2fa.body.secret);
+    // G5 : anti-rejeu persistant — le verify du setup a consommé son pas ;
+    // le login prouve le pas frais suivant (helper fenêtre + monotone).
+    const freshCode = await freshTotp(enable2fa.body.secret, 'api.edu.a@test.dz');
     const loginWithCode = await api('POST', '/auth/login', null, {
       email: 'api.edu.a@test.dz',
       password,
@@ -300,7 +317,7 @@ async function main() {
     const newPwLogin = await api('POST', '/auth/login', null, {
       email: 'api.edu.a@test.dz',
       password: 'NewPassword456!',
-      totp_code: totp.generate(enable2fa.body.secret),
+      totp_code: await freshTotp(enable2fa.body.secret, 'api.edu.a@test.dz'), // G5 : pas strictement postérieur (anti-rejeu)
     });
     check('Nouveau mot de passe + 2FA → 200', newPwLogin.status === 200);
 

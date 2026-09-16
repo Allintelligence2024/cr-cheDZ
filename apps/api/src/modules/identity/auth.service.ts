@@ -9,6 +9,12 @@ import { PG_POOL } from '../../shared/database/database.provider';
 import { AppError, Errors } from '../../shared/errors';
 import { ACCESS_TOKEN_PURPOSE } from '../../shared/auth/jwt-token-options';
 import { INVITATION_JWT_SERVICE } from '../../shared/auth/invitation-jwt.module';
+import {
+  openTotpSecret,
+  parseTotpKeyRing,
+  sealTotpSecret,
+  TotpKeyRing,
+} from '../../shared/auth/totp-crypto';
 import { AuditService } from '../privacy/audit.service';
 import { SessionsService } from './sessions.service';
 import { TotpService } from './totp.service';
@@ -40,6 +46,8 @@ interface UserRow {
   status: string;
   totp_secret: string | null;
   totp_enabled: boolean;
+  /** G5 (audit 2026-09) : pas TOTP déjà consommé (mig. 063), pg rend bigint en chaîne. */
+  totp_last_step?: string | number | null;
   is_super_admin: boolean;
   failed_attempts: number;
   locked_until: Date | null;
@@ -74,7 +82,14 @@ export class AuthService {
     private readonly audit: AuditService,
     private readonly sms: SmsService,
     private readonly whatsapp: WhatsAppService,
-  ) {}
+  ) {
+    // G5 : anneau de clés de chiffrement des secrets TOTP. Clé malformée =
+    // refus au démarrage (parse lève), dans TOUS les environnements ; absence
+    // de clé = mode historique (clair), refusé en production par @creche/prod-config.
+    this.totpRing = parseTotpKeyRing(this.config.get<string>('TOTP_ENCRYPTION_KEY'));
+  }
+
+  private readonly totpRing: TotpKeyRing | null;
 
   // ── Login ────────────────────────────────────────────────────────────────
 
@@ -102,7 +117,12 @@ export class AuthService {
     this.assertLoginAllowed(user);
 
     if (user.totp_enabled) {
-      if (!totpCode || !user.totp_secret || !this.totp.verify(user.totp_secret, totpCode)) {
+      // G5 : vérification + CONSOMMATION persistante du pas (anti-rejeu). Le
+      // code absent est refusé comme avant (TOTP_INVALID) pour le canal mot
+      // de passe — le client sait qu'il doit le demander.
+      const outcome = await this.consumeTotp(user.id, totpCode);
+      if (outcome === 'unreadable') throw Errors.mfaSecretUnreadable();
+      if (outcome !== 'ok') {
         await this.recordFailedAttempt(user.id, email);
         throw Errors.totpInvalid();
       }
@@ -217,7 +237,7 @@ export class AuthService {
     );
   }
 
-  async verifyParentOtp(phone: string, code: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
+  async verifyParentOtp(phone: string, code: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }, totpCode?: string): Promise<LoginResult> {
     const target = phone.trim();
     const otp = await this.pool.query<{ id: string; code_hash: string; attempts: number }>(
       `SELECT id, code_hash, attempts FROM otp_codes WHERE target=$1 AND purpose='parent_login' AND used_at IS NULL AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1`, [target],
@@ -240,14 +260,22 @@ export class AuthService {
     );
     const user = found.rows[0];
     if (!user?.id) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
+    // G5 : l'OTP prouve le téléphone ; il ne remplace PAS le second facteur
+    // d'un compte MFA. L'OTP est déjà consommé ici (usage unique), aucun
+    // accès n'est émis sans le code TOTP valide et frais.
+    await this.requireTotpGate(user.id, totpCode);
     return this.issueTokenPair(user, ctx);
   }
 
-  async setParentPin(userId: string, pin: string): Promise<void> {
+  async setParentPin(userId: string, pin: string, totpCode?: string): Promise<void> {
+    // G5 : un compte MFA ne peut pas s'ajouter (ni remplacer) un contournement
+    // PIN sans preuve récente du second facteur — sinon poser un PIN valide
+    // annulerait de fait le facteur à chaque reconnexion.
+    await this.requireTotpGate(userId, totpCode);
     await this.pool.query(`UPDATE users SET parent_pin_hash=$2, version=version+1 WHERE id=$1`, [userId, await bcrypt.hash(pin, Number(this.config.get<number>('BCRYPT_ROUNDS', 12)))]);
   }
 
-  async loginParentPin(phone: string, pin: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }): Promise<LoginResult> {
+  async loginParentPin(phone: string, pin: string, ctx: { deviceId?: string; ipAddress?: string; userAgent?: string }, totpCode?: string): Promise<LoginResult> {
     // Bootstrap RLS : guardians est une table tenant ; la fonction SECURITY
     // DEFINER (migration 025) fait la recherche hors contexte tenant.
     const res = await this.pool.query<UserRow>(
@@ -259,6 +287,10 @@ export class AuthService {
       await this.recordFailedAttempt(user?.id ?? null, phone);
       throw new AppError('INVALID_PARENT_PIN', 'PIN incorrect', 'رمز PIN غير صحيح', 401);
     }
+    // G5 : le PIN prouve quelque chose de plus faible qu'un mot de passe ; il
+    // ne peut JAMAIS court-circuiter le second facteur quand le compte en a
+    // un. Refus uniquement après vérification du PIN (pas d'énumération).
+    await this.requireTotpGate(user.id, totpCode);
     return this.issueTokenPair(user, ctx);
   }
 
@@ -521,7 +553,10 @@ export class AuthService {
       if (user.totp_enabled) throw Errors.totpAlreadyEnabled();
       const secret = user.totp_secret ?? this.totp.generateSecret();
       if (!user.totp_secret) {
-        await client.query('UPDATE users SET totp_secret=$2, version=version+1 WHERE id=$1', [userId, secret]);
+        // G5 : avec une clé active, le secret n'est jamais écrit en clair ; le
+        // QR otpauth continue de fournir la valeur base32 à l'utilisateur.
+        const stored = this.totpRing ? sealTotpSecret(this.totpRing, userId, secret) : secret;
+        await client.query('UPDATE users SET totp_secret=$2, version=version+1 WHERE id=$1', [userId, stored]);
         await this.audit.logInTransaction(client, {
           userId, action: 'update', resourceType: 'user', resourceId: userId,
           newValues: { totp_setup: true },
@@ -541,12 +576,22 @@ export class AuthService {
 
   private async changeTotp(userId: string, code: string, enabled: boolean): Promise<{ enabled: boolean }> {
     return this.withTotpAccount(userId, async (client, user) => {
-      if (!user.totp_secret) return Errors.totpInvalid();
-      if (!this.totp.verify(user.totp_secret, code)) {
+      // G5 : même anti-rejeu persistant que les canaux de connexion — confirmer
+      // le setup puis désactiver avec le MÊME code n'est pas deux réussites.
+      const outcome = this.resolveTotp(userId, user.totp_enabled, user.totp_secret, user.totp_last_step, code);
+      if (outcome.status === 'unreadable') throw Errors.mfaSecretUnreadable();
+      // Historique (G1d) : « pas de facteur du tout » refuse sans prêter de
+      // preuve erronée à l'utilisateur — aucun compteur de lockout touché.
+      if (outcome.status === 'no_factor') return Errors.totpInvalid();
+      if (outcome.status !== 'ok') {
         await this.recordFailedAttempt(userId, user.email ?? '', client);
         // Returned, not thrown: persist the failed proof before emitting 401.
         return Errors.totpInvalid();
       }
+      await client.query(
+        'UPDATE users SET totp_last_step=$2, totp_secret=COALESCE($3, totp_secret), version=version+1 WHERE id=$1',
+        [userId, outcome.step, outcome.reseal],
+      );
       if (!enabled || !user.totp_enabled) {
         await client.query(
           `UPDATE users SET totp_enabled=$2,
@@ -563,6 +608,92 @@ export class AuthService {
       }
       return { enabled };
     });
+  }
+
+  /**
+   * G5 — garde du second facteur pour les canaux parent (PIN login, OTP,
+   * pose/remplacement du PIN). Aucun facteur au compte => passage libre
+   * (comportement historique). Facteur actif => code valide et jamais
+   * consommé exigé ; code absent => TOTP_REQUIRED. Appelée APRÈS la preuve
+   * principale (PIN/OTP vérifiés) pour ne rien révéler à un attaquant.
+   */
+  private async requireTotpGate(userId: string, totpCode: string | undefined): Promise<void> {
+    const outcome = await this.consumeTotp(userId, totpCode);
+    if (outcome === 'not_enabled') return;
+    if (outcome === 'missing') throw Errors.totpRequired();
+    if (outcome === 'unreadable') throw Errors.mfaSecretUnreadable();
+    if (outcome !== 'ok') throw Errors.totpInvalid();
+  }
+
+  /**
+   * G5 — vérifie un code TOTP sur la ligne verrouillée (FOR UPDATE) et, s'il
+   * est bon, CONSOMME le pas dans la même transaction : sous concurrence,
+   * deux requêtes simultanées avec le même code sont sérialisées sur la ligne
+   * et une seule réussit. Lit aussi le secret scellé (et le rescelle à la clé
+   * courante si legacy/rotation). 'ok'|'not_enabled'|'missing'|'invalid'|'unreadable'.
+   */
+  private async consumeTotp(
+    userId: string,
+    code: string | undefined,
+  ): Promise<'ok' | 'not_enabled' | 'missing' | 'invalid' | 'unreadable'> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const res = await client.query<Pick<UserRow, 'totp_enabled' | 'totp_secret'> & { totp_last_step: string | number | null }>(
+        'SELECT totp_enabled, totp_secret, totp_last_step FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE',
+        [userId],
+      );
+      const row = res.rows[0];
+      if (!row?.totp_enabled) {
+        await client.query('COMMIT');
+        return 'not_enabled';
+      }
+      const outcome = this.resolveTotp(userId, true, row.totp_secret, row.totp_last_step, code);
+      if (outcome.status !== 'ok') {
+        await client.query('ROLLBACK');
+        // Ici le facteur est actif : une absence de secret est une corruption,
+        // jamais le cas historique « pas de facteur » du canal 2fa (G1d).
+        return outcome.status === 'no_factor' ? 'unreadable' : outcome.status;
+      }
+      await client.query(
+        'UPDATE users SET totp_last_step=$2, totp_secret=COALESCE($3, totp_secret), version=version+1 WHERE id=$1',
+        [userId, outcome.step, outcome.reseal],
+      );
+      await client.query('COMMIT');
+      return 'ok';
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** G5 — décision pure sur lecture verrouillée : fenêtre ±1 pas, pas
+   * strictement postérieur au dernier consommé, rescellage si nécessaire.
+   * Secret absent : 'invalid' si le facteur n'est pas activé (comportement
+   * historique 401) mais 'unreadable' si enabled=true sans secret lisible
+   * (état corrompu → fail-closed, jamais un contournement silencieux). */
+  private resolveTotp(
+    userId: string,
+    factorEnabled: boolean,
+    storedSecret: string | null,
+    lastStepRaw: string | number | null | undefined,
+    code: string | undefined,
+  ): { status: 'ok'; step: number; reseal: string | null } | { status: 'missing' | 'invalid' | 'unreadable' | 'no_factor' } {
+    if (!code) return { status: 'missing' };
+    if (!storedSecret) return factorEnabled ? { status: 'unreadable' } : { status: 'no_factor' };
+    const opened = openTotpSecret(this.totpRing, userId, storedSecret);
+    if (!opened) return { status: 'unreadable' };
+    const matched = this.totp.matchStep(opened.secret, code);
+    if (matched === null) return { status: 'invalid' };
+    const last = lastStepRaw === null || lastStepRaw === undefined ? null : Number(lastStepRaw);
+    if (last !== null && Number.isFinite(last) && matched <= last) return { status: 'invalid' };
+    return {
+      status: 'ok',
+      step: matched,
+      reseal: opened.needsReseal && this.totpRing ? sealTotpSecret(this.totpRing, userId, opened.secret) : null,
+    };
   }
 
   /** Account-scoped settings: current state and secret are checked AFTER the

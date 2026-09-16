@@ -33,6 +33,8 @@ function worker(extra = {}) {
       NODE_ENV: process.env.PRODUCTION_ROLE_TESTS === '1' ? 'production' : 'test',
       JWT_SECRET: 'phase-e-local-only-jwt-secret-at-least-32',
       PAYMENT_WEBHOOK_SECRET: 'phase-e-local-only-webhook-secret-at-least-32',
+      // G5 : garde de boot production partagée api/worker — clé fournie.
+      TOTP_ENCRYPTION_KEY: 'e'.repeat(64),
       STORAGE_BACKEND: 'local', STORAGE_LOCAL_DIR: '/tmp/phase-e-worker-storage',
       SENTRY_DSN: '', FIREBASE_SERVICE_ACCOUNT_JSON: '',
       WORKER_POLL_MS: '50', WORKER_REAPER_INTERVAL_MS: '100',

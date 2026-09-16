@@ -72,6 +72,8 @@ services:
       # H2k — digests du collecteur (optionnels ; Prometheus n'est pas livré en
       # staging : aucun montage de secret ici, la voie admin JWT suffit).
       METRICS_COLLECTOR_TOKEN_HASHES: ${METRICS_COLLECTOR_TOKEN_HASHES:-}
+      # G5 — chiffrement au repos des secrets TOTP (voir .env.example).
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:-}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET requis}
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}

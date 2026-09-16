@@ -100,6 +100,9 @@ services:
       # H2k — uniquement des DIGESTS SHA-256 des tokens de collecte autorisés
       # à lire /api/v1/metrics (jamais le secret brut ici, jamais de repli public).
       METRICS_COLLECTOR_TOKEN_HASHES: ${METRICS_COLLECTOR_TOKEN_HASHES:-}
+      # G5 — clé de chiffrement au repos des secrets TOTP ; la garde de boot
+      # production (@creche/prod-config) est partagée api+worker : absence = refus.
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY requis (G5 — 32 octets hex ou base64)}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
@@ -149,6 +152,8 @@ services:
       NODE_ENV: production
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?PAYMENT_WEBHOOK_SECRET requis}
+      # G5 : garde de boot partagée — le worker exige la même clé que l'api.
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY requis (G5 — 32 octets hex ou base64)}
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}

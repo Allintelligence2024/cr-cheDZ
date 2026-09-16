@@ -294,6 +294,8 @@ const main = async () => {
         STORAGE_LOCAL_DIR: storeDir,
         PAYMENT_WEBHOOK_SECRET: 'phase22-prod-webhook-0123456789abcdef0123456789',
         JWT_SECRET: 'phase22-prod-jwt-0123456789abcdef0123456789',
+        // G5 : clé de scellage TOTP (synthétique) exigée par la garde prod au boot.
+        TOTP_ENCRYPTION_KEY: 'b'.repeat(64),
         APP_PORT: String(prodPort),
         SENTRY_DSN: '',
       },

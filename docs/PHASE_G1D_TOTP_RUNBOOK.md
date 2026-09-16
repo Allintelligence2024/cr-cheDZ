@@ -108,6 +108,16 @@ du PostgreSQL local. Pas d'APK release ni qualification production par ces tests
 
 ## Limites maintenues ouvertes
 
+> **Mise à jour post-lots (2026-09)** : ce qui suit décrit le périmètre DU lot
+> G1d à sa livraison. Depuis, **G4** a fermé le point JWT/rôles/membership
+> (révocabilité globale des principaux, [runbook G4](PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md))
+> et **G5** a fermé chiffrement au repos du secret, anti-rejeu persistant des
+> codes et exigence MFA sur tous les canaux PIN/OTP parent
+> ([runbook G5](PHASE_G5_MFA_RUNBOOK.md)). Restent effectivement ouverts :
+> récupération/step-up (décision client pour les codes de secours), invalidation
+> proactive de secrets copiés avant G5 (ré-enrôlement recommandé), et la
+> qualification d'applications authenticator tierces.
+
 **G1d ne ferme ni toute l'authentification ni toute la MFA.**
 
 - Secret toujours en clair dans la colonne PG : chiffrement au repos avec gestion

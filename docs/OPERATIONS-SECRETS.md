@@ -172,3 +172,29 @@ NODE_ENV=production node -e "require('./packages/prod-config/dist').assertProduc
 - Preuves et limites : [runbook H2j/H2k](PHASE_H2J_METRICS_RUNBOOK.md) ; ingestion
   réelle qualifiée par le gate `scripts/test-metrics-collector-stack.mjs` (vrai
   Prometheus 2.53.0). La voie E2 (exporter SQL, sans API) reste distincte.
+
+### 9. Clé de chiffrement des secrets TOTP — G5
+
+- `TOTP_ENCRYPTION_KEY` protège **uniquement** `users.totp_secret` au repos
+  (AES-256-GCM, AAD = identifiant utilisateur → un scellé arraché d'une ligne
+  et collé sur une autre ne se déchiffre pas). Ce n'est ni le `JWT_SECRET`, ni
+  l'`ENCRYPTION_KEY` métier existant ; ne jamais les réutiliser l'un pour l'autre.
+- Format : 32 octets — hexadécimal 64 caractères (`openssl rand -hex 32`) ou
+  base64/base64url. **Rotation** : liste `courante,ancienne` ; la première scelle,
+  toutes déchiffrent ; chaque usage rescelle la ligne à la courante — une fois
+  tous les comptes actifs passés (ou après le délai de rétention souhaité), on
+  retire l'ancienne et seule la courante reste.
+- Fail-closed : valeur scellée indéchiffrable (clé retirée trop tôt, octet
+  altéré) ⇒ `403 MFA_SECRET_UNREADABLE`, aucune session, compteur de verrouillage
+  de l'utilisateur non touché — c'est une erreur d'exploitation, pas une faute
+  de l'utilisateur. **Ne jamais** « réparer » en repassant en mode clair ni en
+  effaçant le secret de la victime.
+- Production : absence de clé = **démarrage refusé** (garde `@creche/prod-config`).
+  Clé présente mais malformée = refus dans tous les environnements. test/dev sans
+  clé = mode historique explicite (clair en base) — l'anti-rejeu persistant des
+  codes (`users.totp_last_step`, migration 063) s'applique de toute façon.
+- Après un rollback applicatif pré-G5 : conserver la clé (les lignes déjà
+  scellées restent illisibles sans elle) et ne pas supprimer la colonne 063.
+- Preuves et limites : [runbook G5](PHASE_G5_MFA_RUNBOOK.md) ; suite `phase54`
+  (18 scénarios HTTP+PG réels, rotation incluse). Les codes de récupération MFA
+  relèvent d'une décision client explicite (non implémentés, non revendiqués).

@@ -342,3 +342,31 @@ Limites assumées : fenêtre garde→commit d'une requête en cours (pas de lock
 du principal par mutation), facteurs TOTP non révocatoires par conception,
 statut d'ORGANISATION hors périmètre, migration 062 obligatoire avant
 redéploiement.
+
+## G5 — Second facteur : au repos chiffré, codes à usage unique, tous canaux
+
+Le secret TOTP ne dort plus en clair : `users.totp_secret` est scellé
+AES-256-GCM (`v1gcm.*`, AAD = identifiant du compte) sous
+`TOTP_ENCRYPTION_KEY` ; la rotation est une liste ordonnée
+`courante,anciennes` avec rescellage à la courante au premier usage, les
+lignes legacy en clair restent lisibles puis sont mises à niveau à l'usage, et
+une valeur indéchiffrable refuse la connexion (`403 MFA_SECRET_UNREADABLE`,
+sans session, sans compteur utilisateur) plutôt que de retomber sur « pas de
+facteur ». Production : boot refusé sans clé valide.
+
+Chaque code accepté CONSOMME son pas (`users.totp_last_step`, migration 063)
+sous verrou de ligne : un pas déjà utilisé est refusé sur les cinq canaux —
+login mot de passe, login PIN parent, verify OTP parent, `2fa/verify`,
+`2fa/disable` — y compris entre canaux (le PIN ne peut plus rejouer un code
+fraîchement utilisé au login) et sous concurrence réelle (une seule requête
+gagne le pas). Corollaires de matrice : `parent_pin_hash` n'est plus JAMAIS un
+contournement du facteur (pose/remplacement du PIN lui-même soumis à preuve
+Totp valide dès que le compte a le facteur), et `totp_enabled=false` reste un
+état explicite — pas un repli silencieux sur secret illisible.
+
+**2/18 → 18/18** (`phase54`, HTTP+PG+redémarrages réels), phase48 **44/44** et
+`isolation` recalibrés sur le contrat « code à usage unique »,
+[runbook G5](../PHASE_G5_MFA_RUNBOOK.md). Limites : codes de récupération =
+décision client (non implémentés) ; l'activation/désactivation du facteur ne
+bump pas l'époque G4 (inchangé) ; OTP SMS/WhatsApp gardent leur consommation
+atomique propre (`otp_codes.used_at`).

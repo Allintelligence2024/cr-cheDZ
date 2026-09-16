@@ -75,9 +75,12 @@ try {
       assert.equal(logs[0].resource_id, u.id); assert.equal(JSON.stringify(logs).includes(secret), false);
     });
     await check(`${status}: confirmation then normal disable remain available`, async () => {
+      // G5 : les codes sont à usage unique par compte — le disable prouve un
+      // PAS STRICTEMENT POSTÉRIEUR à celui du confirm (le même code rejoué
+      // serait refusé ; contract volontaire, voir phase54).
       assert.ok(secret); assert.equal((await settings('verify', u, totp.generate(secret))).status, 200);
       assert.equal((await row(u)).totp_enabled, true);
-      assert.equal((await settings('disable', u, totp.generate(secret))).status, 200);
+      assert.equal((await settings('disable', u, totp.generate(secret, totp.currentStep() + 1))).status, 200);
       const state = await row(u); assert.equal(state.totp_enabled, false); assert.equal(state.totp_secret, null);
     });
   }
@@ -170,8 +173,12 @@ try {
     assert.equal((await audit(u)).length, 1);
   });
   await check('concurrent confirmation creates only one state-change audit', async () => {
+    // G5 : deux requêtes SIMULTANÉES avec le même code ne font qu'UNE
+    // consommation — le perdant du verrou de ligne repart avec 401 rejeu.
     const u = await fixture(false), code = totp.generate(known), replies = await overlap(u, 'verify', [code, code]);
-    assert.ok(replies.every(r => r.status === 200)); assert.equal((await row(u)).totp_enabled, true); assert.equal((await audit(u)).length, 1);
+    assert.equal(replies.filter(r => r.status === 200).length, 1, `exactement une confirmation: ${replies.map(r => r.status).join(',')}`);
+    assert.ok(replies.every(r => r.status === 200 || r.status === 401));
+    assert.equal((await row(u)).totp_enabled, true); assert.equal((await audit(u)).length, 1);
   });
   for (const action of ['verify','disable']) await check(`${action}: invalid proofs increment account counter and enforce lockout`, async () => {
     const u = await fixture(action === 'disable'), code = wrong();

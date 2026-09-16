@@ -176,6 +176,9 @@ try {
     const baseEnv = {
       NODE_ENV: 'production', PAYMENT_WEBHOOK_SECRET: 'x'.repeat(32), JWT_SECRET: 'y'.repeat(48),
       STORAGE_BACKEND: 'local', STORAGE_LOCAL_DIR: '/srv/creche-storage',
+      // G5 : présence TOTP_ENCRYPTION_KEY désormais exigée en prod — fournie
+      // pour isoler le cas H2k (le « [] » attendu porte sur la liste collecteur).
+      TOTP_ENCRYPTION_KEY: 'd'.repeat(64),
     };
     assert.deepEqual(validateProductionConfig({ ...baseEnv }), []);
     const problems = validateProductionConfig({ ...baseEnv, [COLLECTOR_ENV]: 'zzz,deadbeef' });

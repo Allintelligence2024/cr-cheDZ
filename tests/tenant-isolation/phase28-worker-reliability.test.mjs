@@ -29,6 +29,9 @@ function startWorker(extra = {}) {
   const child = spawn(process.execPath, ['apps/worker/dist/main.js'], {
     env: { ...process.env, DATABASE_URL: appUrl(), NODE_ENV: process.env.PRODUCTION_ROLE_TESTS === '1' ? 'production' : 'test',
       JWT_SECRET: 'phase28-worker-jwt-only-32-characters-long', PAYMENT_WEBHOOK_SECRET: 'phase28-worker-webhook-32-characters-long',
+      // G5 : la garde production (partagée api/worker) exige la clé TOTP au boot ;
+      // le worker ne l'utilise pas, mais le contrat de déploiement la fournit partout.
+      TOTP_ENCRYPTION_KEY: 'e'.repeat(64),
       STORAGE_BACKEND: 'local', STORAGE_LOCAL_DIR: root, SENTRY_DSN: '', FIREBASE_SERVICE_ACCOUNT_JSON: '',
       WORKER_SCHEDULER_ENABLED: 'false', WORKER_POLL_MS: '50', WORKER_SCHEDULER_POLL_MS: '100',
       WORKER_EXPORT_TIMEOUT_MS: '5000', WORKER_EXPORT_MAX_AGE_MS: '1800000', ...extra },

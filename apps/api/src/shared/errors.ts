@@ -46,6 +46,13 @@ export const Errors = {
     new AppError('TOTP_ALREADY_ENABLED', 'La double authentification est déjà activée', 'المصادقة الثنائية مفعّلة بالفعل', 409),
   totpInvalid: () =>
     new AppError('TOTP_INVALID', 'Code de vérification incorrect', 'رمز التحقق غير صحيح', 401),
+  mfaSecretUnreadable: () =>
+    new AppError(
+      'MFA_SECRET_UNREADABLE',
+      'Second facteur indisponible — contactez l’administrateur',
+      'المصادقة الثانية غير متاحة — اتصل بالإدارة',
+      403,
+    ),
   sessionReuseDetected: () =>
     new AppError(
       'SESSION_REUSE_DETECTED',

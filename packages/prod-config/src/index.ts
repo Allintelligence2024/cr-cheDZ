@@ -1,6 +1,7 @@
 import { isAbsolute, resolve } from 'node:path';
 import { resolveStorageBackend, type StorageBackend } from './storage';
 import { validateMetricsCollectorConfig } from './metrics-collector';
+import { validateTotpEncryptionKey, validateTotpEncryptionKeyProduction } from './totp-key';
 
 /**
  * Garde de configuration de production (MISSION P1 — feat(config)).
@@ -91,6 +92,10 @@ export function validateProductionConfig(env: EnvLike = process.env): string[] {
   //    bloque le démarrage en production, sans jamais activer de repli public.
   problems.push(...validateMetricsCollectorConfig(env));
 
+  // 6. G5 : clé de chiffrement au repos des secrets TOTP — présence exigée en
+  //    production (jamais de secret base32 en clair), format vérifié partout.
+  problems.push(...validateTotpEncryptionKeyProduction(env));
+
   return problems;
 }
 
@@ -101,6 +106,12 @@ export function validateProductionConfig(env: EnvLike = process.env): string[] {
 export function assertProductionConfig(env: EnvLike = process.env): void {
   if (env.NODE_ENV !== 'production') {
     resolveStorageBackend(env);
+    // G5 : hors production, seule la FORME d'une clé présente est bloquante
+    // (l'absence = mode historique explicite test/dev, jamais un contournement).
+    const totpProblems = validateTotpEncryptionKey(env);
+    if (totpProblems.length > 0) {
+      throw new Error(`GARDE CONFIG — démarrage refusé :\n${totpProblems.map((p) => `  - ${p}`).join('\n')}`);
+    }
     return;
   }
   const problems = validateProductionConfig(env);
@@ -125,3 +136,9 @@ export {
   validateMetricsCollectorConfig,
   type MetricsCollectorConfig,
 } from './metrics-collector';
+
+export {
+  TOTP_ENCRYPTION_KEY_ENV,
+  validateTotpEncryptionKey,
+  validateTotpEncryptionKeyProduction,
+} from './totp-key';

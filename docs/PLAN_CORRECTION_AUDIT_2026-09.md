@@ -7,7 +7,7 @@
 
 ---
 
-## Suivi de cette session (v3.2) — H2k, H2l, OpenAPI, G4
+## Suivi de cette session (v3.3) — H2k, H2l, OpenAPI, G4, G5
 
 - **H2k livré** : credential de collecteur Prometheus à privilège limité pour
   `/api/v1/metrics` (digests SHA-256 en env API, token brut dans un fichier
@@ -36,6 +36,21 @@
   des six notices (H1/H2/G/F2/F4/OpenAPI), IDs ici et dans les runbooks
   H2j/H2l (mentions « à consigner en PR #45 »). Le merge reste soumis à
   autorisation client.
+  **Suivi G5 (MFA)** : lot complet — `TOTP_ENCRYPTION_KEY` (scellage AES-256-GCM
+  des secrets au repos, AAD par compte, rotation listée, rescellage à l'usage),
+  anti-rejeu persistant `users.totp_last_step` (migration 063) sur les cinq
+  canaux consommateurs de code, facteur exigé sur PIN/OTP/pose-de-PIN parent,
+  fail-closed `403 MFA_SECRET_UNREADABLE`. RED **2/18** (baseline `ac1a420`,
+  vulnérabilité downgrader reproduite : PIN → 200 sans facteur) → GREEN
+  **18/18** (phase54) ; phase48 **44/44** et `isolation` recalibrés sur le
+  contrat « code à usage unique par compte » ; unit **45/45** ; gate strict
+  local **57 suites/contrôles** attendu. Le CI `database` de `ac1a420`
+  (run `35053833498`) est rouge sans logs lisibles côté agent (portée
+  Actions insuffisante, blob inaccessible, rerun refusé) — le run du SHA G5
+  tranchera ; une annotation `::error` nommant la suite en échec a été ajoutée
+  au runner pour rendre le prochain diagnostic lisible via l'API. Les codes de
+  récupération MFA relèvent d'une **décision client** (non implémentés).
+  [Runbook G5](PHASE_G5_MFA_RUNBOOK.md).
 - **H2l livré** : `scripts/anonymize.sql` audités contre le schéma actuel
   (61 migrations) et étendu — tuteurs, personnel, messages, sessions,
   devices/tokens, IP, sites, miroirs JSONB ; garde anti-prod, auto-vérif
@@ -477,9 +492,17 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       strict **51/51**, CI **34966272565**, **9/9** sur `4c36ad6`,
       database **104371358901**, six notices vérifiées en PR #44.
       [Runbook G1d](PHASE_G1D_TOTP_RUNBOOK.md).
-- [ ] **Suite MFA** : chiffrement du secret au repos, anti-rejeu TOTP persistant,
-      preuve récente avant préparation, récupération/rotation et obligation MFA sur
-      tous les canaux PIN/OTP parent non qualifiés. Secrets déjà divulgués non invalidés.
+- [x] **Suite MFA (durcissement G5)** : secret TOTP scellé AES-256-GCM au repos
+      (AAD par compte, rotation « courante,anciennes », rescellage à l'usage,
+      boot production refusé sans clé), anti-rejeu TOTP PERSISTANT
+      (`users.totp_last_step`, mig. 063 — une seule consommation par pas, tous
+      canaux, prouvée sous course PG réelle) et obligation du facteur sur login
+      PIN, verify OTP et pose de PIN parent (refus uniquement après preuve
+      principale correcte). RED 2/18 → GREEN 18/18 (phase54), phase48 44/44 et
+      isolation recalés. **Non fermés volontairement** : les codes de
+      récupération MFA (décision client explicite) et l'invalidation des secrets
+      éventuellement divulgués avant le lot (les comptes à risque doivent
+      ré-enrôler — procédure au runbook). [Runbook G5](PHASE_G5_MFA_RUNBOOK.md).
 - [x] **G4 révocabilité globale** : revalidation à l'entrée de l'époque de
       principal (JWT en vol) contre `users.token_epoch`, bumpée par déclencheurs
       sur users/memberships/role_assignments — migration 062, suite phase53
@@ -490,10 +513,10 @@ la dernière CI de la PR #44, pas celui du simple check historique `flutter-chec
       (fenêtre garde→commit, TOTP seul, statut d'organisation). Les mentions
       « global JWT revocation unqualified » des notices H2j/G1x sont résolues
       par ce lot ; les suites individuelles conservent leurs limites propres.
-- [ ] **Suite G auth (reste)** : autres frontières invitations, MFA ci-dessus
-      et demandes OTP concurrentes ; propriété/réassociation device_id et autres
+- [ ] **Suite G auth (reste)** : autres frontières invitations (nonce/livraison),
+      demandes OTP concurrentes ; propriété/réassociation device_id et autres
       courses refresh vs login/logout/mot de passe/révocations après vérification.
-      G1a/G1b/G1c/G1d/G4 ne ferment pas ces frontières.
+      G1a/G1b/G1c/G1d/G4/G5 ne ferment pas ces frontières.
       Pas de qualification globale de l'auth ni de topologie de déploiement.
 
 ### G2. RLS

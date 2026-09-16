@@ -81,6 +81,7 @@ SUITES=(
   phase51-metrics-collector.api.test.mjs
   phase52-anonymization.pg.test.mjs
   phase53-principal-revocation.api.test.mjs
+  phase54-mfa-hardening.api.test.mjs
 )
 
 FILTER="${1:-}"
@@ -109,6 +110,12 @@ for s in "${SUITES[@]}"; do
   else
     RESULTS+=("FAIL|$s|$(grep -c '✗' "$log" 2>/dev/null || echo '?') échecs — voir $log")
     failed=$((failed+1))
+    # G5 : les logs bruts des jobs privés ne sont pas toujours lisibles par
+    # l'agent (portée Actions limitée) — l'annotation publie le nom de la
+    # suite en échec + les premières lignes ✗, lisibles via l'API check-runs.
+    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+      echo "::error title=Suite en échec::$s — $(grep -m2 '✗' "$log" 2>/dev/null | tr '\n\r' '||' | head -c 300)"
+    fi
   fi
 done
 

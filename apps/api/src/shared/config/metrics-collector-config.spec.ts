@@ -54,6 +54,8 @@ describe(`@creche/prod-config — ${METRICS_COLLECTOR_HASHES_ENV} (H2k)`, () => 
       STORAGE_BACKEND: 's3',
       S3_ACCESS_KEY: 'prod-access-key',
       S3_SECRET_KEY: 'prod-secret-key',
+      // G5 : présence désormais exigée en production — fournie pour isoler le cas H2k.
+      TOTP_ENCRYPTION_KEY: 'a'.repeat(64),
     };
     expect(() => assertProductionConfig({ ...base, [METRICS_COLLECTOR_HASHES_ENV]: 'nope' })).toThrow(/METRICS_COLLECTOR_TOKEN_HASHES/);
     expect(() => assertProductionConfig({ ...base, [METRICS_COLLECTOR_HASHES_ENV]: DIGEST_A })).not.toThrow();
