@@ -37,6 +37,13 @@ function run(command, args, overrides = {}) {
   const result = spawnSync(command, args, { env: { ...env, ...overrides }, stdio: 'inherit' });
   if (result.error || result.status !== 0) {
     console.error(`Gate D interrompu : ${command} ${args.join(' ')} (exit ${result.status})`);
+    // CI : les logs bruts ne sont pas toujours lisibles (portée Actions) —
+    // l'annotation publie le coupable + la dernière ligne stderr utile,
+    // accessibles via l'API check-runs/annotations.
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      const tail = String(result.stderr ?? '').trim().split('\n').filter(Boolean).slice(-2).join(' | ').slice(0, 300);
+      console.log(`::error title=Gate D interrompu::${command} ${args.join(' ')} (exit ${result.status})${tail ? ' — ' + tail : ''}`);
+    }
     process.exit(result.status || 1);
   }
 }

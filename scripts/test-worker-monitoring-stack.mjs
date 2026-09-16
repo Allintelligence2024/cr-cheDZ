@@ -13,6 +13,17 @@ import {setTimeout as delay} from 'node:timers/promises';
 import pg from 'pg';
 import {fixture,token} from '../tests/monitoring/relay-fixture.mjs';
 
+// G5 diagnostic : les logs bruts des jobs privés ne sont pas lisibles par
+// l'agent (portée Actions) — la première erreur non traitée est publiée en
+// annotation GitHub (message tronqué, jamais de secret) pour rendre le
+// prochain échec diagnostiquable via l'API check-runs/annotations.
+process.on('unhandledRejection', (error) => {
+  const message = String(error?.message ?? error).replace(/\r?\n/g, ' | ').slice(0, 400);
+  if (process.env.GITHUB_ACTIONS === 'true') console.log(`::error title=E2 stack interrompue::${message}`);
+  console.error(error);
+  process.exit(1);
+});
+
 assert.equal(process.env.ALLOW_DATABASE_RESET,'1','Cluster jetable requis');
 assert.equal(process.env.PRODUCTION_ROLE_TESTS,'1','Gate exige les vrais rôles de production');
 assert.ok(new URL(process.env.DATABASE_URL).pathname.endsWith('_test'));
