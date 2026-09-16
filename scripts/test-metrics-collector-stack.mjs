@@ -192,7 +192,17 @@ try {
   await until(async () => (await apiTargets())[0]?.health === 'up', 'target api UP avec le credential de collecte');
   let [target] = await apiTargets();
   assert.equal(target.lastError, '', `scrape propre exigé, got ${target.lastError}`);
-  assert.ok(target.scrapeSeriesCount >= 8, `séries attendues, got ${target.scrapeSeriesCount}`);
+  // Le nombre de séries ne vient PAS d'un champ de /api/v1/targets (ce champ
+  // n'existe pas dans l'API Prometheus 2.53 — l'erreur de ce gate lui-même a
+  // été révélée par son premier vrai run CI). Il se prouve par requête réelle
+  // sur l'index : ≥ 8 noms de séries distincts pour le job api.
+  const countQ = encodeURIComponent('count(count by (__name__) ({job="api"}))');
+  let seriesNames = Number.NaN;
+  await until(async () => {
+    const q = await (await fetch(`http://127.0.0.1:${promPort}/api/v1/query?query=${countQ}`)).json();
+    seriesNames = Number(q.data.result[0]?.value?.[1]);
+    return Number.isFinite(seriesNames) && seriesNames >= 8;
+  }, `≥ 8 noms de séries distincts collectés pour le job api (got ${seriesNames})`, 30000);
 
   await until(async () => {
     const q = await (await fetch(`http://127.0.0.1:${promPort}/api/v1/query?query=creche_jobs_pending`)).json();
