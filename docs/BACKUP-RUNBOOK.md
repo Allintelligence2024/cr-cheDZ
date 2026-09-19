@@ -97,14 +97,52 @@ bash scripts/run-isolation-suites.sh | tail -n 30
 | `psql: role does not exist` | dump avec owner | `pg_dump --no-owner --no-privileges` déjà fait par backup.sh, sinon `--no-owner` au restore |
 | `migrate --check` drift | migration manquante | Appliquer `node scripts/migrate.mjs` |
 
-## Automatisation mensuelle (cron)
+## Automatisation (cron VPS)
 
 ```cron
-0 3 * * * DATABASE_URL=... BACKUP_DIR=/var/backups/creche BACKUP_PASSPHRASE=... /home/user/cr-cheDZ/scripts/backup.sh >> /var/log/creche-backup.log 2>&1
-0 4 1 * * /home/user/cr-cheDZ/docs/BACKUP-RUNBOOK.md # exercice mensuel 1er du mois
+0 3 * * * DATABASE_URL=... BACKUP_DIR=/var/backups/creche BACKUP_PASSPHRASE=... BACKUP_OFFSITE_DIR=/mnt/offsite/creche /home/user/cr-cheDZ/scripts/backup.sh >> /var/log/creche-backup.log 2>&1
 ```
+
+### Hors site (P0-2, audit continu 2026-09) — OBLIGATOIRE avant pilote
+
+`BACKUP_OFFSITE_DIR` pointe vers un montage distant du VPS (l'archive et son
+empreinte `.sha256` y sont copiées, rétention alignée) :
+
+```bash
+# Option recommandée : bucket S3/MinIO distant monté via rclone
+rclone config create offsite s3 provider=Other access_key_id=... secret_access_key=... endpoint=...
+mkdir -p /mnt/offsite && rclone mount offsite:creche-backups /mnt/offsite --daemon
+# Alternative : montage NFS / snapshot objet du fournisseur VPS.
+```
+
+Règle : un incendie du VPS ne doit jamais emporter à la fois la base et ses
+sauvegardes. Tester une fois : `rclone ls offsite:creche-backups/daily`.
+
+## Drill automatique sauvegarde → restauration (P0-2)
+
+`scripts/restore-drill.mjs` rejoue le cycle complet contre une base `*_test` :
+backup.sh chiffré (+ copie hors site simulée) → sha256 → **preuve de
+chiffrement** (mauvaise passphrase refusée) → restauration (pipeline exact
+du runbook : gpg → gunzip → psql) dans une base dédiée
+`restore_drill_target` → comparaison source/restauré (comptes de lignes des
+tables majeures, politiques RLS, fonctions SECURITY DEFINER) → nettoyage.
+Prérequis : gpg, gzip, pg_dump et psql (présents en CI et sur le VPS).
+
+- **CI : job `backup-drill` sur CHAQUE push** (`.github/workflows/ci.yml`) —
+  une régression du pipeline de sauvegarde casse la CI le jour même.
+- Local :
+  ```bash
+  DATABASE_URL="postgres://postgres:postgres@localhost:54329/creche_test" \
+  BACKUP_PASSPHRASE="..." node scripts/restore-drill.mjs
+  ```
+
+Ce drill remplace l'exercice manuel mensuel comme preuve de routine ;
+l'exercice chronométré < 30 min ci-dessus reste requis **avant pilote**
+(conditions réelles, VM propre, autre opérateur).
 
 ## Critère go/no-go pilote
 
+- [ ] Job CI `backup-drill` vert sur la dernière release
+- [ ] Copie hors site effective et vérifiée (`rclone ls` ou équivalent)
 - [ ] Exercice restore <30 min réalisé **2 fois** (dont 1 fois par une autre personne que l'auteur du backup)
 - [ ] Temps consigné, logs conservés

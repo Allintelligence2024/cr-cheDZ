@@ -5,6 +5,7 @@ import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
+import { EmailService } from '../../shared/email/email.service';
 import { AuditService } from '../privacy/audit.service';
 import { PdfStorageService } from './pdf-storage.service';
 
@@ -25,6 +26,7 @@ export class BillingService {
     private readonly pdfStorage: PdfStorageService,
     private readonly config: ConfigService,
     private readonly audit: AuditService,
+    private readonly email: EmailService,
     @Inject(PG_POOL) private readonly pool: Pool,
   ) {}
 
@@ -175,8 +177,48 @@ export class BillingService {
            updated_at=NOW() WHERE id=$1 RETURNING paid_amount,balance,status`,
         [invoice.id, dto.amount],
       )).rows[0];
+      // Accusé de paiement — best-effort : jamais bloquant pour l'encaissement.
+      void this.sendReceiptBestEffort(org, payment, invoice.child_id);
       return { ...payment, invoice: updated };
     });
+  }
+
+  /** Reçu envoyé au tuteur facturable ; silencieux si transport indisponible. */
+  private async sendReceiptBestEffort(
+    orgId: string,
+    payment: { receipt_number: string; amount: number; method: string },
+    childId: string,
+  ): Promise<void> {
+    try {
+      const orgName = (await this.pool.query(
+        `SELECT name_fr FROM organizations WHERE id = $1`, [orgId],
+      )).rows[0]?.name_fr as string | undefined;
+      if (!orgName) return;
+      const recipient = await this.tenant.withTenantConnection(async (c) => {
+        const res = await c.query(
+          `SELECT g.email
+           FROM guardians g
+           JOIN child_guardians cg
+             ON cg.guardian_id = g.id AND cg.organization_id = g.organization_id
+           WHERE cg.child_id = $1 AND cg.organization_id = $2 AND g.email IS NOT NULL
+           ORDER BY cg.is_primary DESC, g.email
+           LIMIT 1`,
+          [childId, orgId],
+        );
+        return res.rows[0]?.email as string | undefined;
+      });
+      if (!recipient) return;
+      await this.email.sendPaymentReceipt({
+        to: recipient,
+        orgName,
+        receiptNumber: payment.receipt_number,
+        amount: Number(payment.amount),
+        method: payment.method,
+      });
+    } catch (error) {
+      // Un échec d'envoi ne doit jamais remettre en cause l'encaissement.
+      void error;
+    }
   }
 
   /** Allocation d'un paiement confirmé vers une facture (bornes en base, trigger 023). */

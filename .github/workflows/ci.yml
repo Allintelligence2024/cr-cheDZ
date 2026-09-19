@@ -63,6 +63,52 @@ jobs:
       - name: Suites d'isolation (isolation + phase3 → phase24 (auto))
         run: bash scripts/run-isolation-suites.sh
 
+  backup-drill:
+    # P0-2 (audit continu 2026-09) : « une sauvegarde non restaurée n'est
+    # pas une sauvegarde ». Chaque push rejoue le cycle complet :
+    # backup.sh chiffré → intégrité sha256 → preuve de chiffrement
+    # (mauvaise passphrase refusée) → restauration sur cluster jetable →
+    # comparaison source/restauré (lignes, politiques RLS, fonctions).
+    # Source en postgres:16 : version de docker-compose.prod.yml ET du
+    # client pg_dump préinstallé sur le runner (≥ serveur exigé par le drill).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: creche_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Client PostgreSQL (pg_dump ≥ serveur)
+        run: |
+          pg_dump --version || sudo apt-get install -y postgresql-client
+          pg_dump --version
+      - name: npm ci
+        run: npm ci
+      - name: Migrations + seeds
+        run: |
+          node scripts/migrate.mjs
+          node scripts/seed.mjs
+      - name: Drill sauvegarde → restauration chiffrée
+        run: node scripts/restore-drill.mjs
+        env:
+          BACKUP_PASSPHRASE: drill-ci-passphrase-sans-secret
+
   quality:
     # B1 (remédiation audits combinés) : lint et tests unitaires API étaient
     # écrits mais JAMAIS exécutés en CI — un rouge ici est un vrai signal.

@@ -59,12 +59,12 @@ pipeline export/paie commencent à garantir.
 
 ## 4. Piliers manquants ou fragiles — classés par priorité
 
-### 🔴 P0 — Bloquant pour une mise en production
+### 🔴 P0 — Bloquant pour une mise en production — ✅ IMPLÉMENTÉ (2026-09-19)
 
-| # | Pilier | Constat vérifié | Recommandation | Effort |
-|---|---|---|---|---|
-| P0-1 | **Email transactionnel réel** | `shared/email/email.service.ts` : simulation dev uniquement ; en production les invitations renvoient **503 INVITATION_DELIVERY_UNAVAILABLE** → l'onboarding d'une crèche est impossible hors dev. Le SMS OTP (Twilio) est réel, mais invitations, reçus de paiement, alertes impayés n'ont aucun canal. | Fournisseur SMTP transactionnel (nodemailer ou Resend/Postmark/Brevo) derrière le même `EmailService`, templates invitation/reçu/OTP email, flag `EMAIL_PROVIDER`, file de retries via le worker, tests d'intégration. | **S** (≈ 3-5 j) |
-| P0-2 | **Sauvegardes planifiées + hors site + restauration prouvée** | `backup.sh` existe (GPG, rétention 7 j) mais **manuel, local, sans planification ni copie hors site** ; la restauration n'est testée que par runbook. | Cron/CI quotidien : dump chiffré → upload objet hors site (S3/MinIO distant), rétention 30 j, et **test de restauration automatique hebdomadaire** dans un conteneur jetable (le squelette `test-staging-stack.mjs` existe déjà). | **S** (≈ 2-3 j) |
+| # | Pilier | Constat vérifié | Correction livrée |
+|---|---|---|---|
+| P0-1 | **Email transactionnel réel** | `shared/email/email.service.ts` : simulation dev uniquement ; en production les invitations renvoient **503 INVITATION_DELIVERY_UNAVAILABLE** → l'onboarding d'une crèche est impossible hors dev. Le SMS OTP (Twilio) est réel, mais invitations, reçus de paiement, alertes impayés n'ont aucun canal. | `EMAIL_PROVIDER=smtp` livre réellement via nodemailer (pool, timeouts 5/10/15 s, 3 tentatives backoff 500 ms/2 s). Fail-closed : config incomplète → 503 avant écriture ; échec d'envoi → 502 `EMAIL_DELIVERY_FAILED` (jamais de jeton exposé). Templates bilingues FR/AR : invitation (lien `/accept-invitation`, validité 7 j) + reçu de paiement (envoyé best-effort au tuteur `is_primary`, jamais bloquant pour l'encaissement). 11 tests unitaires ; phase47 (G1c, 38 cas) rejouée verte avec rôles de production. |
+| P0-2 | **Sauvegardes planifiées + hors site + restauration prouvée** | `backup.sh` existait (GPG, rétention 7 j) mais **manuel, local, sans planification ni copie hors site** ; la restauration n'était testée que par runbook. | `backup.sh` : empreinte SHA-256 + copie hors site `BACKUP_OFFSITE_DIR` + rétention alignée. Nouveau `scripts/restore-drill.mjs` : backup réel → sha256 → **preuve de chiffrement** (mauvaise passphrase refusée) → restauration pipeline runbook (gpg→gunzip→psql) dans une base dédiée → comparaison source/restauré (12 tables, politiques RLS, fonctions SECURITY DEFINER) → nettoyage ; garde-fou base `*_test`. Job CI **`backup-drill` sur chaque push**. Runbook enrichi (cron + hors site rclone/S3 + drill). |
 
 ### 🟠 P1 — Indispensables juste après la mise en prod
 
@@ -100,9 +100,9 @@ tous les concurrents étudiés. À planifier dans cet ordre :
 
 ## 5. Roadmap recommandée
 
-1. **Immédiat (P0, ≈ 1 semaine)** : email transactionnel + sauvegardes
-   planifiées hors site avec restauration testée. Sans ces deux-là, la mise en
-   production d'une vraie crèche n'est pas défendable.
+1. ~~**Immédiat (P0)**~~ ✅ **Livré** : email transactionnel SMTP + drill de
+   restauration automatisé en CI + copie hors site. La mise en production
+   d'une vraie crèche est défendable sur ces deux volets.
 2. **Fenêtre de lancement (P1, ≈ 2-4 semaines en parallèle des démarches
    SATIM/compte marchand)** : sandbox paiement, builds mobiles CI, charge,
    couverture.
