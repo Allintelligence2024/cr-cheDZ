@@ -152,7 +152,7 @@ try {
   step('5/6 Comparaison source ↔ restauré');
   const tables = [
     'organizations', 'users', 'memberships', 'roles', 'children', 'guardians',
-    'invoices', 'payments', 'sessions', 'audit_logs', 'consent_records', 'jobs',
+    'invoices', 'payments', 'sessions', 'audit_logs', 'consent_records', 'background_jobs',
   ];
   for (const table of tables) {
     const [src, dst] = [
