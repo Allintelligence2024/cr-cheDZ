@@ -30,14 +30,16 @@ test('export présences : demande UI → worker réel → téléchargement navig
   await page.getByRole('button', { name: "Demander l'export" }).click();
   await expect(page.getByText(/Export demandé/)).toBeVisible();
 
-  // La ligne passe DONE une fois le job traité par le worker (~2 s de poll).
+  // La ligne passe done une fois le job traité par le worker (~2 s de poll).
   // La page ne se recharge pas d'elle-même : on relance le GET /exports via
-  // page.reload() jusqu'à voir la ligne DONE (timeout global 30 s).
+  // page.reload() jusqu'à voir la ligne done (timeout global 30 s).
+  // NB : le statut est affiché en MAJUSCULES par CSS (textTransform), mais le
+  // texte DOM reste « done » — matcher sans tenir compte de la casse.
   const row = page
     .getByRole('row')
     .filter({ hasText: 'Présences' })
     .filter({ hasText: today })
-    .filter({ hasText: /DONE/ });
+    .filter({ hasText: /done/i });
   await expect(async () => {
     await page.reload();
     await expect(row).toBeVisible({ timeout: 2_000 });
