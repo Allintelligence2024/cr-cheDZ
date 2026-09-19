@@ -346,9 +346,12 @@ async function main() {
 
     // ── 6. Worker ───────────────────────────────────────────────────────────
     console.log('\n6) Worker (jobs + drain notifications)');
+    // B3 : le worker tourne avec le rôle APPLICATIF (appUrl), comme les
+    // autres suites (phase8/11/13/16/21/23/24/27/28) — plus jamais avec
+    // l'URL admin capturée en début de script.
     const worker = spawn('node', ['apps/worker/dist/main.js'], {
       cwd: REPO,
-      env: { ...process.env, DATABASE_URL: url },
+      env: { ...process.env, DATABASE_URL: appUrl() },
       stdio: 'ignore',
     });
     await new Promise((r) => setTimeout(r, 4000));

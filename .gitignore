@@ -26,6 +26,10 @@ logs/
 *.log
 npm-debug.log*
 
+# Playwright (job e2e)
+playwright-report/
+test-results/
+
 # IDE
 .idea/
 .vscode/
