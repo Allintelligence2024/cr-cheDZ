@@ -126,29 +126,40 @@ fichiers listés comme « lus » n'existent pas au HEAD (`apps/worker/src/stripe
 | D3 | `apps/parent-mobile/lib/main.dart` | URL par défaut : supprimer le défaut `http://10.0.2.2:3000` (exiger `--dart-define API_URL` au build release, ou défaut `https://api.creche.dz/api/v1` comme staff-mobile) | R1-fait 3 |
 | D4 | `scripts/pilot/seed-pilot.mjs` | Mot de passe via variable d'env (`PILOT_PASSWORD`, défaut affiché dans le log de seed uniquement) + commentaire « données synthétiques » | R2-M27/M28 |
 
-### Lot E — Dette qualité / perf (1 j, non bloquant)
+### Lot E — Dette qualité / perf (1 j, non bloquant) — ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-09-19)
 
 | # | Fichier | Correction | Réf audit |
 |---|---|---|---|
-| E1 | `storage.service.ts` + `pdf-storage.service.ts` + `exports.service.ts` + `video.service.ts` | Factoriser un `StorageClientService` unique (config S3 résolue une fois via `@creche/prod-config`) | R2-M1/M2 |
-| E2 | `video.service.ts` (`streamContent`) | Streaming (pipe S3 GetObject / `createReadStream` local) au lieu du Buffer complet | R2-M25 |
-| E3 | `scripts/pilot/pilot-report.mjs` | Exécuter réellement les suites phase* (ou renommer la section « présence » et documenter) | R2-M15 |
-| E4 | `journal.service.ts` | Documenter `visible_to_parents` forcé faux pour les notes privées (commentaire + contrat) | R2-M17 |
+| E1 | `storage.service.ts` + `pdf-storage.service.ts` + `exports.service.ts` | ✅ Nouveau `shared/storage/s3-client.service.ts` (S3ClientService : bucket + presignGet) injecté dans les trois services ; plus aucun `new S3Client` dupliqué ni import dynamique | R2-M1/M2 |
+| E2 | `video.service.ts` (`streamContent`) + `video.controller.ts` | ✅ Streaming : `{ stream, mimeType, size }` (createReadStream, stat), 404 CLIP_FILE_MISSING si absent, pipe dans le contrôleur avec erreur → 404 JSON / destroy | R2-M25 |
+| E3 | `scripts/pilot/pilot-report.mjs` | ✅ Les migrations exécutent réellement `migrate.mjs --status`, les seeds `seed.mjs` ; les suites/bench sont étiquetés « PRÉSENCE seule » (exécution : `scripts/run-isolation-suites.sh`) | R2-M15 |
+| E4 | `journal.service.ts` | ✅ Contrat documenté sur `insertEvent` : note privée ⇒ `visible_to_parents = false` forcé silencieusement (fail-closed) | R2-M17 |
 
-### Lot F — Documentation (0,5 j)
+Note E1 : NestJS n'a pas de `providedIn` — le service est déclaré dans les providers
+des modules media, billing, exports. Valeurs par défaut et durées de presign inchangées.
+
+### Lot F — Documentation (0,5 j) — ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-09-19)
 
 | # | Fichier | Correction | Réf audit |
 |---|---|---|---|
-| F1 | `SECURITY.md` | Supprimer la mention CodeQL (aucun job n'existe) **ou** ajouter le job ; mettre à jour les comptes de suites (runner actuel ≈ 61 entrées) et la date | R1-fait 9 |
-| F2 | `docs/CI-RESTORE.md` | Bannière « historique — les workflows sont commités » ; contenu décrit un ci.yml avec CodeQL/e2e qui n'existe pas | R1-fait 9 |
-| F3 | `packages/api-contracts/openapi.yaml` | En-tête : retirer « régénéré par le backend NestJS à chaque build » (contradiction avec l'état vérifié verrouillé par `openapi-contract.test.mjs`) ; ajouter cette phrase aux assertions du test | R1-fait 9 |
-| F4 | `.github/workflows/ci.yml` (commentaire), `docs/BACKUP-RUNBOOK.md`, `docs/ANTIGRAVITY-MCP.md`, `docs/CURSOR-FINAL-MISSIONS.md` | Comptes périmés : « 001→049 » → 063 ; « 28/28 suites » → compter depuis le runner réel (ou référence générique) | R1-fait 9 |
+| F1 | `SECURITY.md` | ✅ Réécrit : CodeQL honnêtement « NON configuré » (audit = npm audit CI + hebdo), état CI réel (4 workflows), comptes non périmables | R1-fait 9 |
+| F2 | `docs/CI-RESTORE.md` | ✅ Bannière « DOCUMENT HISTORIQUE » en tête | R1-fait 9 |
+| F3 | `packages/api-contracts/openapi.yaml` | ✅ En-tête : spec partielle 13 paths écrite à la main, génération à la demande ; assertion anti-régression ajoutée dans `openapi-contract.test.mjs` (test vert) | R1-fait 9 |
+| F4 | `docs/BACKUP-RUNBOOK.md`, `docs/ANTIGRAVITY-MCP.md` | ✅ Comptes codés en dur (« 28/28 suites », « 001→052 ») remplacés par des références génériques au runner. `ci.yml` corrigé dès le lot B ; `CURSOR-FINAL-MISSIONS.md` conservé tel quel (journal daté d'une mission passée) | R1-fait 9 |
 
-### Lot G — Hors périmètre immédiat, à planifier
+### Lot G — Mobile & e2e étendus — ✅ IMPLÉMENTÉ (2026-09-19), exécution en CI
 
-- **G1** : compilation réelle des apps Flutter (issue #8) — `flutter build apk` en CI ; c'est le
-  dernier point qui maintient « capacité à livrer : non » pour les mobiles.
-- **G2** : e2e Playwright étendus (invitation, téléchargement, refresh) une fois A1–A3 livrés.
+- **G1** : `flutter test` ajouté au job staff-mobile (4 fichiers de tests réels : widget
+  login, sync F2/F3B, projections) — première exécution réelle de code mobile en CI.
+  Le `flutter build apk/ipa` reste dans l'issue #8 (toolchain Android/iOS à provisionner ;
+  le sandbox de développement n'a ni docker ni accès aux CDN Flutter — l'étape n'a pas pu
+  être pré-validée localement, conformément à la règle « pas de faux vert »).
+- **G2** : 3 nouveaux specs Playwright (exécutés par le job e2e non bloquant) :
+  `invitation-flow` (création → lien → activation → login autonome, régression A1),
+  `export-download` (demande UI → worker réel en webServer → téléchargement navigateur),
+  `session-refresh` (access token corrompu → refresh silencieux → tableau de bord, A2/A3).
+  La config démarre désormais aussi le worker (build ajouté au job e2e) et passe l'API
+  en NODE_ENV=development + EMAIL_PROVIDER=none pour le jeton d'invitation.
 
 ---
 

@@ -1,18 +1,33 @@
-# Sécurité — posture (mise à jour 2026-08-02)
+# Sécurité — posture (mise à jour 2026-09-19, remédiation lot F)
 
 ## Posture
 
 - **Isolation multi-tenant** : RLS PostgreSQL `USING` + `WITH CHECK` sur toutes
   les tables tenant, rôle applicatif `NOBYPASSRLS` (`creche_app`), helper
-  `app_tenant_id()` (safe-by-default). Vérifié par les suites
-  `tests/tenant-isolation/*` sur PostgreSQL réel (15 suites vertes).
+  `app_tenant_id()` (safe-by-default), filtres organisation explicites en
+  défense en profondeur sur les lectures sensibles (billing, parents, santé,
+  journal, sync — lot C, 2026-09). Vérifié par les suites
+  `tests/tenant-isolation/*` (phase3 → phase54 + gardes contrat/schema/RLS)
+  sur PostgreSQL réel, **rejouvées en CI avec les rôles de production**
+  (Gate D — `scripts/test-production-roles.mjs`).
+- **Rôles base de données** : bootstrap reproductible (`roles.sql` exécuté par
+  le service `bootstrap-roles` des compose dev/staging/prod) — l'applicatif
+  n'est JAMAIS superuser, le migrateur est séparé (`creche_migrator`).
 - **Secrets** : exclusivement via variables d'environnement (`.env.prod.example`) ;
   aucun token ni secret journalisé ; audit PII masqué (`[REDACTED]`) ; le lien
-  d'invitation (qui contient le jeton) n'est plus journalisé en mode dev.
+  d'invitation (qui contient le jeton) n'est plus journalisé en mode dev ;
+  `.env.prod` est un fichier local d'exploitation, non versionné.
+- **JWT** : tokens d'accès (`purpose: 'access'`) seuls acceptés par le garde
+  d'authentification ; secret d'invitation dérivé (HMAC) ; révocation globale
+  immédiate par époque du principal (`users.token_epoch`) ; garde de boot
+  refusant la production si `JWT_SECRET` est absent, trop court ou égal au
+  défaut de développement.
 - **OTP** : codes générés par `crypto.randomInt` (Math.random retiré — détecté
   par analyse statique locale).
 - **Uploads** : URLs signées S3/MinIO courtes (1 h), consentements photo
-  re-vérifiés à chaque URL, accès journalisés.
+  re-vérifiés à chaque URL, accès journalisés ; clés de stockage contrôlées
+  côté DTO, côté service (`assertStorageKeyInTenant`) et en base
+  (contrainte 049).
 - **Webhook** : signature HMAC-SHA256 sur le corps brut, idempotence par
   `external_reference`.
 - **Erreurs** : `AppError` FR/AR, jamais de SQL brut ni d'anglais exposé.
@@ -31,21 +46,31 @@ Corrections appliquées le 2026-08-02 (migration de durcissement) :
 | xlsx (admin-web, import) | high prototype pollution, SANS correctif | **remplacé par exceljs** (chunk lazy) |
 | uuid (via gaxios/worker) | 9.0.1 | override **^11.1.1** |
 
-Suites complètes rejouées sous NestJS 11 / React 19 : **14/14 vertes** +
-phase12-messaging (7 cas).
-
 ## Analyse statique
 
 - semgrep local (règles maison, hors ligne) : 5 résultats — 1 vrai bug corrigé
   (Math.random pour les OTP), 4 faux positifs documentés (logs sans secret).
-- CodeQL : configuré dans `.github/workflows/ci.yml` (à exécuter en CI une fois
-  la permission `workflows` accordée).
+- **CodeQL : NON configuré.** Aucun job CodeQL n'existe dans les workflows
+  (l'affirmation contraire présente ici avant le 2026-09-19 était fausse —
+  corrigée par le lot F de remédiation). L'audit des dépendances est assuré
+  par `npm audit` (job `security` de la CI à chaque push/PR + workflow
+  hebdomadaire `security-audit` avec ouverture d'issue automatique).
+
+## CI — état réel (2026-09-19)
+
+Les workflows sont **commités et actifs** (`docs/CI-RESTORE.md` est historique) :
+
+| Workflow | Contenu |
+|---|---|
+| `ci.yml` | `database` (PG18 : migrations, seeds, schema-check, garde RLS, suites d'isolation sous rôles de prod), `quality` (eslint + jest), `e2e` (Playwright contre l'API réelle), `admin-web`, `support-console`, `security` (npm audit) |
+| `docker.yml` | Build (et push sur main) des images api/worker/admin-web/support-console |
+| `flutter.yml` | `pub get` + `analyze` des deux apps mobiles — les apps n'ont encore JAMAIS été compilées (dette assumée, issue #8) |
+| `security-audit.yml` | `npm audit --omit=dev` hebdomadaire, issue auto si vulnérabilité |
 
 ## Recommandations restantes
 
-1. **Restaurer les workflows CI** (permission `workflows` de la GitHub App) :
-   e2e Playwright, CodeQL et Docker en CI dépendent de cette permission.
-2. **Gate de merge** : `npm audit --omit=dev --audit-level=high` doit rester à 0
-   (vérifiable désormais sans exception).
+1. **Compiler réellement les apps Flutter** (issue #8) : c'est le dernier
+   point bloquant la livraison mobile.
+2. **Gate de merge** : `npm audit --omit=dev --audit-level=high` doit rester à 0.
 3. Headers de sécurité, TLS et rate limiting : configurés dans
    `infrastructure/nginx/nginx.conf` (template, à déployer avec le VPS).

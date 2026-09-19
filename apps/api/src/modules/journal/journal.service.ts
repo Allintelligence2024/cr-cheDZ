@@ -180,7 +180,13 @@ export class JournalService {
     }
     const f = input.fields;
 
-    // Même un DTO mixte ne doit pas publier un contenu marqué privé.
+    // E4 (contrat documenté) : une note marquée privée est TOUJOURS insérée
+    // avec visible_to_parents = false, même si le client passe
+    // visible_to_parents = true — le serveur force la valeur silencieusement
+    // (fail-closed, pas d'erreur à la création ; la publication ultérieure
+    // via PATCH visibility est refusée par 422 NOTE_PRIVATE). Ce n'est pas
+    // de l'écho de DTO : la visibilité parent d'un contenu privé ne peut
+    // JAMAIS provenir de la requête.
     const visible = input.visibleToParents ?? true;
     const isPrivateNote = f.note_is_private === true;
 

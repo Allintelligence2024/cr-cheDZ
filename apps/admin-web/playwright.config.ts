@@ -2,9 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * E2E Playwright — exécuté en CI (job e2e) contre l'API réelle.
- * Prérequis : base migrée + seedée (+ seed-e2e.mjs), API compilée.
- * L'API (port 3000) et le frontend Vite (port 4000, proxy /api) sont
- * démarrés automatiquement par webServer.
+ * Prérequis : base migrée + seedée (+ seed-e2e.mjs), API et worker compilés.
+ * L'API (port 3000), le worker (traitement des jobs) et le frontend Vite
+ * (port 4000, proxy /api) sont démarrés automatiquement par webServer.
  */
 export default defineConfig({
   testDir: './e2e',
@@ -26,7 +26,27 @@ export default defineConfig({
       cwd: '../..',
       reuseExistingServer: true,
       timeout: 60_000,
-      env: { ...process.env, APP_PORT: '3000' } as Record<string, string>,
+      // NODE_ENV=development + EMAIL_PROVIDER=none : seul mode où le jeton
+      // d'invitation est remis dans la réponse (transport email non livré) —
+      // nécessaire à invitation-flow.spec.ts. Hors development, l'API échoue
+      // en 503 INVITATION_DELIVERY_UNAVAILABLE (vérifié par les suites).
+      env: {
+        ...process.env,
+        APP_PORT: '3000',
+        NODE_ENV: 'development',
+        EMAIL_PROVIDER: 'none',
+      } as Record<string, string>,
+    },
+    {
+      // Worker : traite les jobs (exports Excel, PDF factures…) — requis par
+      // export-download.spec.ts. Prérequis : `npm run build --workspace @creche/worker`.
+      // Pas d'url/port : pas de sonde de readiness (Playwright démarre le
+      // process et passe à la suite) ; le spec attend le résultat du job.
+      command: 'node apps/worker/dist/main.js',
+      cwd: '../..',
+      reuseExistingServer: true,
+      timeout: 60_000,
+      env: { ...process.env } as Record<string, string>,
     },
     {
       // Vite dev : cwd par défaut = dossier de cette config (apps/admin-web),

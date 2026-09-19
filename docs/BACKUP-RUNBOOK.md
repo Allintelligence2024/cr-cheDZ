@@ -15,7 +15,7 @@ DATABASE_URL="..." BACKUP_DIR=/var/backups/creche BACKUP_PASSPHRASE="..." ./scri
 ## Objectif de l'exercice
 
 - Restaurer **en staging < 30 min** depuis la sauvegarde chiffrée la plus récente
-- Vérifier cohérence schéma (`migrate.mjs --check`) + seeds + 28 suites isolation
+- Vérifier cohérence schéma (`migrate.mjs --check`) + seeds + suites d'isolation (`scripts/run-isolation-suites.sh`)
 - Documenter temps, taille, incidents
 
 ## Pré-requis VM clean (Ubuntu 22.04)
@@ -64,7 +64,7 @@ psql "$DATABASE_URL" -c "SELECT count(*) FROM organizations; SELECT max(created_
 ```bash
 cd /home/user/cr-cheDZ
 DATABASE_URL="$DATABASE_URL" node scripts/migrate.mjs --check
-# Doit dire : Schéma cohérent, 001→052, checksums OK, sinon drift
+# Doit dire : Schéma cohérent, toutes migrations appliquées (001→NNN), checksums OK, sinon drift
 ```
 
 ### T0+20min — Seeds + smoke
@@ -79,14 +79,14 @@ curl http://localhost:3000/api/v1/health
 ```bash
 export RATE_LIMIT_DISABLED=1 NODE_ENV=test STORAGE_BACKEND=local STORAGE_LOCAL_DIR=/tmp/restore-storage PAYMENT_WEBHOOK_SECRET=phase8-test-secret
 bash scripts/run-isolation-suites.sh | tail -n 30
-# Attendu : 28/28 vertes
+# Attendu : toutes les suites du runner vertes (compte réel donné par le runner)
 ```
 
 ### T0+30min — Bilan
 - [ ] Temps total < 30 min : ___ min
 - [ ] Taille backup : ___ MB
 - [ ] `migrate --check` vert
-- [ ] 28/28 suites vertes
+- [ ] Suites d'isolation vertes (`scripts/run-isolation-suites.sh`, sans échec)
 - [ ] Restauration documentée dans `docs/pilot/BILAN-PILOTE.md` § Exercice restauration
 
 ## Échecs connus

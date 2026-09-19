@@ -1,5 +1,13 @@
 # Restauration des workflows GitHub Actions
 
+> ⚠️ **DOCUMENT HISTORIQUE (2026-09-19, lot F de remédiation)** — les
+> workflows sont **commités et actifs** (`ci.yml`, `docker.yml`,
+> `flutter.yml`, `security-audit.yml`) ; la permission `workflows` a été
+> obtenue depuis. Ce document ne décrit PLUS l'état réel : il mentionne des
+> workflows « non commités » et un contenu de `ci.yml` (CodeQL, e2e en un
+> seul job) qui ne correspond plus au fichier actuel. Conservé uniquement
+> pour la trace de l'incident de permission GitHub App.
+
 **Contexte** : la GitHub App utilisée par l'agent de développement n'a pas la
 permission `workflows` — GitHub refuse de créer/mettre à jour
 `.github/workflows/*` via ce token (push rejeté : « refusing to allow a
