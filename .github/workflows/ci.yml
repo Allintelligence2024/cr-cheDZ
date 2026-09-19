@@ -124,8 +124,57 @@ jobs:
         run: npm run build --workspace @creche/worker
       - name: Installer Playwright (Chromium)
         run: npx playwright install --with-deps chromium
+      # G2 diagnostic : boot réel des trois webServer AVANT Playwright — une
+      # annotation lisible (API check-runs/annotations) identifie le serveur
+      # fautif si l'un d'eux ne démarre pas, au lieu d'un échec opaque.
+      - name: Diagnostic webServers (API + worker + Vite)
+        run: |
+          set +e
+          APP_PORT=3000 NODE_ENV=development EMAIL_PROVIDER=none \
+            node apps/api/dist/main.js > /tmp/api-boot.log 2>&1 &
+          API_PID=$!
+          API_OK=0
+          for _ in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3000/api/v1/health > /dev/null && { API_OK=1; break; }
+            kill -0 "$API_PID" 2>/dev/null || break
+            sleep 0.5
+          done
+          if [ "$API_OK" = "1" ]; then echo "✓ API démarrée"; else
+            echo "::error title=e2e boot API::$(tail -c 600 /tmp/api-boot.log | tr '\n' ' ')"
+          fi
+          kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null
+
+          node apps/worker/dist/main.js > /tmp/worker-boot.log 2>&1 &
+          WORKER_PID=$!
+          sleep 6
+          if kill -0 "$WORKER_PID" 2>/dev/null; then echo "✓ worker vivant"; else
+            echo "::error title=e2e boot worker::$(tail -c 600 /tmp/worker-boot.log | tr '\n' ' ')"
+          fi
+          kill "$WORKER_PID" 2>/dev/null; wait "$WORKER_PID" 2>/dev/null
+
+          (cd apps/admin-web && npm run dev -- --port 4000 --strictPort > /tmp/vite-boot.log 2>&1) &
+          VITE_PID=$!
+          VITE_OK=0
+          for _ in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4000 > /dev/null && { VITE_OK=1; break; }
+            sleep 0.5
+          done
+          if [ "$VITE_OK" = "1" ]; then echo "✓ Vite démarré"; else
+            echo "::error title=e2e boot Vite::$(tail -c 600 /tmp/vite-boot.log | tr '\n' ' ')"
+          fi
+          kill "$VITE_PID" 2>/dev/null
+          pkill -f "vite.*--port 4000" 2>/dev/null
+          sleep 1
+          echo "— diagnostic terminé (les erreurs éventuelles sont en annotations)"
       - name: Tests e2e (Playwright)
-        run: npx playwright test --config apps/admin-web/playwright.config.ts
+        run: |
+          if npx playwright test --config apps/admin-web/playwright.config.ts > /tmp/e2e-playwright.log 2>&1; then
+            tail -n 15 /tmp/e2e-playwright.log
+          else
+            tail -n 80 /tmp/e2e-playwright.log
+            echo "::error title=e2e Playwright en échec::$(grep -m4 -E '›|Error:|expect\(|webServer' /tmp/e2e-playwright.log | tr '\n' '|' | head -c 700)"
+            exit 1
+          fi
       - name: Rapport Playwright
         if: always()
         uses: actions/upload-artifact@v4
