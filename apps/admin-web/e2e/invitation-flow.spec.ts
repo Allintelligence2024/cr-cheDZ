@@ -40,9 +40,10 @@ test('invitation : création → activation via lien → compte utilisable', asy
   // ── 2-3. Activation via le lien (parcours navigateur, sans session) ──────
   await page.goto(`/accept-invitation?token=${invite.invitation_token}`);
   await expect(page.getByText("Acceptation d'invitation")).toBeVisible();
-  await page.getByLabel('Prénom').fill('E2E');
-  await page.getByLabel('Nom').fill('Invitée');
-  await page.getByLabel('Mot de passe').fill(PASSWORD);
+  await page.getByLabel('Prénom', { exact: true }).fill('E2E');
+  // exact:true — sinon « Prénom » matche aussi le label contenant « nom ».
+  await page.getByLabel('Nom', { exact: true }).fill('Invitée');
+  await page.getByLabel('Mot de passe', { exact: true }).fill(PASSWORD);
   await page.getByRole('button', { name: 'Activer mon compte' }).click();
 
   // Régression A1 : l'utilisateur arrive sur le tableau de bord, PAS /login.

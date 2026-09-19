@@ -11,9 +11,11 @@ export class RateLimitGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     // Désactivation pour les tests d'intégration et les load tests
-    // (RATE_LIMIT_DISABLED=true). En production, le rate limiting est aussi
-    // enforce au niveau nginx (auth 5 r/m, api 30 r/m, sync 60 r/m).
-    if (process.env.RATE_LIMIT_DISABLED === 'true') return true;
+    // (RATE_LIMIT_DISABLED=true ou 1 — le runner d'isolation exporte '1').
+    // En production, le rate limiting est aussi enforce au niveau nginx
+    // (auth 5 r/m, api 30 r/m, sync 60 r/m).
+    const disabled = process.env.RATE_LIMIT_DISABLED;
+    if (disabled === 'true' || disabled === '1') return true;
 
     const options =
       Reflect.getMetadata(RATE_LIMIT_KEY, context.getHandler()) ??

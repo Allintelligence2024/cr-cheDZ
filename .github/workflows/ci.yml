@@ -30,7 +30,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_test
-      RATE_LIMIT_DISABLED: '1'
+      RATE_LIMIT_DISABLED: 'true'
       NODE_ENV: test
       STORAGE_BACKEND: local
       STORAGE_LOCAL_DIR: /tmp/creche-storage-ci
@@ -101,7 +101,7 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_e2e
       NODE_ENV: test
-      RATE_LIMIT_DISABLED: '1'
+      RATE_LIMIT_DISABLED: 'true'
       STORAGE_BACKEND: local
       STORAGE_LOCAL_DIR: /tmp/creche-storage-e2e
       JWT_SECRET: e2e_jwt_secret_32_caracteres_minimum_ok
