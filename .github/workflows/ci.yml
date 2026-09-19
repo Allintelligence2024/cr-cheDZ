@@ -171,8 +171,9 @@ jobs:
           if npx playwright test --config apps/admin-web/playwright.config.ts > /tmp/e2e-playwright.log 2>&1; then
             tail -n 15 /tmp/e2e-playwright.log
           else
-            tail -n 80 /tmp/e2e-playwright.log
-            echo "::error title=e2e Playwright en échec::$(grep -m4 -E '›|Error:|expect\(|webServer' /tmp/e2e-playwright.log | tr '\n' '|' | head -c 700)"
+            tail -n 100 /tmp/e2e-playwright.log
+            echo "::error title=e2e liste des échecs::$(grep -E '✘|passed|failed' /tmp/e2e-playwright.log | tr '\n' '|' | head -c 700)"
+            echo "::error title=e2e détail 1er échec::$(sed -n '/^  [0-9]\+) \[chromium\]/,+12p' /tmp/e2e-playwright.log | head -c 800 | tr '\n' '~')"
             exit 1
           fi
       - name: Rapport Playwright
