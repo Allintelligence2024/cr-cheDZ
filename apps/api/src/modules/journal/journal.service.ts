@@ -239,7 +239,9 @@ export class JournalService {
 
   private async childOfTenant(client: PoolClient, childId: string): Promise<{ id: string; room_id: string | null } | null> {
     const res = await client.query(
-      `SELECT id, room_id FROM children WHERE id = $1 AND deleted_at IS NULL`,
+      // C6 : filtre organisation EXPLICITE en plus de la RLS (fail-closed).
+      `SELECT id, room_id FROM children
+       WHERE id = $1 AND organization_id = current_setting('app.tenant_id')::uuid AND deleted_at IS NULL`,
       [childId],
     );
     return res.rows[0] ?? null;

@@ -277,7 +277,13 @@ export class HealthService {
   }
 
   private async childOfTenant(client: import('pg').PoolClient, childId: string): Promise<void> {
-    const res = await client.query(`SELECT id FROM children WHERE id=$1 AND deleted_at IS NULL`, [childId]);
+    // C6 : filtre organisation EXPLICITE en plus de la RLS — le tenant est
+    // celui posé sur la connexion par withTenantConnection (fail-closed si absent).
+    const res = await client.query(
+      `SELECT id FROM children
+       WHERE id=$1 AND organization_id = current_setting('app.tenant_id')::uuid AND deleted_at IS NULL`,
+      [childId],
+    );
     if (res.rows.length === 0) throw Errors.notFound();
   }
 }

@@ -13,6 +13,9 @@ coverage/
 .env
 .env.local
 .env.*.local
+# D1 : .env.prod est un fichier LOCAL d'exploitation (copié depuis
+# .env.prod.example) — jamais versionné.
+.env.prod
 
 # Flutter/Dart
 .dart_tool/

@@ -160,11 +160,13 @@ export class ParentsService {
   }
 
   async invoiceDetail(userId: string, invoiceId: string): Promise<Record<string, unknown>> {
+    const org = requireTenant(this.tenantContext);
     await this.assertInvoicePermission(userId, invoiceId);
     return this.tenantContext.withTenantConnection(async (client) => {
       const invoice = (await client.query(
         `SELECT ${PARENT_INVOICE_FIELDS_SQL}
-         FROM invoices i JOIN children c ON c.id = i.child_id WHERE i.id = $1`, [invoiceId],
+         FROM invoices i JOIN children c ON c.id = i.child_id
+         WHERE i.id = $1 AND i.organization_id = $2`, [invoiceId, org],
       )).rows[0];
       const lines = (await client.query(
         `SELECT id, description_fr, description_ar, quantity, unit_price, total_price, line_type
@@ -189,6 +191,10 @@ export class ParentsService {
     });
     if (!invoice.pdf_url) throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
     if (this.pdfStorage.isLocal()) {
+      // C4 : un pdf_url orphelin → 404, jamais un 500 (ENOENT).
+      if (!this.pdfStorage.exists(invoice.pdf_url as string)) {
+        throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
+      }
       return { kind: 'buffer' as const, buffer: await this.pdfStorage.read(invoice.pdf_url as string), invoice };
     }
     return { kind: 'redirect' as const, url: await this.pdfStorage.presign(invoice.pdf_url as string), invoice };
@@ -208,11 +214,13 @@ export class ParentsService {
   }
 
   async receiptDetail(userId: string, paymentId: string): Promise<Record<string, unknown>> {
-    requireTenant(this.tenantContext);
+    const org = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
+      // C2 : hors tenant → 404 (pas de 403 révélateur d'existence).
       const payment = (await client.query(
         `SELECT ${PARENT_RECEIPT_FIELDS_SQL}
-         FROM payments p JOIN children c ON c.id = p.child_id WHERE p.id = $1`, [paymentId],
+         FROM payments p JOIN children c ON c.id = p.child_id
+         WHERE p.id = $1 AND p.organization_id = $2`, [paymentId, org],
       )).rows[0];
       if (!payment) throw Errors.notFound();
       const allowed = await this.canReceiveInvoices(client, userId, payment.child_id);
@@ -235,10 +243,13 @@ export class ParentsService {
     userId: string,
     invoiceId: string,
   ): Promise<{ id: string; organization_id: string; invoice_number: string | null; pdf_url: string | null; child_id: string }> {
-    requireTenant(this.tenantContext);
+    const org = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
+      // C2 : filtre tenant explicite — un objet hors tenant est invisible
+      // (404, comme inexistant) : pas de 403 qui révélerait son existence.
       const invoice = (await client.query(
-        `SELECT id, organization_id, invoice_number, pdf_url, child_id FROM invoices WHERE id = $1`, [invoiceId],
+        `SELECT id, organization_id, invoice_number, pdf_url, child_id
+         FROM invoices WHERE id = $1 AND organization_id = $2`, [invoiceId, org],
       )).rows[0];
       if (!invoice) throw Errors.notFound();
       const allowed = await this.canReceiveInvoices(client, userId, invoice.child_id);

@@ -4,7 +4,10 @@ export class CreateContractDto {
  @IsNumber() @Min(0) monthly_base_amount!: number;
  @IsDateString() start_date!: string;
  @IsOptional() @IsDateString() end_date?: string;
- @IsOptional() @IsString() schedule_type?: string;
+ // C8 : valeurs alignées sur la définition de contracts.schedule_type
+ // (010_billing : full_time, half_time, daily, custom) — erreur 400 claire
+ // au lieu d'une donnée libre silencieusement acceptée.
+ @IsOptional() @IsIn(['full_time', 'half_time', 'daily', 'custom']) schedule_type?: string;
  @IsOptional() @IsNumber() @Min(0) @Max(100) discount_percent?: number;
 }
 export class GenerateInvoiceDto {

@@ -87,7 +87,16 @@ fichiers listés comme « lus » n'existent pas au HEAD (`apps/worker/src/stripe
 | B2 | `.github/workflows/ci.yml` + `apps/admin-web/playwright.config.ts` | Corriger le `webServer` : `cwd: '../..'` (racine) pour `node apps/api/dist/main.js`, ou chemin relatif corrigé ; ajouter un job `e2e` (migrate + seed + seed-e2e + playwright) — même non bloquant au début, pour un signal honnête |
 | B3 | `tests/tenant-isolation/phase6.api.test.mjs` | Spawn worker avec `DATABASE_URL: appUrl()` (comme phase8/11/13/16/21/23/24/27/28) au lieu de l'URL admin capturée |
 
-### Lot C — Défense en profondeur API (1–2 j)
+### Lot C — Défense en profondeur API (1–2 j) — ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-09-19)
+
+> Preuves : typecheck + lint + jest (48/48) + builds OK ; sur PG18 embarqué :
+> schema-check, rls-behavior-check, isolation, phase3, phase6, phase7 (11 cas),
+> phase8 (16 cas), phase9, phase10-health (11 cas), phase12 (7 cas),
+> phase14, phase23, phase24, phase30→34 sync, phase35 (21), phase38 (44),
+> phase41 (58), phase47 (34 assertions de sécurité invitations) — tout vert.
+> (phase47 s'arrête ensuite sur le redémarrage mode staging/production, qui
+> exige le rôle `creche_app` réel du gate D — comportement attendu hors CI.)
+
 
 | # | Fichier | Correction | Réf audit |
 |---|---|---|---|
@@ -101,7 +110,14 @@ fichiers listés comme « lus » n'existent pas au HEAD (`apps/worker/src/stripe
 | C8 | `billing.dto.ts` | `schedule_type` : `@IsIn([...])` aligné sur la contrainte CHECK de table | R2-M29 |
 | C9 | Décision à trancher (doc + code) | Comportement super_admin sans tenant sur les routes `requireTenant` : soit tenant explicite par header/query validé, soit erreur documentée `TENANT_REQUIRED` | R2-M8 |
 
-### Lot D — Hygiène configuration & environnement (0,5 j)
+### Lot D — Hygiène configuration & environnement (0,5 j) — ✅ IMPLÉMENTÉ & VÉRIFIÉ (2026-09-19)
+
+> Preuves : `resolveDatabaseUrl` couvert par 3 nouveaux tests jest (48/48) ;
+> `.env.prod` retiré du suivi Git (`git rm --cached` + `.gitignore`) et sa
+> valeur `POSTGRES_USER` alignée sur `postgres` ; seed-pilot refuse de
+> s'exécuter sans `PILOT_PASSWORD` et n'affiche plus jamais le mot de passe ;
+> URL défaut parent-mobile = `https://api.creche.dz/api/v1` (comme staff-mobile).
+
 
 | # | Fichier | Correction | Réf audit |
 |---|---|---|---|
