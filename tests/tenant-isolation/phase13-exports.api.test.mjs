@@ -21,6 +21,7 @@
 import { execSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
+import { unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
@@ -127,6 +128,14 @@ const main = async () => {
     const buffer = Buffer.from(await dlA.arrayBuffer());
     ok('A : téléchargement 200 + magic PK (xlsx)', dlA.status === 200 && buffer.subarray(0, 2).toString() === 'PK', `status=${dlA.status} magic=${buffer.subarray(0, 2).toString()}`);
     ok('A : content-disposition attachment .xlsx', (dlA.headers.get('content-disposition') ?? '').includes('.xlsx'));
+
+    // Verrou (audit 2026-09) : si le fichier disparaît du stockage (purge,
+    // incident disque), le téléchargement répond 404 clair — jamais 500 ENOENT.
+    await unlink(join(process.env.STORAGE_LOCAL_DIR, done.storage_key));
+    const dlMissing = await fetch(`${base}/exports/${exportId}/download`, { headers: { authorization: `Bearer ${tokenA}` } });
+    const missingBody = await dlMissing.json().catch(() => ({}));
+    ok('Fichier supprimé du stockage → 404 EXPORT_FILE_MISSING (pas de 500)',
+      dlMissing.status === 404 && missingBody.code === 'EXPORT_FILE_MISSING', `status=${dlMissing.status} body=${JSON.stringify(missingBody).slice(0, 100)}`);
 
     // ── 5/6. Isolation B ────────────────────────────────────────────────────
     console.log('\n5/6) Isolation (org B)');

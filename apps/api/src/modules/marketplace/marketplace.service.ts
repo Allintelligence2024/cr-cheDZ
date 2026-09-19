@@ -37,7 +37,7 @@ export class MarketplaceService {
         `SELECT slug, name_fr,
                 settings->>'public_name' AS public_name,
                 settings->>'public_description' AS public_description,
-                wilaya, commune, address_line1,
+                wilaya, commune,
                 settings->>'public_phone' AS public_phone,
                 settings->>'public_email' AS public_email,
                 establishment_type

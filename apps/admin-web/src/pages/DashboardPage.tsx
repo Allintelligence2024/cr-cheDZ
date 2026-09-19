@@ -2,6 +2,7 @@ import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, tokens } from '@creche/design-system';
 import { http } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n';
 
 interface RoomSummary {
@@ -34,6 +35,7 @@ const statStyle = (color: string): React.CSSProperties => ({
 
 export function DashboardPage(): React.JSX.Element {
   const { t } = useI18n();
+  const { user } = useAuth();
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +51,12 @@ export function DashboardPage(): React.JSX.Element {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing.lg }}>
+      {/* G2 : la clé i18n dashboard.welcome existait sans être rendue — les e2e
+          (login/director/refresh) s'attendent à voir le message de bienvenue. */}
+      <h2 style={{ margin: 0, fontSize: 20 }}>
+        {t('dashboard.welcome')}
+        {user?.first_name ? `, ${user.first_name}` : ''} 👋
+      </h2>
       <Card title={`${t('dash.today')} — ${data?.date ?? ''}`}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing.md }}>
           <Button variant="ghost" onClick={load}>{t('common.refresh')}</Button>

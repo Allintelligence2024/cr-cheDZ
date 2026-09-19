@@ -30,7 +30,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_test
-      RATE_LIMIT_DISABLED: '1'
+      RATE_LIMIT_DISABLED: 'true'
       NODE_ENV: test
       STORAGE_BACKEND: local
       STORAGE_LOCAL_DIR: /tmp/creche-storage-ci
@@ -45,7 +45,7 @@ jobs:
         run: npm ci
       - name: Typecheck (api, worker, admin-web, support-console)
         run: npm run typecheck
-      - name: Migrations (reset + status 001→049)
+      - name: Migrations (reset + status 001→063)
         run: |
           node scripts/migrate.mjs --reset
           node scripts/migrate.mjs
@@ -62,6 +62,196 @@ jobs:
           npm run build --workspace @creche/worker
       - name: Suites d'isolation (isolation + phase3 → phase24 (auto))
         run: bash scripts/run-isolation-suites.sh
+
+  backup-drill:
+    # P0-2 (audit continu 2026-09) : « une sauvegarde non restaurée n'est
+    # pas une sauvegarde ». Chaque push rejoue le cycle complet :
+    # backup.sh chiffré → intégrité sha256 → preuve de chiffrement
+    # (mauvaise passphrase refusée) → restauration sur cluster jetable →
+    # comparaison source/restauré (lignes, politiques RLS, fonctions).
+    # Source en postgres:16 : version de docker-compose.prod.yml ET du
+    # client pg_dump préinstallé sur le runner (≥ serveur exigé par le drill).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: creche_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Client PostgreSQL (pg_dump ≥ serveur)
+        run: |
+          pg_dump --version || sudo apt-get install -y postgresql-client
+          pg_dump --version
+      - name: npm ci
+        run: npm ci
+      - name: Migrations + seeds
+        run: |
+          node scripts/migrate.mjs
+          node scripts/seed.mjs
+      - name: Drill sauvegarde → restauration chiffrée
+        run: node scripts/restore-drill.mjs
+        env:
+          BACKUP_PASSPHRASE: drill-ci-passphrase-sans-secret
+
+  quality:
+    # B1 (remédiation audits combinés) : lint et tests unitaires API étaient
+    # écrits mais JAMAIS exécutés en CI — un rouge ici est un vrai signal.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Lint (eslint --max-warnings=0)
+        run: npm run lint
+      - name: Tests unitaires API (jest)
+        run: npm run test:unit
+
+  e2e:
+    # B2 : parcours Playwright (login + directeur) contre l'API réelle.
+    # Jamais exécutés avant ce job — un rouge est honnête et non bloquant
+    # (seul le check `database` est requis par la branch protection).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: creche_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_e2e
+      NODE_ENV: test
+      RATE_LIMIT_DISABLED: 'true'
+      STORAGE_BACKEND: local
+      STORAGE_LOCAL_DIR: /tmp/creche-storage-e2e
+      JWT_SECRET: e2e_jwt_secret_32_caracteres_minimum_ok
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Migrations + seeds + compte e2e
+        run: |
+          node scripts/migrate.mjs --reset
+          node scripts/migrate.mjs
+          node scripts/seed.mjs
+          node tests/tenant-isolation/seed-e2e.mjs
+      - name: Build API
+        run: npm run build --workspace @creche/api
+      - name: Build worker
+        run: npm run build --workspace @creche/worker
+      - name: Installer Playwright (Chromium)
+        run: npx playwright install --with-deps chromium
+      # G2 diagnostic : boot réel des trois webServer AVANT Playwright — une
+      # annotation lisible (API check-runs/annotations) identifie le serveur
+      # fautif si l'un d'eux ne démarre pas, au lieu d'un échec opaque.
+      - name: Diagnostic webServers (API + worker + Vite)
+        run: |
+          set +e
+          APP_PORT=3000 NODE_ENV=development EMAIL_PROVIDER=none \
+            node apps/api/dist/main.js > /tmp/api-boot.log 2>&1 &
+          API_PID=$!
+          API_OK=0
+          for _ in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3000/api/v1/health > /dev/null && { API_OK=1; break; }
+            kill -0 "$API_PID" 2>/dev/null || break
+            sleep 0.5
+          done
+          if [ "$API_OK" = "1" ]; then echo "✓ API démarrée"; else
+            echo "::error title=e2e boot API::$(tail -c 600 /tmp/api-boot.log | tr '\n' ' ')"
+          fi
+          kill "$API_PID" 2>/dev/null; wait "$API_PID" 2>/dev/null
+
+          node apps/worker/dist/main.js > /tmp/worker-boot.log 2>&1 &
+          WORKER_PID=$!
+          sleep 6
+          if kill -0 "$WORKER_PID" 2>/dev/null; then echo "✓ worker vivant"; else
+            echo "::error title=e2e boot worker::$(tail -c 600 /tmp/worker-boot.log | tr '\n' ' ')"
+          fi
+          kill "$WORKER_PID" 2>/dev/null; wait "$WORKER_PID" 2>/dev/null
+
+          (cd apps/admin-web && npm run dev -- --port 4000 --strictPort > /tmp/vite-boot.log 2>&1) &
+          VITE_PID=$!
+          VITE_OK=0
+          for _ in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4000 > /dev/null && { VITE_OK=1; break; }
+            sleep 0.5
+          done
+          if [ "$VITE_OK" = "1" ]; then echo "✓ Vite démarré"; else
+            echo "::error title=e2e boot Vite::$(tail -c 600 /tmp/vite-boot.log | tr '\n' ' ')"
+          fi
+          kill "$VITE_PID" 2>/dev/null
+          pkill -f "vite.*--port 4000" 2>/dev/null
+          sleep 1
+          echo "— diagnostic terminé (les erreurs éventuelles sont en annotations)"
+      - name: Tests e2e (Playwright)
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: /tmp/pw-results.json
+        run: |
+          if npx playwright test --config apps/admin-web/playwright.config.ts --reporter=list,json > /tmp/e2e-playwright.log 2>&1; then
+            tail -n 15 /tmp/e2e-playwright.log
+          else
+            tail -n 100 /tmp/e2e-playwright.log
+            echo "::error title=e2e liste des échecs::$(grep -E '✘|passed|failed' /tmp/e2e-playwright.log | tr '\n' '|' | head -c 700)"
+            node -e '
+              const fs = require("fs");
+              const strip = (s) => String(s).replace(/\u001b\[[0-9;]*m/g, "").replace(/\s+/g, " ");
+              try {
+                const r = JSON.parse(fs.readFileSync("/tmp/pw-results.json", "utf8"));
+                const out = [];
+                const walk = (s) => {
+                  for (const spec of s.specs ?? []) for (const t of spec.tests ?? [])
+                    for (const res of t.results ?? [])
+                      if (res.status !== "passed" && res.status !== "skipped")
+                        out.push(`${spec.file}:${spec.line} ${spec.title} — ${strip(res.error?.message ?? res.status).slice(0, 280)}`);
+                  for (const c of s.suites ?? []) walk(c);
+                };
+                for (const s of r.suites ?? []) walk(s);
+                const seen = new Set();
+                const uniq = out.filter((l) => { const k = l.slice(0, 80); if (seen.has(k)) return false; seen.add(k); return true; });
+                console.log(`::error title=e2e erreurs détaillées::${uniq.slice(0, 6).join(" || ").slice(0, 2000)}`);
+              } catch (e) { console.log(`::error title=e2e détail indisponible::${e.message}`); }
+            '
+            exit 1
+          fi
+      - name: Rapport Playwright
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/admin-web/playwright-report/
+            apps/admin-web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   admin-web:
     runs-on: ubuntu-latest

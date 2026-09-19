@@ -15,7 +15,7 @@ DATABASE_URL="..." BACKUP_DIR=/var/backups/creche BACKUP_PASSPHRASE="..." ./scri
 ## Objectif de l'exercice
 
 - Restaurer **en staging < 30 min** depuis la sauvegarde chiffrée la plus récente
-- Vérifier cohérence schéma (`migrate.mjs --check`) + seeds + 28 suites isolation
+- Vérifier cohérence schéma (`migrate.mjs --check`) + seeds + suites d'isolation (`scripts/run-isolation-suites.sh`)
 - Documenter temps, taille, incidents
 
 ## Pré-requis VM clean (Ubuntu 22.04)
@@ -64,7 +64,7 @@ psql "$DATABASE_URL" -c "SELECT count(*) FROM organizations; SELECT max(created_
 ```bash
 cd /home/user/cr-cheDZ
 DATABASE_URL="$DATABASE_URL" node scripts/migrate.mjs --check
-# Doit dire : Schéma cohérent, 001→052, checksums OK, sinon drift
+# Doit dire : Schéma cohérent, toutes migrations appliquées (001→NNN), checksums OK, sinon drift
 ```
 
 ### T0+20min — Seeds + smoke
@@ -79,14 +79,14 @@ curl http://localhost:3000/api/v1/health
 ```bash
 export RATE_LIMIT_DISABLED=1 NODE_ENV=test STORAGE_BACKEND=local STORAGE_LOCAL_DIR=/tmp/restore-storage PAYMENT_WEBHOOK_SECRET=phase8-test-secret
 bash scripts/run-isolation-suites.sh | tail -n 30
-# Attendu : 28/28 vertes
+# Attendu : toutes les suites du runner vertes (compte réel donné par le runner)
 ```
 
 ### T0+30min — Bilan
 - [ ] Temps total < 30 min : ___ min
 - [ ] Taille backup : ___ MB
 - [ ] `migrate --check` vert
-- [ ] 28/28 suites vertes
+- [ ] Suites d'isolation vertes (`scripts/run-isolation-suites.sh`, sans échec)
 - [ ] Restauration documentée dans `docs/pilot/BILAN-PILOTE.md` § Exercice restauration
 
 ## Échecs connus
@@ -97,14 +97,52 @@ bash scripts/run-isolation-suites.sh | tail -n 30
 | `psql: role does not exist` | dump avec owner | `pg_dump --no-owner --no-privileges` déjà fait par backup.sh, sinon `--no-owner` au restore |
 | `migrate --check` drift | migration manquante | Appliquer `node scripts/migrate.mjs` |
 
-## Automatisation mensuelle (cron)
+## Automatisation (cron VPS)
 
 ```cron
-0 3 * * * DATABASE_URL=... BACKUP_DIR=/var/backups/creche BACKUP_PASSPHRASE=... /home/user/cr-cheDZ/scripts/backup.sh >> /var/log/creche-backup.log 2>&1
-0 4 1 * * /home/user/cr-cheDZ/docs/BACKUP-RUNBOOK.md # exercice mensuel 1er du mois
+0 3 * * * DATABASE_URL=... BACKUP_DIR=/var/backups/creche BACKUP_PASSPHRASE=... BACKUP_OFFSITE_DIR=/mnt/offsite/creche /home/user/cr-cheDZ/scripts/backup.sh >> /var/log/creche-backup.log 2>&1
 ```
+
+### Hors site (P0-2, audit continu 2026-09) — OBLIGATOIRE avant pilote
+
+`BACKUP_OFFSITE_DIR` pointe vers un montage distant du VPS (l'archive et son
+empreinte `.sha256` y sont copiées, rétention alignée) :
+
+```bash
+# Option recommandée : bucket S3/MinIO distant monté via rclone
+rclone config create offsite s3 provider=Other access_key_id=... secret_access_key=... endpoint=...
+mkdir -p /mnt/offsite && rclone mount offsite:creche-backups /mnt/offsite --daemon
+# Alternative : montage NFS / snapshot objet du fournisseur VPS.
+```
+
+Règle : un incendie du VPS ne doit jamais emporter à la fois la base et ses
+sauvegardes. Tester une fois : `rclone ls offsite:creche-backups/daily`.
+
+## Drill automatique sauvegarde → restauration (P0-2)
+
+`scripts/restore-drill.mjs` rejoue le cycle complet contre une base `*_test` :
+backup.sh chiffré (+ copie hors site simulée) → sha256 → **preuve de
+chiffrement** (mauvaise passphrase refusée) → restauration (pipeline exact
+du runbook : gpg → gunzip → psql) dans une base dédiée
+`restore_drill_target` → comparaison source/restauré (comptes de lignes des
+tables majeures, politiques RLS, fonctions SECURITY DEFINER) → nettoyage.
+Prérequis : gpg, gzip, pg_dump et psql (présents en CI et sur le VPS).
+
+- **CI : job `backup-drill` sur CHAQUE push** (`.github/workflows/ci.yml`) —
+  une régression du pipeline de sauvegarde casse la CI le jour même.
+- Local :
+  ```bash
+  DATABASE_URL="postgres://postgres:postgres@localhost:54329/creche_test" \
+  BACKUP_PASSPHRASE="..." node scripts/restore-drill.mjs
+  ```
+
+Ce drill remplace l'exercice manuel mensuel comme preuve de routine ;
+l'exercice chronométré < 30 min ci-dessus reste requis **avant pilote**
+(conditions réelles, VM propre, autre opérateur).
 
 ## Critère go/no-go pilote
 
+- [ ] Job CI `backup-drill` vert sur la dernière release
+- [ ] Copie hors site effective et vérifiée (`rclone ls` ou équivalent)
 - [ ] Exercice restore <30 min réalisé **2 fois** (dont 1 fois par une autre personne que l'auteur du backup)
 - [ ] Temps consigné, logs conservés

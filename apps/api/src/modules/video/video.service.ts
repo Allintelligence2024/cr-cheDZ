@@ -1,7 +1,9 @@
 import { resolveStorageBackend, type StorageBackend } from '@creche/prod-config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readFile } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
+import { createReadStream, existsSync } from 'node:fs';
+import type { Readable } from 'node:stream';
 import { resolve, sep } from 'node:path';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -317,8 +319,10 @@ export class VideoService {
     return { storage_backend: 's3', download_url: await this.storage.presignGet(clip.storage_key) };
   }
 
-  /** Backend local (dev/test) : lecture réelle du fichier — visionnage journalisé. */
-  async streamContent(clipId: string, userId: string, ipAddress?: string): Promise<{ buffer: Buffer; mimeType: string }> {
+  /** Backend local (dev/test) : lecture réelle du fichier — visionnage journalisé.
+   *  E2 : flux continu (createReadStream) au lieu du fichier complet en
+   *  mémoire — la pression mémoire ne dépend plus de la taille du clip. */
+  async streamContent(clipId: string, userId: string, ipAddress?: string): Promise<{ stream: Readable; mimeType: string; size: number }> {
     const tenantId = await this.assertVideoEnabled();
     const clip = await this.clipOfTenant(clipId);
     if (clip.storage_backend !== 'local') {
@@ -347,10 +351,9 @@ export class VideoService {
         422,
       );
     }
-    let buffer: Buffer;
-    try {
-      buffer = await readFile(filePath);
-    } catch {
+    // E2 : existence vérifiée AVANT d'ouvrir le flux (même 404 qu'avant),
+    // puis flux disque — jamais le clip complet en mémoire.
+    if (!existsSync(filePath)) {
       throw new AppError(
         'CLIP_FILE_MISSING',
         'Fichier du clip introuvable sur le stockage local',
@@ -358,6 +361,7 @@ export class VideoService {
         404,
       );
     }
-    return { buffer, mimeType: clip.mime_type };
+    const { size } = await stat(filePath);
+    return { stream: createReadStream(filePath), mimeType: clip.mime_type, size };
   }
 }

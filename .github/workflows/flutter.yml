@@ -9,7 +9,8 @@
 #        Flutter version"). Corrigé en `channel: stable`.
 # Le statut reflète maintenant la VRAIE compilation. Non bloquant (seul le
 # check `database` est requis par la branch protection) : un rouge honnête ne
-# bloque pas les merges. Suivi / rescope "build + run" dans l'issue #8.
+# bloque pas les merges. `flutter test` (staff-mobile) a été ajouté le
+# 2026-09-19 (lot G) ; le « build apk/ipa » reste dans l'issue #8.
 name: flutter
 
 on:
@@ -44,6 +45,11 @@ jobs:
         run: |
           flutter pub get -v | tee staff-pub-get.log
           flutter analyze -v | tee staff-analyze.log
+      # Lot G : les tests existent (widget login + sync F2/F3B + projections) —
+      # ils sont réellement exécutés, pas seulement analysés.
+      - name: staff-mobile — tests
+        working-directory: apps/staff-mobile
+        run: flutter test | tee staff-test.log
       - name: Upload staff-mobile logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -52,3 +58,4 @@ jobs:
           path: |
             apps/staff-mobile/staff-pub-get.log
             apps/staff-mobile/staff-analyze.log
+            apps/staff-mobile/staff-test.log

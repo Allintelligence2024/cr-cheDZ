@@ -117,6 +117,16 @@ const main = async () => {
       Number(entryUpdated.gross_amount) === 45000 && Number(entryUpdated.deductions_amount) === 2000 && Number(entryUpdated.net_amount) === 43000,
       JSON.stringify(entryUpdated));
 
+    // Verrou (audit 2026-09) : une retenue saisie POSITIVE ne doit JAMAIS
+    // gonfler le net — le calcul est indépendant du signe (ABS côté serveur).
+    const positiveDeduction = await api('POST', `/payroll/entries/${entryA.id}/lines`, tokenA, {
+      lines: [{ line_type: 'deduction', label_fr: 'Retenue saisie positive', amount: 1000 }],
+    });
+    ok('Retenue positive acceptée (saisie sans signe)', positiveDeduction.status === 200 || positiveDeduction.status === 201, JSON.stringify(positiveDeduction.body).slice(0, 120));
+    ok('Retenue positive réduit le net : 43000 − 1000 = 42000 (pas 44000 !)',
+      Number(positiveDeduction.body.net) === 42000 && Number(positiveDeduction.body.deductions) === 3000,
+      JSON.stringify(positiveDeduction.body));
+
     // ── 4. Finalisation → immuable ──────────────────────────────────────────
     console.log('\n4) Finalisation (immuable)');
     const fin = await api('POST', `/payroll/runs/${runId}/finalize`, tokenA, {});

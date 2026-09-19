@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { ApiError, apiDownload, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface ExportRow {
@@ -58,24 +58,18 @@ export function ExportsPage(): React.JSX.Element {
   const download = async (id: string): Promise<void> => {
     setError(null);
     try {
-      const res = await fetch(`/api/v1/exports/${id}/download`, {
-        headers: { authorization: `Bearer ${localStorage.getItem('creche_access_token') ?? ''}` },
-        redirect: 'follow',
-      });
-      if (res.status === 409) {
-        setError(t('exports.notReady'));
-        return;
-      }
-      if (!res.ok) throw new Error(String(res.status));
-      const blob = await res.blob();
+      // A3 : passe par le client API — un access token expiré est renouvelé
+      // automatiquement avant le téléchargement (plus de 401 après 15 min).
+      const blob = await apiDownload(`/exports/${id}/download`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `export-${id.slice(0, 8)}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      setError(t('common.error'));
+    } catch (e: unknown) {
+      const err = e as ApiError;
+      setError(err?.status === 409 ? t('exports.notReady') : (err?.messageFr ?? t('common.error')));
     }
   };
 

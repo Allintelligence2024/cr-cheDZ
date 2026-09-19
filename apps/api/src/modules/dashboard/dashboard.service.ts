@@ -64,7 +64,11 @@ export class DashboardService {
          JOIN users u ON u.id = sp.user_id
          WHERE sd.organization_id = $1
            AND sd.expiry_date IS NOT NULL
-           AND sd.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + 30
+           -- C5 : date du jour en fuseau algérois, comme le reste du module —
+           -- CURRENT_DATE dépend du fuseau du serveur et serait incohérent
+           -- autour de minuit.
+           AND sd.expiry_date BETWEEN (NOW() AT TIME ZONE 'Africa/Algiers')::date
+                                  AND (NOW() AT TIME ZONE 'Africa/Algiers')::date + 30
          ORDER BY sd.expiry_date
          LIMIT 20`,
         [tenantId],

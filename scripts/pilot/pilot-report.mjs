@@ -15,12 +15,15 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const run = (cmd, env = {}) => {
+const run = (cmd, env = {}, clean = false) => {
+  const cleanLine = (l) => !/[│┌┐└┘├┤┬┴┼─]/.test(l);
   try {
     const out = execSync(cmd, { cwd: repo, env: { ...process.env, ...env }, encoding: 'utf8', timeout: 600000 });
-    return { ok: true, out: out.split('\n').filter((l) => l.trim()).slice(-4).join(' | ') };
+    const lines = out.split('\n').filter((l) => l.trim() && (!clean || cleanLine(l)));
+    return { ok: true, out: lines.slice(-4).join(' | ') };
   } catch (e) {
-    return { ok: false, out: String(e.stdout ?? e.message).split('\n').filter((l) => l.trim()).slice(-4).join(' | ') };
+    const lines = String(e.stdout ?? e.message).split('\n').filter((l) => l.trim() && (!clean || cleanLine(l)));
+    return { ok: false, out: lines.slice(-4).join(' | ') };
   }
 };
 
@@ -38,8 +41,14 @@ const add = (label, ok, detail) => checks.push({ label, ok, detail });
 
 const main = async () => {
   console.log('→ Rapport de préparation pilote…');
-  add('Migrations appliquées (35)', true, 'scripts/migrate.mjs --check');
-  add('Seeds appliqués', true, 'scripts/seed.mjs');
+
+  // E3 : les vérifications sont RÉELLEMENT exécutées quand c'est possible —
+  // plus de « true » codé en dur. Ce qui n'est qu'une vérification de
+  // PRÉSENCE est étiqueté comme tel (jamais présenté comme un test passé).
+  const migrations = run('node scripts/migrate.mjs --status', {}, true);
+  add('Migrations à jour', migrations.ok, migrations.out);
+  const seeds = run('node scripts/seed.mjs');
+  add('Seeds appliqués (idempotents)', seeds.ok, seeds.out);
 
   const schema = run('node tests/tenant-isolation/schema-check.mjs');
   add('schema-check (RLS, contraintes, drift)', schema.ok, schema.out);
@@ -48,9 +57,10 @@ const main = async () => {
 
   const { existsSync } = await import('node:fs');
   for (const s of suites) {
-    add(`Suite ${s}`, existsSync(join(repo, 'tests/tenant-isolation', s)), 'présente');
+    add(`Suite ${s} (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh)`,
+      existsSync(join(repo, 'tests/tenant-isolation', s)), 'fichier présent, non exécuté ici');
   }
-  add('Benchmark MVP (tests/load/mvp-bench.mjs)', existsSync(join(repo, 'tests/load/mvp-bench.mjs')), 'présent');
+  add('Benchmark MVP (tests/load/mvp-bench.mjs) — présence', existsSync(join(repo, 'tests/load/mvp-bench.mjs')), 'fichier présent ; exécution via --bench');
 
   // Critères MVP (docs/PLAN_IMPLEMENTATION.md §6)
   const mvp = [
@@ -90,7 +100,10 @@ const main = async () => {
     '|---|---|---|',
     ...mvp.map(([label, proof, status]) => `| ${label} | ${proof} | ${status === 'pass' ? '✅ pass' : status === 'na' ? '⏳ na (infra réelle requise)' : '❌'} |`),
     '',
-    '## Benchmark MVP (mesures API réelles)',
+    '> Honnêteté E3 : les valeurs « API mesurée » proviennent de l\'exécution du',
+    '> benchmark du 2026-08-02 ; ce rapport ne le rejoue QUE si `--bench` est passé.',
+    '',
+    '## Benchmark MVP (réexécuté uniquement avec --bench)',
     '',
     '```',
     benchOut,
@@ -100,7 +113,7 @@ const main = async () => {
     '',
     '- FCM/APNs/SMS : secrets requis pour les tests de bout en bout (chemins d\'échec testés).',
     '- Stores (Play Console / App Store) : builds et device farm à réaliser hors sandbox.',
-    '- e2e Playwright : à exécuter en CI (workflows locaux — permission `workflows` requise).',
+    '- e2e Playwright : job `e2e` en CI (lots A/B remédiation) ; specs exécutées contre l’API réelle.',
     '',
   ];
   const pilotDir = join(repo, 'docs/pilot');

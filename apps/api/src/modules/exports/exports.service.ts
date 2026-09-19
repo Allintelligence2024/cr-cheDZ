@@ -3,10 +3,12 @@ import { exportRange } from '@creche/prod-config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
+import { S3ClientService } from '../../shared/storage/s3-client.service';
 
 /**
  * Exports Excel (roadmap v2).
@@ -15,6 +17,9 @@ import { AppError, Errors } from '../../shared/errors';
  * dans report_exports (migration 038). Le téléchargement est autorisé pour
  * le tenant demandeur uniquement (RLS) — backend local (buffer) ou S3 (URL
  * signée), jamais de faux « prêt » avant que le worker n'ait écrit le fichier.
+ *
+ * E1 : plus de client S3 recréé à chaque téléchargement — S3ClientService
+ * mutualisé (bucket + credentials résolus une seule fois au boot).
  */
 @Injectable()
 export class ExportsService {
@@ -22,6 +27,7 @@ export class ExportsService {
   constructor(
     private readonly tenantContext: TenantContextService,
     private readonly config: ConfigService,
+    private readonly s3: S3ClientService,
   ) {
     this.backend = resolveStorageBackend({
       NODE_ENV: this.config.get<string>('NODE_ENV'),
@@ -103,24 +109,21 @@ export class ExportsService {
           422,
         );
       }
+      // Garde d'existence (audit — symétrique de C4 sur les PDF) : une clé
+      // orpheline (fichier purgé/disparu) ne doit pas produire un 500 ENOENT
+      // mais un 404 clair.
+      if (!existsSync(filePath)) {
+        throw new AppError(
+          'EXPORT_FILE_MISSING',
+          'Le fichier d’export est introuvable sur le stockage local',
+          'ملف التصدير غير موجود في التخزين المحلي',
+          404,
+        );
+      }
       return { kind: 'buffer', buffer: await readFile(filePath), filename };
     }
-    const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-    const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
-    const client = new S3Client({
-      endpoint: this.config.get<string>('S3_ENDPOINT', 'http://localhost:9000'),
-      region: this.config.get<string>('S3_REGION', 'us-east-1'),
-      credentials: {
-        accessKeyId: this.config.get<string>('S3_ACCESS_KEY', 'minio_dev'),
-        secretAccessKey: this.config.get<string>('S3_SECRET_KEY', 'minio_dev_password'),
-      },
-      forcePathStyle: true,
-    });
-    const url = await getSignedUrl(
-      client,
-      new GetObjectCommand({ Bucket: this.config.get<string>('S3_BUCKET', 'creche-media'), Key: row.storage_key as string }),
-      { expiresIn: 900 },
-    );
+    // E1 : URL signée via le client S3 mutualisé (900 s, comme avant).
+    const url = await this.s3.presignGet(row.storage_key as string, 900);
     return { kind: 'redirect', url, filename };
   }
 

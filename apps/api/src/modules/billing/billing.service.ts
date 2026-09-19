@@ -5,6 +5,7 @@ import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
+import { EmailService } from '../../shared/email/email.service';
 import { AuditService } from '../privacy/audit.service';
 import { PdfStorageService } from './pdf-storage.service';
 
@@ -25,6 +26,7 @@ export class BillingService {
     private readonly pdfStorage: PdfStorageService,
     private readonly config: ConfigService,
     private readonly audit: AuditService,
+    private readonly email: EmailService,
     @Inject(PG_POOL) private readonly pool: Pool,
   ) {}
 
@@ -60,9 +62,10 @@ export class BillingService {
   }
 
   async getContract(contractId: string): Promise<Record<string, unknown>> {
-    requireTenant(this.tenant);
+    const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
-      const r = await c.query(`SELECT * FROM contracts WHERE id=$1`, [contractId]);
+      // C1 : filtre tenant explicite EN PLUS de la RLS (défense en profondeur).
+      const r = await c.query(`SELECT * FROM contracts WHERE id=$1 AND organization_id=$2`, [contractId, org]);
       if (!r.rows[0]) throw Errors.notFound();
       return r.rows[0];
     });
@@ -73,7 +76,7 @@ export class BillingService {
   async generateInvoice(userId: string, dto: { contract_id: string; period_year: number; period_month: number; due_date: string }) {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
-      const contract = (await c.query(`SELECT * FROM contracts WHERE id=$1 AND is_active=true`, [dto.contract_id])).rows[0];
+      const contract = (await c.query(`SELECT * FROM contracts WHERE id=$1 AND organization_id=$2 AND is_active=true`, [dto.contract_id, org])).rows[0];
       if (!contract) throw Errors.notFound();
       const exists = await c.query(
         `SELECT id FROM invoices WHERE contract_id=$1 AND period_year=$2 AND period_month=$3 AND status <> 'cancelled'`,
@@ -132,11 +135,12 @@ export class BillingService {
   }
 
   async getInvoice(invoiceId: string): Promise<Record<string, unknown>> {
-    requireTenant(this.tenant);
+    const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
       const invoice = (await c.query(
         `SELECT i.*, ch.first_name_fr AS child_first_name, ch.last_name_fr AS child_last_name
-         FROM invoices i JOIN children ch ON ch.id = i.child_id WHERE i.id=$1`, [invoiceId],
+         FROM invoices i JOIN children ch ON ch.id = i.child_id
+         WHERE i.id=$1 AND i.organization_id=$2`, [invoiceId, org],
       )).rows[0];
       if (!invoice) throw Errors.notFound();
       const lines = (await c.query(
@@ -152,7 +156,7 @@ export class BillingService {
   async recordCashPayment(userId: string, dto: { invoice_id: string; amount: number; notes?: string }) {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
-      const invoice = (await c.query(`SELECT id,child_id,total_amount,paid_amount,status FROM invoices WHERE id=$1 FOR UPDATE`, [dto.invoice_id])).rows[0];
+      const invoice = (await c.query(`SELECT id,child_id,total_amount,paid_amount,status FROM invoices WHERE id=$1 AND organization_id=$2 FOR UPDATE`, [dto.invoice_id, org])).rows[0];
       if (!invoice) throw Errors.notFound();
       if (['paid', 'cancelled'].includes(invoice.status)) throw Errors.invoiceImmutable();
       const due = Number(invoice.total_amount) - Number(invoice.paid_amount);
@@ -173,20 +177,60 @@ export class BillingService {
            updated_at=NOW() WHERE id=$1 RETURNING paid_amount,balance,status`,
         [invoice.id, dto.amount],
       )).rows[0];
+      // Accusé de paiement — best-effort : jamais bloquant pour l'encaissement.
+      void this.sendReceiptBestEffort(org, payment, invoice.child_id);
       return { ...payment, invoice: updated };
     });
+  }
+
+  /** Reçu envoyé au tuteur facturable ; silencieux si transport indisponible. */
+  private async sendReceiptBestEffort(
+    orgId: string,
+    payment: { receipt_number: string; amount: number; method: string },
+    childId: string,
+  ): Promise<void> {
+    try {
+      const orgName = (await this.pool.query(
+        `SELECT name_fr FROM organizations WHERE id = $1`, [orgId],
+      )).rows[0]?.name_fr as string | undefined;
+      if (!orgName) return;
+      const recipient = await this.tenant.withTenantConnection(async (c) => {
+        const res = await c.query(
+          `SELECT g.email
+           FROM guardians g
+           JOIN child_guardians cg
+             ON cg.guardian_id = g.id AND cg.organization_id = g.organization_id
+           WHERE cg.child_id = $1 AND cg.organization_id = $2 AND g.email IS NOT NULL
+           ORDER BY cg.is_primary DESC, g.email
+           LIMIT 1`,
+          [childId, orgId],
+        );
+        return res.rows[0]?.email as string | undefined;
+      });
+      if (!recipient) return;
+      await this.email.sendPaymentReceipt({
+        to: recipient,
+        orgName,
+        receiptNumber: payment.receipt_number,
+        amount: Number(payment.amount),
+        method: payment.method,
+      });
+    } catch (error) {
+      // Un échec d'envoi ne doit jamais remettre en cause l'encaissement.
+      void error;
+    }
   }
 
   /** Allocation d'un paiement confirmé vers une facture (bornes en base, trigger 023). */
   async allocatePayment(userId: string, paymentId: string, dto: { invoice_id: string; amount_allocated: number }) {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
-      const payment = (await c.query(`SELECT id,amount,status FROM payments WHERE id=$1 FOR UPDATE`, [paymentId])).rows[0];
+      const payment = (await c.query(`SELECT id,amount,status FROM payments WHERE id=$1 AND organization_id=$2 FOR UPDATE`, [paymentId, org])).rows[0];
       if (!payment) throw Errors.notFound();
       if (payment.status !== 'confirmed') {
         throw new AppError('PAYMENT_NOT_CONFIRMED', 'Seul un paiement confirmé peut être alloué', 'يمكن تخصيص الدفعات المؤكدة فقط', 422);
       }
-      const invoice = (await c.query(`SELECT id,status,total_amount,paid_amount FROM invoices WHERE id=$1 FOR UPDATE`, [dto.invoice_id])).rows[0];
+      const invoice = (await c.query(`SELECT id,status,total_amount,paid_amount FROM invoices WHERE id=$1 AND organization_id=$2 FOR UPDATE`, [dto.invoice_id, org])).rows[0];
       if (!invoice) throw Errors.notFound();
       if (['paid', 'cancelled'].includes(invoice.status)) throw Errors.invoiceImmutable();
       // Mêmes bornes que le trigger 023, dans le même ordre (paiement, puis facture).
@@ -234,11 +278,12 @@ export class BillingService {
   }
 
   async getPayment(paymentId: string): Promise<Record<string, unknown>> {
-    requireTenant(this.tenant);
+    const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
       const payment = (await c.query(
         `SELECT p.*, ch.first_name_fr AS child_first_name, ch.last_name_fr AS child_last_name
-         FROM payments p JOIN children ch ON ch.id=p.child_id WHERE p.id=$1`, [paymentId],
+         FROM payments p JOIN children ch ON ch.id=p.child_id
+         WHERE p.id=$1 AND p.organization_id=$2`, [paymentId, org],
       )).rows[0];
       if (!payment) throw Errors.notFound();
       const allocations = (await c.query(
@@ -330,9 +375,9 @@ export class BillingService {
 
   /** Téléchargement autorisé : retourne le buffer PDF (local) ou l'URL signée (S3). */
   async invoicePdf(userId: string, invoiceId: string, ipAddress?: string) {
-    requireTenant(this.tenant);
+    const org = requireTenant(this.tenant);
     const invoice = await this.tenant.withTenantConnection(async (c) => {
-      const r = await c.query(`SELECT id, organization_id, pdf_url FROM invoices WHERE id=$1`, [invoiceId]);
+      const r = await c.query(`SELECT id, organization_id, pdf_url FROM invoices WHERE id=$1 AND organization_id=$2`, [invoiceId, org]);
       if (!r.rows[0]) throw Errors.notFound();
       if (!r.rows[0].pdf_url) throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
       return r.rows[0];
@@ -349,6 +394,11 @@ export class BillingService {
       ipAddress: ipAddress ?? null,
     });
     if (this.pdfStorage.isLocal()) {
+      // C4 : vérifier l'existence AVANT de lire — un pdf_url orphelin ne doit
+      // pas produire un 500 (ENOENT) mais le même 404 que « pas encore généré ».
+      if (!this.pdfStorage.exists(invoice.pdf_url as string)) {
+        throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
+      }
       return { kind: 'buffer' as const, buffer: await this.pdfStorage.read(invoice.pdf_url as string), invoice };
     }
     return { kind: 'redirect' as const, url: await this.pdfStorage.presign(invoice.pdf_url as string), invoice };

@@ -1,4 +1,4 @@
-# RAPPORT DE PRÉPARATION AU PILOTE — 2026-08-02
+# RAPPORT DE PRÉPARATION AU PILOTE — 2026-09-19
 
 > Généré par `scripts/pilot/pilot-report.mjs` sur PostgreSQL réel avec le rôle NOBYPASSRLS.
 
@@ -6,25 +6,25 @@
 
 | Vérification | Statut | Détail |
 |---|---|---|
-| Migrations appliquées (35) | ✅ | scripts/migrate.mjs --check |
-| Seeds appliqués | ✅ | scripts/seed.mjs |
+| Migrations à jour | ✅ | ✓ Schéma cohérent avec les fichiers de migrations. |
+| Seeds appliqués (idempotents) | ✅ | → Seed 013_compliance.sql | → Seed 014_feature_flags.sql | → Seed 015_privacy_registry.sql | ✓ Seeds appliqués. |
 | schema-check (RLS, contraintes, drift) | ✅ | 1) RLS sur toutes les tables tenant (C01) | 5) Drift des migrations (C05) | ✓ Schéma conforme : RLS complète, contraintes financières, curseur monotone, migrations cohérentes. |
 | rls-behavior-check (GATE RLS) | ✅ |   ✓ B voit uniquement ses enfants |   ✓ Trigger agrégats : daily_summaries.meal_count = 1 |   ✓ Facture payée non modifiable (INVOICE_IMMUTABLE) | ✓ Isolation RLS vérifiée comportementalement : aucun accès cross-tenant. |
-| Suite schema-check.mjs | ✅ | présente |
-| Suite rls-behavior-check.mjs | ✅ | présente |
-| Suite isolation.api.test.mjs | ✅ | présente |
-| Suite phase3.api.test.mjs | ✅ | présente |
-| Suite phase4.api.test.mjs | ✅ | présente |
-| Suite phase5.api.test.mjs | ✅ | présente |
-| Suite phase6.api.test.mjs | ✅ | présente |
-| Suite phase7-parent.api.test.mjs | ✅ | présente |
-| Suite phase8-billing.api.test.mjs | ✅ | présente |
-| Suite phase9-dashboard.api.test.mjs | ✅ | présente |
-| Suite phase10-health.api.test.mjs | ✅ | présente |
-| Suite phase10-compliance.api.test.mjs | ✅ | présente |
-| Suite phase10-privacy.api.test.mjs | ✅ | présente |
-| Suite phase11-hardening.api.test.mjs | ✅ | présente |
-| Benchmark MVP (tests/load/mvp-bench.mjs) | ✅ | présent |
+| Suite schema-check.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite rls-behavior-check.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite isolation.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase3.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase4.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase5.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase6.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase7-parent.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase8-billing.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase9-dashboard.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase10-health.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase10-compliance.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase10-privacy.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Suite phase11-hardening.api.test.mjs (PRÉSENCE seule — exécution : scripts/run-isolation-suites.sh) | ✅ | fichier présent, non exécuté ici |
+| Benchmark MVP (tests/load/mvp-bench.mjs) — présence | ✅ | fichier présent ; exécution via --bench |
 
 ## Critères MVP (checklist §6)
 
@@ -41,14 +41,17 @@
 | Staging sans données réelles | scripts/anonymize.sql prêt ; contrôle CI à activer | ✅ pass |
 | 5 crèches × 2 semaines d'utilisation | Seed pilote prêt (5 crèches) ; exécution terrain requise | ⏳ na (infra réelle requise) |
 
-## Benchmark MVP (mesures API réelles)
+> Honnêteté E3 : les valeurs « API mesurée » proviennent de l'exécution du
+> benchmark du 2026-08-02 ; ce rapport ne le rejoue QUE si `--bench` est passé.
+
+## Benchmark MVP (réexécuté uniquement avec --bench)
 
 ```
-✓ Repas groupé 12 enfants (API) : 0.034 s (limite 30 s) | ✓ Génération facture mensuelle (API) : 0.007 s (limite 5 s) | ✓ Import 50 enfants (API) : 0.060 s (limite 60 s) | ✓ Benchmark MVP : 4/4 critères dans les limites.
+non exécuté (lancer : node tests/load/mvp-bench.mjs)
 ```
 
 ## Blocages connus
 
 - FCM/APNs/SMS : secrets requis pour les tests de bout en bout (chemins d'échec testés).
 - Stores (Play Console / App Store) : builds et device farm à réaliser hors sandbox.
-- e2e Playwright : à exécuter en CI (workflows locaux — permission `workflows` requise).
+- e2e Playwright : job `e2e` en CI (lots A/B remédiation) ; specs exécutées contre l’API réelle.

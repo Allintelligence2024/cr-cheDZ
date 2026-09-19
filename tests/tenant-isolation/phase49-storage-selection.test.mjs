@@ -14,6 +14,10 @@ import { validateProductionConfig, assertProductionConfig } from '@creche/prod-c
 import { ConfigService } from '@nestjs/config';
 import { PdfStorageService } from '../../apps/api/dist/modules/billing/pdf-storage.service.js';
 import { ExportsService } from '../../apps/api/dist/modules/exports/exports.service.js';
+// E1 : client S3 mutualisé — les services se construisent maintenant avec
+// (config, s3) ; on instancie le client avec la même ConfigService que le test.
+import { S3ClientService } from '../../apps/api/dist/shared/storage/s3-client.service.js';
+const withS3 = (config) => new S3ClientService(config);
 import { VideoService } from '../../apps/api/dist/modules/video/video.service.js';
 import { storeFile } from '../../apps/worker/dist/pdf.js';
 
@@ -58,13 +62,13 @@ try {
   for (const mode of ['test','development','staging']) await check(`${mode}: absent backend still selects the established s3 default`, async () => {
     setEnv({ ...original, ...safe, NODE_ENV: mode, STORAGE_BACKEND: undefined });
     const config = new ConfigService();
-    assert.equal(new PdfStorageService(config).isLocal(), false);
+    assert.equal(new PdfStorageService(config, withS3(config)).isLocal(), false);
     assert.equal(new VideoService(null, config, null, null).resolveStorageBackend(), 's3');
     assert.doesNotThrow(() => assertProductionConfig(process.env));
   });
   for (const [label, factory] of [
-    ['pdf', config => new PdfStorageService(config).isLocal()],
-    ['exports', config => new ExportsService(null, config)],
+    ['pdf', config => new PdfStorageService(config, withS3(config)).isLocal()],
+    ['exports', config => new ExportsService(null, config, withS3(config))],
     ['video', config => new VideoService(null, config, null, null).resolveStorageBackend()],
   ]) for (const backend of [undefined,'','s33']) await check(`${label}: production backend ${JSON.stringify(backend)} refused in actual service`, async () => {
     setEnv({ ...original, ...safe, STORAGE_BACKEND: backend });
@@ -72,7 +76,7 @@ try {
   });
   await check('production local video remains forbidden (does not forbid local PDFs)', async () => {
     setEnv({ ...original, ...safe, STORAGE_BACKEND: 'local' }); const config = new ConfigService();
-    assert.equal(new PdfStorageService(config).isLocal(), true);
+    assert.equal(new PdfStorageService(config, withS3(config)).isLocal(), true);
     assert.throws(() => new VideoService(null, config, null, null).resolveStorageBackend(), error => error.code === 'STORAGE_POLICY');
   });
   for (const [label, entry] of [['API','apps/api/dist/main.js'],['worker','apps/worker/dist/main.js']]) {
@@ -97,7 +101,8 @@ try {
     setEnv({ ...original, ...safe, STORAGE_BACKEND: 'local' });
     const key = `${randomUUID()}/invoices/${randomUUID()}.pdf`, data = Buffer.from('synthetic H2i bytes');
     await storeFile(key, data, 'application/pdf');
-    const pdf = new PdfStorageService(new ConfigService());
+    const cfg = new ConfigService();
+    const pdf = new PdfStorageService(cfg, withS3(cfg));
     assert.equal(pdf.isLocal(), true); assert.deepEqual(await pdf.read(key), data); assert.deepEqual(await readFile(join(root,key)), data);
   });
   await check('actual S3 transport selection: worker PUT and API GET reach loopback provider only', async () => {
@@ -111,7 +116,7 @@ try {
     try {
       setEnv({ ...original, ...safe, S3_ENDPOINT: `http://127.0.0.1:${server.address().port}`, S3_BUCKET: 'synthetic-h2i', S3_REGION: 'us-east-1' });
       const key = `${randomUUID()}/invoices/${randomUUID()}.pdf`;
-      await storeFile(key, data, 'application/pdf'); const pdf = new PdfStorageService(new ConfigService());
+      await storeFile(key, data, 'application/pdf'); const cfg = new ConfigService(); const pdf = new PdfStorageService(cfg, withS3(cfg));
       assert.equal(pdf.isLocal(), false); assert.deepEqual(await pdf.read(key), data);
       assert.deepEqual(calls.map(x=>x.method), ['PUT','GET']); assert.ok(calls.every(x=>x.url.startsWith(`/synthetic-h2i/${key}`)));
     } finally { await new Promise(resolve => server.close(resolve)); }

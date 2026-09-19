@@ -18,10 +18,12 @@ class ParentApp extends StatefulWidget {
 }
 
 class _ParentAppState extends State<ParentApp> {
+  // D3 : défaut = URL de production HTTPS, comme staff-mobile. Pour un
+  // émulateur Android en dev : --dart-define API_URL=http://10.0.2.2:3000/api/v1
   final _api = ParentApiClient(
     const String.fromEnvironment(
       'API_URL',
-      defaultValue: 'http://10.0.2.2:3000/api/v1',
+      defaultValue: 'https://api.creche.dz/api/v1',
     ),
   );
   bool _authenticated = false;
