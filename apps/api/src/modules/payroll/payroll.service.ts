@@ -84,10 +84,14 @@ export class PayrollService {
         sort += 1;
       }
       // Recalcul : gross = somme des non-deductions, deductions = somme des deductions.
+      // Bug argent (audit 2026-09) : les retenues sont contractuellement des
+      // montants NÉGATIFS (phase17 : amount -2000 → deductions 2000), mais une
+      // saisie positive ne doit JAMAIS gonfler le net — ABS rend le calcul
+      // indépendant du signe saisi.
       const sums = (await client.query(
         `SELECT
            COALESCE(SUM(amount) FILTER (WHERE line_type <> 'deduction'), 0)::numeric AS gross,
-           COALESCE(-SUM(amount) FILTER (WHERE line_type = 'deduction'), 0)::numeric AS deductions
+           COALESCE(SUM(ABS(amount)) FILTER (WHERE line_type = 'deduction'), 0)::numeric AS deductions
          FROM payroll_lines WHERE entry_id=$1`, [entryId],
       )).rows[0];
       await client.query(

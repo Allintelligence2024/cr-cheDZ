@@ -163,6 +163,20 @@ des modules media, billing, exports. Valeurs par défaut et durées de presign i
 
 ---
 
+### Lot H — Audit continu (2026-09-19, après fusion des lots A–G) — ✅ IMPLÉMENTÉ & VÉRIFIÉ
+
+Relecture fichier par fichier des chemins critiques (worker, exports, paie,
+marketplace) au-delà des deux rapports. Trois défauts réels corrigés, chacun
+verrouillé par une assertion de non-régression :
+
+| # | Fichier | Défaut | Correction |
+|---|---|---|---|
+| H1 | `exports.service.ts` (`download`, backend local) | Clé orpheline (fichier purgé/disparu) → `readFile` levait ENOENT → **500** | Garde `existsSync` → 404 `EXPORT_FILE_MISSING` (symétrique de C4 sur les PDF) ; verrou phase13 |
+| H2 | `payroll.service.ts` (`addLine`) | Retenue saisie **positive** : `-SUM(amount)` la transformait en déduction négative → **le net augmentait** (bug monétaire) | `SUM(ABS(amount))` pour les retenues → net correct quel que soit le signe ; convention phase17 (montant négatif) reste valide ; verrou phase17 |
+| H3 | `marketplace.service.ts` + `MarketplacePage.tsx` | Endpoint **public** renvoyait `address_line1` (adresse interne) hors de l'allowlist documentée (nom public, wilaya, commune, description, contact opt-in) | Champ retiré de la requête et de l'UI (minimisation loi 25-11) ; phase18 rejouée |
+
+---
+
 ## 3. Estimation consolidée
 
 | Lot | Effort | Bloquant pour la prod ? |

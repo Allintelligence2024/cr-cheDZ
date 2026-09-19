@@ -3,6 +3,7 @@ import { exportRange } from '@creche/prod-config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -106,6 +107,17 @@ export class ExportsService {
           'Clé de stockage interdite (chemin hors du répertoire de stockage)',
           'مفتاح تخزين مرفوض (مسار خارج مجلد التخزين)',
           422,
+        );
+      }
+      // Garde d'existence (audit — symétrique de C4 sur les PDF) : une clé
+      // orpheline (fichier purgé/disparu) ne doit pas produire un 500 ENOENT
+      // mais un 404 clair.
+      if (!existsSync(filePath)) {
+        throw new AppError(
+          'EXPORT_FILE_MISSING',
+          'Le fichier d’export est introuvable sur le stockage local',
+          'ملف التصدير غير موجود في التخزين المحلي',
+          404,
         );
       }
       return { kind: 'buffer', buffer: await readFile(filePath), filename };
