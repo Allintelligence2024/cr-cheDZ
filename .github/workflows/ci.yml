@@ -167,13 +167,33 @@ jobs:
           sleep 1
           echo "— diagnostic terminé (les erreurs éventuelles sont en annotations)"
       - name: Tests e2e (Playwright)
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: /tmp/pw-results.json
         run: |
-          if npx playwright test --config apps/admin-web/playwright.config.ts > /tmp/e2e-playwright.log 2>&1; then
+          if npx playwright test --config apps/admin-web/playwright.config.ts --reporter=list,json > /tmp/e2e-playwright.log 2>&1; then
             tail -n 15 /tmp/e2e-playwright.log
           else
             tail -n 100 /tmp/e2e-playwright.log
             echo "::error title=e2e liste des échecs::$(grep -E '✘|passed|failed' /tmp/e2e-playwright.log | tr '\n' '|' | head -c 700)"
-            echo "::error title=e2e détail 1er échec::$(sed -n '/^  [0-9]\+) \[chromium\]/,+12p' /tmp/e2e-playwright.log | head -c 800 | tr '\n' '~')"
+            node -e '
+              const fs = require("fs");
+              const strip = (s) => String(s).replace(/\u001b\[[0-9;]*m/g, "").replace(/\s+/g, " ");
+              try {
+                const r = JSON.parse(fs.readFileSync("/tmp/pw-results.json", "utf8"));
+                const out = [];
+                const walk = (s) => {
+                  for (const spec of s.specs ?? []) for (const t of spec.tests ?? [])
+                    for (const res of t.results ?? [])
+                      if (res.status !== "passed" && res.status !== "skipped")
+                        out.push(`${spec.file}:${spec.line} ${spec.title} — ${strip(res.error?.message ?? res.status).slice(0, 280)}`);
+                  for (const c of s.suites ?? []) walk(c);
+                };
+                for (const s of r.suites ?? []) walk(s);
+                const seen = new Set();
+                const uniq = out.filter((l) => { const k = l.slice(0, 80); if (seen.has(k)) return false; seen.add(k); return true; });
+                console.log(`::error title=e2e erreurs détaillées::${uniq.slice(0, 6).join(" || ").slice(0, 2000)}`);
+              } catch (e) { console.log(`::error title=e2e détail indisponible::${e.message}`); }
+            '
             exit 1
           fi
       - name: Rapport Playwright
