@@ -46,6 +46,7 @@ targetUrl.pathname = `/${TARGET_DB}`;
 
 const work = mkdtempSync(join(tmpdir(), 'restore-drill-'));
 let failed = false;
+let currentStep = 'préparation';
 const step = (label) => console.log(`\n── ${label}`);
 
 function binOrNull(name) {
@@ -89,6 +90,7 @@ try {
     throw new Error(`pg_dump v${dumpMajor} < serveur PostgreSQL v${serverMajor} : client trop ancien`);
   }
   console.log(`✓ Outillage : pg_dump v${dumpMajor}, psql présents ; serveur v${serverMajor}`);
+  currentStep = '1/6 backup.sh';
 
   // ── 1. Sauvegarde réelle (même script que la production) ────────────────
   step('1/6 Sauvegarde chiffrée via scripts/backup.sh');
@@ -115,18 +117,21 @@ try {
   const offsiteCopy = join(offsiteDir, 'daily', archives[0]);
   if (!existsSync(offsiteCopy)) throw new Error('copie hors site absente (BACKUP_OFFSITE_DIR non honoré)');
   console.log('✓ Copie hors site présente');
+  currentStep = '2/6 sha256';
 
   // ── 2. Intégrité sha256 ───────────────────────────────────────────────────
   step('2/6 Intégrité SHA-256');
   const sha = spawnSync('sha256sum', ['-c', `${archives[0]}.sha256`], { cwd: join(backupDir, 'daily'), encoding: 'utf8' });
   if (sha.status !== 0) throw new Error(`sha256sum -c en échec : ${sha.stdout}${sha.stderr}`);
   console.log('✓ Empreinte vérifiée');
+  currentStep = '3/6 preuve de chiffrement';
 
   // ── 3. Preuve de chiffrement (mauvaise passphrase refusée) ───────────────
   step('3/6 Preuve de chiffrement (mauvaise passphrase)');
   const wrong = spawnSync('gpg', ['--batch', '--decrypt', '--passphrase', 'WRONG-' + PASSPHRASE, archive], { stdio: 'pipe' });
   if (wrong.status === 0) throw new Error('le déchiffrement avec une mauvaise passphrase a RÉUSSI — chiffrement invalide');
   console.log('✓ Déchiffrement refusé avec une mauvaise passphrase');
+  currentStep = '4/6 restauration';
 
   // ── 4. Restauration (pipeline exact du runbook) ──────────────────────────
   step('4/6 Restauration dans une base dédiée');
@@ -141,6 +146,7 @@ try {
   });
   if (restore.status !== 0) throw new Error(`restauration en échec :\n${restore.stdout}\n${restore.stderr}`);
   console.log('✓ Restauration terminée');
+  currentStep = '5/6 comparaison';
 
   // ── 5. Comparaison source ↔ restauré ─────────────────────────────────────
   step('5/6 Comparaison source ↔ restauré');
@@ -167,13 +173,20 @@ try {
     if (!found) throw new Error(`fonction SECURITY DEFINER manquante après restauration : ${fn}`);
   }
   console.log('✓ Fonctions SECURITY DEFINER du bootstrap présentes');
+  currentStep = '6/6 synthèse/nettoyage';
 
   // ── 6. Synthèse + nettoyage ──────────────────────────────────────────────
   step('6/6 Synthèse');
   console.log('✓ DRILL OK : sauvegarde chiffrée vérifiée, restaurée et conforme à la source.');
 } catch (error) {
   failed = true;
-  console.error(`✗ DRILL EN ÉCHEC : ${error?.stack ?? error}`);
+  const detail = String(error?.stack ?? error);
+  console.error(`✗ DRILL EN ÉCHEC : ${detail}`);
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    // Les logs bruts Actions ne sont pas toujours lisibles par l'agent —
+    // l'annotation publie la cause complète via l'API check-runs.
+    console.log(`::error title=Restore drill (P0-2) étape ${currentStep}::${detail.replace(/\r?\n/g, ' | ').slice(0, 900)}`);
+  }
 } finally {
   await withClient(SOURCE_URL, (c) => c.query(`DROP DATABASE IF EXISTS ${TARGET_DB}`)).catch(() => {});
   rmSync(work, { recursive: true, force: true });
