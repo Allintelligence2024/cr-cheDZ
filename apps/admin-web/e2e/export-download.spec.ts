@@ -31,12 +31,17 @@ test('export présences : demande UI → worker réel → téléchargement navig
   await expect(page.getByText(/Export demandé/)).toBeVisible();
 
   // La ligne passe DONE une fois le job traité par le worker (~2 s de poll).
+  // La page ne se recharge pas d'elle-même : on relance le GET /exports via
+  // page.reload() jusqu'à voir la ligne DONE (timeout global 30 s).
   const row = page
     .getByRole('row')
     .filter({ hasText: 'Présences' })
     .filter({ hasText: today })
     .filter({ hasText: /DONE/ });
-  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(async () => {
+    await page.reload();
+    await expect(row).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
 
   // Téléchargement via le navigateur : un vrai fichier doit arriver.
   const [download] = await Promise.all([
