@@ -89,6 +89,8 @@ jobs:
           if ! flutter build apk --release 2>&1 | tee staff-build.log; then
             echo "## staff-mobile — échec du build" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"; grep -aE "FAILURE|What went wrong|rror|Exception|P1-2" -A4 staff-build.log | head -80 >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+            # Annotations (lisibles via l'API même quand les logs/artefacts ne le sont pas)
+            grep -aE "FAILURE|What went wrong|rror:|Exception|P1-2" -A2 staff-build.log | grep -av '^--$' | head -12 | while IFS= read -r l; do echo "::error title=staff-mobile build::${l:0:400}"; done
             exit 1
           fi
       - name: parent-mobile — build apk (release)
@@ -104,6 +106,8 @@ jobs:
           if ! flutter build apk --release 2>&1 | tee parent-build.log; then
             echo "## parent-mobile — échec du build" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"; grep -aE "FAILURE|What went wrong|rror|Exception|P1-2" -A4 parent-build.log | head -80 >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+            # Annotations (lisibles via l'API même quand les logs/artefacts ne le sont pas)
+            grep -aE "FAILURE|What went wrong|rror:|Exception|P1-2" -A2 parent-build.log | grep -av '^--$' | head -12 | while IFS= read -r l; do echo "::error title=parent-mobile build::${l:0:400}"; done
             exit 1
           fi
       - name: App bundles Play Store (uniquement si signés)
