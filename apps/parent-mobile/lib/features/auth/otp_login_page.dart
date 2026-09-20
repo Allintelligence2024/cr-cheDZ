@@ -24,7 +24,7 @@ class _OtpLoginPageState extends State<OtpLoginPage> {
       await widget.api.requestOtp(_phone.text);
       setState(() => _sent = true);
     } catch (_) {
-      setState(() => _error = 'Impossible d'envoyer le code / تعذر إرسال الرمز');
+      setState(() => _error = "Impossible d'envoyer le code / تعذر إرسال الرمز");
     } finally {
       if (mounted) setState(() => _busy = false);
     }
