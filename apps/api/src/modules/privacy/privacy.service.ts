@@ -11,6 +11,7 @@ import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
 import { ACCESS_TOKEN_PURPOSE } from '../../shared/auth/jwt-token-options';
 import { AuditService } from './audit.service';
+import { S3ClientService } from '../../shared/storage/s3-client.service';
 
 /**
  * Vie privée (loi 18-07 modifiée par 25-11) + console support.
@@ -33,6 +34,7 @@ export class PrivacyService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     @Inject(PG_POOL) private readonly pool: Pool,
+    private readonly s3: S3ClientService,
   ) {}
 
   // ── Registre des traitements (DPO) ────────────────────────────────────────
@@ -262,6 +264,63 @@ export class PrivacyService {
       );
       return r.rows[0];
     });
+  }
+
+  // ── Effacement 25-11 par anonymisation (Phase 5, migration 067) ──────────
+
+  /**
+   * Anonymise à chaud un enfant SORTI (et ses tuteurs exclusifs + comptes
+   * parents) : la fonction SQL `anonymize_child` fait tout en UNE transaction
+   * (fail-closed tenant, motif requis, idempotente, audit + tombstone sync).
+   * Ensuite, HORS transaction, purge best-effort des objets S3 dont les clés
+   * ont été retournées : un échec de purge est REMONTÉ dans la réponse
+   * (`media_purge.failed`) et audité — jamais de faux « purgé ».
+   */
+  async anonymizeChild(childId: string, actorId: string, reason: string, requestId?: string): Promise<Record<string, unknown>> {
+    const tenantId = requireTenant(this.tenantContext);
+    const result = await this.tenantContext.withTenantConnection(async (client) => {
+      await this.assertCurrentRequestActor(client, actorId);
+      let row: Record<string, unknown>;
+      try {
+        row = (await client.query(`SELECT anonymize_child($1, $2, $3) AS r`, [childId, actorId, reason])).rows[0].r as Record<string, unknown>;
+      } catch (err) {
+        const msg = (err as Error).message ?? '';
+        if (msg.includes('CHILD_NOT_FOUND')) throw Errors.notFound();
+        if (msg.includes('CHILD_STILL_ACTIVE')) {
+          throw new AppError('CHILD_STILL_ACTIVE', 'L’enfant est encore inscrit : enregistrez d’abord sa sortie', 'الطفل لا يزال مسجلاً: سجّل مغادرته أولاً', 409);
+        }
+        if (msg.includes('ANONYMIZE_REASON_REQUIRED')) {
+          throw new AppError('ANONYMIZE_REASON_REQUIRED', 'Un motif d’au moins 5 caractères est requis', 'يلزم سبب من 5 أحرف على الأقل', 400);
+        }
+        throw err;
+      }
+      if (requestId) {
+        await client.query(
+          `UPDATE privacy_requests SET status='resolved', resolved_by=$2, resolved_at=NOW()
+           WHERE id=$1 AND organization_id=$3 AND status <> 'resolved'`, [requestId, actorId, tenantId],
+        );
+      }
+      return row;
+    });
+
+    const keys = (result.media_storage_keys as string[] | undefined) ?? [];
+    const purged: string[] = [];
+    const failed: Array<{ key: string; error: string }> = [];
+    if (result.already_anonymized !== true) {
+      for (const key of keys) {
+        try { await this.s3.deleteObject(key); purged.push(key); }
+        catch (e) { failed.push({ key, error: (e as Error).message }); }
+      }
+      await this.audit.log({
+        organizationId: tenantId,
+        userId: actorId,
+        action: 'delete',
+        resourceType: 'media_purge',
+        resourceId: childId,
+        newValues: { purged: purged.length, failed: failed.map((f) => f.key) },
+      });
+    }
+    return { ...result, media_purge: { purged: purged.length, failed } };
   }
 
   // ── Violations de données (chrono 5 jours ANPDP) ──────────────────────────

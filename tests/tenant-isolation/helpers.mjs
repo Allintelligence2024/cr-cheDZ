@@ -86,6 +86,8 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION support_set_flag(text, uuid, boolean) TO creche_app_test');
   // Phase 12 (migration 036) : suivi pilote (agrégats par organisation)
   await admin.query('GRANT EXECUTE ON FUNCTION support_pilot_summary() TO creche_app_test');
+  // Phase 5 rapport 5 analyses (migration 067) : effacement 25-11 par anonymisation
+  await admin.query('GRANT EXECUTE ON FUNCTION anonymize_child(uuid, uuid, text) TO creche_app_test');
   // Roadmap v2 (migration 040) : multi-rôles — liste des rôles effectifs
   await admin.query('GRANT EXECUTE ON FUNCTION auth_user_roles(uuid) TO creche_app_test');
   // Roadmap v2 (migration 042) : drain notification_queue sous NOBYPASSRLS

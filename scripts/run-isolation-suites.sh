@@ -72,6 +72,7 @@ SUITES=(
   phase42-staff-document-scope.api.test.mjs
   phase43-auth-hardening.api.test.mjs
   phase44-rls-integrity.pg.test.mjs
+  phase44b-financial-integrity.pg.test.mjs
   phase45-dpia-approval.api.test.mjs
   phase46-refresh-rotation.api.test.mjs
   phase47-invitations.api.test.mjs
@@ -82,6 +83,9 @@ SUITES=(
   phase52-anonymization.pg.test.mjs
   phase53-principal-revocation.api.test.mjs
   phase54-mfa-hardening.api.test.mjs
+  phase55-notification-reclaim.pg.test.mjs
+  phase56-anonymize-child.pg.test.mjs
+  phase56b-anonymize-child.api.test.mjs
 )
 
 FILTER="${1:-}"

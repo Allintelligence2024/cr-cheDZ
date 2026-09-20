@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 /**
@@ -37,6 +37,12 @@ export class S3ClientService {
 
   get client(): S3Client {
     return this._client;
+  }
+
+  /** Suppression d'un objet (purge après anonymisation 25-11). Idempotent
+   * côté S3 : supprimer une clé absente n'est pas une erreur. */
+  async deleteObject(key: string): Promise<void> {
+    await this._client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   /** URL signée GET de courte durée (jamais de lecture objet via l'API). */
