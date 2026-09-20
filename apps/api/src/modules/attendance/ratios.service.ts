@@ -13,8 +13,10 @@ export interface RoomRatio {
   children_present: number;
   educators_assigned: number;
   educators_on_duty: number;
-  /** on_duty si le pointage du personnel est utilisé aujourd'hui dans l'établissement, sinon assigned. */
-  basis: 'on_duty' | 'assigned';
+  /** on_duty si le pointage du personnel est utilisé aujourd'hui dans l'établissement ; assigned sinon ;
+   *  unconfigured si l'établissement n'a AUCUNE affectation active (module non utilisé : seul le plafond
+   *  de capacité est contrôlé, jamais de « breach » d'encadrement ni de trace conformité). */
+  basis: 'on_duty' | 'assigned' | 'unconfigured';
   educators_counted: number;
   max_children_per_educator: number;
   min_educators: number;
@@ -63,7 +65,10 @@ export class RatiosService {
     const maxPerEducator = Number(params?.max_children_per_educator ?? 10);
     const minEducators = Number(params?.min_educators_per_group ?? 2);
 
-    const usesStaffClock = (await client.query(
+    const usesAssignments = (await client.query(
+      `SELECT 1 FROM staff_assignments WHERE organization_id=$1 AND is_active AND start_date <= $2 AND (end_date IS NULL OR end_date >= $2) LIMIT 1`, [tenantId, today],
+    )).rowCount! > 0;
+    const usesStaffClock = usesAssignments && (await client.query(
       `SELECT 1 FROM staff_attendance WHERE organization_id=$1 AND attendance_date=$2 AND check_in IS NOT NULL LIMIT 1`, [tenantId, today],
     )).rowCount! > 0;
 
@@ -91,12 +96,15 @@ export class RatiosService {
 
     const rooms: RoomRatio[] = rows.map((r) => {
       const present = Number(r.children_present);
-      const basis: RoomRatio['basis'] = usesStaffClock ? 'on_duty' : 'assigned';
+      const basis: RoomRatio['basis'] = !usesAssignments ? 'unconfigured' : usesStaffClock ? 'on_duty' : 'assigned';
       const counted = basis === 'on_duty' ? Number(r.educators_on_duty) : Number(r.educators_assigned);
       const maxCap = Number(r.max_capacity);
       const reasons: string[] = [];
       let status: RatioStatus = present === 0 ? 'empty' : 'ok';
-      if (present > 0) {
+      if (present > 0 && basis === 'unconfigured') {
+        if (present > maxCap) { status = 'breach'; reasons.push('CAPACITY_EXCEEDED'); }
+        else { status = 'warning'; reasons.push('STAFF_NOT_CONFIGURED'); }
+      } else if (present > 0) {
         if (present > maxCap) { status = 'breach'; reasons.push('CAPACITY_EXCEEDED'); }
         if (counted === 0) { status = 'breach'; reasons.push('NO_EDUCATOR'); }
         else {
@@ -105,7 +113,7 @@ export class RatiosService {
         }
         if (status === 'ok' && (present >= maxCap * 0.9 || present >= maxPerEducator * counted * 0.9)) { status = 'warning'; reasons.push('NEAR_LIMIT'); }
       }
-      const headroomRatio = counted === 0 ? 0 : maxPerEducator * counted - present;
+      const headroomRatio = basis === 'unconfigured' ? maxCap - present : counted === 0 ? 0 : maxPerEducator * counted - present;
       const headroom = Math.max(0, Math.min(maxCap - present, headroomRatio));
       return {
         room_id: r.room_id, room_name: r.room_name, site_name: r.site_name, max_capacity: maxCap,
@@ -122,7 +130,7 @@ export class RatiosService {
    * n'est pas revenue à la normale (pas de spam), dans la transaction appelante.
    */
   async recordBreach(client: PoolClient, ratio: RoomRatio): Promise<boolean> {
-    if (ratio.status !== 'breach') return false;
+    if (ratio.status !== 'breach' || ratio.basis === 'unconfigured') return false;
     const tenantId = requireTenant(this.tenantContext);
     const rule = (await client.query(
       `SELECT cr.id FROM compliance_rules cr JOIN compliance_rule_sets rs ON rs.id=cr.rule_set_id

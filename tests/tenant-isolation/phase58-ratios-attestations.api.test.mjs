@@ -149,6 +149,11 @@ const main = async () => {
     ok('Dashboard A : ratios[] et alerts.ratio_breaches présents', dash.status === 200 && Array.isArray(dash.body.ratios) && Array.isArray(dash.body.alerts.ratio_breaches) && dash.body.alerts.ratio_breaches.some((x) => x.room_id === A.room), JSON.stringify(dash.body.alerts.ratio_breaches).slice(0, 200));
     const rB = await api('GET', '/attendance/ratios', tokenB);
     ok('B : uniquement sa salle (vide), aucune donnée de A', rB.body.rooms.length === 1 && rB.body.rooms[0].room_id === B.room && rB.body.rooms[0].status === 'empty' && rB.body.alerts.length === 0);
+    await api('POST', '/attendance/check-in', tokenB, { child_id: childB });
+    const rB2 = await api('GET', '/attendance/ratios', tokenB);
+    ok('B (aucune affectation) : basis unconfigured, warning STAFF_NOT_CONFIGURED, jamais breach', rB2.body.rooms[0].basis === 'unconfigured' && rB2.body.rooms[0].status === 'warning' && rB2.body.rooms[0].reasons.includes('STAFF_NOT_CONFIGURED') && rB2.body.rooms[0].headroom === 14, JSON.stringify(rB2.body.rooms[0]));
+    ok('B : aucune trace compliance_checks realtime (module personnel non configuré)', (await db.query(`SELECT count(*)::int AS n FROM compliance_checks WHERE organization_id=$1 AND checked_by='realtime'`, [B.org])).rows[0].n === 0);
+    await api('POST', '/attendance/check-out', tokenB, { child_id: childB });
     ok('Parent : /attendance/ratios → 403', (await api('GET', '/attendance/ratios', tokenBill)).status === 403);
 
     // ── P2-6 ───────────────────────────────────────────────────────────────

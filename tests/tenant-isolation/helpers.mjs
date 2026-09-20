@@ -73,6 +73,10 @@ export async function ensureAppRole(admin) {
   if ((await admin.query("SELECT to_regprocedure('exports_reconcile_tenant()') AS fn")).rows[0].fn) {
     await admin.query('GRANT EXECUTE ON FUNCTION exports_fail_job(uuid,uuid), exports_fail_stale(interval,uuid), exports_reconcile_tenant() TO creche_app_test');
   }
+  // O4 (migration 065) : reprise des notifications 'processing' orphelines (worker)
+  if ((await admin.query("SELECT to_regprocedure('notif_queue_reclaim(interval)') AS fn")).rows[0].fn) {
+    await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_reclaim(interval) TO creche_app_test');
+  }
   // Phase 7 (migration 025) : bootstrap login parent (guardians sous RLS)
   await admin.query('GRANT EXECUTE ON FUNCTION auth_parent_lookup_by_phone(text) TO creche_app_test');
   // Phase 10 (migration 029) : console support (recherche globale, jobs)
