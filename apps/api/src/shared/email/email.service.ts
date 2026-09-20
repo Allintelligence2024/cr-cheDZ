@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createTransport, type Transporter } from 'nodemailer';
 import { AppError } from '../errors';
-import { invitationEmail, paymentReceiptEmail } from './email-templates';
+import { invitationEmail, invoiceReminderEmail, paymentReceiptEmail, type InvoiceReminderTemplateInput } from './email-templates';
 
 export type EmailProvider = 'none' | 'smtp';
 
@@ -149,5 +149,29 @@ export class EmailService {
     } catch (error) {
       this.logger.warn(`Reçu de paiement non envoyé (non bloquant) : ${String((error as Error)?.message ?? error)}`);
     }
+  }
+
+  /**
+   * Relance d'impayé (P2-3) — FAIL-CLOSED, à l'inverse du reçu : une relance
+   * « enregistrée » sans transmission réelle serait une fausse preuve de
+   * diligence. 503 REMINDER_DELIVERY_UNAVAILABLE si le transport n'est pas
+   * configuré ; 502 EMAIL_DELIVERY_FAILED si l'envoi échoue (l'appelant
+   * annule alors sa transaction : aucune ligne invoice_reminders).
+   */
+  async sendInvoiceReminder(input: InvoiceReminderTemplateInput & { to: string }): Promise<void> {
+    if (!this.deliveryAvailable()) {
+      throw new AppError(
+        'REMINDER_DELIVERY_UNAVAILABLE',
+        'L’envoi des relances n’est pas configuré (EMAIL_PROVIDER=smtp + SMTP_HOST/SMTP_FROM requis)',
+        'إرسال التذكيرات غير مهيأ',
+        503,
+      );
+    }
+    if (this.provider() === 'none') {
+      this.logger.log(`[email-dev] Simulation de relance niveau ${input.level} : aucune transmission`);
+      return;
+    }
+    const { subject, html, text } = invoiceReminderEmail(input);
+    await this.send(input.to, subject, html, text);
   }
 }

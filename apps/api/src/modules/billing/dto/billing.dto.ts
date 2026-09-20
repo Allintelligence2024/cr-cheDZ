@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 export class CreateContractDto {
  @IsUUID() child_id!: string;
  @IsNumber() @Min(0) monthly_base_amount!: number;
@@ -44,4 +44,10 @@ export class InvoiceIdParam { @IsUUID() invoiceId!: string; }
 export class PaymentIdParam { @IsUUID() paymentId!: string; }
 export class CashRegisterQueryDto {
   @IsOptional() @IsUUID() site_id?: string;
+}
+/** P2-3 : relance d'impayé. email = envoi réel (fail-closed) ; manual = trace d'un appel/entretien (notes requises). */
+export class SendReminderDto {
+  @IsIn([1, 2, 3]) level!: 1 | 2 | 3;
+  @IsIn(['email', 'manual']) channel!: 'email' | 'manual';
+  @IsOptional() @IsString() @MaxLength(1000) notes?: string;
 }

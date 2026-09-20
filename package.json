@@ -31,6 +31,7 @@
     "check:android-manifest": "node scripts/check-android-manifest.mjs",
     "test:production-roles": "node scripts/test-production-roles.mjs",
     "test:unit": "npm run test --workspace @creche/api",
+    "test:api-phase57": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase57-invoice-reminders.api.test.mjs",
     "test:capacity": "npm run build --workspace @creche/api && node tests/load/capacity-bench.mjs",
     "check:worker-monitoring": "node scripts/check-worker-monitoring.mjs"
   },

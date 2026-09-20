@@ -106,6 +106,10 @@ export async function ensureAppRole(admin) {
   if (expiryFn.rows.length > 0) {
     await admin.query('GRANT EXECUTE ON FUNCTION payments_expire_pending(integer, integer) TO creche_app_test');
   }
+  // P2-3 (migration 068) : transition overdue à la lecture (SECURITY INVOKER, RLS).
+  if ((await admin.query("SELECT to_regprocedure('invoices_mark_overdue(uuid)') AS fn")).rows[0].fn) {
+    await admin.query('GRANT EXECUTE ON FUNCTION invoices_mark_overdue(uuid) TO creche_app_test');
+  }
   // Fondations audit (migration 050) : jauges globales /metrics
   await admin.query('GRANT EXECUTE ON FUNCTION metrics_global_counts() TO creche_app_test');
 }

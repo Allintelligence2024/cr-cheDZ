@@ -1,5 +1,6 @@
 import { EmailService } from './email.service';
 import { AppError } from '../errors';
+import { invoiceReminderEmail } from './email-templates';
 
 /** ConfigService minimal : map plate + valeurs par défaut. */
 function configOf(env: Record<string, string | undefined>) {
@@ -128,4 +129,62 @@ describe('EmailService — envoi et retries', () => {
       s.sendPaymentReceipt({ to: 'p@test.dz', orgName: 'O', receiptNumber: 'REC-1', amount: 500, method: 'cash' }),
     ).resolves.toBeUndefined(); // best-effort : pas d'exception
   }, 15000);
+});
+
+describe('EmailService — relance d’impayé (P2-3, fail-closed)', () => {
+  const smtpEnv = { NODE_ENV: 'production', EMAIL_PROVIDER: 'smtp', SMTP_HOST: 'smtp.y.dz', SMTP_FROM: 'no-reply@creche.dz' };
+  const reminder = { to: 'parent@test.dz', orgName: 'Les Poussins', invoiceNumber: 'FAC-202606-1', childName: 'Yanis Test', balanceDue: 12000, dueDate: '2026-06-05', level: 1 as const };
+
+  function withFakeTransport(env: Record<string, string>) {
+    const s = serviceWith(env);
+    const sendMail = jest.fn();
+    jest.spyOn(s as unknown as { buildTransport: () => unknown }, 'buildTransport').mockReturnValue({ sendMail });
+    return { s, sendMail };
+  }
+
+  it('transport non configuré (none + production) → 503 REMINDER_DELIVERY_UNAVAILABLE, rien envoyé', async () => {
+    const { s, sendMail } = withFakeTransport({ NODE_ENV: 'production', EMAIL_PROVIDER: 'none' });
+    await expect(s.sendInvoiceReminder(reminder)).rejects.toMatchObject({ code: 'REMINDER_DELIVERY_UNAVAILABLE', status: 503 });
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('smtp incomplet (SMTP_HOST absent) → 503', async () => {
+    const { s } = withFakeTransport({ NODE_ENV: 'production', EMAIL_PROVIDER: 'smtp', SMTP_FROM: 'x@y.dz' });
+    await expect(s.sendInvoiceReminder(reminder)).rejects.toMatchObject({ code: 'REMINDER_DELIVERY_UNAVAILABLE' });
+  });
+
+  it('none + development → simulation silencieuse, aucun appel transport', async () => {
+    const { s, sendMail } = withFakeTransport({ NODE_ENV: 'development', EMAIL_PROVIDER: 'none' });
+    await expect(s.sendInvoiceReminder(reminder)).resolves.toBeUndefined();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it('smtp : envoi réel bilingue, niveau 3 = dernier rappel, montant formaté', async () => {
+    const { s, sendMail } = withFakeTransport(smtpEnv);
+    sendMail.mockResolvedValue({});
+    await s.sendInvoiceReminder({ ...reminder, level: 3 });
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.to).toBe('parent@test.dz');
+    expect(mail.subject).toMatch(/Dernier rappel.*FAC-202606-1/);
+    expect(mail.text).toMatch(/12[\s\u00a0\u202f]000,00 DZD/);
+    expect(mail.text).toMatch(/تذكير أخير/);
+    expect(mail.html).toContain('Yanis Test');
+  });
+
+  it('smtp : échec définitif → 502 EMAIL_DELIVERY_FAILED propagé (jamais avalé, contrairement au reçu)', async () => {
+    const { s, sendMail } = withFakeTransport(smtpEnv);
+    sendMail.mockRejectedValue(new Error('ECONNREFUSED'));
+    jest.spyOn(global, 'setTimeout').mockImplementation(((fn: () => void) => { fn(); return 0 as unknown as NodeJS.Timeout; }) as never);
+    try {
+      await expect(s.sendInvoiceReminder(reminder)).rejects.toMatchObject({ code: 'EMAIL_DELIVERY_FAILED', status: 502 });
+      expect(sendMail).toHaveBeenCalledTimes(3);
+    } finally { (global.setTimeout as unknown as jest.SpyInstance).mockRestore(); }
+  });
+
+  it('template : les valeurs sont échappées en HTML', () => {
+    const { html } = invoiceReminderEmail({ ...reminder, childName: '<script>x</script>' });
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
 });

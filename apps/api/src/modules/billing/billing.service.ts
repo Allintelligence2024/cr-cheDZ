@@ -152,6 +152,131 @@ export class BillingService {
     });
   }
 
+  // ── Impayés & relances (P2-3) ─────────────────────────────────────────────
+
+  /**
+   * draft → sent : la facture devient exigible (une facture brouillon n'est
+   * pas un impayé — contrat du tableau de bord phase 9). Idempotent (409 si
+   * déjà émise), refuse une facture payée/annulée (422).
+   */
+  async markInvoiceSent(userId: string, invoiceId: string) {
+    const org = requireTenant(this.tenant);
+    return this.tenant.withTenantConnection(async (c) => {
+      const inv = (await c.query(`SELECT id, status FROM invoices WHERE id=$1 AND organization_id=$2 FOR UPDATE`, [invoiceId, org])).rows[0];
+      if (!inv) throw Errors.notFound();
+      if (['paid', 'cancelled'].includes(inv.status)) throw Errors.invoiceImmutable();
+      if (inv.status !== 'draft') throw new AppError('INVOICE_ALREADY_SENT', 'La facture a déjà été émise', 'تم إصدار الفاتورة بالفعل', 409);
+      const r = await c.query(
+        `UPDATE invoices SET status='sent', sent_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING id, invoice_number, status, sent_at, due_date, balance`,
+        [invoiceId],
+      );
+      void this.audit.log({ organizationId: org, userId, action: 'update', resourceType: 'invoice', resourceId: invoiceId, resourceLabel: 'invoice.sent', oldValues: { status: 'draft' }, newValues: { status: 'sent' } });
+      return r.rows[0];
+    });
+  }
+
+  /**
+   * Journal des impayés (balance âgée). La transition sent/partially_paid →
+   * overdue (échéance dépassée, date d'Alger) est appliquée À LA LECTURE via
+   * invoices_mark_overdue (068) : la fraîcheur ne dépend d'aucun job.
+   * Tranches : 0-30 / 31-60 / 61-90 / 90+ jours de retard.
+   */
+  async agedBalance(): Promise<{ as_of: string; totals: Record<string, unknown>; invoices: Array<Record<string, unknown>> }> {
+    const org = requireTenant(this.tenant);
+    return this.tenant.withTenantConnection(async (c) => {
+      await c.query(`SELECT invoices_mark_overdue($1)`, [org]);
+      const rows = (await c.query(
+        `SELECT i.id, i.invoice_number, i.child_id, ch.first_name_fr AS child_first_name, ch.last_name_fr AS child_last_name,
+                i.total_amount, i.paid_amount, i.balance, i.status, i.due_date,
+                GREATEST(0, (NOW() AT TIME ZONE 'Africa/Algiers')::date - i.due_date)::int AS days_overdue,
+                COALESCE((SELECT MAX(r.level) FROM invoice_reminders r WHERE r.invoice_id = i.id), 0)::int AS last_reminder_level,
+                (SELECT MAX(r.sent_at) FROM invoice_reminders r WHERE r.invoice_id = i.id) AS last_reminder_at
+         FROM invoices i JOIN children ch ON ch.id = i.child_id
+         WHERE i.organization_id = $1 AND i.status IN ('sent','partially_paid','overdue') AND i.balance > 0
+         ORDER BY i.due_date, i.invoice_number`, [org],
+      )).rows;
+      const bucket = (d: number) => (d <= 0 ? 'not_due' : d <= 30 ? 'd0_30' : d <= 60 ? 'd31_60' : d <= 90 ? 'd61_90' : 'd90_plus');
+      const totals: Record<string, number> = { not_due: 0, d0_30: 0, d31_60: 0, d61_90: 0, d90_plus: 0, overdue_total: 0, outstanding_total: 0, overdue_count: 0 };
+      for (const r of rows) {
+        const bal = Number(r.balance); const d = Number(r.days_overdue);
+        r.aging_bucket = bucket(d);
+        totals[r.aging_bucket] += bal; totals.outstanding_total += bal;
+        if (d > 0) { totals.overdue_total += bal; totals.overdue_count += 1; }
+      }
+      for (const k of Object.keys(totals)) totals[k] = Math.round(totals[k] * 100) / 100;
+      return { as_of: (await c.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date::text AS d`)).rows[0].d, totals, invoices: rows };
+    });
+  }
+
+  /**
+   * Relance d'impayé. Règles :
+   *  - facture exigible avec solde > 0 (sent/partially_paid/overdue), sinon 422 ;
+   *  - niveaux strictement croissants (1 → 2 → 3), un seul par niveau (409) ;
+   *  - channel=email : envoi RÉEL au tuteur facturable (can_receive_invoices,
+   *    puis is_primary) — fail-closed : transport absent → 503, échec → 502,
+   *    et la ligne invoice_reminders n'est écrite QUE si l'envoi a réussi
+   *    (même transaction, ROLLBACK sinon) ; aucun tuteur avec email → 422 ;
+   *  - channel=manual : trace d'un appel/entretien, notes obligatoires.
+   */
+  async sendReminder(userId: string, invoiceId: string, dto: { level: 1 | 2 | 3; channel: 'email' | 'manual'; notes?: string }) {
+    const org = requireTenant(this.tenant);
+    if (dto.channel === 'manual' && !dto.notes?.trim()) {
+      throw new AppError('REMINDER_NOTES_REQUIRED', 'Une relance manuelle doit être documentée (notes)', 'يجب توثيق التذكير اليدوي (ملاحظات)', 400);
+    }
+    return this.tenant.withTenantConnection(async (c) => {
+      await c.query(`SELECT invoices_mark_overdue($1)`, [org]);
+      const inv = (await c.query(
+        `SELECT i.id, i.invoice_number, i.status, i.balance, i.due_date::text AS due_date, i.child_id,
+                ch.first_name_fr, ch.last_name_fr, o.name_fr AS org_name
+         FROM invoices i JOIN children ch ON ch.id = i.child_id JOIN organizations o ON o.id = i.organization_id
+         WHERE i.id=$1 AND i.organization_id=$2 FOR UPDATE OF i`, [invoiceId, org],
+      )).rows[0];
+      if (!inv) throw Errors.notFound();
+      if (!['sent', 'partially_paid', 'overdue'].includes(inv.status) || Number(inv.balance) <= 0) {
+        throw new AppError('INVOICE_NOT_RECEIVABLE', 'Seule une facture émise avec un solde dû peut être relancée', 'لا يمكن التذكير إلا بفاتورة صادرة برصيد مستحق', 422);
+      }
+      const last = (await c.query(`SELECT COALESCE(MAX(level),0)::int AS l FROM invoice_reminders WHERE invoice_id=$1`, [invoiceId])).rows[0].l as number;
+      if (dto.level <= last) throw new AppError('REMINDER_LEVEL_ALREADY_SENT', `Une relance de niveau ${dto.level} a déjà été envoyée`, 'تم إرسال تذكير بهذا المستوى بالفعل', 409);
+      if (dto.level !== last + 1) throw new AppError('REMINDER_LEVEL_SEQUENCE', `Le prochain niveau de relance est ${last + 1}`, 'يجب اتباع تسلسل مستويات التذكير', 422);
+
+      let guardianId: string | null = null;
+      if (dto.channel === 'email') {
+        const g = (await c.query(
+          `SELECT g.id, g.email FROM guardians g
+           JOIN child_guardians cg ON cg.guardian_id = g.id AND cg.organization_id = g.organization_id
+           WHERE cg.child_id = $1 AND cg.organization_id = $2 AND g.email IS NOT NULL AND g.deleted_at IS NULL
+           ORDER BY cg.can_receive_invoices DESC, cg.is_primary DESC, g.email LIMIT 1`, [inv.child_id, org],
+        )).rows[0];
+        if (!g) throw new AppError('REMINDER_NO_RECIPIENT', 'Aucun tuteur avec adresse email pour cet enfant', 'لا يوجد ولي أمر ببريد إلكتروني لهذا الطفل', 422);
+        guardianId = g.id;
+        // Envoi AVANT l'INSERT : un échec lève (503/502) → ROLLBACK, aucune trace.
+        await this.email.sendInvoiceReminder({
+          to: g.email, orgName: inv.org_name, invoiceNumber: inv.invoice_number,
+          childName: `${inv.first_name_fr} ${inv.last_name_fr}`.trim(), balanceDue: Number(inv.balance), dueDate: inv.due_date, level: dto.level,
+        });
+      }
+      const r = (await c.query(
+        `INSERT INTO invoice_reminders(organization_id, invoice_id, level, channel, balance_due, guardian_id, notes, sent_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, invoice_id, level, channel, balance_due, guardian_id, notes, sent_at`,
+        [org, invoiceId, dto.level, dto.channel, Number(inv.balance), guardianId, dto.notes ?? null, userId],
+      )).rows[0];
+      void this.audit.log({ organizationId: org, userId, action: 'create', resourceType: 'invoice_reminder', resourceId: r.id, resourceLabel: inv.invoice_number, newValues: { invoice_id: invoiceId, level: dto.level, channel: dto.channel } });
+      return r;
+    });
+  }
+
+  async listReminders(invoiceId: string): Promise<Array<Record<string, unknown>>> {
+    const org = requireTenant(this.tenant);
+    return this.tenant.withTenantConnection(async (c) => {
+      const inv = await c.query(`SELECT 1 FROM invoices WHERE id=$1 AND organization_id=$2`, [invoiceId, org]);
+      if (!inv.rows[0]) throw Errors.notFound();
+      return (await c.query(
+        `SELECT id, level, channel, balance_due, guardian_id, notes, sent_by, sent_at FROM invoice_reminders WHERE invoice_id=$1 AND organization_id=$2 ORDER BY level`,
+        [invoiceId, org],
+      )).rows;
+    });
+  }
+
   // ── Paiements ─────────────────────────────────────────────────────────────
 
   async recordCashPayment(userId: string, dto: { invoice_id: string; amount: number; notes?: string }) {

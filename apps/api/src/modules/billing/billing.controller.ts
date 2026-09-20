@@ -8,7 +8,7 @@ import { AppError } from '../../shared/errors';
 import {
   AllocatePaymentDto, CloseCashRegisterDto, ContractIdParam, CreateContractDto,
   CreateOnlinePaymentDto, GenerateInvoiceDto, InvoiceIdParam, OpenCashRegisterDto,
-  PaymentIdParam, RecordCashPaymentDto,
+  PaymentIdParam, RecordCashPaymentDto, SendReminderDto,
 } from './dto/billing.dto';
 import { BillingService } from './billing.service';
 import { PaymentProviderService } from './payment-provider.service';
@@ -63,6 +63,13 @@ export class BillingController {
     return this.billing.listInvoices(childId);
   }
 
+  /** P2-3 : journal des impayés (balance âgée) — transition overdue appliquée à la lecture. */
+  @Get('invoices/aged-balance')
+  @Roles('director', 'accountant')
+  agedBalance() {
+    return this.billing.agedBalance();
+  }
+
   @Get('invoices/:invoiceId')
   @Roles('director', 'accountant')
   invoiceDetail(@Param() p: InvoiceIdParam) {
@@ -77,6 +84,27 @@ export class BillingController {
     res.setHeader('content-type', 'application/pdf');
     res.setHeader('content-disposition', `inline; filename="${result.invoice.invoice_number ?? 'facture'}.pdf"`);
     res.send(result.buffer);
+  }
+
+  /** draft → sent : la facture devient exigible. */
+  @Post('invoices/:invoiceId/send')
+  @Roles('director', 'accountant')
+  @HttpCode(HttpStatus.OK)
+  sendInvoice(@CurrentUser() u: CurrentUserPayload, @Param() p: InvoiceIdParam) {
+    return this.billing.markInvoiceSent(u.sub, p.invoiceId);
+  }
+
+  /** P2-3 : relance d'impayé (email réel fail-closed, ou trace manuelle). */
+  @Post('invoices/:invoiceId/reminders')
+  @Roles('director', 'accountant')
+  reminder(@CurrentUser() u: CurrentUserPayload, @Param() p: InvoiceIdParam, @Body() d: SendReminderDto) {
+    return this.billing.sendReminder(u.sub, p.invoiceId, d);
+  }
+
+  @Get('invoices/:invoiceId/reminders')
+  @Roles('director', 'accountant')
+  reminders(@Param() p: InvoiceIdParam) {
+    return this.billing.listReminders(p.invoiceId);
   }
 
   // ── Paiements ─────────────────────────────────────────────────────────────
