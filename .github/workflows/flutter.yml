@@ -84,7 +84,9 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_allowDebugSigning: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
-        run: flutter build apk --release 2>&1 | tee staff-build.log
+        run: |
+          set -o pipefail
+          flutter build apk --release --verbose 2>&1 | tee staff-build.log
       - name: parent-mobile — build apk (release)
         working-directory: apps/parent-mobile
         env:
@@ -93,7 +95,9 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ORG_GRADLE_PROJECT_allowDebugSigning: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
-        run: flutter build apk --release 2>&1 | tee parent-build.log
+        run: |
+          set -o pipefail
+          flutter build apk --release --verbose 2>&1 | tee parent-build.log
       - name: App bundles Play Store (uniquement si signés)
         if: steps.keystore.outputs.signed == 'true'
         env:
@@ -109,7 +113,11 @@ jobs:
           set -e
           for app in staff-mobile parent-mobile; do
             apk="apps/$app/build/app/outputs/flutter-apk/app-release.apk"
-            test -s "$apk" || { echo "::error::APK manquant : $apk"; exit 1; }
+            if [ ! -s "$apk" ]; then
+              echo "::error::APK manquant : $apk"
+              echo "── Sorties Flutter/Gradle trouvées :"; find "apps/$app/build" -name '*.apk' -o -name '*.aab' 2>/dev/null | head
+              exit 1
+            fi
             echo "$app : $(du -h "$apk" | cut -f1)"
           done
       - name: Upload APK
