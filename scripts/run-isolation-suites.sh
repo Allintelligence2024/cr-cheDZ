@@ -87,6 +87,7 @@ SUITES=(
   phase56-anonymize-child.pg.test.mjs
   phase56b-anonymize-child.api.test.mjs
   phase57-invoice-reminders.api.test.mjs
+  phase58-ratios-attestations.api.test.mjs
 )
 
 FILTER="${1:-}"

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
+import { RatiosService } from '../attendance/ratios.service';
 
 /**
  * Tableau de bord de la directrice (Phase 9).
@@ -14,7 +15,7 @@ import { requireTenant } from '../../shared/database/tenant-utils';
  */
 @Injectable()
 export class DashboardService {
-  constructor(private readonly tenantContext: TenantContextService) {}
+  constructor(private readonly tenantContext: TenantContextService, private readonly ratios: RatiosService) {}
 
   async summary(): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
@@ -98,10 +99,13 @@ export class DashboardService {
         [tenantId],
       )).rows;
 
+      const ratios = await this.ratios.compute(client);
       return {
         date: today,
         rooms,
+        ratios: ratios.rooms,
         alerts: {
+          ratio_breaches: ratios.alerts,
           children_not_checked_in: notCheckedIn,
           documents_expiring: documentsExpiring,
           unpaid_invoices: unpaidInvoices,

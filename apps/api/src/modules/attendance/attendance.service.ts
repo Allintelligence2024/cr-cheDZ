@@ -4,6 +4,7 @@ import { TenantContextService } from '../../shared/database/tenant-context.servi
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RatiosService } from './ratios.service';
 import type { CommandResult } from './dto/attendance.dto';
 
 interface ApplyParams {
@@ -33,6 +34,7 @@ export class AttendanceService {
   constructor(
     private readonly tenantContext: TenantContextService,
     private readonly notifications: NotificationsService,
+    private readonly ratios: RatiosService,
   ) {}
 
   // ── Flows HTTP (contexte tenant du JWT) ──────────────────────────────────
@@ -47,7 +49,14 @@ export class AttendanceService {
         recordedBy: userId,
       });
       if (result.status !== 'accepted') this.throwCommand(result);
-      return this.sessionFor(client, tenantId, dto.child_id);
+      const session = await this.sessionFor(client, tenantId, dto.child_id);
+      // P2-1 : ratio de la salle APRÈS ce check-in — l'accueil n'est jamais
+      // bloqué (l'enfant est physiquement là), mais la directrice est alertée
+      // immédiatement et le franchissement est tracé (compliance_checks).
+      const roomId = (session as { room_id?: string | null }).room_id ?? null;
+      const ratio = roomId ? await this.ratios.forRoom(client, roomId) : null;
+      if (ratio) await this.ratios.recordBreach(client, ratio);
+      return { ...session, ratio };
     });
   }
 
