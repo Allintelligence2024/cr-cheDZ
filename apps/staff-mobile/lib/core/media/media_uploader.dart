@@ -53,12 +53,14 @@ class MediaUploader {
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.connectionError:
         return true;
-      case DioExceptionType.unknown:
-        return e.response == null;
       case DioExceptionType.badResponse:
       case DioExceptionType.badCertificate:
       case DioExceptionType.cancel:
         return false;
+      default:
+        // unknown, transformTimeout (dio ≥ 5.9) et tout futur type : on ne
+        // rejoue que si AUCUNE réponse serveur n'a été reçue.
+        return e.response == null;
     }
   }
 
