@@ -1,7 +1,15 @@
-import { IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 export class CreateContractDto {
  @IsUUID() child_id!: string;
- @IsNumber() @Min(0) monthly_base_amount!: number;
+ // P2-2 : optionnel si daily_rate + annual_weeks sont fournis (lissage calculé).
+ @IsOptional() @IsNumber() @Min(0) monthly_base_amount?: number;
+ // P2-2 : semaine type (jours ISO 1=lundi … 7=dimanche), défaut DZ dim→jeu.
+ @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(7) @ArrayUnique() @IsInt({ each: true }) @Min(1, { each: true }) @Max(7, { each: true }) weekly_schedule?: number[];
+ @IsOptional() @IsNumber() @Min(0.5) @Max(12) hours_per_day?: number;
+ @IsOptional() @IsInt() @Min(1) @Max(52) annual_weeks?: number;
+ @IsOptional() @IsNumber() @Min(0) daily_rate?: number;
+ @IsOptional() @IsBoolean() absence_deduction?: boolean;
+ @IsOptional() @IsNumber() @Min(0) extra_day_rate?: number;
  @IsDateString() start_date!: string;
  @IsOptional() @IsDateString() end_date?: string;
  // C8 : valeurs alignées sur la définition de contracts.schedule_type

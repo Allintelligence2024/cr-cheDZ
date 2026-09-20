@@ -128,6 +128,16 @@ export class BillingController {
     return this.billing.listPayments(childId);
   }
 
+  /** P1-1 : rapprochement des paiements en ligne (pending/stale/confirmed/failed). */
+  @Get('payments/online/reconciliation')
+  @Roles('director', 'accountant')
+  onlineReconciliation(@Query('stale_minutes') stale?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const minutes = stale ? Number(stale) : 30;
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) throw new AppError('VALIDATION_ERROR', 'stale_minutes : entier entre 1 et 10080', 'stale_minutes : عدد صحيح بين 1 و 10080', 400);
+    if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to && !/^\d{4}-\d{2}-\d{2}$/.test(to))) throw new AppError('VALIDATION_ERROR', 'from/to : format YYYY-MM-DD', 'from/to : الصيغة YYYY-MM-DD', 400);
+    return this.billing.onlineReconciliation(minutes, from, to);
+  }
+
   @Get('payments/:paymentId')
   @Roles('director', 'accountant')
   paymentDetail(@Param() p: PaymentIdParam) {

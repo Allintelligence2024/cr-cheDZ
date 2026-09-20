@@ -10,7 +10,14 @@
 # Le statut reflète maintenant la VRAIE compilation. Non bloquant (seul le
 # check `database` est requis par la branch protection) : un rouge honnête ne
 # bloque pas les merges. `flutter test` (staff-mobile) a été ajouté le
-# 2026-09-19 (lot G) ; le « build apk/ipa » reste dans l'issue #8.
+# 2026-09-19 (lot G).
+# P1-2 (2026-09-20) : les deux apps sont désormais COMPILÉES (flutter build
+# apk). Signature : si les secrets ANDROID_KEYSTORE_BASE64 / _PASSWORD /
+# ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD existent → APK release SIGNÉ +
+# app bundle (publiable) ; sinon → APK release signé debug, EXPLICITEMENT
+# autorisé par ORG_GRADLE_PROJECT_allowDebugSigning (le build.gradle.kts
+# échoue sans keystore ni autorisation : jamais de faux « release »).
+# L'iOS (ipa) attend un compte Apple Developer (dépendance externe).
 name: flutter
 
 on:
@@ -50,6 +57,71 @@ jobs:
       - name: staff-mobile — tests
         working-directory: apps/staff-mobile
         run: flutter test | tee staff-test.log
+      # ── P1-2 : compilation réelle des APK ──────────────────────────────────
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Keystore de release (si secrets présents)
+        id: keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload-keystore.jks"
+            echo "path=$RUNNER_TEMP/upload-keystore.jks" >> "$GITHUB_OUTPUT"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "Keystore de release présent : APK/AAB signés (publiables)."
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=P1-2 signature::Aucun secret ANDROID_KEYSTORE_BASE64 : APK release compilé avec signature debug (vérification de build uniquement, non publiable)."
+          fi
+      - name: staff-mobile — build apk (release)
+        working-directory: apps/staff-mobile
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ORG_GRADLE_PROJECT_allowDebugSigning: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
+        run: flutter build apk --release 2>&1 | tee staff-build.log
+      - name: parent-mobile — build apk (release)
+        working-directory: apps/parent-mobile
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ORG_GRADLE_PROJECT_allowDebugSigning: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
+        run: flutter build apk --release 2>&1 | tee parent-build.log
+      - name: App bundles Play Store (uniquement si signés)
+        if: steps.keystore.outputs.signed == 'true'
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          (cd apps/staff-mobile && flutter build appbundle --release)
+          (cd apps/parent-mobile && flutter build appbundle --release)
+      - name: Vérification des artefacts (APK présents, signature attendue)
+        run: |
+          set -e
+          for app in staff-mobile parent-mobile; do
+            apk="apps/$app/build/app/outputs/flutter-apk/app-release.apk"
+            test -s "$apk" || { echo "::error::APK manquant : $apk"; exit 1; }
+            echo "$app : $(du -h "$apk" | cut -f1)"
+          done
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ steps.keystore.outputs.signed == 'true' && 'signed' || 'debug-signed' }}
+          path: |
+            apps/staff-mobile/build/app/outputs/flutter-apk/app-release.apk
+            apps/parent-mobile/build/app/outputs/flutter-apk/app-release.apk
+            apps/*/build/app/outputs/bundle/release/*.aab
+          if-no-files-found: ignore
       - name: Upload staff-mobile logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -59,3 +131,5 @@ jobs:
             apps/staff-mobile/staff-pub-get.log
             apps/staff-mobile/staff-analyze.log
             apps/staff-mobile/staff-test.log
+            apps/staff-mobile/staff-build.log
+            apps/parent-mobile/parent-build.log

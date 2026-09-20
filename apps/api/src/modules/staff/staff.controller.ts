@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -14,13 +15,18 @@ import { IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import {
+  CoverageQuery,
+  CreateShiftDto,
   CreateStaffAssignmentDto,
+  GenerateWeekDto,
+  ScheduleQuery,
   CreateStaffDocumentDto,
   CreateStaffDto,
   StaffAttendanceDto,
   UpdateStaffDto,
 } from './dto/staff.dto';
 import { StaffService } from './staff.service';
+import { StaffScheduleService } from './staff-schedule.service';
 
 class StaffIdParam {
   @IsUUID()
@@ -47,12 +53,43 @@ const READ_ROLES = ['super_admin', 'director', 'accountant'] as const;
 
 @Controller('staff')
 export class StaffController {
-  constructor(private readonly staffService: StaffService) {}
+  constructor(private readonly staffService: StaffService, private readonly schedule: StaffScheduleService) {}
 
   @Get()
   @Roles(...READ_ROLES)
   async list(): Promise<{ items: Array<Record<string, unknown>> }> {
     return { items: await this.staffService.list() };
+  }
+
+  // ── P2-5 : planning ──────────────────────────────────────────────────────
+  @Get('schedule')
+  @Roles(...READ_ROLES)
+  async scheduleList(@Query() q: ScheduleQuery): Promise<{ items: Array<Record<string, unknown>> }> {
+    return { items: await this.schedule.list(q.from, q.to, q.site_id) };
+  }
+
+  @Get('schedule/coverage')
+  @Roles(...READ_ROLES)
+  async scheduleCoverage(@Query() q: CoverageQuery) {
+    return this.schedule.coverage(q.date, q.site_id);
+  }
+
+  @Post('schedule/shifts')
+  @Roles(...WRITE_ROLES)
+  async createShift(@Body() dto: CreateShiftDto, @CurrentUser() user: CurrentUserPayload) {
+    return this.schedule.createShift(user.sub, dto);
+  }
+
+  @Delete('schedule/shifts/:id')
+  @Roles(...WRITE_ROLES)
+  async deleteShift(@Param() params: StaffIdParam, @CurrentUser() user: CurrentUserPayload) {
+    return this.schedule.deleteShift(user.sub, params.id);
+  }
+
+  @Post('schedule/generate-week')
+  @Roles(...WRITE_ROLES)
+  async generateWeek(@Body() dto: GenerateWeekDto, @CurrentUser() user: CurrentUserPayload) {
+    return this.schedule.generateWeek(user.sub, dto);
   }
 
   @Get('documents/expiring')

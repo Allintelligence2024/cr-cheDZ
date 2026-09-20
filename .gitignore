@@ -45,3 +45,8 @@ test-results/
 *.sql.gz
 backups/
 tests/load/capacity-report.json
+
+# P1-2 — signature Android : jamais de keystore ni de mots de passe dans Git
+apps/*/android/key.properties
+*.jks
+*.keystore
