@@ -44,3 +44,4 @@ test-results/
 # Backups locaux
 *.sql.gz
 backups/
+tests/load/capacity-report.json
