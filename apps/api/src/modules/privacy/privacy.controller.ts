@@ -61,6 +61,17 @@ class IdParam {
   id!: string;
 }
 
+class AnonymizeChildDto {
+  @IsString()
+  @MaxLength(500)
+  reason!: string;
+
+  /** Demande de droits (privacy_requests) à clore en même temps, si connue. */
+  @IsOptional()
+  @IsUUID()
+  request_id?: string;
+}
+
 class ImpersonateDto {
   @IsUUID()
   user_id!: string;
@@ -133,6 +144,14 @@ export class PrivacyController {
   @Roles('director', 'super_admin')
   resolveRequest(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.resolveRequest(p.id, u.sub);
+  }
+
+  // ── Effacement 25-11 : anonymisation à chaud d'un enfant sorti ────────────
+
+  @Post('privacy/children/:id/anonymize')
+  @Roles('director', 'super_admin')
+  anonymizeChild(@Param() p: IdParam, @Body() dto: AnonymizeChildDto, @CurrentUser() u: CurrentUserPayload) {
+    return this.privacy.anonymizeChild(p.id, u.sub, dto.reason, dto.request_id);
   }
 
   // ── Violations (chrono 5 jours ANPDP) ─────────────────────────────────────

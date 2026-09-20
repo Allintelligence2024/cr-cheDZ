@@ -8,7 +8,7 @@ import { AppError } from '../../shared/errors';
 import {
   AllocatePaymentDto, CloseCashRegisterDto, ContractIdParam, CreateContractDto,
   CreateOnlinePaymentDto, GenerateInvoiceDto, InvoiceIdParam, OpenCashRegisterDto,
-  PaymentIdParam, RecordCashPaymentDto,
+  PaymentIdParam, RecordCashPaymentDto, SendReminderDto,
 } from './dto/billing.dto';
 import { BillingService } from './billing.service';
 import { PaymentProviderService } from './payment-provider.service';
@@ -63,6 +63,13 @@ export class BillingController {
     return this.billing.listInvoices(childId);
   }
 
+  /** P2-3 : journal des impayés (balance âgée) — transition overdue appliquée à la lecture. */
+  @Get('invoices/aged-balance')
+  @Roles('director', 'accountant')
+  agedBalance() {
+    return this.billing.agedBalance();
+  }
+
   @Get('invoices/:invoiceId')
   @Roles('director', 'accountant')
   invoiceDetail(@Param() p: InvoiceIdParam) {
@@ -77,6 +84,27 @@ export class BillingController {
     res.setHeader('content-type', 'application/pdf');
     res.setHeader('content-disposition', `inline; filename="${result.invoice.invoice_number ?? 'facture'}.pdf"`);
     res.send(result.buffer);
+  }
+
+  /** draft → sent : la facture devient exigible. */
+  @Post('invoices/:invoiceId/send')
+  @Roles('director', 'accountant')
+  @HttpCode(HttpStatus.OK)
+  sendInvoice(@CurrentUser() u: CurrentUserPayload, @Param() p: InvoiceIdParam) {
+    return this.billing.markInvoiceSent(u.sub, p.invoiceId);
+  }
+
+  /** P2-3 : relance d'impayé (email réel fail-closed, ou trace manuelle). */
+  @Post('invoices/:invoiceId/reminders')
+  @Roles('director', 'accountant')
+  reminder(@CurrentUser() u: CurrentUserPayload, @Param() p: InvoiceIdParam, @Body() d: SendReminderDto) {
+    return this.billing.sendReminder(u.sub, p.invoiceId, d);
+  }
+
+  @Get('invoices/:invoiceId/reminders')
+  @Roles('director', 'accountant')
+  reminders(@Param() p: InvoiceIdParam) {
+    return this.billing.listReminders(p.invoiceId);
   }
 
   // ── Paiements ─────────────────────────────────────────────────────────────
@@ -98,6 +126,16 @@ export class BillingController {
   @Roles('director', 'accountant')
   payments(@Query('child_id') childId?: string) {
     return this.billing.listPayments(childId);
+  }
+
+  /** P1-1 : rapprochement des paiements en ligne (pending/stale/confirmed/failed). */
+  @Get('payments/online/reconciliation')
+  @Roles('director', 'accountant')
+  onlineReconciliation(@Query('stale_minutes') stale?: string, @Query('from') from?: string, @Query('to') to?: string) {
+    const minutes = stale ? Number(stale) : 30;
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) throw new AppError('VALIDATION_ERROR', 'stale_minutes : entier entre 1 et 10080', 'stale_minutes : عدد صحيح بين 1 و 10080', 400);
+    if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to && !/^\d{4}-\d{2}-\d{2}$/.test(to))) throw new AppError('VALIDATION_ERROR', 'from/to : format YYYY-MM-DD', 'from/to : الصيغة YYYY-MM-DD', 400);
+    return this.billing.onlineReconciliation(minutes, from, to);
   }
 
   @Get('payments/:paymentId')

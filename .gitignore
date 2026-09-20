@@ -13,6 +13,9 @@ coverage/
 .env
 .env.local
 .env.*.local
+# D1 : .env.prod est un fichier LOCAL d'exploitation (copié depuis
+# .env.prod.example) — jamais versionné.
+.env.prod
 
 # Flutter/Dart
 .dart_tool/
@@ -26,6 +29,10 @@ logs/
 *.log
 npm-debug.log*
 
+# Playwright (job e2e)
+playwright-report/
+test-results/
+
 # IDE
 .idea/
 .vscode/
@@ -37,3 +44,9 @@ npm-debug.log*
 # Backups locaux
 *.sql.gz
 backups/
+tests/load/capacity-report.json
+
+# P1-2 — signature Android : jamais de keystore ni de mots de passe dans Git
+apps/*/android/key.properties
+*.jks
+*.keystore

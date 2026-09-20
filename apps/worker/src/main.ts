@@ -293,14 +293,12 @@ const JOB_HANDLERS: JobHandlers = {
   retention_purge: () => retentionPurge(),
   video_clips_purge: () => videoClipsPurge(),
   payments_expire: () => paymentsExpire(),
-  // La livraison des notifications passe par notification_queue (drain
-  // ci-dessous) : ce job marque la prise en charge, le drain ne passe la file
-  // en 'sent' qu'après traitement, avec failure_reason explicite
-  // (PUSH_NOT_CONFIGURED_OR_NO_DEVICE) si aucun push n'a réellement été
-  // délivré — sent signifie traité, pas livré ; l'inbox reste la voie fiable.
-  send_parent_notification: async (_payload, orgId) => {
-    if (!orgId) throw new Error('ORGANIZATION_REQUIRED');
-  },
+  // O1 (audit 2026-09-19) : « send_parent_notification » supprimé — la
+  // livraison parent passe par notification_queue (drainNotificationQueue) :
+  // push/in-app avec failure_reason explicite (PUSH_NOT_CONFIGURED_OR_NO_DEVICE)
+  // si aucun push n'a réellement été délivré — sent signifie traité, pas livré ;
+  // l'inbox reste la voie fiable. Les lignes héritées échouent explicitement
+  // (« Type de job inconnu »), jamais avec un faux succès.
   export_report: (_p, _o, job) => exportReport(job),
   // Intégration non configurée dans cette session (stub explicite, jamais de
   // faux statut : le job échoue avec un message clair si invoqué).
@@ -398,9 +396,18 @@ async function apnsSend(token: string, notification: { title: string; body: stri
 
 /** Drain notification_queue (migration 042) : claim/finish via SECURITY DEFINER
  *  (sans tenant posé, la RLS rendait la file invisible sous NOBYPASSRLS). */
+// O4 (audit 2026-09-19) : délai après lequel une ligne 'processing' dont le
+// worker est mort est considérée orpheline et reclaimée (mêmes règles de
+// retry que notif_queue_finish : backoff exponentiel, plafond 3 essais).
+const NOTIF_RECLAIM_TIMEOUT_MS = Number(process.env.NOTIF_RECLAIM_TIMEOUT_MS ?? 300_000);
+
 async function drainNotificationQueue(): Promise<void> {
   const client = await pool.connect();
   try {
+    // O4 (audit 2026-09-19) : sans ce reclaim, un crash entre claim et finish
+    // laissait la ligne 'processing' pour toujours (claim ne reprend que les
+    // 'pending' — la file n'avait pas d'équivalent de jobs_reap_stale).
+    await client.query(`SELECT notif_queue_reclaim($1::interval)`, [`${NOTIF_RECLAIM_TIMEOUT_MS} milliseconds`]);
     const claimed = await client.query(`SELECT id, organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data FROM notif_queue_claim(25)`);
     for (const n of claimed.rows) {
       // Recheck current rights under tenant RLS, after claim and before any provider call.
@@ -425,14 +432,17 @@ async function drainNotificationQueue(): Promise<void> {
         }
         continue;
       }
-      // Canal push : les appareils sont lus DANS le tenant (RLS).
-      const devices = await withTenant(n.organization_id, async (c) => c.query(
-        `SELECT platform, fcm_token, apns_token FROM devices
-         WHERE organization_id=$1 AND registered_by=$2 AND is_active=true AND revoked_at IS NULL
-           AND (fcm_token IS NOT NULL OR apns_token IS NOT NULL)`,
-        [n.organization_id, n.user_id],
-      ));
+      // Canal push : les appareils sont lus DANS le tenant (RLS). O4 (audit
+      // 2026-09-19) : la lecture est DANS le try — une erreur (RLS,
+      // connexion) ne doit pas casser le lot en cours : la notification est
+      // renvoyée en queue avec son motif, les suivantes sont traitées.
       try {
+        const devices = await withTenant(n.organization_id, async (c) => c.query(
+          `SELECT platform, fcm_token, apns_token FROM devices
+           WHERE organization_id=$1 AND registered_by=$2 AND is_active=true AND revoked_at IS NULL
+             AND (fcm_token IS NOT NULL OR apns_token IS NOT NULL)`,
+          [n.organization_id, n.user_id],
+        ));
         const message = {
           title: n.title_fr,
           body: n.body_fr,

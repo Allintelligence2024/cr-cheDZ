@@ -346,19 +346,24 @@ async function main() {
 
     // ── 6. Worker ───────────────────────────────────────────────────────────
     console.log('\n6) Worker (jobs + drain notifications)');
+    // B3 : le worker tourne avec le rôle APPLICATIF (appUrl), comme les
+    // autres suites (phase8/11/13/16/21/23/24/27/28) — plus jamais avec
+    // l'URL admin capturée en début de script.
     const worker = spawn('node', ['apps/worker/dist/main.js'], {
       cwd: REPO,
-      env: { ...process.env, DATABASE_URL: url },
+      env: { ...process.env, DATABASE_URL: appUrl() },
       stdio: 'ignore',
     });
     await new Promise((r) => setTimeout(r, 4000));
     worker.kill();
     const jobs = await admin.query(
-      `SELECT status FROM background_jobs WHERE organization_id = $1 AND job_type = 'send_parent_notification'`,
+      `SELECT count(*)::int AS n FROM background_jobs WHERE organization_id = $1 AND job_type = 'send_parent_notification'`,
       [A.org],
     );
-    check('Worker : job send_parent_notification → done', jobs.rows.length >= 1
-      && jobs.rows.every((j) => j.status === 'done'),
+    // O1 (audit 2026-09-19) : le job « send_parent_notification » est supprimé —
+    // la livraison parent passe par notification_queue (vérifiée juste après) :
+    // plus de job redondant qui marquait un faux « done » sans délivrer rien.
+    check('Worker : plus de job send_parent_notification redondant (O1)', jobs.rows[0].n === 0,
       JSON.stringify(jobs.rows));
     const queue = await admin.query(
       `SELECT DISTINCT status FROM notification_queue WHERE organization_id = $1`,

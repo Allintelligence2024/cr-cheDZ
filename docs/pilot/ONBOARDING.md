@@ -22,7 +22,8 @@ contrats actifs, parents avec permissions complètes.
 
 ## 2. Comptes de test (uniquement données de démonstration)
 
-Mot de passe commun : `Password123!` (à changer dès la mise en production).
+Mot de passe commun : défini par la variable d'environnement `PILOT_PASSWORD`
+lors du seed (jamais codé en dur — D4), à changer dès la mise en production.
 
 | Rôle | Email |
 |---|---|

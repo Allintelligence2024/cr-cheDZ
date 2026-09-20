@@ -22,8 +22,9 @@ export interface InvitationResult {
 
 /**
  * Invitations : création d'un utilisateur pending + membership +
- * token signé (7 j), remis seulement en development ; transport réel non livré.
- * Acceptation via POST /auth/accept-invitation.
+ * token signé (7 j). Livraison : SMTP réel en tout environnement configuré
+ * (P0), remise en main propre development sinon ; transport indisponible →
+ * 503 avant toute écriture. Acceptation via POST /auth/accept-invitation.
  */
 @Injectable()
 export class InvitationsService {

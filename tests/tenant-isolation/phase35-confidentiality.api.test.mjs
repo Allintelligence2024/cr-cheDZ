@@ -37,8 +37,8 @@ try {
   await db.query("INSERT INTO health_records(organization_id,child_id,blood_type,general_notes) VALUES($1,$2,'O+','HEALTH_SENTINEL')",[org,child]);
   await db.query(`INSERT INTO invoices(organization_id,child_id,invoice_number,period_year,period_month,subtotal,total_amount,due_date,created_by)
     VALUES($1,$2,$3,2026,9,100,100,'2026-09-30',$4)`,[org,child,randomUUID(),director.id]);
-  await db.query(`INSERT INTO payments(organization_id,child_id,reference_number,amount,method,status,created_by)
-    VALUES($1,$2,$3,100,'cash','confirmed',$4)`,[org,child,randomUUID(),director.id]);
+  await db.query(`INSERT INTO payments(organization_id,child_id,reference_number,amount,method,status,created_by,site_id)
+    VALUES($1,$2,$3,100,'cash','confirmed',$4,$5)`,[org,child,randomUUID(),director.id,site]);
   process.env.DATABASE_URL=appUrl();process.env.NODE_ENV='test';process.env.RATE_LIMIT_DISABLED='true';
   const {createApp}=await import('../../apps/api/dist/app.factory.js');
   const {PG_POOL}=await import('../../apps/api/dist/shared/database/database.provider.js');

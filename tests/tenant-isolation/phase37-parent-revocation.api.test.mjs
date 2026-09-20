@@ -41,7 +41,7 @@ try {
   await db.query("INSERT INTO allergies(organization_id,child_id,allergen,allergen_type,severity,created_by) VALUES($1,$2,'H2C_ALLERGEN','food','mild',$3)", [org, child, director.id]);
   const media = (await db.query("INSERT INTO media_assets(organization_id,child_id,uploaded_by,media_type,storage_key,mime_type,is_visible_to_parents,children_in_photo,all_consents_checked) VALUES($1,$2,$3,'photo',$4,'image/jpeg',true,ARRAY[$2::uuid],true) RETURNING id", [org, child, director.id, `${org}/photo/h2c.jpg`])).rows[0].id;
   const invoice = (await db.query("INSERT INTO invoices(organization_id,child_id,invoice_number,period_year,period_month,subtotal,total_amount,due_date,created_by) VALUES($1,$2,$3,2026,9,100,100,'2026-09-30',$4) RETURNING id", [org, child, randomUUID(), director.id])).rows[0].id;
-  const payment = (await db.query("INSERT INTO payments(organization_id,child_id,reference_number,amount,method,status,created_by) VALUES($1,$2,$3,100,'cash','confirmed',$4) RETURNING id", [org, child, randomUUID(), director.id])).rows[0].id;
+  const payment = (await db.query("INSERT INTO payments(organization_id,child_id,reference_number,amount,method,status,created_by,site_id) VALUES($1,$2,$3,100,'cash','confirmed',$4,$5) RETURNING id", [org, child, randomUUID(), director.id, site])).rows[0].id;
   const key = `${org}/invoices/${invoice}.pdf`;
   await mkdir(dirname(join(root, key)), { recursive: true });
   await writeFile(join(root, key), '%PDF-1.4\nH2C_PDF_BYTES\n%%EOF'); // access test, not PDF rendering qualification

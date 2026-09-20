@@ -25,6 +25,9 @@ interface AuthValue {
   user: Me | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  /** Recharge le profil depuis les jetons déjà stockés (A1 : acceptation
+   * d'invitation — plus de login('','') qui échouait silencieusement). */
+  refreshProfile: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -32,6 +35,7 @@ const AuthContext = createContext<AuthValue>({
   user: null,
   loading: true,
   login: async () => undefined,
+  refreshProfile: async () => undefined,
   logout: async () => undefined,
 });
 
@@ -39,17 +43,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const [user, setUser] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /** Recharge /me avec les jetons en stock ; échec = jetons invalides. */
+  const refreshProfile = async (): Promise<void> => {
+    if (!getTokens().access) {
+      setUser(null);
+      return;
+    }
+    try {
+      setUser(await http.get<Me>('/me'));
+    } catch {
+      clearTokens();
+      setUser(null);
+    }
+  };
+
   useEffect(() => {
     const tokens = getTokens();
     if (!tokens.access) {
       setLoading(false);
       return;
     }
-    http
-      .get<Me>('/me')
-      .then(setUser)
-      .catch(() => clearTokens())
-      .finally(() => setLoading(false));
+    refreshProfile().finally(() => setLoading(false));
   }, []);
 
   const login = async (email: string, password: string): Promise<void> => {
@@ -72,7 +86,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, loading, login, refreshProfile, logout }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 

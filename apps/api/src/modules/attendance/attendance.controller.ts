@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { AttendanceService } from './attendance.service';
+import { RatiosService } from './ratios.service';
 import {
   AttendanceSummaryQuery,
   CheckInDto,
@@ -14,7 +15,7 @@ const STAFF_ROLES = ['super_admin', 'director', 'educator', 'receptionist'] as c
 
 @Controller('attendance')
 export class AttendanceController {
-  constructor(private readonly attendanceService: AttendanceService) {}
+  constructor(private readonly attendanceService: AttendanceService, private readonly ratios: RatiosService) {}
 
   @Post('check-in')
   @Roles(...STAFF_ROLES)
@@ -44,5 +45,12 @@ export class AttendanceController {
   @Roles(...STAFF_ROLES)
   async summary(@Query() query: AttendanceSummaryQuery): Promise<{ date: string; items: Array<Record<string, unknown>> }> {
     return this.attendanceService.summary(query.room_id, query.date);
+  }
+
+  /** P2-1 : ratios d'encadrement & capacité en temps réel, par salle. */
+  @Get('ratios')
+  @Roles(...STAFF_ROLES)
+  async ratiosToday() {
+    return this.ratios.today();
   }
 }

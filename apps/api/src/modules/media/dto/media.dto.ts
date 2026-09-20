@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   Min,
   MinLength,
@@ -48,6 +49,10 @@ export class RegisterMediaDto {
   @IsString()
   @MinLength(3)
   @MaxLength(500)
+  // C7 : aligné sur le DTO vidéo — aucun `..` (lookahead négatif), caractères
+  // sûrs uniquement. Les gardes finales restent assertStorageKeyInTenant (API)
+  // et la contrainte DB 049_storage_key_safety.
+  @Matches(/^(?!.*\.\.)[\w\-./]{1,500}$/, { message: 'storage_key invalide (chemin relatif sans ..)' })
   storage_key!: string;
 
   @IsString()

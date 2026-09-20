@@ -2,18 +2,29 @@
 /**
  * Seed des données de démarrage des 5 crèches pilotes (Phase 12).
  *
+ * ⚠ DONNÉES EXCLUSIVEMENT SYNTHÉTIQUES (jamais de données réelles d'enfants) :
+ * noms, dates et comptes sont fictifs ; à ne jouer QUE sur environnement
+ * pilote/staging, jamais sur une base contenant de vraies données.
+ *
  * Crée par crèche : organisation, site, 3 salles, directrice + 2 éducatrices,
  * 15 enfants répartis, parents (gardiens avec permissions), contrats actifs,
  * profils staff + affectations. Comptes de test documentés dans
  * docs/pilot/ONBOARDING.md. Idempotent (slugs pilot-01…pilot-05).
  *
- * Usage : DATABASE_URL=… node scripts/pilot/seed-pilot.mjs [01 02 …]
+ * D4 : mot de passe des comptes via PILOT_PASSWORD (variable d'environnement)
+ * au lieu d'une constante en clair dans le dépôt.
+ *
+ * Usage : DATABASE_URL=… PILOT_PASSWORD=… node scripts/pilot/seed-pilot.mjs [01 02 …]
  */
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 
-const PASSWORD = 'Password123!';
+if (!process.env.PILOT_PASSWORD) {
+  console.error('PILOT_PASSWORD requis : définissez le mot de passe des comptes pilotes via cette variable d’environnement.');
+  process.exit(1);
+}
+const PASSWORD = process.env.PILOT_PASSWORD;
 const PILOTS = [
   { num: '01', name: 'Crèche Pilote El-Djazair', wilaya: '16', type: 'creche' },
   { num: '02', name: 'Crèche Pilote Oran', wilaya: '31', type: 'creche' },
@@ -125,7 +136,8 @@ async function main() {
     console.log(`✓ ${slug} — ${pilot.name} (${children.length} enfants, 3 salles, directrice + 2 éducatrices + comptable)`);
   }
   await client.end();
-  console.log(`\nComptes de test : pilot-NN.directrice@pilote.dz / ${PASSWORD} (voir docs/pilot/ONBOARDING.md)`);
+  // D4 : le mot de passe n'est JAMAIS ré-affiché (secret fourni par l'env).
+  console.log('\nComptes de test : pilot-NN.directrice@pilote.dz / $PILOT_PASSWORD (voir docs/pilot/ONBOARDING.md)');
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

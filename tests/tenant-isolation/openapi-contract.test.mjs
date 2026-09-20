@@ -68,6 +68,13 @@ test('generator works for real but is NOT wired to the build (status quo documen
     'api-contracts has no build script: generation stays on-demand (do not wire it without a client decision)');
 });
 
+test('the spec header itself never re-claims build-wired generation (lot F)', () => {
+  assert.equal(SPEC.includes('régénéré par le backend NestJS à chaque build'), false,
+    'openapi.yaml header must stay honest: hand-written partial spec, generation on demand');
+  assert.match(SPEC, /écrite À LA\s*\n?\s*MAIN|écrite À LA MAIN/i, 'header must say the spec is hand-written');
+  assert.match(SPEC, /13 paths/, 'header must state the real perimeter');
+});
+
 test('documentation claims match the delivered state (corrected 2026-09, never re-inflated)', () => {
   const readme = readFileSync('README.md', 'utf8');
   assert.match(readme, /Contrats API \| OpenAPI 3\.1 \*\*partiel\*\*/);

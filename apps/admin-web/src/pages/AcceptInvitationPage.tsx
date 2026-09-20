@@ -11,7 +11,7 @@ export function AcceptInvitationPage(): React.JSX.Element {
   const [params] = useSearchParams();
   const token = params.get('token') ?? '';
   const { t } = useI18n();
-  const { login } = useAuth();
+  const { refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -33,7 +33,9 @@ export function AcceptInvitationPage(): React.JSX.Element {
         { invitation_token: token, first_name: firstName, last_name: lastName, password },
       );
       setTokens(res.access_token, res.refresh_token);
-      await login('', '').catch(() => undefined); // force reload du profil
+      // A1 : charge directement le profil avec les jetons reçus — plus de
+      // login('','') qui échouait silencieusement et renvoyait vers /login.
+      await refreshProfile();
       navigate('/');
     } catch (err: unknown) {
       setError((err as { messageFr?: string }).messageFr ?? 'Erreur');

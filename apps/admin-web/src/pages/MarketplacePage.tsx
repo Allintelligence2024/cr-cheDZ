@@ -10,7 +10,6 @@ interface Listing {
   public_description: string | null;
   wilaya: string;
   commune: string | null;
-  address_line1: string | null;
   public_phone: string | null;
   public_email: string | null;
   establishment_type: string;
@@ -53,8 +52,7 @@ export function MarketplacePage(): React.JSX.Element {
               </p>
               {c.public_description && <p style={{ fontSize: 13, margin: '0 0 8px' }}>{c.public_description}</p>}
               <p style={{ margin: 0, fontSize: 12, color: tokens.colors.textMuted }}>
-                {c.address_line1 ?? ''}
-                {c.public_phone ? ` · ${c.public_phone}` : ''}
+                {c.public_phone ? c.public_phone : ''}
                 {c.public_email ? ` · ${c.public_email}` : ''}
               </p>
             </div>

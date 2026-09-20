@@ -215,7 +215,7 @@ export class SyncService {
 
     // L'enfant doit appartenir au tenant (RLS).
     const child = await client.query(
-      `SELECT id FROM children WHERE id = $1 AND deleted_at IS NULL`,
+      `SELECT id FROM children\n       -- C6 : filtre organisation explicite en plus de la RLS (fail-closed).\n       WHERE id = $1 AND organization_id = current_setting('app.tenant_id')::uuid AND deleted_at IS NULL`,
       [base.childId],
     );
     if (child.rows.length === 0) {
@@ -259,7 +259,7 @@ export class SyncService {
     const tenantId = this.tenantContext.getTenantId();
     const p = op.payload as Record<string, unknown>;
     const child = await client.query(
-      `SELECT id FROM children WHERE id = $1 AND deleted_at IS NULL`,
+      `SELECT id FROM children\n       -- C6 : filtre organisation explicite en plus de la RLS (fail-closed).\n       WHERE id = $1 AND organization_id = current_setting('app.tenant_id')::uuid AND deleted_at IS NULL`,
       [base.childId],
     );
     if (child.rows.length === 0) {

@@ -104,11 +104,17 @@ export class MessagingService {
         );
         if (!media.rows[0]) throw Errors.notFound();
       }
+      // C3 : organisation résolue AVANT l'INSERT (FOR UPDATE contre une
+      // suppression concurrente) — plus de sous-requête pouvant produire NULL.
+      const conversation = (await client.query(
+        `SELECT organization_id FROM conversations WHERE id=$1 FOR UPDATE`, [conversationId],
+      )).rows[0];
+      if (!conversation) throw Errors.notFound();
       const message = (await client.query(
         `INSERT INTO messages (organization_id, conversation_id, sender_id, body, attachment_id)
-         VALUES ((SELECT organization_id FROM conversations WHERE id=$1), $1, $2, $3, $4)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING id, sender_id, body, attachment_id, is_system_message, sent_at`,
-        [conversationId, userId, dto.body, dto.attachment_id ?? null],
+        [conversation.organization_id, conversationId, userId, dto.body, dto.attachment_id ?? null],
       )).rows[0];
       await client.query(
         `UPDATE conversations SET last_message_at = NOW() WHERE id = $1`, [conversationId],

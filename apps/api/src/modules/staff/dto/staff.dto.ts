@@ -1,4 +1,7 @@
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
   IsDateString,
   IsIn,
   IsInt,
@@ -6,6 +9,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -185,4 +189,32 @@ export class StaffAttendanceDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+}
+
+// ── P2-5 : planning ──────────────────────────────────────────────────────────
+export class CreateShiftDto {
+  @IsUUID() staff_id!: string;
+  @IsOptional() @IsUUID() room_id?: string;
+  @IsOptional() @IsUUID() site_id?: string;
+  @IsDateString() shift_date!: string;
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) start_time!: string;
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) end_time!: string;
+  @IsOptional() @IsIn(['work', 'on_call', 'training', 'leave']) shift_type?: 'work' | 'on_call' | 'training' | 'leave';
+  @IsOptional() @IsString() @MaxLength(500) notes?: string;
+}
+export class GenerateWeekDto {
+  @IsDateString() week_start!: string;
+  @IsOptional() @IsArray() @ArrayMinSize(1) @ArrayMaxSize(7) @IsInt({ each: true }) @Min(1, { each: true }) @Max(7, { each: true }) days?: number[];
+  @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) start_time?: string;
+  @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) end_time?: string;
+  @IsOptional() @IsUUID() site_id?: string;
+}
+export class ScheduleQuery {
+  @IsDateString() from!: string;
+  @IsDateString() to!: string;
+  @IsOptional() @IsUUID() site_id?: string;
+}
+export class CoverageQuery {
+  @IsDateString() date!: string;
+  @IsOptional() @IsUUID() site_id?: string;
 }

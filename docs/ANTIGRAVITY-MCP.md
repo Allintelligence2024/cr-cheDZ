@@ -16,7 +16,7 @@ Tu es Antigravity, agent autonome avec accès MCP : filesystem, github, postgres
 Repo : Allintelligence2024/cr-cheDZ
 Main @ bff4c99 (PR #12 merged) — CI verte obligatoire : postgres:18 + branch protection exige job database
 Stack : NestJS 11.1 + React 19 + Flutter 3.47.1 (stable) + GHCR ghcr.io/creche-saas/{api,worker,admin-web,support-console}:latest+SHA
-Migrations 001→052 immuables, 28/28 suites isolation (schema-check, rls-behavior, isolation, phase3→phase24) sur PG18 réel NOBYPASSRLS
+Migrations immuables (ADR-007), suites d'isolation complètes (`scripts/run-isolation-suites.sh`, phases courantes listées par le runner) sur PG18 réel NOBYPASSRLS
 Garde config P1 : @creche/prod-config (PAYMENT_WEBHOOK_SECRET≥32, JWT_SECRET≥32≠dev, STORAGE, SATIM complet ou 0)
 Flutter CI : maintenant honnête rouge (intl ^0.19.0 vs ^0.20.3) — voir issue #8
 ```
@@ -45,7 +45,7 @@ Flutter CI : maintenant honnête rouge (intl ^0.19.0 vs ^0.20.3) — voir issue 
 3. Créer VM clean (Docker) : `shell:exec` `docker run -d --name pg-restore -e POSTGRES_PASSWORD=postgres -p 5433:5432 postgres:18`
 4. `shell:exec` `gpg --batch --decrypt --passphrase $BACKUP_PASSPHRASE $BACKUP | gunzip | psql $DATABASE_URL_RESTORE`
 5. `shell:exec` `DATABASE_URL=$RESTORE node scripts/migrate.mjs --check` → doit être vert
-6. `shell:exec` `bash scripts/run-isolation-suites.sh` (échantillon 28/28)
+6. `shell:exec` `bash scripts/run-isolation-suites.sh` (toutes les suites du runner)
 7. `filesystem:write` `docs/pilot/BILAN-PILOTE.md` § Exercice restauration : temps, taille, verdict
 8. `github:create_issue` si échec, ou `github:create_pr` avec runbook mis à jour
 
@@ -138,7 +138,7 @@ Puis Mission 2 (secrets réels) : utilise vault MCP, teste garde P1, jamais de s
 
 Puis Mission 3 (pilote) : seed 5 crèches, bench, checklist quotidienne via metrics.
 
-Puis Mission 4 (dettes codables) : une PR par dette, typecheck + build + lint + audit + 28/28 suites.
+Puis Mission 4 (dettes codables) : une PR par dette, typecheck + build + lint + audit + suites d'isolation complètes.
 
 Chaque PR doit avoir preuves d'exécution (logs collés). Pas de force-push. Conventional Commits.
 

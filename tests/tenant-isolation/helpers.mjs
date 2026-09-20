@@ -73,6 +73,10 @@ export async function ensureAppRole(admin) {
   if ((await admin.query("SELECT to_regprocedure('exports_reconcile_tenant()') AS fn")).rows[0].fn) {
     await admin.query('GRANT EXECUTE ON FUNCTION exports_fail_job(uuid,uuid), exports_fail_stale(interval,uuid), exports_reconcile_tenant() TO creche_app_test');
   }
+  // O4 (migration 065) : reprise des notifications 'processing' orphelines (worker)
+  if ((await admin.query("SELECT to_regprocedure('notif_queue_reclaim(interval)') AS fn")).rows[0].fn) {
+    await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_reclaim(interval) TO creche_app_test');
+  }
   // Phase 7 (migration 025) : bootstrap login parent (guardians sous RLS)
   await admin.query('GRANT EXECUTE ON FUNCTION auth_parent_lookup_by_phone(text) TO creche_app_test');
   // Phase 10 (migration 029) : console support (recherche globale, jobs)
@@ -86,6 +90,8 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION support_set_flag(text, uuid, boolean) TO creche_app_test');
   // Phase 12 (migration 036) : suivi pilote (agrégats par organisation)
   await admin.query('GRANT EXECUTE ON FUNCTION support_pilot_summary() TO creche_app_test');
+  // Phase 5 rapport 5 analyses (migration 067) : effacement 25-11 par anonymisation
+  await admin.query('GRANT EXECUTE ON FUNCTION anonymize_child(uuid, uuid, text) TO creche_app_test');
   // Roadmap v2 (migration 040) : multi-rôles — liste des rôles effectifs
   await admin.query('GRANT EXECUTE ON FUNCTION auth_user_roles(uuid) TO creche_app_test');
   // Roadmap v2 (migration 042) : drain notification_queue sous NOBYPASSRLS
@@ -103,6 +109,10 @@ export async function ensureAppRole(admin) {
   const expiryFn = await admin.query(`SELECT 1 FROM pg_proc WHERE proname='payments_expire_pending'`);
   if (expiryFn.rows.length > 0) {
     await admin.query('GRANT EXECUTE ON FUNCTION payments_expire_pending(integer, integer) TO creche_app_test');
+  }
+  // P2-3 (migration 068) : transition overdue à la lecture (SECURITY INVOKER, RLS).
+  if ((await admin.query("SELECT to_regprocedure('invoices_mark_overdue(uuid)') AS fn")).rows[0].fn) {
+    await admin.query('GRANT EXECUTE ON FUNCTION invoices_mark_overdue(uuid) TO creche_app_test');
   }
   // Fondations audit (migration 050) : jauges globales /metrics
   await admin.query('GRANT EXECUTE ON FUNCTION metrics_global_counts() TO creche_app_test');

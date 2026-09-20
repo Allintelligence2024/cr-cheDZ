@@ -4,6 +4,7 @@ import { TenantContextService } from '../../shared/database/tenant-context.servi
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RatiosService } from './ratios.service';
 import type { CommandResult } from './dto/attendance.dto';
 
 interface ApplyParams {
@@ -33,6 +34,7 @@ export class AttendanceService {
   constructor(
     private readonly tenantContext: TenantContextService,
     private readonly notifications: NotificationsService,
+    private readonly ratios: RatiosService,
   ) {}
 
   // ── Flows HTTP (contexte tenant du JWT) ──────────────────────────────────
@@ -47,7 +49,14 @@ export class AttendanceService {
         recordedBy: userId,
       });
       if (result.status !== 'accepted') this.throwCommand(result);
-      return this.sessionFor(client, tenantId, dto.child_id);
+      const session = await this.sessionFor(client, tenantId, dto.child_id);
+      // P2-1 : ratio de la salle APRÈS ce check-in — l'accueil n'est jamais
+      // bloqué (l'enfant est physiquement là), mais la directrice est alertée
+      // immédiatement et le franchissement est tracé (compliance_checks).
+      const roomId = (session as { room_id?: string | null }).room_id ?? null;
+      const ratio = roomId ? await this.ratios.forRoom(client, roomId) : null;
+      if (ratio) await this.ratios.recordBreach(client, ratio);
+      return { ...session, ratio };
     });
   }
 
@@ -170,12 +179,11 @@ export class AttendanceService {
       child_id: p.childId, session_id: sessionId, session_date: today,
       status: 'present', occurred_at: p.occurredAt.toISOString(),
     }, p.deviceId);
-    // Notification parent : file d'envoi (worker) + file d'envoi push/in-app.
-    await client.query(
-      `INSERT INTO background_jobs (organization_id, job_type, payload, priority)
-       VALUES ($1, 'send_parent_notification', $2, 1)`,
-      [tenantId, JSON.stringify({ child_id: p.childId, event_type: 'check_in' })],
-    );
+    // Notification parent : notification_queue (drainée par le worker —
+    // push/in-app + inbox). O1 (audit 2026-09-19) : le job background_jobs
+    // « send_parent_notification » est supprimé — sa livraison effective
+    // passait déjà par la file ci-dessous ; le job redondant ne faisait que
+    // polluer background_jobs.
     await this.notifications.notifyGuardiansOfEvent(client, tenantId, p.childId, 'check_in', sessionId);
     return { status: 'accepted' };
   }

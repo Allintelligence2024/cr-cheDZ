@@ -180,8 +180,8 @@ test('E2 : trois producteurs planifiés exécutent réellement leurs effets, jam
   const key=`${org}/video/expired.mp4`; mkdirSync(dirname(join(root,key)),{recursive:true}); writeFileSync(join(root,key),'clip test');
   const clip=(await db.query(`INSERT INTO video_clips(organization_id,camera_id,captured_at,storage_backend,storage_key,uploaded_by,uploaded_at)
     VALUES($1,$2,NOW()-INTERVAL '35 days','local',$3,$4,NOW()-INTERVAL '35 days') RETURNING id`,[org,camera,key,user])).rows[0].id;
-  const payment=(await db.query(`INSERT INTO payments(organization_id,reference_number,child_id,amount,method,payment_gateway,created_by,created_at)
-    VALUES($1,$2,$3,1000,'cib','satim',$4,NOW()-INTERVAL '80 hours') RETURNING id`,[org,randomUUID(),child,user])).rows[0].id;
+  const payment=(await db.query(`INSERT INTO payments(organization_id,reference_number,child_id,amount,method,payment_gateway,created_by,created_at,site_id)
+    VALUES($1,$2,$3,1000,'cib','satim',$4,NOW()-INTERVAL '80 hours',$5) RETURNING id`,[org,randomUUID(),child,user,site])).rows[0].id;
   // Injection de ticks passés, pas d’horloge fictive dans le worker. Avant 056,
   // aucune table/producteur : le test échoue sur l'absence de vrais jobs.
   if ((await db.query("SELECT to_regclass('scheduler_ticks') AS t")).rows[0].t) await db.query("UPDATE scheduler_ticks SET next_run_at=NOW()-INTERVAL '1 minute'");
@@ -301,8 +301,8 @@ test('E2 : horaires Alger et alerte de fraîcheur lisible sans worker', async ()
 });
 
 test('E2 : expiration de plus de 500 paiements dans le même traitement', async () => {
-  await db.query(`INSERT INTO payments(organization_id,reference_number,child_id,amount,method,payment_gateway,created_by,created_at)
-    SELECT $1,'BULK-'||gen_random_uuid()::text,$2,1000,'cib','satim',$3,NOW()-INTERVAL '80 hours' FROM generate_series(1,501)`,[org,child,user]);
+  await db.query(`INSERT INTO payments(organization_id,reference_number,child_id,amount,method,payment_gateway,created_by,created_at,site_id)
+    SELECT $1,'BULK-'||gen_random_uuid()::text,$2,1000,'cib','satim',$3,NOW()-INTERVAL '80 hours',$4 FROM generate_series(1,501)`,[org,child,user,site]);
   const id=await job('payments_expire',{},null); startWorker(); assert.equal((await settled(id)).status,'done');
   assert.equal((await db.query("SELECT 1 FROM payments WHERE reference_number LIKE 'BULK-%' AND status='pending'")).rowCount,0);
 });

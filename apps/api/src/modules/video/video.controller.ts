@@ -73,9 +73,19 @@ export class VideoController {
   @Get('clips/:id/content')
   @Roles(...VIDEO_ROLES)
   async content(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload, @Req() req: Request, @Res() res: Response): Promise<void> {
-    const { buffer, mimeType } = await this.video.streamContent(p.id, u.sub, req.ip);
+    // E2 : le clip est streamé depuis le disque (plus de buffer complet).
+    const { stream, mimeType, size } = await this.video.streamContent(p.id, u.sub, req.ip);
     res.setHeader('content-type', mimeType);
-    res.setHeader('content-length', buffer.length);
-    res.end(buffer);
+    res.setHeader('content-length', size);
+    stream.on('error', (error) => {
+      // Fichier disparu entre la garde existsSync et la lecture : si rien
+      // n'est encore parti, répondre 404 propre ; sinon couper la connexion.
+      if (!res.headersSent) {
+        res.status(404).json({ statusCode: 404, code: 'CLIP_FILE_MISSING', message_fr: 'Fichier du clip introuvable sur le stockage local', message_ar: 'ملف المقطع غير موجود في التخزين المحلي', timestamp: new Date().toISOString(), path: req.path });
+      } else {
+        res.destroy(error);
+      }
+    });
+    stream.pipe(res);
   }
 }

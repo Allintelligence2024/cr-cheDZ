@@ -1,11 +1,11 @@
 import { resolveStorageBackend, type StorageBackend } from '@creche/prod-config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { S3ClientService } from '../../shared/storage/s3-client.service';
 
 /**
  * Stockage des PDF de facturation.
@@ -16,27 +16,19 @@ import { join } from 'node:path';
  *   (pratique pour les tests et les déploiements mono-serveur).
  *
  * Le worker (apps/worker) écrit le PDF, l'API le sert après autorisation.
+ * E1 : client S3 mutualisé via S3ClientService.
  */
 @Injectable()
 export class PdfStorageService {
   private readonly backend: StorageBackend;
-  private readonly client: S3Client;
-  private readonly bucket: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly s3: S3ClientService,
+  ) {
     this.backend = resolveStorageBackend({
       NODE_ENV: this.config.get<string>('NODE_ENV'),
       STORAGE_BACKEND: this.config.get<string>('STORAGE_BACKEND'),
-    });
-    this.bucket = this.config.get<string>('S3_BUCKET', 'creche-media');
-    this.client = new S3Client({
-      endpoint: this.config.get<string>('S3_ENDPOINT', 'http://localhost:9000'),
-      region: this.config.get<string>('S3_REGION', 'us-east-1'),
-      credentials: {
-        accessKeyId: this.config.get<string>('S3_ACCESS_KEY', 'minio_dev'),
-        secretAccessKey: this.config.get<string>('S3_SECRET_KEY', 'minio_dev_password'),
-      },
-      forcePathStyle: true, // MinIO / S3-compatible
     });
   }
 
@@ -58,17 +50,16 @@ export class PdfStorageService {
     if (this.isLocal()) {
       return readFile(join(this.localDir(), key));
     }
-    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
-    const response = await this.client.send(command);
+    const command = new GetObjectCommand({ Bucket: this.s3.bucket, Key: key });
+    const response = await this.s3.client.send(command);
     const chunks: Buffer[] = [];
     for await (const chunk of response.Body as AsyncIterable<Buffer>) chunks.push(Buffer.from(chunk));
     return Buffer.concat(chunks);
   }
 
   /** URL signée courte durée (backend S3). */
-  async presign(key: string): Promise<string> {
-    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
-    return getSignedUrl(this.client, command, { expiresIn: 900 });
+  presign(key: string): Promise<string> {
+    return this.s3.presignGet(key, 900);
   }
 
   /** Le PDF existe-t-il sur le backend local ? (détection d'erreur précoce) */

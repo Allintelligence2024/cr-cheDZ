@@ -4,8 +4,11 @@ info:
   version: 0.2.0
   description: >
     API du logiciel de gestion de crèche (Algérie).
-    Contrat source de vérité — régénéré par le backend NestJS à chaque build
-    (ADR-004 : client TS généré pour le web, clients Dart écrits à la main).
+    Spec PARTIELLE (13 paths : auth, devices, me, rooms, health) écrite À LA
+    MAIN — vérifiée cohérente avec les contrôleurs réels par
+    tests/tenant-isolation/openapi-contract.test.mjs. Génération du client
+    TS à la demande (`npm run generate`), non branchée au build
+    (ADR-004 ; clients Dart écrits à la main).
     Erreurs : toute réponse d'erreur a la forme ErrorBody (code + FR/AR).
 servers:
   - url: /api/v1
