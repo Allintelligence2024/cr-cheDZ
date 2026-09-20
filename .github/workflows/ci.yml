@@ -124,8 +124,19 @@ jobs:
       - run: npm ci
       - name: Lint (eslint --max-warnings=0)
         run: npm run lint
-      - name: Tests unitaires API (jest)
+      # P1-4 : couverture mesurée, seuils-cliquets (jest.config.mts) — un
+      # recul sur une unité de sécurité/argent couverte fait échouer le job.
+      - name: Tests unitaires API (jest --coverage, seuils)
         run: npm run test:unit
+      - name: Rapport de couverture (artifact)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-coverage
+          path: |
+            apps/api/coverage/coverage-summary.json
+            apps/api/coverage/lcov.info
+          retention-days: 30
 
   e2e:
     # B2 : parcours Playwright (login + directeur) contre l'API réelle.
