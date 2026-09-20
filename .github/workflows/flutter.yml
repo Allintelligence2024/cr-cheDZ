@@ -83,10 +83,14 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ORG_GRADLE_PROJECT_allowDebugSigning: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
+          ALLOW_DEBUG_SIGNING: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
         run: |
           set -o pipefail
-          flutter build apk --release --verbose 2>&1 | tee staff-build.log
+          if ! flutter build apk --release 2>&1 | tee staff-build.log; then
+            echo "## staff-mobile — échec du build" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"; grep -aE "FAILURE|What went wrong|rror|Exception|P1-2" -A4 staff-build.log | head -80 >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
       - name: parent-mobile — build apk (release)
         working-directory: apps/parent-mobile
         env:
@@ -94,10 +98,14 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ORG_GRADLE_PROJECT_allowDebugSigning: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
+          ALLOW_DEBUG_SIGNING: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
         run: |
           set -o pipefail
-          flutter build apk --release --verbose 2>&1 | tee parent-build.log
+          if ! flutter build apk --release 2>&1 | tee parent-build.log; then
+            echo "## parent-mobile — échec du build" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"; grep -aE "FAILURE|What went wrong|rror|Exception|P1-2" -A4 parent-build.log | head -80 >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
       - name: App bundles Play Store (uniquement si signés)
         if: steps.keystore.outputs.signed == 'true'
         env:

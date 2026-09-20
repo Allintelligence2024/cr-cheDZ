@@ -18,11 +18,13 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
+// Une variable CI vide ("") équivaut à absente.
 fun signingValue(key: String, env: String): String? =
-    keystoreProperties.getProperty(key) ?: System.getenv(env)
+    (keystoreProperties.getProperty(key) ?: System.getenv(env))?.takeIf { it.isNotBlank() }
 val releaseStoreFile = signingValue("storeFile", "ANDROID_KEYSTORE_PATH")
-val hasReleaseKeystore = releaseStoreFile != null && file(releaseStoreFile).exists()
-val allowDebugSigning = (project.findProperty("allowDebugSigning") as String?) == "true"
+val hasReleaseKeystore = releaseStoreFile != null && File(releaseStoreFile).exists()
+val allowDebugSigning = (project.findProperty("allowDebugSigning")?.toString() == "true")
+    || System.getenv("ALLOW_DEBUG_SIGNING") == "true"
 
 android {
     namespace = "com.creche.staff_mobile"
@@ -52,7 +54,7 @@ android {
     signingConfigs {
         if (hasReleaseKeystore) {
             create("release") {
-                storeFile = file(releaseStoreFile!!)
+                storeFile = File(releaseStoreFile!!)
                 storePassword = signingValue("storePassword", "ANDROID_KEYSTORE_PASSWORD")
                 keyAlias = signingValue("keyAlias", "ANDROID_KEY_ALIAS")
                 keyPassword = signingValue("keyPassword", "ANDROID_KEY_PASSWORD")
@@ -62,15 +64,14 @@ android {
 
     buildTypes {
         release {
-            signingConfig = when {
-                hasReleaseKeystore -> signingConfigs.getByName("release")
-                allowDebugSigning -> signingConfigs.getByName("debug")
-                else -> throw GradleException(
+            if (!hasReleaseKeystore && !allowDebugSigning) {
+                throw GradleException(
                     "P1-2 : aucun keystore de release (android/key.properties ou ANDROID_KEYSTORE_*). " +
                     "Un APK release signé avec la clé debug n'est pas publiable. " +
-                    "Pour un build de vérification : flutter build apk --release -PallowDebugSigning=true (ou --debug)."
+                    "Pour un build de vérification : ALLOW_DEBUG_SIGNING=true flutter build apk --release (ou --debug)."
                 )
             }
+            signingConfig = if (hasReleaseKeystore) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false
         }
