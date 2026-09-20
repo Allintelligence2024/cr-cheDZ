@@ -8,6 +8,7 @@ import { AppError, Errors } from '../../shared/errors';
 import { EmailService } from '../../shared/email/email.service';
 import { AuditService } from '../privacy/audit.service';
 import { PdfStorageService } from './pdf-storage.service';
+import { buildReceiptNumber } from './receipt';
 
 /**
  * Facturation — Phase 8.
@@ -156,16 +157,24 @@ export class BillingService {
   async recordCashPayment(userId: string, dto: { invoice_id: string; amount: number; notes?: string }) {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
-      const invoice = (await c.query(`SELECT id,child_id,total_amount,paid_amount,status FROM invoices WHERE id=$1 AND organization_id=$2 FOR UPDATE`, [dto.invoice_id, org])).rows[0];
+      // B1 : le site d'encaissement (site de l'enfant à l'instant T) est figé
+      // sur le paiement — une mutation ultérieure de l'enfant ne déplace pas
+      // le flux de caisse d'un site à l'autre.
+      const invoice = (await c.query(
+        `SELECT i.id, i.child_id, i.total_amount, i.paid_amount, i.status, ch.site_id
+         FROM invoices i JOIN children ch ON ch.id = i.child_id
+         WHERE i.id = $1 AND i.organization_id = $2 FOR UPDATE`,
+        [dto.invoice_id, org],
+      )).rows[0];
       if (!invoice) throw Errors.notFound();
       if (['paid', 'cancelled'].includes(invoice.status)) throw Errors.invoiceImmutable();
       const due = Number(invoice.total_amount) - Number(invoice.paid_amount);
       if (dto.amount > due) throw new AppError('PAYMENT_EXCEEDS_BALANCE', 'Le paiement dépasse le solde de la facture', 'الدفعة تتجاوز رصيد الفاتورة', 422);
       const seq = (await c.query(`SELECT next_org_sequence($1) AS n`, [org])).rows[0].n;
       const payment = (await c.query(
-        `INSERT INTO payments(organization_id,reference_number,receipt_number,child_id,amount,method,status,received_at,confirmed_at,notes,created_by)
-         VALUES($1,$2,$3,$4,$5,'cash','confirmed',NOW(),NOW(),$6,$7) RETURNING id,reference_number,receipt_number,amount,status`,
-        [org, `PAY-${seq}`, `REC-${seq}-${org.slice(0, 8)}`, invoice.child_id, dto.amount, dto.notes ?? null, userId],
+        `INSERT INTO payments(organization_id,reference_number,receipt_number,child_id,amount,method,status,received_at,confirmed_at,notes,created_by,site_id)
+         VALUES($1,$2,$3,$4,$5,'cash','confirmed',NOW(),NOW(),$6,$7,$8) RETURNING id,reference_number,receipt_number,amount,status`,
+        [org, `PAY-${seq}`, buildReceiptNumber(seq, org), invoice.child_id, dto.amount, dto.notes ?? null, userId, invoice.site_id],
       )).rows[0];
       await c.query(
         `INSERT INTO payment_allocations(organization_id,payment_id,invoice_id,amount_allocated,allocated_by) VALUES($1,$2,$3,$4,$5)`,
@@ -301,6 +310,24 @@ export class BillingService {
       const site = await c.query(`SELECT id FROM sites WHERE id=$1`, [dto.site_id]);
       if (!site.rows[0]) throw Errors.notFound();
       const date = (await c.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date AS d`)).rows[0].d;
+      // B2 : un registre d'un jour antérieur reste ouvert → erreur explicite
+      // (pas de blocage silencieux) : il faut d'abord le clôturer — la
+      // clôture cible le registre ouvert le plus récent du site.
+      const previous = (await c.query(
+        `SELECT register_date FROM daily_cash_registers
+         WHERE site_id=$1 AND closed_at IS NULL AND register_date < $2
+         ORDER BY register_date DESC LIMIT 1`,
+        [dto.site_id, date],
+      )).rows[0];
+      if (previous) {
+        const prevDate = new Date(previous.register_date).toISOString().slice(0, 10);
+        throw new AppError(
+          'CASH_OPEN_PREVIOUS_DAY',
+          `Un registre du ${prevDate} reste ouvert sur ce site — clôturez-le avant d'ouvrir la caisse du jour`,
+          'سجل سابق ما يزال مفتوحًا — أغلقه أولاً قبل فتح صندوق اليوم',
+          409,
+        );
+      }
       const r = await c.query(
         `INSERT INTO daily_cash_registers(organization_id,site_id,register_date,opening_balance)
          VALUES($1,$2,$3,$4) ON CONFLICT(site_id,register_date) DO NOTHING RETURNING *`,
@@ -311,19 +338,50 @@ export class BillingService {
     });
   }
 
+  /**
+   * Clôture le registre ouvert le plus récent du site (B2 : inclut un registre
+   * de la veille non clôturé — le chemin de reprise de CASH_OPEN_PREVIOUS_DAY).
+   * B1 : le total agrège le site d'encaissement FIGÉ sur les paiements
+   * (p.site_id), pas le site courant de l'enfant. total_cash_out reste 0 :
+   * aucun flux de décaissement n'existe (commentaire de colonne, migration 066).
+   */
   async closeCashRegister(userId: string, dto: { site_id: string; notes?: string }) {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
       const date = (await c.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date AS d`)).rows[0].d;
-      const register = (await c.query(`SELECT * FROM daily_cash_registers WHERE site_id=$1 AND register_date=$2 FOR UPDATE`, [dto.site_id, date])).rows[0];
-      if (!register) throw new AppError('CASH_REGISTER_NOT_OPEN', 'La caisse n’est pas ouverte', 'الصندوق غير مفتوح', 409);
-      if (register.closed_at) throw new AppError('CASH_REGISTER_CLOSED', 'La caisse est déjà clôturée', 'الصندوق مغلق بالفعل', 409);
+      let register = (await c.query(
+        `SELECT * FROM daily_cash_registers
+         WHERE site_id=$1 AND register_date=$2 AND closed_at IS NULL FOR UPDATE`,
+        [dto.site_id, date],
+      )).rows[0];
+      if (!register) {
+        register = (await c.query(
+          `SELECT * FROM daily_cash_registers
+           WHERE site_id=$1 AND closed_at IS NULL AND register_date < $2
+           ORDER BY register_date DESC LIMIT 1 FOR UPDATE`,
+          [dto.site_id, date],
+        )).rows[0];
+      }
+      if (!register) {
+        // Aucun registre ouvert : distinguer « clôturé aujourd'hui » de
+        // « jamais ouvert aujourd'hui » (codes existants conservés).
+        const today = (await c.query(
+          `SELECT id FROM daily_cash_registers WHERE site_id=$1 AND register_date=$2`,
+          [dto.site_id, date],
+        )).rows[0];
+        throw new AppError(
+          today ? 'CASH_REGISTER_CLOSED' : 'CASH_REGISTER_NOT_OPEN',
+          today ? 'La caisse est déjà clôturée' : 'La caisse n’est pas ouverte',
+          today ? 'الصندوق مغلق بالفعل' : 'الصندوق غير مفتوح',
+          409,
+        );
+      }
       const total = (await c.query(
         `SELECT COALESCE(SUM(p.amount),0) AS total
-         FROM payments p JOIN children ch ON ch.id=p.child_id
+         FROM payments p
          WHERE p.organization_id=$1 AND p.method='cash' AND p.status='confirmed'
-           AND ch.site_id=$2 AND (p.confirmed_at AT TIME ZONE 'Africa/Algiers')::date=$3`,
-        [org, dto.site_id, date],
+           AND p.site_id=$2 AND (p.confirmed_at AT TIME ZONE 'Africa/Algiers')::date=$3`,
+        [org, dto.site_id, register.register_date],
       )).rows[0].total;
       return (await c.query(
         `UPDATE daily_cash_registers SET total_cash_in=$1,closing_balance=opening_balance+$1,closed_at=NOW(),closed_by=$2,notes=$3 WHERE id=$4 RETURNING *`,

@@ -70,7 +70,11 @@ try {
   }
   const site=(await db.query("INSERT INTO sites(organization_id,name_fr) VALUES($1,'G2') RETURNING id",[a])).rows[0].id;
   const child=(await db.query("INSERT INTO children(organization_id,site_id,first_name_fr,last_name_fr,date_of_birth,created_by) VALUES($1,$2,'G2','Test','2024-01-01',$3) RETURNING id",[a,site,user])).rows[0].id;
-  const payment=async()=> (await db.query("INSERT INTO payments(organization_id,reference_number,child_id,amount,method,created_by) VALUES($1,$2,$3,100,'cash',$4) RETURNING id",[a,randomUUID(),child,user])).rows[0].id;
+  // confirmed : depuis la migration 064, les allocations ne portent que sur
+  // des paiements confirmés (garde guard_payment_allocation) — aligné sur les
+  // flux applicatifs (cash : créé confirmé ; webhook : confirmation puis
+  // allocation).
+  const payment=async()=> (await db.query("INSERT INTO payments(organization_id,reference_number,child_id,amount,method,status,created_by,site_id) VALUES($1,$2,$3,100,'cash','confirmed',$4,$5) RETURNING id",[a,randomUUID(),child,user,site])).rows[0].id;
   const invoice=async()=> (await db.query("INSERT INTO invoices(organization_id,invoice_number,child_id,period_year,period_month,subtotal,total_amount,due_date,created_by) VALUES($1,$2,$3,2026,9,100,100,'2026-09-30',$4) RETURNING id",[a,randomUUID(),child,user])).rows[0].id;
   const allocate=(c,p,i,amount)=>c.query('INSERT INTO payment_allocations(organization_id,payment_id,invoice_id,amount_allocated,allocated_by) VALUES($1,$2,$3,$4,$5)',[a,p,i,amount,user]);
   for(const amount of [70,40]) await check(`parallel allocation ${amount}+${amount} against payment 100`,async()=>{

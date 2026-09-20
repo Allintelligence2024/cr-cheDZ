@@ -12,7 +12,9 @@ export class CreateContractDto {
 }
 export class GenerateInvoiceDto {
  @IsUUID() contract_id!: string;
- @IsInt() @Min(2020) period_year!: number;
+ // B4 : borne haute — une année > 2100 n'a aucun sens métier (et permettait
+ // d'encoder des données corrompues sans rejet).
+ @IsInt() @Min(2020) @Max(2100) period_year!: number;
  @IsInt() @Min(1) @Max(12) period_month!: number;
  @IsDateString() due_date!: string;
 }

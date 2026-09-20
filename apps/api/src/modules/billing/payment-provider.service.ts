@@ -73,8 +73,12 @@ export class PaymentProviderService {
 
     const externalReference = `satim-${randomUUID()}`;
     const payment = await this.tenantContext.withTenantConnection(async (client) => {
+      // B1 : le site d'encaissement est figé sur le paiement dès l'init
+      // (le webhook de confirmation n'enchange plus rien).
       const invoice = (await client.query(
-        `SELECT id, child_id, total_amount, paid_amount, status FROM invoices WHERE id=$1 FOR UPDATE`, [dto.invoice_id],
+        `SELECT i.id, i.child_id, i.total_amount, i.paid_amount, i.status, ch.site_id
+         FROM invoices i JOIN children ch ON ch.id = i.child_id
+         WHERE i.id = $1 FOR UPDATE`, [dto.invoice_id],
       )).rows[0];
       if (!invoice) throw Errors.notFound();
       if (invoice.status === 'paid' || invoice.status === 'cancelled') throw Errors.invoiceImmutable();
@@ -96,10 +100,10 @@ export class PaymentProviderService {
       const method = dto.method === 'cib' ? 'cib' : 'edahabia';
       const row = (await client.query(
         `INSERT INTO payments (organization_id, reference_number, child_id, amount, method, status,
-           external_reference, payment_gateway, created_by, invoice_id)
-         VALUES ($1,$2,$3,$4,$5,'pending',$6,'satim',$7,$8)
+           external_reference, payment_gateway, created_by, invoice_id, site_id)
+         VALUES ($1,$2,$3,$4,$5,'pending',$6,'satim',$7,$8,$9)
          RETURNING id, reference_number, amount, method, status, external_reference`,
-        [orgId, `ONL-${seq}`, invoice.child_id, due, method, externalReference, userId, dto.invoice_id],
+        [orgId, `ONL-${seq}`, invoice.child_id, due, method, externalReference, userId, dto.invoice_id, invoice.site_id],
       )).rows[0];
       return row;
     });

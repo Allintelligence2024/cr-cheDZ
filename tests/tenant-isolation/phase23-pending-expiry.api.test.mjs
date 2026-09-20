@@ -156,15 +156,15 @@ const main = async () => {
     const invBefore = (await db.query(`SELECT status, paid_amount FROM invoices WHERE id=$1`, [invoice1.id])).rows[0];
     const expiredId = (await db.query(
       `INSERT INTO payments (organization_id, reference_number, child_id, amount, method, status,
-         external_reference, payment_gateway, created_by, invoice_id, created_at)
-       VALUES ($1,$2,$3,10000,'cib','pending',$4,'satim',$5,$6,NOW() - INTERVAL '73 hours') RETURNING id`,
-      [A.org, `ONL-P23-E1`, childA, `satim-exp-${randomUUID()}`, A.director, invoice1.id],
+         external_reference, payment_gateway, created_by, invoice_id, created_at, site_id)
+       VALUES ($1,$2,$3,10000,'cib','pending',$4,'satim',$5,$6,NOW() - INTERVAL '73 hours',$7) RETURNING id`,
+      [A.org, `ONL-P23-E1`, childA, `satim-exp-${randomUUID()}`, A.director, invoice1.id, A.site],
     )).rows[0].id;
     const recentId = (await db.query(
       `INSERT INTO payments (organization_id, reference_number, child_id, amount, method, status,
-         external_reference, payment_gateway, created_by, invoice_id, created_at)
-       VALUES ($1,$2,$3,10000,'cib','pending',$4,'satim',$5,$6,NOW() - INTERVAL '1 hour') RETURNING id`,
-      [A.org, `ONL-P23-R1`, childA, `satim-rec-${randomUUID()}`, A.director, invoice1.id],
+         external_reference, payment_gateway, created_by, invoice_id, created_at, site_id)
+       VALUES ($1,$2,$3,10000,'cib','pending',$4,'satim',$5,$6,NOW() - INTERVAL '1 hour',$7) RETURNING id`,
+      [A.org, `ONL-P23-R1`, childA, `satim-rec-${randomUUID()}`, A.director, invoice1.id, A.site],
     )).rows[0].id;
     await db.query(`INSERT INTO background_jobs (organization_id, job_type, payload, priority) VALUES (NULL, 'payments_expire', '{}', 1)`);
     worker = startWorker();

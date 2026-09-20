@@ -170,12 +170,11 @@ export class AttendanceService {
       child_id: p.childId, session_id: sessionId, session_date: today,
       status: 'present', occurred_at: p.occurredAt.toISOString(),
     }, p.deviceId);
-    // Notification parent : file d'envoi (worker) + file d'envoi push/in-app.
-    await client.query(
-      `INSERT INTO background_jobs (organization_id, job_type, payload, priority)
-       VALUES ($1, 'send_parent_notification', $2, 1)`,
-      [tenantId, JSON.stringify({ child_id: p.childId, event_type: 'check_in' })],
-    );
+    // Notification parent : notification_queue (drainée par le worker —
+    // push/in-app + inbox). O1 (audit 2026-09-19) : le job background_jobs
+    // « send_parent_notification » est supprimé — sa livraison effective
+    // passait déjà par la file ci-dessous ; le job redondant ne faisait que
+    // polluer background_jobs.
     await this.notifications.notifyGuardiansOfEvent(client, tenantId, p.childId, 'check_in', sessionId);
     return { status: 'accepted' };
   }

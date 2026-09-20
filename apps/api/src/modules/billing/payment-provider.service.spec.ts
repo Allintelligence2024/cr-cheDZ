@@ -26,7 +26,7 @@ describe('PaymentProviderService.createOnlinePayment', () => {
   let client: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount: number }> };
   let service: import('./payment-provider.service').PaymentProviderService;
 
-  const invoiceRow = { id: INVOICE, child_id: randomUUID(), total_amount: '10000.00', paid_amount: '0', status: 'sent' };
+  const invoiceRow = { id: INVOICE, child_id: randomUUID(), site_id: randomUUID(), total_amount: '10000.00', paid_amount: '0', status: 'sent' };
 
   const setup = async (overrides: {
     updateRowCount?: number;
@@ -45,7 +45,7 @@ describe('PaymentProviderService.createOnlinePayment', () => {
         const compact = sql.replace(/\s+/g, ' ').trim();
         clientQueries.push({ sql: compact, params });
         if (compact.startsWith('SELECT COALESCE(f_org')) return { rows: tenantRows.feature_flags, rowCount: 1 };
-        if (compact.includes('FROM invoices WHERE id=$1 FOR UPDATE')) return { rows: tenantRows.invoices, rowCount: 1 };
+        if (compact.includes('FROM invoices i JOIN children ch ON ch.id = i.child_id WHERE i.id = $1 FOR UPDATE')) return { rows: tenantRows.invoices, rowCount: 1 };
         if (compact.includes('next_org_sequence')) return { rows: tenantRows.next_org_sequence, rowCount: 1 };
         if (compact.startsWith('INSERT INTO payments')) return { rows: tenantRows.payments_insert, rowCount: 1 };
         if (compact.startsWith('UPDATE payments SET gateway_response')) {

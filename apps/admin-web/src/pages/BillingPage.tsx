@@ -329,7 +329,9 @@ function CashTab({ onError, onMessage }: { onError: (m: string) => void; onMessa
           `${Number(r.opening_balance).toLocaleString('fr-FR')} DZD`,
           `${Number(r.total_cash_in).toLocaleString('fr-FR')} DZD`,
           r.closing_balance != null ? `${Number(r.closing_balance).toLocaleString('fr-FR')} DZD` : '—',
-          r.closed_at ? new Date(r.closed_at).toLocaleString('fr-FR') : '—',
+          // F4 : heure de clôture affichée en heure algérienne (et non le fuseau
+          // du navigateur) — les registres sont datés en Africa/Algiers côté API.
+          r.closed_at ? new Date(r.closed_at).toLocaleString('fr-FR', { timeZone: 'Africa/Algiers' }) : '—',
         ])}
       />
     </Card>

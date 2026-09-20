@@ -2,6 +2,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router';
 import React, { lazy, Suspense } from 'react';
 import { tokens } from '@creche/design-system';
 import { useAuth } from './auth/AuthContext';
+import { canAccess, homeFor } from './auth/routeAccess';
 import { useI18n } from './i18n';
 import { AcceptInvitationPage } from './pages/AcceptInvitationPage';
 import { InvitationsPage } from './pages/InvitationsPage';
@@ -53,8 +54,10 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
     { to: '/staff', label: t('nav.staff') },
     { to: '/invitations', label: t('nav.invitations') },
     { to: '/settings', label: t('nav.settings') },
-    ...(user?.is_super_admin ? [{ to: '/organizations', label: t('nav.organizations') }] : []),
-  ];
+    { to: '/organizations', label: t('nav.organizations') },
+    // F3 : le menu ne propose que les écrans visibles pour le rôle courant
+    // (miroir des @Roles serveur — l'autorisation reste côté API).
+  ].filter((item) => canAccess(user, item.to));
 
   const closeNav = (): void => setNavOpen(false);
 
@@ -107,6 +110,13 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
   );
 }
 
+/** F3 : écran refusé pour le rôle → renvoi vers le premier écran accessible. */
+function RequireRole({ path, children }: { path: string; children: React.ReactNode }): React.JSX.Element {
+  const { user } = useAuth();
+  if (!canAccess(user, path)) return <Navigate to={homeFor(user)} replace />;
+  return <>{children}</>;
+}
+
 export function AppRoutes(): React.JSX.Element {
   const { user, loading } = useAuth();
 
@@ -127,26 +137,26 @@ export function AppRoutes(): React.JSX.Element {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/attendance" element={<AttendancePage />} />
-        <Route path="/journal" element={<JournalPage />} />
-        <Route path="/media" element={<MediaPage />} />
-        <Route path="/messaging" element={<MessagingPage />} />
-        <Route path="/exports" element={<ExportsPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/payroll" element={<PayrollPage />} />
-        <Route path="/video" element={<VideoPage />} />
-        <Route path="/marketplace" element={<MarketplacePage />} />
-        <Route path="/billing" element={<BillingPage />} />
-        <Route path="/health" element={<HealthPage />} />
-        <Route path="/compliance" element={<CompliancePage />} />
-        <Route path="/organizations" element={<OrganizationsPage />} />
-        <Route path="/sites" element={<SitesPage />} />
-        <Route path="/rooms" element={<RoomsPage />} />
-        <Route path="/children" element={<ChildrenPage />} />
-        <Route path="/staff" element={<StaffPage />} />
-        <Route path="/invitations" element={<InvitationsPage />} />
-        <Route path="/settings" element={<OrgSettingsPage />} />
+        <Route path="/" element={<RequireRole path="/"><DashboardPage /></RequireRole>} />
+        <Route path="/attendance" element={<RequireRole path="/attendance"><AttendancePage /></RequireRole>} />
+        <Route path="/journal" element={<RequireRole path="/journal"><JournalPage /></RequireRole>} />
+        <Route path="/media" element={<RequireRole path="/media"><MediaPage /></RequireRole>} />
+        <Route path="/messaging" element={<RequireRole path="/messaging"><MessagingPage /></RequireRole>} />
+        <Route path="/exports" element={<RequireRole path="/exports"><ExportsPage /></RequireRole>} />
+        <Route path="/privacy" element={<RequireRole path="/privacy"><PrivacyPage /></RequireRole>} />
+        <Route path="/payroll" element={<RequireRole path="/payroll"><PayrollPage /></RequireRole>} />
+        <Route path="/video" element={<RequireRole path="/video"><VideoPage /></RequireRole>} />
+        <Route path="/marketplace" element={<RequireRole path="/marketplace"><MarketplacePage /></RequireRole>} />
+        <Route path="/billing" element={<RequireRole path="/billing"><BillingPage /></RequireRole>} />
+        <Route path="/health" element={<RequireRole path="/health"><HealthPage /></RequireRole>} />
+        <Route path="/compliance" element={<RequireRole path="/compliance"><CompliancePage /></RequireRole>} />
+        <Route path="/organizations" element={<RequireRole path="/organizations"><OrganizationsPage /></RequireRole>} />
+        <Route path="/sites" element={<RequireRole path="/sites"><SitesPage /></RequireRole>} />
+        <Route path="/rooms" element={<RequireRole path="/rooms"><RoomsPage /></RequireRole>} />
+        <Route path="/children" element={<RequireRole path="/children"><ChildrenPage /></RequireRole>} />
+        <Route path="/staff" element={<RequireRole path="/staff"><StaffPage /></RequireRole>} />
+        <Route path="/invitations" element={<RequireRole path="/invitations"><InvitationsPage /></RequireRole>} />
+        <Route path="/settings" element={<RequireRole path="/settings"><OrgSettingsPage /></RequireRole>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

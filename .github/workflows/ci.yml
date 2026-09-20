@@ -45,6 +45,8 @@ jobs:
         run: npm ci
       - name: Typecheck (api, worker, admin-web, support-console)
         run: npm run typecheck
+      - name: admin-web — matrice d'accès UI par rôle (F3)
+        run: npm run test:unit --workspace @creche/admin-web
       - name: Migrations (reset + status 001→063)
         run: |
           node scripts/migrate.mjs --reset

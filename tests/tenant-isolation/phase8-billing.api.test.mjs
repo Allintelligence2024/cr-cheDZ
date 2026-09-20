@@ -20,7 +20,13 @@
  *  13.  job PDF créé et traité par le worker (sous NOBYPASSRLS) ;
  *  14.  PDF stocké (backend local configuré) + URL/endpoint autorisé ;
  *  15.  parent A lit uniquement les factures de ses enfants (can_receive_invoices) ;
- *  16.  parent B (org B) ne consulte jamais les factures de A.
+ *  16.  parent B (org B) ne consulte jamais les factures de A ;
+ *  17.  B1 : le total de caisse impute le site d'encaissement FIGÉ (enfant muté
+ *         entre encaissement et clôture → le flux reste au site du registre) ;
+ *  18.  B2 : un registre de la veille non clôturé bloque l'ouverture du jour
+ *         (409 CASH_OPEN_PREVIOUS_DAY) ; la clôture le cible (reprise) ;
+ *  19.  B4 : receipt_number sans fragment d'UUID tenant (sel court SHA-256) ;
+ *         period_year > 2100 → 400.
  *
  * Prérequis : DATABASE_URL PostgreSQL réel, API + worker compilés (dist/).
  */
@@ -172,6 +178,10 @@ const main = async () => {
     ok('A : seconde génération → 409 INVOICE_ALREADY_EXISTS', second.status === 409 && second.body.code === 'INVOICE_ALREADY_EXISTS');
     const count = await db.query(`SELECT COUNT(*)::int AS n FROM invoices WHERE contract_id=$1 AND period_year=$2 AND period_month=$3`, [contractId, periodYear, periodMonth]);
     ok('Une seule facture en base pour contrat/période', count.rows[0].n === 1, `n=${count.rows[0].n}`);
+    const badYear = await api('POST', '/billing/invoices/generate', tokenA, {
+      contract_id: contractId, period_year: 2101, period_month: 9, due_date: '2030-01-05',
+    });
+    ok('B4 : period_year > 2100 → 400', badYear.status === 400, `status=${badYear.status}`);
 
     // ── Caisse ouverte ──────────────────────────────────────────────────────
     await api('POST', '/billing/cash-register/open', tokenA, { site_id: A.site, opening_balance: 0 });
@@ -180,6 +190,14 @@ const main = async () => {
     console.log('\n4) Paiement espèces partiel');
     const pay1 = await api('POST', '/billing/payments/cash', tokenA, { invoice_id: invoiceAId, amount: 3000 });
     ok('Paiement partiel 3000 → solde 7000, statut partially_paid', pay1.status === 201 && Number(pay1.body.invoice.balance) === 7000 && pay1.body.invoice.status === 'partially_paid', JSON.stringify(pay1.body));
+    // B4 : plus de fragment d'UUID tenant en clair sur le reçu — sel court SHA-256.
+    ok('B4 : receipt_number = REC-<séq>-<sel 8 hex> sans fragment d’UUID tenant',
+      typeof pay1.body.receipt_number === 'string'
+      && /^REC-\d+-[0-9a-f]{8}$/.test(pay1.body.receipt_number)
+      && !pay1.body.receipt_number.includes(A.org.slice(0, 8)),
+      `rec=${pay1.body.receipt_number}`);
+    const paidSite = (await db.query(`SELECT site_id FROM payments WHERE id=$1`, [pay1.body.id])).rows[0];
+    ok('B1 : le site d’encaissement est figé sur le paiement (site de l’enfant à T)', paidSite.site_id === A.site, `site=${paidSite && paidSite.site_id}`);
 
     // ── 5. Paiement > solde ─────────────────────────────────────────────────
     console.log('\n5) Paiement supérieur au solde');
@@ -208,9 +226,9 @@ const main = async () => {
       await appConn0.query(`SELECT set_config('app.tenant_id', $1, true)`, [A.org]);
       const seq = (await appConn0.query(`SELECT next_org_sequence($1) AS n`, [A.org])).rows[0].n;
       const px = await appConn0.query(
-        `INSERT INTO payments(organization_id,reference_number,receipt_number,child_id,amount,method,status,confirmed_at,created_by)
-         VALUES($1,$2,$3,$4,10000,'bank_transfer','confirmed',NOW(),$5) RETURNING id`,
-        [A.org, `PAY-SQL-${seq}`, `REC-SQL-${seq}`, childA.rows[0].id, A.director],
+        `INSERT INTO payments(organization_id,reference_number,receipt_number,child_id,amount,method,status,confirmed_at,created_by,site_id)
+         VALUES($1,$2,$3,$4,10000,'bank_transfer','confirmed',NOW(),$5,$6) RETURNING id`,
+        [A.org, `PAY-SQL-${seq}`, `REC-SQL-${seq}`, childA.rows[0].id, A.director, A.site],
       );
       pxId = px.rows[0].id;
       await appConn0.query(
@@ -307,11 +325,64 @@ const main = async () => {
     const close2 = await api('POST', '/billing/cash-register/close', tokenA, { site_id: A.site });
     ok('Double clôture → 409 CASH_REGISTER_CLOSED', close2.status === 409 && close2.body.code === 'CASH_REGISTER_CLOSED');
     const cashSum = await db.query(
-      `SELECT COALESCE(SUM(p.amount),0)::numeric AS total FROM payments p JOIN children ch ON ch.id=p.child_id
-       WHERE p.organization_id=$1 AND p.method='cash' AND p.status='confirmed' AND ch.site_id=$2`,
+      `SELECT COALESCE(SUM(p.amount),0)::numeric AS total FROM payments p
+       WHERE p.organization_id=$1 AND p.method='cash' AND p.status='confirmed' AND p.site_id=$2`,
       [A.org, A.site],
     );
-    ok('Total caisse == somme SQL des paiements espèces confirmés', Number(cashSum.rows[0].total) === 18000, `sql=${cashSum.rows[0].total}`);
+    ok('Total caisse == somme SQL des paiements espèces confirmés (site d’encaissement figé, B1)', Number(cashSum.rows[0].total) === 18000, `sql=${cashSum.rows[0].total}`);
+
+    // ── 17/18. B1 : site d'encaissement figé + B2 : veille non clôturée ─────
+    console.log('\n17-18) Caisse : site d’encaissement figé (B1) + veille non clôturée (B2)');
+    const siteA2 = (await db.query(`INSERT INTO sites(organization_id,name_fr) VALUES($1,'S2') RETURNING id`, [A.org])).rows[0].id;
+    const childA2 = (await db.query(
+      `INSERT INTO children(organization_id,site_id,room_id,reference_number,first_name_fr,last_name_fr,date_of_birth,created_by)
+       VALUES($1,$2,$3,'P8-9','Mina','Test','2024-03-01',$4) RETURNING id`,
+      [A.org, siteA2, A.room, A.director],
+    )).rows[0].id;
+    const contractA2 = await api('POST', '/billing/contracts', tokenA, { child_id: childA2, monthly_base_amount: 4000, start_date: '2026-01-01' });
+    const invoiceA2 = await api('POST', '/billing/invoices/generate', tokenA, {
+      contract_id: contractA2.body.id, period_year: periodYear, period_month: periodMonth, due_date: '2026-08-05',
+    });
+    ok('Site S2 : contrat + facture de l’enfant Mina (4000 DZD)', contractA2.status === 201 && invoiceA2.status === 201, JSON.stringify(invoiceA2.body).slice(0, 120));
+    const openA2 = await api('POST', '/billing/cash-register/open', tokenA, { site_id: siteA2, opening_balance: 0 });
+    const payA2 = await api('POST', '/billing/payments/cash', tokenA, { invoice_id: invoiceA2.body.id, amount: 4000 });
+    ok('Paiement 4000 encaissé au site S2 (figé sur le paiement)', openA2.status < 300 && payA2.status === 201, JSON.stringify(payA2.body).slice(0, 120));
+    // L’enfant mute vers le site S1 ENTRE l’encaissement et la clôture :
+    await db.query(`UPDATE children SET site_id=$1 WHERE id=$2`, [A.site, childA2]);
+    const closeA2 = await api('POST', '/billing/cash-register/close', tokenA, { site_id: siteA2 });
+    ok('B1 : clôture S2 = 4000 — imputation au site du registre, pas au site courant de l’enfant', closeA2.status < 300 && Number(closeA2.body.total_cash_in) === 4000, `total=${closeA2.body && closeA2.body.total_cash_in}`);
+    const site1Total = (await db.query(
+      `SELECT COALESCE(SUM(total_cash_in),0)::numeric AS t FROM daily_cash_registers WHERE site_id=$1 AND closed_at IS NOT NULL`,
+      [A.site],
+    )).rows[0].t;
+    ok('B1 : le flux n’est pas comptabilisé au site S1 (18000 inchangé)', Number(site1Total) === 18000, `s1=${site1Total}`);
+
+    // B2 : un registre de la veille non clôturé bloque l’ouverture du jour.
+    await db.query(
+      `INSERT INTO daily_cash_registers(organization_id,site_id,register_date,opening_balance)
+       VALUES($1,$2,(NOW() AT TIME ZONE 'Africa/Algiers')::date - 1,100)`,
+      [A.org, siteA2],
+    );
+    const openBlocked = await api('POST', '/billing/cash-register/open', tokenA, { site_id: siteA2 });
+    ok('B2 : veille non clôturée → 409 CASH_OPEN_PREVIOUS_DAY', openBlocked.status === 409 && openBlocked.body.code === 'CASH_OPEN_PREVIOUS_DAY', JSON.stringify(openBlocked.body).slice(0, 160));
+    const closeYesterday = await api('POST', '/billing/cash-register/close', tokenA, { site_id: siteA2 });
+    ok('B2 : la clôture cible le registre ouvert le plus récent (la veille)', closeYesterday.status < 300 && Number(closeYesterday.body.total_cash_in) === 0 && closeYesterday.body.opening_balance !== undefined, JSON.stringify(closeYesterday.body).slice(0, 160));
+    const reopenClosed = await api('POST', '/billing/cash-register/open', tokenA, { site_id: siteA2 });
+    ok('B2 : re-ouverture du registre du jour (déjà clôturé) → 409 CASH_REGISTER_ALREADY_OPEN', reopenClosed.status === 409 && reopenClosed.body.code === 'CASH_REGISTER_ALREADY_OPEN', JSON.stringify(reopenClosed.body).slice(0, 160));
+    // Vrai chemin de reprise : un site SANS registre du jour dont la veille est ouverte.
+    const siteA3 = (await db.query(`INSERT INTO sites(organization_id,name_fr) VALUES($1,'S3') RETURNING id`, [A.org])).rows[0].id;
+    await db.query(
+      `INSERT INTO daily_cash_registers(organization_id,site_id,register_date,opening_balance)
+       VALUES($1,$2,(NOW() AT TIME ZONE 'Africa/Algiers')::date - 1,50)`,
+      [A.org, siteA3],
+    );
+    const open3a = await api('POST', '/billing/cash-register/open', tokenA, { site_id: siteA3 });
+    ok('B2 : S3 — veille non clôturée → 409 CASH_OPEN_PREVIOUS_DAY', open3a.status === 409 && open3a.body.code === 'CASH_OPEN_PREVIOUS_DAY', JSON.stringify(open3a.body).slice(0, 160));
+    const close3 = await api('POST', '/billing/cash-register/close', tokenA, { site_id: siteA3 });
+    ok('B2 : S3 — la clôture reprend le registre de la veille', close3.status < 300 && Number(close3.body.total_cash_in) === 0, JSON.stringify(close3.body).slice(0, 160));
+    const open3b = await api('POST', '/billing/cash-register/open', tokenA, { site_id: siteA3 });
+    ok('B2 : S3 — ouverture du jour possible après la reprise', open3b.status < 300, `status=${open3b.status}`);
+    await api('POST', '/billing/cash-register/close', tokenA, { site_id: siteA3 });
 
     // ── 13/14. Worker : job PDF → stockage → URL autorisée ──────────────────
     console.log('\n13-14) PDF généré par le worker et servi');
@@ -418,7 +489,7 @@ const main = async () => {
     console.error(`\nÉCHEC Phase 8 : ${failures.length} assertion(s) — ${failures.join(' | ')}`);
     process.exit(1);
   }
-  console.log('\n✓ Phase 8 validée : facturation isolée (16 cas) sur PostgreSQL réel NOBYPASSRLS.');
+  console.log('\n✓ Phase 8 validée : facturation isolée (19 cas) sur PostgreSQL réel NOBYPASSRLS.');
 };
 
 main().catch((e) => { console.error(e.stack); process.exit(1); });
