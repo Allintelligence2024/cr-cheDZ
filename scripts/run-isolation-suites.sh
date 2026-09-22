@@ -94,6 +94,7 @@ SUITES=(
   phase62-payroll-finalized-lock.pg.test.mjs
   phase63-sync-retention.pg.test.mjs
   phase64-auth-cookies.api.test.mjs
+  phase65-feature-flag-disable.api.test.mjs
 )
 
 FILTER="${1:-}"

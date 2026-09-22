@@ -9,11 +9,14 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { FeatureFlag } from '../../shared/decorators/feature-flag.decorator';
+import { FeatureFlagGuard } from '../../shared/guards/feature-flag.guard';
 import {
   CoverageQuery,
   CreateShiftDto,
@@ -62,32 +65,44 @@ export class StaffController {
   }
 
   // ── P2-5 : planning ──────────────────────────────────────────────────────
+  // R17 (remédiation 2026-09-21, F16) — feature flag `staff_schedule_module`.
+  // Pas d'UI admin-web pour le moment. Le flag permet de désactiver d'un clic.
   @Get('schedule')
   @Roles(...READ_ROLES)
+  @FeatureFlag('staff_schedule_module')
+  @UseGuards(FeatureFlagGuard)
   async scheduleList(@Query() q: ScheduleQuery): Promise<{ items: Array<Record<string, unknown>> }> {
     return { items: await this.schedule.list(q.from, q.to, q.site_id) };
   }
 
   @Get('schedule/coverage')
   @Roles(...READ_ROLES)
+  @FeatureFlag('staff_schedule_module')
+  @UseGuards(FeatureFlagGuard)
   async scheduleCoverage(@Query() q: CoverageQuery) {
     return this.schedule.coverage(q.date, q.site_id);
   }
 
   @Post('schedule/shifts')
   @Roles(...WRITE_ROLES)
+  @FeatureFlag('staff_schedule_module')
+  @UseGuards(FeatureFlagGuard)
   async createShift(@Body() dto: CreateShiftDto, @CurrentUser() user: CurrentUserPayload) {
     return this.schedule.createShift(user.sub, dto);
   }
 
   @Delete('schedule/shifts/:id')
   @Roles(...WRITE_ROLES)
+  @FeatureFlag('staff_schedule_module')
+  @UseGuards(FeatureFlagGuard)
   async deleteShift(@Param() params: StaffIdParam, @CurrentUser() user: CurrentUserPayload) {
     return this.schedule.deleteShift(user.sub, params.id);
   }
 
   @Post('schedule/generate-week')
   @Roles(...WRITE_ROLES)
+  @FeatureFlag('staff_schedule_module')
+  @UseGuards(FeatureFlagGuard)
   async generateWeek(@Body() dto: GenerateWeekDto, @CurrentUser() user: CurrentUserPayload) {
     return this.schedule.generateWeek(user.sub, dto);
   }
