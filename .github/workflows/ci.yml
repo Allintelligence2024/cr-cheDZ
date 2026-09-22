@@ -95,9 +95,18 @@ jobs:
           node-version: 22
           cache: npm
       - name: Client PostgreSQL (fallback PATH — le drill préfère les binaires embedded 18)
+        # backup-drill (S5 / R9) : pg_dump + psql sont obligatoires. Sans
+        # apt-get update d'abord, le cache d'Actions peut être obsolète et
+        # l'install échoue silencieusement → drill rouge. On force un update
+        # frais pour stabiliser le drill (cf. historique : 4 échecs / 8 PRs
+        # observés sur la branche).
         run: |
-          pg_dump --version || sudo apt-get install -y postgresql-client
+          if ! command -v pg_dump >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends postgresql-client
+          fi
           pg_dump --version
+          psql --version
       - name: npm ci
         run: npm ci
       - name: Migrations + seeds
