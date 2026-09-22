@@ -26,6 +26,23 @@ export class EnrollmentService {
     return (r.has_sibling ? 50 : 0) + (r.is_staff_child ? 30 : 0) + Math.min(20, Math.max(0, weeks));
   }
 
+  /** R5 (remédiation 2026-09-21) : défense en profondeur — les décisions de
+   *  capacité (waitlist/offer/decide) exigent le rôle director ACTIF du tenant,
+   *  vérifié en service en plus du @Roles du contrôleur (première implémentation
+   *  du double contrôle dans ce monorepo — matrice d'autorisation v15). */
+  private async requireDirector(
+    c: { query: (q: string, p?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> },
+    org: string,
+    userId: string,
+  ) {
+    const r = (await c.query(
+      `SELECT 1 FROM memberships m JOIN roles r ON r.id = m.role_id
+       WHERE m.user_id=$1 AND m.organization_id=$2 AND m.is_active AND r.slug='director'`,
+      [userId, org],
+    )).rows;
+    if (r.length === 0) throw Errors.forbidden();
+  }
+
   async create(userId: string, dto: CreateEnrollmentRequestDto) {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
@@ -100,6 +117,7 @@ export class EnrollmentService {
   async offer(userId: string, id: string, dto: OfferPlaceDto) {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
+      await this.requireDirector(c, org, userId);
       const req = (await c.query(`SELECT * FROM enrollment_requests WHERE id=$1 AND organization_id=$2 FOR UPDATE`, [id, org])).rows[0];
       if (!req) throw Errors.notFound();
       if (!['pending', 'waitlisted', 'expired'].includes(req.status)) throw new AppError('ENROLLMENT_INVALID_TRANSITION', `Transition impossible depuis « ${req.status} »`, 'انتقال غير ممكن', 409);
@@ -122,6 +140,7 @@ export class EnrollmentService {
   async decide(userId: string, id: string, dto: DecideDto) {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
+      await this.requireDirector(c, org, userId);
       const req = (await c.query(`SELECT * FROM enrollment_requests WHERE id=$1 AND organization_id=$2 FOR UPDATE`, [id, org])).rows[0];
       if (!req) throw Errors.notFound();
       if (['accepted', 'declined', 'withdrawn'].includes(req.status)) throw new AppError('ENROLLMENT_ALREADY_DECIDED', 'Demande déjà close', 'الطلب مغلق مسبقاً', 409);
@@ -149,6 +168,8 @@ export class EnrollmentService {
   private async transition(userId: string, id: string, from: string[], to: string, extra: Record<string, unknown>) {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
+      // transition() n'est appelée que par waitlist() — décision de capacité : director-only (R5).
+      await this.requireDirector(c, org, userId);
       const req = (await c.query(`SELECT id, reference_number, status FROM enrollment_requests WHERE id=$1 AND organization_id=$2 FOR UPDATE`, [id, org])).rows[0];
       if (!req) throw Errors.notFound();
       if (!from.includes(req.status)) throw new AppError('ENROLLMENT_INVALID_TRANSITION', `Transition impossible depuis « ${req.status} »`, 'انتقال غير ممكن', 409);

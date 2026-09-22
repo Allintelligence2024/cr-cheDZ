@@ -90,6 +90,9 @@ SUITES=(
   phase58-ratios-attestations.api.test.mjs
   phase59-contracts-enrollment-schedule.api.test.mjs
   phase60-satim-reconciliation.api.test.mjs
+  phase61-enrollment-authz.api.test.mjs
+  phase62-payroll-finalized-lock.pg.test.mjs
+  phase63-sync-retention.pg.test.mjs
 )
 
 FILTER="${1:-}"

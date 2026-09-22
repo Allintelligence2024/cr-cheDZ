@@ -42,7 +42,9 @@ Ces tests structurels ne remplacent pas le véritable démarrage Docker.
 
 ```sh
 # Racine du dépôt ; projet distinct pour ne pas réutiliser un ancien volume.
-docker compose -p creche-dev-v2 -f infrastructure/docker/docker-compose.dev.yml up --build
+# (R1 2026-09-21 : passe à -p creche-dev-v3 — un volume formatté PG16 n'est
+#  pas lisible par PG18, cf. BACKUP-RUNBOOK « Upgrade PostgreSQL 16 → 18 ».)
+docker compose -p creche-dev-v3 -f infrastructure/docker/docker-compose.dev.yml up --build
 ```
 
 Web : `http://localhost:4000`. API : `http://localhost:3000/api/v1/health`.

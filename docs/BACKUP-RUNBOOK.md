@@ -12,6 +12,22 @@ DATABASE_URL="..." BACKUP_DIR=/var/backups/creche BACKUP_PASSPHRASE="..." ./scri
 
 `docs/RUNBOOK.md §2` et §5 décrivent déjà la restauration, mais jamais exécutée en temps réel.
 
+## Upgrade PostgreSQL 16 → 18 (volume existant)
+
+Depuis la remédiation R1 (2026-09-21), les Compose dev/staging/prod sont sur
+`postgres:18-alpine`. **Jamais** de remontée de version majeure *in place* sur
+un volume existant (le montage de données de l'image 18 diffère de celui de 16) :
+
+1. Sauvegarder la base 16 (`scripts/backup.sh` — archive chiffrée + sha256) ;
+2. Déployer un cluster `postgres:18` neuf (volume vierge) ;
+3. Restaurer (pipeline `gpg --decrypt | gunzip | psql` — §2 de ce runbook) ;
+4. Vérifier : `node scripts/migrate.mjs --check` + `scripts/run-isolation-suites.sh` ;
+5. Basculer le trafic, puis conserver l'ancienne base en rétention.
+
+En dev : ne pas réutiliser l'ancien volume — nouveau projet
+(`docker compose -p creche-dev-v3 -f infrastructure/docker/docker-compose.dev.yml up --build`)
+ou suppression du volume `postgres_dev_data`.
+
 ## Objectif de l'exercice
 
 - Restaurer **en staging < 30 min** depuis la sauvegarde chiffrée la plus récente
@@ -156,3 +172,17 @@ rejouer les anonymisations postérieures à la sauvegarde avant remise en ligne
 - [ ] Copie hors site effective et vérifiée (`rclone ls` ou équivalent)
 - [ ] Exercice restore <30 min réalisé **2 fois** (dont 1 fois par une autre personne que l'auteur du backup)
 - [ ] Temps consigné, logs conservés
+
+## R8 — Pare-feu hôte (VPS)
+
+Voir [`docs/OPERATIONS-FIREWALL.md`](OPERATIONS-FIREWALL.md) pour la politique
+complète (UFW + compose-side bindings). Résumé :
+
+- Public (VPS) : SSH (22) + HTTP (80) + HTTPS (443). Tout le reste = INTERDIT.
+- Compose : `nginx` seul expose `80:80` + `443:443` ; tout autre service a
+  un binding `127.0.0.1:` ou aucun `ports:`.
+- `/support/` (R7) : allowlist via `SUPPORT_ALLOWED_CIDRS` (cf. ce runbook
+  section « Upgrade 16 → 18 » pour la procédure de rotation).
+
+Le critère go/no-go inclut désormais : `sudo ss -ltnp` ne montre que 22, 80,
+443 sur les interfaces non-loopback.

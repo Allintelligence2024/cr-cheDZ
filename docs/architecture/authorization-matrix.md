@@ -1,4 +1,4 @@
-# Matrice d'autorisation par module (v14 — audit 2026-09, Phases C/H2a/H2b/H2c/H2d/H2e/H2f/H2g/H2h/G1a/G1b/G1c/G1d/G2/G3a)
+# Matrice d'autorisation par module (v15 — remédiation 2026-09-21, R5 : enrollment)
 
 > Décidée le 2026-09-14 en exécution du plan `PLAN_CORRECTION_AUDIT_2026-09.md` (C1).
 > Sources : constantes `@Roles(...)` des contrôleurs et politiques self-service des services.
@@ -30,6 +30,7 @@
 | **invitations** | `super_admin`, `director` | `super_admin`, `director` (jamais `super_admin` comme cible) | — |
 | **multi-rôles** (`/members/:id/roles`) | `super_admin`, `director` | `super_admin`, `director` (jamais `super_admin` comme cible) | — |
 | **parent** (13 routes enfant) | Utilisateur/membership actifs + lien gardien/enfant courant ; capacités distinctes, pas le seul rôle JWT | Absence : journal ; consentement : lien courant | Finances minimisées H2d ; autres projections à revoir |
+| **enrollment** (migration 070, post-v14) | `director`, `receptionist` (liste + capacité — PII des demandes scopée tenant) | `create` : `director`, `receptionist` (saisie des demandes au comptoir) ; `waitlist`/`offer`/`decide` : **`director` seul** (R5 : décision de capacité + création d'enfant — contrôle au niveau contrôle **ET** service, première implémentation du double contrôle) | Non — projections DTO (noms/nés tuteur, tél, email) scopées tenant |
 
 ## Décisions à reconfirmer en Phase H (G2/H2)
 

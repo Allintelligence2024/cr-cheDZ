@@ -2,8 +2,6 @@
 # 18.4.0-beta.17 en local ; docker-library/postgres:18 en CI — JAMAIS 16/17 :
 # un moteur différent de celui validé masquerait des bugs de compatibilité,
 # cf. bug jobs_finish enum 024→048 découvert sur la seule vraie base).
-# NOTE : ce fichier n'est PAS suivi (permission `workflows` manquante —
-# docs/CI-RESTORE.md pour la restauration manuelle).
 name: ci
 
 on:
@@ -76,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -96,7 +94,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Client PostgreSQL (pg_dump ≥ serveur)
+      - name: Client PostgreSQL (fallback PATH — le drill préfère les binaires embedded 18)
         run: |
           pg_dump --version || sudo apt-get install -y postgresql-client
           pg_dump --version
