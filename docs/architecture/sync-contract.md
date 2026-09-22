@@ -257,3 +257,47 @@ puis vérifie les opérations, événements, sessions et appareils dans PostgreS
   scopé est migré en v3 sur place, pas renommé ni abandonné.
 
 [Reproductions, frontière fonctionnelle, upgrade et rollback](../PHASE_F_COMPLETION_H1_RUNBOOK.md).
+
+---
+
+## Statut officiel (R16, remédiation 2026-09-21, F14)
+
+**Décision prise (option b du plan)** : tant que le **gate F4 reste ouvert**
+(certaines opérations avancées peuvent diverger du contrat — voir
+`scripts/test-sync-api-flutter.mjs` pour les 7 tests du moteur réel), le
+client généré `sync_wire_client.dart` est désactivé par défaut côté
+staff-mobile. Le mobile continue d'utiliser l'ancien client `sync_client.dart`
+qui a fait ses preuves en pré-production.
+
+### Mécanisme
+
+- **Seed 014** : ajout du flag `sync_generated_v1` (default `false`) dans
+  `feature_flags`. Lecture via `GET /api/v1/feature-flags` (endpoint déjà
+  câblé — `apps/api/src/modules/organizations/feature-flags.controller.ts`).
+- **Mobile (à implémenter en S1, Phase 4)** : wrapper `SyncClientFactory`
+  qui consulte le flag au démarrage + le met en cache pour 5 min. Selon
+  `is_enabled`, il retourne `SyncClient` (legacy) ou `SyncWireClient`
+  (généré). Tests : fallback legacy par défaut, activation explicite par
+  le directeur plateforme après audit F4 clos.
+
+### Critère de fermeture F4 (à valider avant d'activer le flag)
+
+1. `scripts/test-sync-api-flutter.mjs` passe avec 7/7 (état actuel)
+2. **+1 test** : une opération avancée `daily_log` avec corrections
+   imbriquées (cf. PHASE_F_COMPLETION_H1_RUNBOOK) doit passer contre
+   l'API réelle + retourner des erreurs de contrat propres (pas de
+   silent drift).
+3. **Audit dry-run** : 1 semaine en pré-prod avec `sync_generated_v1=true`
+   sur UN tenant pilote, monitoring `sync_engine_errors` (compteur
+   existant dans `background_jobs`).
+4. **Décision go/no-go** tracée dans ce fichier (PR dédiée).
+
+### Pas de déploiement progressif implicite
+
+L'état « déployé malgré l'interdiction » est le pire des trois :
+- on découvre les bugs en prod, sur des données réelles ;
+- on ne peut pas revenir en arrière sans re-publier une version du mobile.
+
+Le feature flag rend ce risque **réversible** : couper le drapeau côté API,
+et tous les mobiles repassent sur `sync_client.dart` au prochain refresh
+de cache (≤ 5 min). C'est l'invariant principal de cette décision.
