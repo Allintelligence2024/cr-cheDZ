@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import React from 'react';
-import { api, clearTokens, getTokens, http, setTokens } from '../api/client';
+import { api, clearTokens, getAccessToken, http, setAccessToken } from '../api/client';
 
 interface Me {
   id: string;
@@ -43,9 +43,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   const [user, setUser] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
 
-  /** Recharge /me avec les jetons en stock ; échec = jetons invalides. */
+  /** Recharge /me avec le token en mémoire ; échec = session invalide. */
   const refreshProfile = async (): Promise<void> => {
-    if (!getTokens().access) {
+    if (!getAccessToken()) {
       setUser(null);
       return;
     }
@@ -58,28 +58,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   };
 
   useEffect(() => {
-    const tokens = getTokens();
-    if (!tokens.access) {
-      setLoading(false);
-      return;
-    }
-    refreshProfile().finally(() => setLoading(false));
+    // R14 : on tente /me directement. Si l'access token est présent en
+    // mémoire (reload récent), on l'utilise. Sinon, on tente un refresh
+    // silencieux via le cookie httpOnly (le client fait un /auth/refresh
+    // qui pose un nouveau access_token si le cookie est valide).
+    const bootstrap = async (): Promise<void> => {
+      if (!getAccessToken()) {
+        // Pas d'access token : on tente un refresh silencieux.
+        try {
+          const res = await api<{ access_token: string }>('POST', '/auth/refresh', {});
+          if (res?.access_token) setAccessToken(res.access_token);
+          else { setUser(null); return; }
+        } catch {
+          // 401 = pas de cookie / expiré. L'utilisateur n'est pas connecté.
+          setUser(null);
+          return;
+        }
+      }
+      await refreshProfile();
+    };
+    bootstrap().finally(() => setLoading(false));
   }, []);
 
   const login = async (email: string, password: string): Promise<void> => {
+    // R14 : web_client=true signale à l'API qu'elle doit positionner un
+    // cookie httpOnly en complément du body. Pas de refresh en localStorage.
     const res = await api<{ access_token: string; refresh_token: string }>('POST', '/auth/login', {
       email,
       password,
+      web_client: true,
     });
-    setTokens(res.access_token, res.refresh_token);
+    setAccessToken(res.access_token);
+    // refresh_token reste présent dans le body pour rétro-compat mais on
+    // ne le persiste pas (le cookie httpOnly est la source de vérité).
     const me = await http.get<Me>('/me');
     setUser(me);
   };
 
   const logout = async (): Promise<void> => {
-    const { refresh } = getTokens();
-    if (refresh) {
-      await api('POST', '/auth/logout', { refresh_token: refresh }).catch(() => undefined);
+    // R14 : le cookie httpOnly est effacé côté serveur via clearRefreshCookie
+    // (même si aucun refresh_token n'est passé dans le body — clearCookie est
+    // idempotent). On n'envoie donc plus le refresh dans le body.
+    try {
+      await api('POST', '/auth/logout', {});
+    } catch {
+      // best-effort : même si logout serveur échoue (réseau), on nettoie
+      // l'état local.
     }
     clearTokens();
     setUser(null);

@@ -1,6 +1,7 @@
 # Development only: synthetic data, local ports, never a production deployment.
 # Run from the repository root:
-# docker compose -p creche-dev-v2 -f infrastructure/docker/docker-compose.dev.yml up --build
+# docker compose -p creche-dev-v3 -f infrastructure/docker/docker-compose.dev.yml up --build
+# (R1 : -p creche-dev-v3 — un volume formatté PG16 n'est pas lisible par PG18)
 # DEV_* settings deliberately do not inherit production DATABASE_URL/secrets.
 x-api-image: &api-image
   image: creche-local-api:dev
@@ -10,7 +11,7 @@ x-api-image: &api-image
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: ${DEV_POSTGRES_DB:-creche_dev}
       POSTGRES_USER: postgres

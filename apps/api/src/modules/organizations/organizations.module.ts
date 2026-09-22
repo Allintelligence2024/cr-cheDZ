@@ -30,5 +30,10 @@ import { SitesService } from './sites.service';
     FeatureFlagsService,
     EmailService,
   ],
+  // R17 (remédiation 2026-09-21, F16) : on exporte FeatureFlagsService pour
+  // que les modules enrollment / staff puissent brancher le FeatureFlagGuard
+  // sans dupliquer la logique de résolution. Les routes API qui consultent
+  // un feature flag sont précisément celles qui n'ont pas d'UI admin-web.
+  exports: [FeatureFlagsService],
 })
 export class OrganizationsModule {}

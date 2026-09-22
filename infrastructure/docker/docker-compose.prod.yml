@@ -18,8 +18,16 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:?DOMAIN requis}
+      # R7 (remédiation 2026-09-21) : allowlist /support/ — CIDR séparés par
+      # espaces ou virgules. Si vide/omis : seuls 127.0.0.1/32 et 10.0.0.0/8
+      # restent autorisés (Docker interne + boucle locale). Pour autoriser un
+      # opérateur distant, ajouter son IP publique ou le CIDR de son VPN.
+      SUPPORT_ALLOWED_CIDRS: ${SUPPORT_ALLOWED_CIDRS:-}
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
+      # R7 : template d'allowlist rendu en /etc/nginx/conf.d/ au démarrage.
+      - ../nginx/support-allowlist.conf.template:/etc/nginx/templates/support-allowlist.conf.template:ro
+      - ../../scripts/render-nginx-support-allowlist.sh:/docker-entrypoint.d/40-render-support-allowlist.sh:ro
       - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       - api
@@ -28,7 +36,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB requis}
       POSTGRES_USER: postgres
@@ -49,7 +57,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD requis}
     ports:
-      - "9000:9000"   # interne au VPS — jamais exposé publiquement
+      - "127.0.0.1:9000:9000"   # interne au VPS — jamais exposé publiquement (R3 : bound loopback ; API ↔ MinIO passent par le réseau compose)
     volumes:
       - minio_prod_data:/data
     restart: unless-stopped
@@ -177,7 +185,16 @@ services:
       migrate:
         condition: service_completed_successfully
     restart: unless-stopped
+    # R12 (remédiation 2026-09-21, F10) — 2 workers concurrents pour absorber
+    # les pics (export PDF long, expiration paiements, purges) sans bloquer
+    # la file. Le claim de job utilise `FOR UPDATE SKIP LOCKED` (migration
+    # 026) : deux workers qui polluent en parallèle ne récupèrent JAMAIS le
+    # même job (le second saute les lignes verrouillées par le premier).
+    # `replicas: 2` n'est pris en compte qu'avec `docker swarm` ; en compose
+    # simple, lancer 2 instances nommées (worker_a + worker_b) ou scaler via
+    # `docker compose up --scale worker=2` (cf. README et runbook S4).
     deploy:
+      replicas: 2
       resources:
         limits:
           memory: 256M
@@ -273,7 +290,7 @@ services:
     restart: unless-stopped
 
   backup:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE requis (GPG symétrique)}

@@ -143,21 +143,74 @@ export class MediaService {
 
   // ── Liste / téléchargement ───────────────────────────────────────────────
 
-  async list(_userId: string, childId?: string): Promise<Array<Record<string, unknown>>> {
+  /**
+   * R10 (remédiation 2026-09-21, F7) : un staff (educator, etc.) ne doit
+   * voir que les médias des enfants de SES salles (memberships.room_ids).
+   * Sans cette garde, tout le personnel voit tous les médias du tenant —
+   * ce qui viole le principe du moindre privilège. Les rôles director /
+   * super_admin / accountant voient tout (pas de restriction d'aire) ; le
+   * rôle educator voit restreint ; parent voit uniquement ce qui est marqué
+   * `is_visible_to_parents=true` (déjà géré par le contrôleur parent).
+   */
+  async list(userId: string, childId?: string): Promise<Array<Record<string, unknown>>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
+      // 1. Récupérer le rôle + room_ids de l'utilisateur pour ce tenant.
+      const m = await client.query(
+        `SELECT m.room_ids, r.slug AS role_slug
+         FROM memberships m
+         JOIN roles r ON r.id = m.role_id
+         WHERE m.user_id = $1 AND m.organization_id = $2 AND m.is_active = true`,
+        [userId, tenantId],
+      );
+      if (m.rows.length === 0) {
+        // Pas de membership actif → 0 média (defense-in-depth ; le guard a
+        // normalement déjà refusé).
+        return [];
+      }
+      const { role_slug: roleSlug, room_ids: roomIds } = m.rows[0] as {
+        role_slug: string;
+        room_ids: string[] | null;
+      };
+
+      // 2. Rôles qui voient TOUT (direction + finance + ops plateforme).
+      const SEES_ALL = new Set(['director', 'super_admin', 'accountant']);
       const params: unknown[] = [tenantId];
-      let childClause = '';
+      let extraWhere = '';
+
+      if (!SEES_ALL.has(roleSlug)) {
+        // Staff « terrain » : filtrer par room_id des enfants via la table
+        // children. memberships.room_ids peut être NULL (= aucune salle :
+        // ne voit rien) ou vide. Si room_ids = NULL, l'utilisateur n'a
+        // aucune aire → aucun média retourné.
+        if (!roomIds || roomIds.length === 0) {
+          return [];
+        }
+        params.push(roomIds);
+        // children.room_id = ANY(memberships.room_ids) ; les photos peuvent
+        // aussi concerner plusieurs enfants (children_in_photo[]) — on inclut
+        // les médias dont child_id OU n'importe quel enfant de la photo
+        // appartient à l'aire du staff. Cohorte côté SQL via EXISTS.
+        extraWhere = `AND (
+          child_id IN (SELECT id FROM children WHERE room_id = ANY($${params.length}::uuid[]))
+          OR EXISTS (
+            SELECT 1 FROM unnest(children_in_photo) AS child_id_in_photo
+            WHERE child_id_in_photo IN (SELECT id FROM children WHERE room_id = ANY($${params.length}::uuid[]))
+          )
+        )`;
+      }
+
       if (childId) {
         params.push(childId);
-        childClause = `AND child_id = $${params.length}`;
+        extraWhere += ` AND child_id = $${params.length}`;
       }
+
       const res = await client.query(
         `SELECT id, child_id, media_type, mime_type, original_filename,
                 file_size_bytes, taken_at, is_visible_to_parents,
                 all_consents_checked, children_in_photo, created_at
          FROM media_assets
-         WHERE organization_id = $1 AND deleted_at IS NULL ${childClause}
+         WHERE organization_id = $1 AND deleted_at IS NULL ${extraWhere}
          ORDER BY created_at DESC`,
         params,
       );

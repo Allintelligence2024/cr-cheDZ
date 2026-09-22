@@ -39,7 +39,8 @@
     "satim:sandbox": "node scripts/satim-sandbox-server.mjs",
     "satim:proof": "node scripts/satim-sandbox-proof.mjs",
     "test:capacity": "npm run build --workspace @creche/api && node tests/load/capacity-bench.mjs",
-    "check:worker-monitoring": "node scripts/check-worker-monitoring.mjs"
+    "check:worker-monitoring": "node scripts/check-worker-monitoring.mjs",
+    "check:env-example": "node scripts/check-env-example.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -18,6 +18,13 @@
 # autorisé par ORG_GRADLE_PROJECT_allowDebugSigning (le build.gradle.kts
 # échoue sans keystore ni autorisation : jamais de faux « release »).
 # L'iOS (ipa) attend un compte Apple Developer (dépendance externe).
+# S2 (remédiation 2026-09-21, G2 — Phase 4) : `channel: stable` flottant
+# remplacé par `flutter-version: 3.47.1` (la version citée dans
+# docs/CURSOR-FINAL-MISSIONS.md et cohérente avec la contrainte
+# `flutter: ">=3.44.0"` d'apps/staff-mobile/pubspec.lock). `flutter-check`
+# reste NON bloquant en branch protection (cf. historique ci-dessus : on
+# NE veut PAS de « faux vert »), mais il est désormais reproductible : la
+# même version tourne en CI et en local.
 name: flutter
 
 on:
@@ -32,7 +39,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          # S2 (Phase 4) : épinglé à 3.47.1 (cf. docs/CURSOR-FINAL-MISSIONS.md
+          # + contrainte pubspec.lock `flutter: ">=3.44.0"`). `channel` et
+          # `flutter-version` sont mutuellement exclusifs dans
+          # subosito/flutter-action@v2 : seule `flutter-version` accepte une
+          # version exacte.
+          flutter-version: '3.47.1'
           cache: true
       - name: parent-mobile — pub get + analyze
         working-directory: apps/parent-mobile

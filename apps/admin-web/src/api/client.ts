@@ -1,7 +1,16 @@
 /**
  * Client API : fetch + JWT + refresh rotatif automatique.
- * Les jetons sont stockés en localStorage (MVP web ; cookies httpOnly
- * à évaluer en durcissement Phase 11).
+ *
+ * R14 (remédiation 2026-09-21, F12) — l'access token reste en mémoire
+ * (state React) car il est court (15 min) ; le refresh token est désormais
+ * dans un cookie httpOnly positionné par l'API (cf. shared/auth/auth-cookies).
+ * Plus de localStorage pour le refresh : un XSS ne peut plus exfiltrer la
+ * session. L'API lit le cookie automatiquement sur /auth/refresh.
+ *
+ * L'access token est gardé en mémoire (variable d'état) et disparaît au
+ * reload F5 — comportement attendu : l'utilisateur doit re-login après un
+ * F5 si sa session a expiré (le cookie httpOnly + le refresh transparent
+ * rendent l'expérience transparente tant que la session de 7j est valide).
  *
  * A2 (remédiation audits combinés) : le single-flight de refresh est
  * nettoyé dans un `finally` — une erreur réseau ne peut plus laisser une
@@ -11,24 +20,43 @@
  * (5xx) conserve les jetons et se retente plus tard.
  */
 const BASE = '/api/v1';
-const ACCESS_KEY = 'creche_access_token';
-const REFRESH_KEY = 'creche_refresh_token';
+const ACCESS_KEY = 'creche_access_token'; // mémoire seulement (cf. ci-dessus)
 
-export function getTokens(): { access: string | null; refresh: string | null } {
-  return {
-    access: localStorage.getItem(ACCESS_KEY),
-    refresh: localStorage.getItem(REFRESH_KEY),
-  };
+/** Garde l'access token en mémoire : survit aux re-renders, meurt au reload. */
+let accessTokenMemory: string | null = null;
+
+export function getAccessToken(): string | null {
+  return accessTokenMemory ?? (typeof window !== 'undefined' ? sessionStorage.getItem(ACCESS_KEY) : null);
 }
 
-export function setTokens(access: string, refresh: string): void {
-  localStorage.setItem(ACCESS_KEY, access);
-  localStorage.setItem(REFRESH_KEY, refresh);
+export function setAccessToken(access: string): void {
+  accessTokenMemory = access;
+  if (typeof window !== 'undefined') sessionStorage.setItem(ACCESS_KEY, access);
 }
 
 export function clearTokens(): void {
-  localStorage.removeItem(ACCESS_KEY);
-  localStorage.removeItem(REFRESH_KEY);
+  accessTokenMemory = null;
+  if (typeof window !== 'undefined') sessionStorage.removeItem(ACCESS_KEY);
+  // Note : pas de clear localStorage pour le refresh — il n'y est plus
+  // (R14). On laisse le cookie httpOnly être effacé par /auth/logout côté
+  // serveur (cf. clearRefreshCookie).
+}
+
+/**
+ * Wrapper fetch : envoie cookies + Authorization Bearer si access token
+ * connu. Le cookie httpOnly est envoyé automatiquement par le navigateur
+ * si l'origine est la même (SameSite=Lax + path=/api/v1/auth).
+ */
+async function authFetch(path: string, init: RequestInit): Promise<Response> {
+  const access = getAccessToken();
+  return fetch(`${BASE}${path}`, {
+    ...init,
+    credentials: 'include', // R14 : envoyer le cookie httpOnly au serveur
+    headers: {
+      ...(access ? { authorization: `Bearer ${access}` } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
 }
 
 export class ApiError extends Error {
@@ -45,27 +73,29 @@ export class ApiError extends Error {
 let refreshing: Promise<string | null> | null = null;
 
 async function refreshAccess(): Promise<string | null> {
-  const { refresh } = getTokens();
-  if (!refresh) return null;
+  // R14 : on ne fournit PLUS le refresh_token dans le body — l'API lit
+  // le cookie httpOnly positionné à /login. Si le navigateur n'envoie
+  // pas le cookie (cross-origin, désactivé), le serveur renvoie 401 et
+  // la session est considérée comme expirée → redirection login.
   let res: Response;
   try {
-    res = await fetch(`${BASE}/auth/refresh`, {
+    res = await authFetch(`/auth/refresh`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refresh }),
+      body: JSON.stringify({}),
     });
   } catch {
     // Coupure réseau : ne jamais détruire la session, on retentera.
     return null;
   }
   if (!res.ok) {
-    // 400/401 : refresh token invalide, réutilisé ou révoqué → fin de session.
-    // 429 (rate-limit) / 5xx : le jeton reste valide, on garde la session.
+    // 400/401 : cookie absent / expiré / révoqué → fin de session.
+    // 429 (rate-limit) / 5xx : le cookie reste valide, on garde la session.
     if (res.status === 400 || res.status === 401) clearTokens();
     return null;
   }
   const body = await res.json();
-  setTokens(body.access_token, body.refresh_token);
+  setAccessToken(body.access_token);
   return body.access_token as string;
 }
 
@@ -85,14 +115,8 @@ async function singleFlightRefresh(): Promise<string | null> {
  * brute (JSON ou blob selon l'appelant).
  */
 async function authenticatedFetch(path: string, init: RequestInit, retry: boolean): Promise<Response> {
-  const { access } = getTokens();
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      ...(access ? { authorization: `Bearer ${access}` } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
+  // R14 : authFetch envoie déjà Authorization Bearer + cookies httpOnly.
+  const res = await authFetch(path, init);
   if (res.status === 401 && retry) {
     const newAccess = await singleFlightRefresh();
     if (newAccess) return authenticatedFetch(path, init, false);

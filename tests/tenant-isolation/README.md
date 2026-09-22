@@ -17,6 +17,7 @@ export DATABASE_URL=postgresql://...:5432/creche_dev
 node tests/tenant-isolation/schema-check.mjs --verbose
 ```
 
-Les tests API (isolation.test.ts) arrivent en Phase 2 — ils s'exécutent contre
-une vraie base PostgreSQL dans CI (service container `postgres:16`) et
-suivent la Partie 6.1 de l'architecture.
+Les tests API (`isolation.api.test.mjs` + phase3 → phase60, liste dans
+`scripts/run-isolation-suites.sh`) s'exécutent contre une vraie base
+PostgreSQL 18 dans CI (service container `postgres:18`) et suivent la
+Partie 6.1 de l'architecture.

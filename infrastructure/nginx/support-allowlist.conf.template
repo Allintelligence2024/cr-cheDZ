@@ -1,0 +1,36 @@
+# ============================================================================
+# support-allowlist.conf.template
+# R7 (remédiation 2026-09-21) — allowlist IPs pour /support/ (console support).
+#
+# Généré par scripts/render-nginx-support-allowlist.sh à partir de la variable
+# SUPPORT_ALLOWED_CIDRS du .env prod. Le bloc `geo $support_allowed` est
+# consommé par infrastructure/nginx/nginx.conf : si l'IP du client n'est pas
+# dans la liste (default 0), le bloc location /support/ renvoie 403.
+#
+# Format SUPPORT_ALLOWED_CIDRS : un ou plusieurs CIDR séparés par des espaces
+# ou des sauts de ligne (ex. "10.0.0.0/8 192.0.2.10/32"). Le générateur
+# expand chaque CIDR en une ligne `CIDR 1;` du bloc geo.
+#
+# Toujours inclure en dur : 127.0.0.1/32 (boucle locale = admin SSH +
+# port-forward) et 10.0.0.0/8 (réseau Docker interne) — c'est l'allowlist
+# minimale pour que les containers du même réseau compose puissent tester
+# /support/ localement. Pour un accès opérateur distant : passer par VPN et
+# n'ajouter que le CIDR du VPN.
+#
+# IMPORTANT : ce fichier n'est PAS écrit par le code applicatif ; seul le
+# script render-nginx-support-allowlist.sh (lui-même appelé au démarrage du
+# container nginx par une entrypoint wrapper) le produit. Mode dégradé
+# (variable absente) : le bloc `geo` ne contient QUE les CIDR minimaux
+# (127.0.0.1/32 + 10.0.0.0/8) → pas d'accès Internet public. deny all en
+# dernier filet, par construction.
+# ============================================================================
+
+geo $remote_addr $support_allowed {
+  default 0;
+
+  # CIDR minimaux toujours présents (boucle locale + réseau Docker interne).
+  127.0.0.1/32 1;
+  10.0.0.0/8 1;
+
+  # >>>SUPPORT_CIDR_LINES<<<
+}

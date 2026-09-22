@@ -75,11 +75,11 @@ staging réellement démarré et healthy ».
 - Pas de démon Docker ici : YAML analysé et contrat structurel testé, mais
   **ni `docker compose up` ni build des images Docker validés** dans cette session.
 - Les tests SQL locaux utilisent PostgreSQL **18.4** (comme la CI existante).
-  Les Compose historiques restent sur **16-alpine** : la compatibilité de ce
-  moteur n'est pas démontrée par le gate local. Avant le premier déploiement,
-  aligner explicitement la version cible avec la CI ou rejouer le gate sur 16.
+  Les Compose dev/staging/prod sont alignés sur **18-alpine** depuis la
+  remédiation R1 (2026-09-21) : la version cible est désormais celle de la CI.
   Ne jamais changer une version majeure sur un volume existant sans procédure
-  dédiée ; le montage de données de l'image PostgreSQL 18 diffère de celui de 16.
+  dédiée (cf. BACKUP-RUNBOOK « Upgrade PostgreSQL 16 → 18 ») ; le montage de
+  données de l'image PostgreSQL 18 diffère de celui de 16 → volume neuf en dev.
 - PostgreSQL émet des avertissements `no privileges were granted` lors du
   GRANT global sur les fonctions d'extensions trusted (uuid-ossp/pgcrypto/pg_trgm) :
   ces fonctions restent propriétaires postgres et exécutables via leurs droits

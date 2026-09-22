@@ -2,7 +2,7 @@ import { useState } from 'react';
 import React from 'react';
 import { Button, Card, TextField, tokens } from '@creche/design-system';
 import { useNavigate, useSearchParams } from 'react-router';
-import { setTokens } from '../api/client';
+import { setAccessToken } from '../api/client';
 import { http } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useI18n } from '../i18n';
@@ -30,9 +30,12 @@ export function AcceptInvitationPage(): React.JSX.Element {
     try {
       const res = await http.post<{ access_token: string; refresh_token: string }>(
         '/auth/accept-invitation',
-        { invitation_token: token, first_name: firstName, last_name: lastName, password },
+        { invitation_token: token, first_name: firstName, last_name: lastName, password, web_client: true },
       );
-      setTokens(res.access_token, res.refresh_token);
+      // R14 : le refresh_token reste dans le body pour rétro-compat mais on
+      // ne le persiste pas — le cookie httpOnly (positionné par l'API) est
+      // la source de vérité.
+      setAccessToken(res.access_token);
       // A1 : charge directement le profil avec les jetons reçus — plus de
       // login('','') qui échouait silencieusement et renvoyait vers /login.
       await refreshProfile();

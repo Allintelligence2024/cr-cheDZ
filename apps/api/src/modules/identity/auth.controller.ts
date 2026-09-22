@@ -1,10 +1,11 @@
-import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
-import type { Request } from 'express';
+import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Public } from '../../shared/decorators/public.decorator';
 import { RateLimit } from '../../shared/decorators/rate-limit.decorator';
 import { AuthService, type LoginResult } from './auth.service';
 import { AcceptInvitationDto, ChangePasswordDto, LoginDto, ParentOtpRequestDto, ParentOtpVerifyDto, ParentPinDto, ParentPinLoginDto, RefreshDto, TotpDto } from './dto/auth.dto';
+import { setRefreshCookie, readRefreshCookie, clearRefreshCookie } from '../../shared/auth/auth-cookies';
 
 @Controller('auth')
 export class AuthController {
@@ -14,8 +15,8 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @RateLimit(10, 60_000)
-  async login(@Body() dto: LoginDto, @Req() req: Request): Promise<LoginResult> {
-    return this.authService.login(
+  async login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<LoginResult> {
+    const result = await this.authService.login(
       dto.email,
       dto.password,
       dto.totp_code,
@@ -23,6 +24,14 @@ export class AuthController {
       req.ip,
       req.headers['user-agent'],
     );
+    // R14 : si le client est un navigateur (web_client=true), on pose
+    // le refresh token dans un cookie httpOnly. Le body reste identique
+    // pour rétro-compat (les SPA qui n'ont pas migré continuent de
+    // fonctionner). Les deux canaux sont indépendants.
+    if (dto.web_client === true) {
+      setRefreshCookie(res, result.refresh_token);
+    }
+    return result;
   }
 
   @Public()
@@ -59,14 +68,50 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @RateLimit(10, 60_000)
-  async refresh(@Body() dto: RefreshDto, @Req() req: Request): Promise<LoginResult> {
-    return this.authService.refresh(dto.refresh_token, dto.device_id, req.ip, req.headers['user-agent']);
+  async refresh(
+    @Body() dto: RefreshDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResult> {
+    // R14 : si le client web n'envoie pas de refresh_token dans le body,
+    // on lit le cookie httpOnly positionné par /login. Cookie préempté
+    // sur le body quand les deux sont présents (le cookie est plus
+    // récent après un refresh réussi : rotation).
+    const refreshToken = dto.refresh_token || readRefreshCookie(req.cookies as Record<string, string | undefined> | undefined);
+    if (!refreshToken) {
+      // Pas de refresh token du tout → on n'invalide pas la session
+      // existante (un mobile qui n'a pas de cookie OK), on renvoie juste
+      // un refresh impossible. Le client reçoit un 401 et redirige.
+      const { Errors } = await import('../../shared/errors');
+      throw Errors.unauthorized();
+    }
+    const result = await this.authService.refresh(refreshToken, dto.device_id, req.ip, req.headers['user-agent']);
+    // R14 : le web_client reçoit un nouveau cookie avec le refresh tourné.
+    // On ne sait pas ici si l'appel vient d'un web_client — on repose le
+    // cookie systématiquement si un cookie était présent à l'entrée (le
+    // client web a déjà son cookie de login ; un client qui n'utilise pas
+    // le cookie n'en avait pas et n'en reçoit pas).
+    if (readRefreshCookie(req.cookies as Record<string, string | undefined> | undefined)) {
+      setRefreshCookie(res, result.refresh_token);
+    }
+    return result;
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async logout(@Body() dto: RefreshDto, @CurrentUser() user: CurrentUserPayload, @Req() req: Request): Promise<void> {
-    await this.authService.logout(dto.refresh_token, user.sub, req.ip, req.headers['user-agent']);
+  async logout(
+    @Body() dto: RefreshDto,
+    @CurrentUser() user: CurrentUserPayload,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    const refreshToken = dto.refresh_token || readRefreshCookie(req.cookies as Record<string, string | undefined> | undefined);
+    if (refreshToken) {
+      await this.authService.logout(refreshToken, user.sub, req.ip, req.headers['user-agent']);
+    }
+    // R14 : efface le cookie httpOnly quoi qu'il arrive (pas de fuite
+    // même si le client n'en avait pas). Idempotent.
+    clearRefreshCookie(res);
   }
 
   @Post('change-password')

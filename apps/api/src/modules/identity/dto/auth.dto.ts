@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class LoginDto {
   @IsEmail({}, { message: 'email invalide' })
@@ -16,12 +16,31 @@ export class LoginDto {
   @IsOptional()
   @IsString()
   device_id?: string;
+
+  /**
+   * R14 (remédiation 2026-09-21, F12) : true pour les clients web
+   * (admin-web, support-console) — l'API pose alors un cookie httpOnly
+   * __Host-creche_refresh en complément du body. false (défaut) pour
+   * les mobiles Flutter qui consomment toujours le refresh dans le body
+   * (rétro-compat). Voir apps/api/src/shared/auth/auth-cookies.ts.
+   */
+  @IsOptional()
+  @IsBoolean()
+  web_client?: boolean;
 }
 
 export class RefreshDto {
+  /**
+   * R14 : optionnel — le web client peut envoyer le refresh dans le cookie
+   * httpOnly (le serveur le lit alors via req.cookies). Pour les mobiles,
+   * le token reste dans le body (rétro-compat flutter_secure_storage).
+   * Au moins UNE des deux sources DOIT être fournie : le contrôleur vérifie
+   * après la validation DTO.
+   */
+  @IsOptional()
   @IsString()
   @MinLength(16)
-  refresh_token!: string;
+  refresh_token?: string;
 
   @IsOptional()
   @IsString()

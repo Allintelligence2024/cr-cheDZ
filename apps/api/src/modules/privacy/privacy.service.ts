@@ -292,6 +292,11 @@ export class PrivacyService {
         if (msg.includes('ANONYMIZE_REASON_REQUIRED')) {
           throw new AppError('ANONYMIZE_REASON_REQUIRED', 'Un motif d’au moins 5 caractères est requis', 'يلزم سبب من 5 أحرف على الأقل', 400);
         }
+        if (msg.includes('ANONYMIZE_STAFF_LINKED')) {
+          // R6 (remédiation 2026-09-21) : garde 071 — un tuteur exclusif qui est
+          // aussi du personnel actif : l’anonymisation détruirait son compte pro.
+          throw new AppError('ANONYMIZE_STAFF_LINKED', 'Un tuteur exclusif de cet enfant est aussi un membre du personnel actif : détachez d’abord l’affiliation tuteur (ou le poste) avant anonymisation', 'حارس هذا الطفل موظف نشط في المؤسسة؛ افصل العلاقة الوصائية أولاً', 409);
+        }
         throw err;
       }
       if (requestId) {

@@ -7,9 +7,9 @@ Monorepo du SaaS de gestion de crèche : présences offline, journal quotidien, 
 | Couche | Technologie |
 |---|---|
 | Apps mobiles | Flutter 3.x (parents : iOS+Android ; personnel : iOS+Android, offline-first) |
-| Admin web + console support | React 18 + TypeScript + Vite |
-| Backend | NestJS 10 + TypeScript (monolithe modulaire) |
-| Base de données | PostgreSQL 16 (RLS multi-tenant) |
+| Admin web + console support | React 19 + TypeScript + Vite |
+| Backend | NestJS 11 + TypeScript (monolithe modulaire) |
+| Base de données | PostgreSQL 18 (RLS multi-tenant — validé sur PG 18 réel, JAMAIS 16/17 : cf. en-tête `ci.yml`) |
 | Stockage médias | MinIO / S3 |
 | Jobs | Worker NestJS standalone + `background_jobs` |
 | CI/CD | GitHub Actions |
@@ -27,12 +27,21 @@ tests/           tenant-isolation · sync · financial · e2e
 
 ## Démarrage rapide (dev)
 
-Prérequis : Docker avec Compose v2. Depuis la racine du monorepo, sur des données
-**synthétiques uniquement** :
+Prérequis :
+- **Docker** avec Compose v2 — la stack dev s'exécute entièrement en conteneurs
+  (aucun `node_modules` requis sur l'hôte) ;
+- **Node ≥ 20** uniquement pour les scripts exécutés sur l'hôte (migrations
+  standalone, seeds, suites de tests — `engines` du manifeste racine) ;
+- **Flutter 3.47.1** seulement pour développer ou bâtir les apps mobiles ;
+- **k6** optionnel pour les tests de charge (`tests/load/`).
+
+Depuis la racine du monorepo, sur des données **synthétiques uniquement** :
 
 ```bash
 # Projet neuf : ne réutilise pas les volumes de l'ancien compose dev.
-docker compose -p creche-dev-v2 -f infrastructure/docker/docker-compose.dev.yml up --build
+# (R1 PG16→18 : un volume formatté PostgreSQL 16 n'est PAS lisible par 18 —
+#  nouveau nom de projet, cf. BACKUP-RUNBOOK « Upgrade PostgreSQL 16 → 18 ».)
+docker compose -p creche-dev-v3 -f infrastructure/docker/docker-compose.dev.yml up --build
 ```
 
 Le compose installe avec `npm ci`, initialise les rôles PostgreSQL séparés, applique

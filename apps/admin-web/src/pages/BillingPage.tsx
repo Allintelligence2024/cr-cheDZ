@@ -175,8 +175,13 @@ function InvoicesTab({ onError, onMessage }: { onError: (m: string) => void; onM
 
   const downloadPdf = async (id: string): Promise<void> => {
     try {
+      // R14 : l'access token vit en mémoire ; lire via getAccessToken()
+      // (sessionStorage en fallback). Le cookie httpOnly est envoyé
+      // automatiquement par le navigateur.
+      const { getAccessToken } = await import('../api/client');
       const res = await fetch(`/api/v1/billing/invoices/${id}/pdf`, {
-        headers: { authorization: `Bearer ${localStorage.getItem('creche_access_token') ?? ''}` },
+        headers: { authorization: `Bearer ${getAccessToken() ?? ''}` },
+        credentials: 'include',
         redirect: 'follow',
       });
       if (!res.ok) throw new Error(String(res.status));
