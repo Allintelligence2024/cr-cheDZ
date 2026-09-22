@@ -87,7 +87,7 @@ export function JournalPage(): React.JSX.Element {
           <Button variant="ghost" onClick={load}>{t('common.refresh')}</Button>
         </div>
         {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-        {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+        {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
         <Table
           headers={['Heure', 'Événement', t('journal.visibility'), t('common.actions')]}
           rows={items.map((item) => [
@@ -95,9 +95,9 @@ export function JournalPage(): React.JSX.Element {
             <span key="l">
               {label(item)}
               {item.note_is_private && <em style={{ color: tokens.colors.textMuted }}> — {t('journal.privateNote')}</em>}
-              {item.is_correction && <em style={{ color: '#F59E0B' }}> — {t('journal.correction')}{item.correction_reason ? ` : ${item.correction_reason}` : ''}</em>}
+              {item.is_correction && <em style={{ color: tokens.colors.warning }}> — {t('journal.correction')}{item.correction_reason ? ` : ${item.correction_reason}` : ''}</em>}
             </span>,
-            <span key="v" style={{ color: item.visible_to_parents ? '#16A34A' : tokens.colors.textMuted }}>
+            <span key="v" style={{ color: item.visible_to_parents ? tokens.colors.success : tokens.colors.textMuted }}>
               {item.visible_to_parents ? t('journal.visible') : t('journal.hidden')}
             </span>,
             <Button key="b" variant="ghost" disabled={Boolean(item.note_is_private)} onClick={() => void toggle(item)}>

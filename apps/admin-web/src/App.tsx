@@ -1,6 +1,6 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router';
 import React, { lazy, Suspense } from 'react';
-import { tokens } from '@creche/design-system';
+import { ThemeToggle, tokens } from '@creche/design-system';
 import { useAuth } from './auth/AuthContext';
 import { canAccess, homeFor } from './auth/routeAccess';
 import { useI18n } from './i18n';
@@ -33,6 +33,20 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
   const { logout, user } = useAuth();
   const { t, locale, setLocale, dir } = useI18n();
   const [navOpen, setNavOpen] = React.useState(false);
+  const location = useLocation();
+
+  // Le tiroir mobile se referme à chaque navigation (sinon il masque l'écran
+  // d'arrivée) et à la touche Échap.
+  React.useEffect(() => setNavOpen(false), [location.pathname]);
+
+  React.useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navOpen]);
 
   const navItems = [
     { to: '/', label: t('nav.dashboard') },
@@ -62,12 +76,28 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
   const closeNav = (): void => setNavOpen(false);
 
   return (
-    <div className={`layout ${navOpen ? 'sidebar-open' : ''}`} style={{ fontFamily: tokens.typography.fontFamily, background: tokens.colors.background }} dir={dir}>
+    <div className={`layout ${navOpen ? 'sidebar-open' : ''}`} style={{ fontFamily: tokens.typography.fontFamily }} dir={dir}>
       <aside className={`layout-sidebar ${navOpen ? 'open' : ''}`}>
-        <h1 style={{ fontSize: 15, padding: '8px 4px' }}>🏫 {t('app.title')}</h1>
-        <button className="layout-burger" onClick={() => setNavOpen(!navOpen)} aria-label="Menu">
+        <h1>
+          <span className="brand-mark" aria-hidden="true">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />
+            </svg>
+          </span>
+          <span className="app-name">{t('app.title')}</span>
+        </h1>
+
+        <ThemeToggle compact />
+
+        <button
+          className="layout-burger"
+          onClick={() => setNavOpen(!navOpen)}
+          aria-label="Menu"
+          aria-expanded={navOpen}
+        >
           {navOpen ? '✕' : '☰'}
         </button>
+
         <nav>
           {navItems.map((item) => (
             <NavLink
@@ -75,36 +105,30 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
               to={item.to}
               end={item.to === '/'}
               onClick={closeNav}
-              style={({ isActive }) => ({
-                color: isActive ? '#fff' : '#94A3B8',
-                textDecoration: 'none',
-                padding: '10px 12px',
-                borderRadius: 8,
-                background: isActive ? tokens.colors.primary : 'transparent',
-                fontSize: 14,
-              })}
+              className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
             >
               {item.label}
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar-footer" style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button
-            onClick={() => setLocale(locale === 'fr' ? 'ar' : 'fr')}
-            style={{ background: 'transparent', border: `1px solid #334155`, color: '#E2E8F0', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}
-          >
+
+        <div className="sidebar-footer">
+          <button onClick={() => setLocale(locale === 'fr' ? 'ar' : 'fr')}>
             {locale === 'fr' ? 'العربية' : 'Français'}
           </button>
-          <button
-            onClick={() => void logout()}
-            style={{ background: 'transparent', border: 'none', color: '#F87171', textAlign: 'left', padding: '8px 12px', cursor: 'pointer' }}
-          >
-            ← {t('nav.logout')}
+          <button className="danger" onClick={() => void logout()}>
+            {t('nav.logout')}
           </button>
         </div>
       </aside>
+
+      {/* Voile : referme le tiroir au clic en dehors (mobile uniquement). */}
+      <div className="layout-scrim" onClick={closeNav} aria-hidden="true" />
+
       <main className="layout-main">
-        <Suspense fallback={<div style={{ padding: 48 }}>{t('common.loading')}</div>}>{children}</Suspense>
+        <Suspense fallback={<div style={{ padding: 48, color: tokens.colors.textMuted }}>{t('common.loading')}</div>}>
+          {children}
+        </Suspense>
       </main>
     </div>
   );

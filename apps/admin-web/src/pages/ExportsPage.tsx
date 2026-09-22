@@ -15,7 +15,7 @@ interface ExportRow {
   completed_at: string | null;
 }
 
-const STATUS_COLOR: Record<ExportRow['status'], string> = { pending: '#B45309', done: '#16A34A', failed: '#DC2626' };
+const STATUS_COLOR: Record<ExportRow['status'], string> = { pending: tokens.colors.warning, done: tokens.colors.success, failed: tokens.colors.danger };
 
 export function ExportsPage(): React.JSX.Element {
   const { t } = useI18n();
@@ -79,7 +79,7 @@ export function ExportsPage(): React.JSX.Element {
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing.lg }}>
       <Card title={t('exports.title')}>
         {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-        {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+        {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
         <div style={{ display: 'flex', gap: tokens.spacing.md, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
             <label style={{ display: 'block', fontSize: tokens.typography.small, color: tokens.colors.textMuted, marginBottom: 4 }}>
@@ -117,7 +117,7 @@ export function ExportsPage(): React.JSX.Element {
             rows={items.map((e) => [
               e.report_type === 'attendance' ? t('exports.attendance') : t('exports.invoices'),
               e.period_label,
-              <span key="s" style={{ color: STATUS_COLOR[e.status] ?? '#000', fontWeight: 600, textTransform: 'uppercase' }}>{e.status}</span>,
+              <span key="s" style={{ color: STATUS_COLOR[e.status] ?? tokens.colors.text, fontWeight: 600, textTransform: 'uppercase' }}>{e.status}</span>,
               size(e.file_size_bytes),
               new Date(e.created_at).toLocaleString('fr-FR'),
               e.status === 'done'

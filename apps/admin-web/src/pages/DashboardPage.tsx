@@ -71,10 +71,10 @@ export function DashboardPage(): React.JSX.Element {
                 <span style={{ color: tokens.colors.textMuted, fontWeight: 400, fontSize: 12 }}> · {room.site_name}</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <span>{t('dash.present')} <span style={statStyle('#16A34A')}>{fmt(room.present)}</span></span>
-                <span>{t('dash.expected')} <span style={statStyle('#F59E0B')}>{fmt(room.expected)}</span></span>
-                <span>{t('dash.departed')} <span style={statStyle('#3B82F6')}>{fmt(room.departed)}</span></span>
-                <span>{t('dash.absent')} <span style={statStyle('#EF4444')}>{fmt(room.absent)}</span></span>
+                <span>{t('dash.present')} <span style={statStyle(tokens.colors.success)}>{fmt(room.present)}</span></span>
+                <span>{t('dash.expected')} <span style={statStyle(tokens.colors.warning)}>{fmt(room.expected)}</span></span>
+                <span>{t('dash.departed')} <span style={statStyle(tokens.colors.info)}>{fmt(room.departed)}</span></span>
+                <span>{t('dash.absent')} <span style={statStyle(tokens.colors.danger)}>{fmt(room.absent)}</span></span>
               </div>
               <div style={{ borderTop: `1px solid ${tokens.colors.border}`, marginTop: 8, paddingTop: 8, color: tokens.colors.textMuted, fontSize: 13 }}>
                 {t('common.total')} : {fmt(room.total_children)}

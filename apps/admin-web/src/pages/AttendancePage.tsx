@@ -94,10 +94,10 @@ export function AttendancePage(): React.JSX.Element {
 
   const statusColor = (s: SummaryItem['status']): string => {
     switch (s) {
-      case 'present': return '#16A34A';
-      case 'departed': return '#3B82F6';
-      case 'absent': return '#EF4444';
-      default: return '#F59E0B';
+      case 'present': return tokens.colors.success;
+      case 'departed': return tokens.colors.info;
+      case 'absent': return tokens.colors.danger;
+      default: return tokens.colors.warning;
     }
   };
 
@@ -116,7 +116,7 @@ export function AttendancePage(): React.JSX.Element {
           <Button variant="ghost" onClick={load}>{t('common.refresh')}</Button>
         </div>
         {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-        {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+        {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
         <Table
           headers={[t('children.ref'), t('common.child'), t('common.room'), t('common.status'), 'Arrivée', 'Départ', t('common.actions')]}
           rows={items.map((item) => [

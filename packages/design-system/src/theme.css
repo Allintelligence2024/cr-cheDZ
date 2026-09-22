@@ -1,0 +1,196 @@
+/* ============================================================================
+ * SÉRÉNITÉ — thème de référence cr-cheDZ (clair + sombre)
+ * ----------------------------------------------------------------------------
+ * Source unique de vérité des couleurs. `tokens.ts` ne fait que pointer vers
+ * ces variables : changer une valeur ici la propage à TOUS les écrans, y
+ * compris ceux qui utilisent encore des styles inline.
+ *
+ * Bascule de thème : l'attribut `data-theme` est posé sur <html> par le
+ * ThemeProvider. En son absence (JS pas encore exécuté, ou no-JS) la
+ * préférence système prend le relais via @media — d'où l'absence de flash.
+ * ========================================================================= */
+
+/* ── Thème CLAIR (défaut) ─────────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+
+  /* Accent — teal profond */
+  --c-primary: #0F766E;
+  --c-primary-hover: #115E59;
+  --c-primary-active: #134E4A;
+  --c-primary-contrast: #FFFFFF;
+  --c-primary-soft: #ECFDF8;
+  --c-primary-border: #C3EFE5;
+
+  /* Surfaces — blanc sur sauge */
+  --c-background: #F4F7F5;
+  --c-surface: #FFFFFF;
+  --c-surface-alt: #FBFCFC;
+  --c-surface-hover: #F4F7F5;
+  --c-sidebar: #FFFFFF;
+  --c-sidebar-text: #435551;
+  --c-sidebar-muted: #7C8D88;
+
+  /* Texte — teintes vérifiées AA (≥ 4.5:1) sur --c-surface ET --c-background.
+     Ne pas éclaircir sans refaire le calcul de contraste. */
+  --c-text: #12211F;
+  --c-text-muted: #5A6E6A;
+  --c-text-faint: #7C8D88;
+
+  /* Traits */
+  --c-border: #E6EDEA;
+  --c-border-strong: #D3DEDA;
+
+  /* États — chaque couleur a sa variante « fond » et son texte accessible */
+  --c-success: #136A32;
+  --c-success-bg: #E8F6ED;
+  --c-success-border: #BFE3CC;
+  --c-success-contrast: #FFFFFF;
+
+  --c-warning: #A35A06;
+  --c-warning-bg: #FEF6E7;
+  --c-warning-border: #F6E0B8;
+  --c-warning-contrast: #FFFFFF;
+
+  --c-danger: #BE123C;
+  --c-danger-bg: #FFF1F3;
+  --c-danger-border: #F6CFD7;
+  --c-danger-contrast: #FFFFFF;
+
+  --c-info: #1D4ED8;
+  --c-info-bg: #EFF6FF;
+  --c-info-border: #C9DDFB;
+  --c-info-contrast: #FFFFFF;
+
+  /* Ombres — très diffuses, jamais dures */
+  --c-shadow-sm: 0 1px 2px rgba(16, 40, 36, .05);
+  --c-shadow-md: 0 1px 2px rgba(16, 40, 36, .04), 0 8px 24px -16px rgba(16, 40, 36, .18);
+  --c-shadow-lg: 0 12px 32px -18px rgba(16, 40, 36, .32);
+  --c-shadow-focus: 0 0 0 3px rgba(15, 118, 110, .22);
+
+  --c-overlay: rgba(18, 33, 31, .42);
+  --c-skeleton: linear-gradient(90deg, #EDF2F0 25%, #F6F9F8 50%, #EDF2F0 75%);
+}
+
+/* ── Thème SOMBRE ─────────────────────────────────────────────────────────── */
+/* Charbon teinté vert plutôt que noir pur : moins fatigant, cohérent avec
+   l'accent teal. L'accent s'éclaircit (#2DD4BF) pour rester lisible, et son
+   texte de contraste devient sombre — d'où `--c-primary-contrast`. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --c-primary: #2DD4BF;
+  --c-primary-hover: #5EEAD4;
+  --c-primary-active: #99F6E4;
+  --c-primary-contrast: #04201C;
+  --c-primary-soft: #11302C;
+  --c-primary-border: #1C4A43;
+
+  --c-background: #0B1413;
+  --c-surface: #121D1B;
+  --c-surface-alt: #162422;
+  --c-surface-hover: #1B2B28;
+  --c-sidebar: #101A19;
+  --c-sidebar-text: #B4C6C2;
+  --c-sidebar-muted: #6C837E;
+
+  --c-text: #E8F1EE;
+  --c-text-muted: #9BB0AB;
+  --c-text-faint: #6C837E;
+
+  --c-border: #223330;
+  --c-border-strong: #2E433F;
+
+  --c-success: #4ADE80;
+  --c-success-bg: #10291C;
+  --c-success-border: #1E4432;
+  --c-success-contrast: #04200F;
+
+  --c-warning: #FBBF24;
+  --c-warning-bg: #2A2011;
+  --c-warning-border: #4A3A1C;
+  --c-warning-contrast: #231803;
+
+  --c-danger: #FB7185;
+  --c-danger-bg: #2D1620;
+  --c-danger-border: #4C2231;
+  --c-danger-contrast: #2A0710;
+
+  --c-info: #7DB1FF;
+  --c-info-bg: #14233A;
+  --c-info-border: #233A5C;
+  --c-info-contrast: #05152E;
+
+  --c-shadow-sm: 0 1px 2px rgba(0, 0, 0, .45);
+  --c-shadow-md: 0 2px 4px rgba(0, 0, 0, .35), 0 10px 26px -18px rgba(0, 0, 0, .9);
+  --c-shadow-lg: 0 16px 38px -20px rgba(0, 0, 0, .95);
+  --c-shadow-focus: 0 0 0 3px rgba(45, 212, 191, .3);
+
+  --c-overlay: rgba(0, 0, 0, .62);
+  --c-skeleton: linear-gradient(90deg, #172624 25%, #1D2F2C 50%, #172624 75%);
+}
+
+/* Préférence système quand aucun choix explicite n'a été fait.
+   Évite le flash clair→sombre avant l'exécution du ThemeProvider. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']):not([data-theme='dark']) {
+    color-scheme: dark;
+
+    --c-primary: #2DD4BF;
+    --c-primary-hover: #5EEAD4;
+    --c-primary-active: #99F6E4;
+    --c-primary-contrast: #04201C;
+    --c-primary-soft: #11302C;
+    --c-primary-border: #1C4A43;
+
+    --c-background: #0B1413;
+    --c-surface: #121D1B;
+    --c-surface-alt: #162422;
+    --c-surface-hover: #1B2B28;
+    --c-sidebar: #101A19;
+    --c-sidebar-text: #B4C6C2;
+    --c-sidebar-muted: #6C837E;
+
+    --c-text: #E8F1EE;
+    --c-text-muted: #9BB0AB;
+    --c-text-faint: #6C837E;
+
+    --c-border: #223330;
+    --c-border-strong: #2E433F;
+
+    --c-success: #4ADE80;
+    --c-success-bg: #10291C;
+    --c-success-border: #1E4432;
+    --c-success-contrast: #04200F;
+
+    --c-warning: #FBBF24;
+    --c-warning-bg: #2A2011;
+    --c-warning-border: #4A3A1C;
+    --c-warning-contrast: #231803;
+
+    --c-danger: #FB7185;
+    --c-danger-bg: #2D1620;
+    --c-danger-border: #4C2231;
+    --c-danger-contrast: #2A0710;
+
+    --c-info: #7DB1FF;
+    --c-info-bg: #14233A;
+    --c-info-border: #233A5C;
+    --c-info-contrast: #05152E;
+
+    --c-shadow-sm: 0 1px 2px rgba(0, 0, 0, .45);
+    --c-shadow-md: 0 2px 4px rgba(0, 0, 0, .35), 0 10px 26px -18px rgba(0, 0, 0, .9);
+    --c-shadow-lg: 0 16px 38px -20px rgba(0, 0, 0, .95);
+    --c-shadow-focus: 0 0 0 3px rgba(45, 212, 191, .3);
+
+    --c-overlay: rgba(0, 0, 0, .62);
+  }
+}
+
+/* La transition de bascule est désactivée pendant le changement de thème
+   (classe posée 200 ms par le ThemeProvider) pour éviter un fondu géant. */
+:root.theme-switching *,
+:root.theme-switching *::before,
+:root.theme-switching *::after {
+  transition: none !important;
+}

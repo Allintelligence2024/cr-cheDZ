@@ -82,7 +82,7 @@ export function InvitationsPage(): React.JSX.Element {
       </form>
       {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
       {link && (
-        <p style={{ fontSize: tokens.typography.small, wordBreak: 'break-all', background: '#F1F5F9', padding: 8, borderRadius: 6 }}>
+        <p style={{ fontSize: tokens.typography.small, wordBreak: 'break-all', background: tokens.colors.surfaceHover, padding: 8, borderRadius: 6 }}>
           🔗 {link}
         </p>
       )}

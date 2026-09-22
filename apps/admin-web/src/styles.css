@@ -1,110 +1,63 @@
 /* ============================================================================
- * Responsive admin-web (roadmap v2) — les styles inline existent ; cette
- * feuille ajoute les MEDIA QUERIES via des classes utilitaires posées par
- * les composants. Mobile-first : la sidebar devient un tiroir, les tables
- * défilent horizontalement, les grilles passent en une colonne.
- * ============================================================================
+ * admin-web — surcharges spécifiques à l'application.
+ *
+ * Le gros du style vit désormais dans le design-system partagé :
+ *   @creche/design-system/src/theme.css  → variables clair/sombre
+ *   @creche/design-system/src/base.css   → layout, tables, grilles, responsive
+ * Les deux sont importés avant ce fichier par `main.tsx`.
+ *
+ * On ne garde ici que ce qui est propre à l'admin.
+ * ========================================================================= */
 
-/* ── Layout : sidebar → tiroir sous 900px ─────────────────────────────────── */
-.layout {
-  display: flex;
-  min-height: 100vh;
+/* Pastille du logo dans la barre latérale. */
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--c-primary);
+  color: var(--c-primary-contrast);
+  box-shadow: 0 5px 12px -6px var(--c-primary);
 }
 
-.layout-sidebar {
-  width: 240px;
-  flex-shrink: 0;
-  background: #0F172A;
-  color: #fff;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
+/* Les écrans héritent d'espacements verticaux réguliers sans les déclarer. */
+.layout-main > * > h2:first-child {
+  margin-top: 0;
 }
 
-.layout-main {
+/* Listes d'alertes du tableau de bord : puces discrètes, teintées. */
+.layout-main ul {
+  padding-inline-start: 18px;
+}
+
+.layout-main ul li {
+  margin-bottom: 4px;
+}
+
+.layout-main ul li::marker {
+  color: var(--c-text-faint);
+}
+
+/* Barre d'actions récurrente en tête d'écran (boutons + filtres). */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.toolbar > .spacer {
   flex: 1;
-  padding: 24px;
   min-width: 0;
 }
 
-/* Bouton burger (mobile uniquement) */
-.layout-burger {
-  display: none;
-  background: transparent;
-  border: 1px solid #334155;
-  color: #E2E8F0;
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  font-size: 16px;
-}
-
-@media (max-width: 900px) {
-  .layout {
-    flex-direction: column;
-  }
-  .layout-sidebar {
-    width: 100%;
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    flex-wrap: wrap;
-  }
-  .layout-sidebar h1 {
-    margin: 0;
-    font-size: 14px;
-    flex: 1;
-  }
-  .layout-sidebar nav {
-    display: none; /* tiroir : affiché quand .open */
-    width: 100%;
-    order: 10;
-  }
-  .layout-sidebar.open nav {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .layout-sidebar .sidebar-footer {
-    display: none;
-  }
-  .layout-burger {
-    display: block;
-  }
-  .layout-main {
-    padding: 12px;
-  }
-}
-
-/* ── Tables : scroll horizontal sur petits écrans ─────────────────────────── */
-.table-scroll {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-@media (max-width: 900px) {
-  .table-scroll table {
-    min-width: 640px;
-  }
-}
-
-/* ── Grilles : une colonne sous 700px ─────────────────────────────────────── */
-.grid-responsive {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 16px;
-}
-
-@media (max-width: 700px) {
-  .grid-responsive {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ── Cartes : pleine largeur mobile ───────────────────────────────────────── */
-@media (max-width: 700px) {
-  .card-responsive {
-    padding: 12px !important;
+/* Les formulaires en ligne passent en colonne sur téléphone. */
+@media (max-width: 640px) {
+  .toolbar > * {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }

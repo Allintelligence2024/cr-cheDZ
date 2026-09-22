@@ -232,7 +232,7 @@ export function ChildrenPage(): React.JSX.Element {
         </p>
       )}
       {report && report.length > 0 && (
-        <div style={{ background: '#FEF2F2', border: `1px solid ${tokens.colors.danger}`, borderRadius: 8, padding: 12, marginBottom: 16 }}>
+        <div style={{ background: tokens.colors.dangerBg, border: `1px solid ${tokens.colors.danger}`, borderRadius: 8, padding: 12, marginBottom: 16 }}>
           <strong>{t('children.importErrors')}</strong>
           <ul style={{ fontSize: tokens.typography.small, marginBottom: 0 }}>
             {report.map((r, i) => (

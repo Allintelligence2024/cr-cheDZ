@@ -2,24 +2,53 @@ import type { CSSProperties, ReactNode } from 'react';
 import React from 'react';
 import { tokens } from './tokens';
 
+/* ============================================================================
+ * Composants partagés — thème « Sérénité ».
+ * Les couleurs proviennent de `tokens` (→ var(--c-*)), donc tout suit
+ * automatiquement la bascule clair/sombre.
+ * ========================================================================= */
+
 const base: CSSProperties = {
   fontFamily: tokens.typography.fontFamily,
   borderRadius: tokens.radius.sm,
-  border: 'none',
+  border: '1px solid transparent',
   cursor: 'pointer',
-  fontWeight: 600,
+  fontWeight: 650,
   fontSize: tokens.typography.body,
-  transition: 'background 0.15s ease',
+  transition: 'background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  lineHeight: 1.2,
+  /* Cible tactile : 44 px recommandés par les guides iOS/Android. */
+  minHeight: 40,
 };
 
-const variants: Record<'primary' | 'danger' | 'ghost', CSSProperties> = {
-  primary: { background: tokens.colors.primary, color: '#fff', padding: '10px 18px' },
-  danger: { background: tokens.colors.danger, color: '#fff', padding: '10px 18px' },
+const variants: Record<'primary' | 'danger' | 'ghost' | 'subtle', CSSProperties> = {
+  primary: {
+    background: tokens.colors.primary,
+    color: tokens.colors.primaryContrast,
+    padding: '10px 18px',
+    boxShadow: tokens.shadows.sm,
+  },
+  danger: {
+    background: tokens.colors.danger,
+    color: '#fff',
+    padding: '10px 18px',
+    boxShadow: tokens.shadows.sm,
+  },
   ghost: {
-    background: 'transparent',
+    background: tokens.colors.surface,
     color: tokens.colors.primary,
-    padding: '8px 12px',
-    border: `1px solid ${tokens.colors.border}`,
+    padding: '9px 15px',
+    borderColor: tokens.colors.border,
+  },
+  subtle: {
+    background: tokens.colors.primarySoft,
+    color: tokens.colors.primary,
+    padding: '9px 15px',
+    borderColor: tokens.colors.primaryBorder,
   },
 };
 
@@ -30,12 +59,21 @@ export function Button(props: {
   type?: 'button' | 'submit';
   disabled?: boolean;
   style?: CSSProperties;
+  title?: string;
+  'aria-label'?: string;
 }): React.JSX.Element {
-  const { children, variant = 'primary', ...rest } = props;
+  const { children, variant = 'primary', style, ...rest } = props;
   return (
     <button
       {...rest}
-      style={{ ...base, ...variants[variant], opacity: props.disabled ? 0.5 : 1, ...props.style }}
+      className="ds-button"
+      style={{
+        ...base,
+        ...variants[variant],
+        opacity: props.disabled ? 0.55 : 1,
+        cursor: props.disabled ? 'not-allowed' : 'pointer',
+        ...style,
+      }}
     >
       {children}
     </button>
@@ -50,12 +88,23 @@ export function TextField(props: {
   placeholder?: string;
   required?: boolean;
   dir?: 'ltr' | 'rtl' | 'auto';
+  disabled?: boolean;
+  hint?: string;
 }): React.JSX.Element {
   return (
     <label style={{ display: 'block', marginBottom: tokens.spacing.md }}>
       {props.label && (
-        <span style={{ display: 'block', marginBottom: 4, fontSize: tokens.typography.small, color: tokens.colors.textMuted }}>
+        <span
+          style={{
+            display: 'block',
+            marginBottom: 6,
+            fontSize: tokens.typography.small,
+            color: tokens.colors.textMuted,
+            fontWeight: 600,
+          }}
+        >
           {props.label}
+          {props.required && <span style={{ color: tokens.colors.danger }}> *</span>}
         </span>
       )}
       <input
@@ -63,75 +112,114 @@ export function TextField(props: {
         value={props.value}
         placeholder={props.placeholder}
         required={props.required}
+        disabled={props.disabled}
         dir={props.dir}
         onChange={(e) => props.onChange(e.target.value)}
-        style={{
-          width: '100%',
-          padding: '10px 12px',
-          borderRadius: tokens.radius.sm,
-          border: `1px solid ${tokens.colors.border}`,
-          fontSize: tokens.typography.body,
-          fontFamily: tokens.typography.fontFamily,
-          boxSizing: 'border-box',
-        }}
+        style={{ width: '100%', boxSizing: 'border-box' }}
       />
+      {props.hint && (
+        <span style={{ display: 'block', marginTop: 5, fontSize: tokens.typography.small, color: tokens.colors.textFaint }}>
+          {props.hint}
+        </span>
+      )}
     </label>
   );
 }
 
-export function Card(props: { title?: string; children: ReactNode; style?: CSSProperties }): React.JSX.Element {
+export function Card(props: {
+  title?: string;
+  children: ReactNode;
+  style?: CSSProperties;
+  actions?: ReactNode;
+}): React.JSX.Element {
   return (
-    <div
-      style={{
-        background: tokens.colors.surface,
-        border: `1px solid ${tokens.colors.border}`,
-        borderRadius: tokens.radius.md,
-        padding: tokens.spacing.lg,
-        ...props.style,
-      }}
-    >
-      {props.title && (
-        <h2 style={{ marginTop: 0, marginBottom: tokens.spacing.md, fontSize: tokens.typography.h2 }}>{props.title}</h2>
+    <section className="ds-card card-responsive" style={props.style}>
+      {(props.title || props.actions) && (
+        <header
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing.md,
+            flexWrap: 'wrap',
+            marginBottom: tokens.spacing.md,
+          }}
+        >
+          {props.title && (
+            <h2 style={{ margin: 0, fontSize: tokens.typography.h2, fontWeight: 700, flex: 1, minWidth: 0 }}>
+              {props.title}
+            </h2>
+          )}
+          {props.actions}
+        </header>
       )}
       {props.children}
-    </div>
+    </section>
   );
 }
 
+/**
+ * Table responsive.
+ *
+ * Au-dessus de 640 px : tableau classique.
+ * En dessous : chaque ligne devient une carte empilée (CSS `.ds-table-cards`),
+ * les en-têtes étant réinjectés via `data-label` — plus lisible qu'un scroll
+ * horizontal sur téléphone.
+ */
 export function Table(props: {
   headers: string[];
   rows: Array<Array<ReactNode>>;
   onRowClick?: (rowIndex: number) => void;
+  empty?: string;
 }): React.JSX.Element {
+  if (props.rows.length === 0 && props.empty) {
+    return (
+      <p
+        style={{
+          color: tokens.colors.textMuted,
+          textAlign: 'center',
+          padding: `${tokens.spacing.lg}px 0`,
+          margin: 0,
+        }}
+      >
+        {props.empty}
+      </p>
+    );
+  }
+
   return (
     <div className="table-scroll">
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: tokens.typography.body }}>
-      <thead>
-        <tr>
-          {props.headers.map((h) => (
-            <th key={h} style={{ textAlign: 'left', padding: '10px 12px', borderBottom: `2px solid ${tokens.colors.border}`, color: tokens.colors.textMuted, fontSize: tokens.typography.small }}>
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {props.rows.map((row, i) => (
-          <tr
-            key={i}
-            style={{
-              borderBottom: `1px solid ${tokens.colors.border}`,
-              cursor: props.onRowClick ? 'pointer' : 'default',
-            }}
-            onClick={props.onRowClick ? () => props.onRowClick?.(i) : undefined}
-          >
-            {row.map((cell, j) => (
-              <td key={j} style={{ padding: '10px 12px' }}>{cell}</td>
+      <table className="ds-table ds-table-cards">
+        <thead>
+          <tr>
+            {props.headers.map((h) => (
+              <th key={h}>{h}</th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {props.rows.map((row, i) => (
+            <tr
+              key={i}
+              style={{ cursor: props.onRowClick ? 'pointer' : 'default' }}
+              onClick={props.onRowClick ? () => props.onRowClick?.(i) : undefined}
+            >
+              {row.map((cell, j) => (
+                <td key={j} data-label={props.headers[j] ?? ''}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
+}
+
+/** Pastille d'état — couleur + texte (jamais la couleur seule). */
+export function Badge(props: {
+  children: ReactNode;
+  tone?: 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+}): React.JSX.Element {
+  return <span className={`ds-badge ds-badge-${props.tone ?? 'neutral'}`}>{props.children}</span>;
 }

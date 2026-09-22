@@ -121,13 +121,13 @@ export function PayrollPage(): React.JSX.Element {
 
   const fmt = (n: string | number): string => `${Number(n).toLocaleString('fr-FR')} DZD`;
   const periodLabel = (r: { period_year: number; period_month: number }): string => `${String(r.period_month).padStart(2, '0')}/${r.period_year}`;
-  const lineColor = (type: string): string => (type === 'deduction' ? '#DC2626' : type === 'bonus' ? '#16A34A' : '#334155');
+  const lineColor = (type: string): string => (type === 'deduction' ? tokens.colors.danger : type === 'bonus' ? tokens.colors.success : tokens.colors.text);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing.lg }}>
       <Card title={t('payroll.title')}>
         {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-        {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+        {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
         <div style={{ display: 'flex', gap: tokens.spacing.md, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 110 }}>
             <TextField label={t('bill.periodYear')} type="number" value={year} onChange={setYear} />
@@ -170,7 +170,7 @@ export function PayrollPage(): React.JSX.Element {
             rows={selected.entries.map((e) => [
               `${e.first_name} ${e.last_name}`,
               fmt(e.gross_amount),
-              <span key="d" style={{ color: Number(e.deductions_amount) > 0 ? '#DC2626' : '#16A34A' }}>{fmt(e.deductions_amount)}</span>,
+              <span key="d" style={{ color: Number(e.deductions_amount) > 0 ? tokens.colors.danger : tokens.colors.success }}>{fmt(e.deductions_amount)}</span>,
               <strong key="n">{fmt(e.net_amount)}</strong>,
               selected.status === 'draft'
                 ? <Button key="l" variant="ghost" onClick={() => { setLineTarget(e); setLineType('bonus'); }}>{t('payroll.addLine')}</Button>

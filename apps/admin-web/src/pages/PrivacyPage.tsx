@@ -79,7 +79,7 @@ export function PrivacyPage(): React.JSX.Element {
         ))}
       </div>
       {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-      {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+      {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
       {tab === 'registry' && <RegistryTab onError={showError} />}
       {tab === 'dpias' && <DpiasTab onError={showError} onMessage={showMessage} />}
       {tab === 'requests' && <RequestsTab onError={showError} onMessage={showMessage} />}
@@ -289,7 +289,7 @@ function ViolationsTab({ onError, onMessage }: { onError: (e: unknown) => void; 
     } catch (e: unknown) { onError(e); }
   };
 
-  const sevColor = (s: string): string => (s === 'high' || s === 'critical' ? '#DC2626' : s === 'moderate' ? '#B45309' : '#16A34A');
+  const sevColor = (s: string): string => (s === 'high' || s === 'critical' ? tokens.colors.danger : s === 'moderate' ? tokens.colors.warning : tokens.colors.success);
 
   return (
     <Card title={t('privacy.violations')}>

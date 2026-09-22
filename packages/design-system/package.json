@@ -2,8 +2,16 @@
   "name": "@creche/design-system",
   "version": "0.1.0",
   "private": true,
-  "description": "Design tokens + composants React partagés (admin-web, support-console)",
+  "description": "Design tokens + composants React partagés (admin-web, support-console) — thème Sérénité clair/sombre",
   "main": "src/index.ts",
+  "scripts": {
+    "test": "node --test src/contrast.test.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./theme.css": "./src/theme.css",
+    "./base.css": "./src/base.css"
+  },
   "peerDependencies": {
     "react": "^18 || ^19"
   }
