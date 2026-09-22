@@ -25,6 +25,7 @@ const pg = new EmbeddedPostgres({
   password: PASSWORD,
   port: PORT,
   persistent: true,
+  initdbFlags: ['--encoding=UTF8', '--locale=fr_FR.UTF-8'],
 });
 
 if (!existsSync(join(DATA_DIR, 'PG_VERSION'))) {

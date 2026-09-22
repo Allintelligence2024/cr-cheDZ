@@ -32,7 +32,6 @@
     "test:production-roles": "node scripts/test-production-roles.mjs",
     "test:unit": "npm run test --workspace @creche/api",
     "test:api-phase57": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase57-invoice-reminders.api.test.mjs",
-
     "test:api-phase58": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase58-ratios-attestations.api.test.mjs",
     "test:api-phase59": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase59-contracts-enrollment-schedule.api.test.mjs",
     "test:api-phase60": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase60-satim-reconciliation.api.test.mjs",
@@ -72,5 +71,11 @@
       "body-parser": "1.20.8"
     },
     "uuid": "^11.1.1"
+  },
+  "allowScripts": {
+    "@embedded-postgres/windows-x64@18.4.0-beta.17": true,
+    "@parcel/watcher@2.6.0": true,
+    "esbuild@0.21.5": true,
+    "unrs-resolver@1.12.2": true
   }
 }
