@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concept 3 — Atelier · cr-cheDZ</title>
+<link rel="stylesheet" href="_shell.css">
+<style>
+/* ===========================================================================
+ * CONCEPT 3 — « ATELIER »
+ * Éditorial chaleureux : fond crème, titres en serif, accents terracotta et
+ * ocre, traits fins plutôt qu'ombres. Référence : Notion / Anthropic / PostHog.
+ * Objectif : se distinguer du bleu SaaS générique ; humain sans être enfantin.
+ * ======================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap');
+
+.c3 {
+  --paper: #FAF6F0;
+  --paper2: #F3EDE4;
+  --card: #FFFDFA;
+  --ink: #221E1A;
+  --ink2: #4A443C;
+  --muted: #7C7166;
+  --line: #E4DACA;
+  --line2: #D6C9B4;
+  --terra: #B4502E;
+  --terra-soft: #F6E7E0;
+  --ocre: #B8862B;
+  --ocre-soft: #F8EED8;
+  --olive: #5C7148;
+  --olive-soft: #E9EFE2;
+  --plum: #6D4E75;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+.c3 *, .c3 *::before, .c3 *::after { box-sizing: border-box; }
+.c3 .serif { font-family: 'Fraunces', 'Iowan Old Style', Georgia, serif; font-weight: 600; letter-spacing: -.015em; }
+
+/* ── Ossature ───────────────────────────────────────────────────────────── */
+.c3.web { display: flex; width: 1280px; min-height: 800px; }
+.c3 .side {
+  width: 228px; flex: none; background: var(--paper2); border-right: 1px solid var(--line);
+  padding: 22px 15px; display: flex; flex-direction: column; gap: 24px;
+}
+.c3 .brand { display: flex; align-items: center; gap: 10px; padding: 0 5px; }
+.c3 .brand .mark {
+  width: 36px; height: 36px; border-radius: 11px; background: var(--terra); color: #FFF7F2;
+  display: grid; place-items: center; flex: none;
+}
+.c3 .brand b { display: block; font-size: 16px; }
+.c3 .brand span { display: block; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+
+.c3 .nsec > p {
+  margin: 0 0 6px 9px; font-size: 10px; font-weight: 700; letter-spacing: .15em;
+  text-transform: uppercase; color: #A4988A;
+}
+.c3 .nav {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px;
+  font-size: 13.5px; color: #4E463D; font-weight: 500;
+}
+.c3 .nav svg { opacity: .65; flex: none; }
+.c3 .nav.on { background: var(--card); color: var(--terra); font-weight: 650; box-shadow: 0 1px 0 var(--line); }
+.c3 .nav.on svg { opacity: 1; }
+.c3 .nav .c { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.c3 .side .foot { margin-top: auto; border-top: 1px solid var(--line); padding-top: 13px; }
+.c3 .side .foot .u { display: flex; align-items: center; gap: 9px; }
+.c3 .av {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--terra); color: #fff;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none;
+}
+.c3 .side .foot b { font-size: 12.5px; display: block; }
+.c3 .side .foot span { font-size: 11px; color: var(--muted); }
+
+.c3 .main { flex: 1; min-width: 0; }
+.c3 .topbar {
+  display: flex; align-items: flex-end; gap: 16px; padding: 26px 32px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.c3 .topbar h1 { margin: 0; font-size: 30px; line-height: 1.1; }
+.c3 .topbar .sub { font-size: 13px; color: var(--muted); margin-top: 5px; }
+.c3 .tools { margin-left: auto; display: flex; gap: 9px; align-items: center; }
+.c3 .obtn {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600;
+  padding: 8px 14px; border-radius: 9px; border: 1px solid var(--line2); background: var(--card); color: #4E463D;
+}
+.c3 .obtn.pri { background: var(--terra); border-color: var(--terra); color: #FFF7F2; }
+
+.c3 .canvas { padding: 24px 32px 34px; display: flex; flex-direction: column; gap: 22px; }
+
+/* ── Cartes à filet ─────────────────────────────────────────────────────── */
+.c3 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 19px 20px; }
+.c3 .card > h3 {
+  margin: 0 0 14px; font-size: 16px; display: flex; align-items: center; gap: 9px;
+  font-family: 'Fraunces', Georgia, serif; font-weight: 600; letter-spacing: -.01em;
+}
+.c3 .card > h3 .link { margin-left: auto; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; color: var(--terra); }
+
+.c3 .stats { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--card); }
+.c3 .stat { padding: 19px 20px; border-right: 1px solid var(--line); }
+.c3 .stat:last-child { border-right: 0; }
+.c3 .stat .lb {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: #A4988A;
+  display: flex; align-items: center; gap: 7px;
+}
+.c3 .stat .vv {
+  font-family: 'Fraunces', Georgia, serif; font-size: 34px; font-weight: 600; letter-spacing: -.03em;
+  line-height: 1.1; margin: 9px 0 3px; font-variant-numeric: tabular-nums;
+}
+.c3 .stat .vv em { font-style: normal; font-size: 16px; color: var(--muted); }
+.c3 .stat .nt { font-size: 12px; color: var(--muted); }
+.c3 .stat .nt b { color: var(--olive); } .c3 .stat .nt b.r { color: var(--terra); }
+
+.c3 .row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 22px; align-items: start; }
+
+/* ── Bandeau conformité ─────────────────────────────────────────────────── */
+.c3 .note {
+  display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; border-radius: 13px;
+  background: var(--ocre-soft); border: 1px solid #EBD9AE; border-left: 4px solid var(--ocre);
+}
+.c3 .note b { font-size: 14px; font-family: 'Fraunces', Georgia, serif; color: #7A5A12; }
+.c3 .note p { margin: 4px 0 0; font-size: 12.5px; color: #8A6A1E; line-height: 1.5; max-width: 74ch; }
+.c3 .note .go { margin-left: auto; align-self: center; }
+
+/* ── Liste salles ───────────────────────────────────────────────────────── */
+.c3 .rlist { display: flex; flex-direction: column; }
+.c3 .r {
+  display: grid; grid-template-columns: 1fr 190px 130px 96px; align-items: center; gap: 16px;
+  padding: 14px 0; border-bottom: 1px dashed var(--line);
+}
+.c3 .r:last-child { border-bottom: 0; padding-bottom: 0; }
+.c3 .r .nm { display: flex; align-items: center; gap: 11px; }
+.c3 .r .em { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 16px; flex: none; }
+.c3 .r b { font-size: 14px; display: block; font-weight: 600; }
+.c3 .r .ag { font-size: 11.5px; color: var(--muted); }
+.c3 .dots { display: flex; gap: 3px; flex-wrap: wrap; max-width: 190px; }
+.c3 .dots i { width: 9px; height: 9px; border-radius: 3px; display: block; }
+.c3 .cnt { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.c3 .cnt b { color: var(--ink); font-weight: 650; }
+.c3 .pill {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 650;
+  padding: 4px 10px; border-radius: 7px; white-space: nowrap; border: 1px solid;
+}
+.c3 .pill.ok { background: var(--olive-soft); color: #3F5230; border-color: #CFDCC2; }
+.c3 .pill.wr { background: var(--ocre-soft); color: #8A6A1E; border-color: #EBD9AE; }
+.c3 .pill.bd { background: var(--terra-soft); color: #93381A; border-color: #EFD2C6; }
+.c3 .pill.nu { background: #F1EBF3; color: #5A3F62; border-color: #DFD0E3; }
+
+/* ── Recouvrement ───────────────────────────────────────────────────────── */
+.c3 .money { display: flex; flex-direction: column; gap: 14px; }
+.c3 .mline { display: flex; align-items: baseline; gap: 10px; }
+.c3 .mline .amt { font-family: 'Fraunces', Georgia, serif; font-size: 27px; font-weight: 600; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+.c3 .mline .cur { font-size: 13px; color: var(--muted); }
+.c3 .mline .pc { margin-left: auto; font-size: 12px; font-weight: 650; color: var(--olive); }
+.c3 .stack { display: flex; height: 13px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line2); }
+.c3 .stack i { display: block; height: 100%; }
+.c3 .keys { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; }
+.c3 .keys div { display: flex; align-items: center; gap: 9px; }
+.c3 .keys i { width: 10px; height: 10px; border-radius: 3px; }
+.c3 .keys span { color: var(--muted); }
+.c3 .keys b { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* ── Journal éditorial ──────────────────────────────────────────────────── */
+.c3 .time { position: relative; padding-left: 20px; }
+.c3 .time::before { content: ''; position: absolute; left: 5px; top: 6px; bottom: 6px; width: 1px; background: var(--line2); }
+.c3 .ev { position: relative; padding: 0 0 17px; }
+.c3 .ev:last-child { padding-bottom: 0; }
+.c3 .ev::before {
+  content: ''; position: absolute; left: -19px; top: 5px; width: 11px; height: 11px;
+  border-radius: 50%; background: var(--card); border: 2px solid var(--terra);
+}
+.c3 .ev.q::before { border-color: var(--line2); }
+.c3 .ev .tm { font-size: 11px; color: #A4988A; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+.c3 .ev b { font-size: 13.5px; display: block; margin-top: 1px; font-weight: 620; }
+.c3 .ev p { margin: 3px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+.c3.app { height: 100%; display: flex; flex-direction: column; background: var(--paper); }
+.c3.app .statusbar { color: var(--ink); }
+.c3 .ah { padding: 6px 20px 15px; }
+.c3 .ah .d { font-size: 11px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; color: #A4988A; }
+.c3 .ah h2 { margin: 4px 0 0; font-family: 'Fraunces', Georgia, serif; font-size: 25px; font-weight: 600; letter-spacing: -.028em; }
+.c3 .asc { flex: 1; overflow: hidden; padding: 0 16px 14px; display: flex; flex-direction: column; gap: 13px; }
+.c3 .mc { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 15px; }
+.c3 .mc.terra { background: var(--terra); border-color: var(--terra); color: #FFF7F2; }
+.c3 .mc.terra .mt2 { color: rgba(255,247,242,.75); }
+.c3 .mh { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+.c3 .mh b { font-family: 'Fraunces', Georgia, serif; font-size: 15px; font-weight: 600; }
+.c3 .mh .tt { margin-left: auto; font-size: 11px; color: #A4988A; }
+.c3 .mt2 { font-size: 11.5px; color: var(--muted); }
+.c3 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.c3 .tabbar3 { display: flex; background: var(--paper2); border-top: 1px solid var(--line); padding: 9px 6px 20px; flex: none; }
+.c3 .tb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #A4988A; font-size: 9.5px; font-weight: 650; }
+.c3 .tb.on { color: var(--terra); }
+.c3 .kr { display: flex; align-items: center; gap: 11px; padding: 11px 0; border-bottom: 1px dashed var(--line); }
+.c3 .kr:last-child { border-bottom: 0; }
+.c3 .kr .ki { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; font-size: 16px; flex: none; }
+.c3 .kr b { font-size: 13.5px; display: block; font-weight: 620; }
+.c3 .kr span { font-size: 11.5px; color: var(--muted); }
+.c3 .act {
+  margin-left: auto; font-size: 11.5px; font-weight: 700; padding: 8px 13px; border-radius: 9px;
+  border: 1px solid var(--terra); background: var(--terra); color: #FFF7F2; white-space: nowrap;
+}
+.c3 .act.o { background: transparent; border-color: var(--line2); color: var(--muted); }
+</style>
+</head>
+<body class="stage">
+
+<header class="stage-top">
+  <a class="back" href="index.html">← Les 5 concepts</a>
+  <div class="who">
+    <span class="num">CONCEPT 03</span>
+    <h1>Atelier</h1>
+    <span class="tag">Éditorial · crème &amp; terracotta · serif — « anti-SaaS générique »</span>
+  </div>
+  <div class="swatches">
+    <i style="background:#FAF6F0"></i><i style="background:#B4502E"></i>
+    <i style="background:#B8862B"></i><i style="background:#5C7148"></i><i style="background:#221E1A"></i>
+  </div>
+</header>
+
+<section class="stage-block">
+  <h2>Web — Console direction</h2>
+  <p class="sub">Pas d'ombres : des filets fins, du papier, des titres en Fraunces. La donnée reste dense mais se lit comme un document.</p>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="url">app.creche.dz/tableau-de-bord</div>
+    </div>
+    <div class="browser-body">
+      <div class="fit c3 web" data-width="1280">
+
+        <aside class="side">
+          <div class="brand">
+            <div class="mark"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-6h6v6"/></svg></div>
+            <div><b class="serif">Les Petits Pas</b><span>ALGER · 3 SITES</span></div>
+          </div>
+
+          <div class="nsec">
+            <p>Chaque jour</p>
+            <div class="nav on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Tableau de bord</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg>Présences<span class="c">84</span></div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg>Journal</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>Médias</div>
+          </div>
+
+          <div class="nsec">
+            <p>Gestion</p>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 5.5a3.2 3.2 0 0 1 0 6"/></svg>Enfants<span class="c">96</span></div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5H8a2.75 2.75 0 0 0 0 5.5H17"/></svg>Facturation<span class="c" style="color:#B4502E;font-weight:700">7</span></div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="7" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Personnel<span class="c">14</span></div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 3l7.5 3v6c0 4.6-3.1 8-7.5 9-4.4-1-7.5-4.4-7.5-9V6z"/><path d="M9.3 12l1.9 1.9 3.6-3.6"/></svg>Conformité</div>
+          </div>
+
+          <div class="foot">
+            <div class="u"><div class="av">NB</div><div><b>Nadia Benali</b><span>Directrice</span></div></div>
+          </div>
+        </aside>
+
+        <div class="main">
+          <div class="topbar">
+            <div>
+              <h1 class="serif">Lundi 22 septembre</h1>
+              <div class="sub">Site Hydra · ouvert depuis 07 h 00 · 14 membres du personnel</div>
+            </div>
+            <div class="tools">
+              <div class="obtn">FR / عربي</div>
+              <div class="obtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 15V3m0 12-4-4m4 4 4-4"/><path d="M3 17v2a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2"/></svg>Exporter</div>
+              <div class="obtn pri"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Nouvelle entrée</div>
+            </div>
+          </div>
+
+          <div class="canvas">
+
+            <div class="stats">
+              <div class="stat">
+                <div class="lb"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B4502E" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Présents</div>
+                <div class="vv">84<em> / 96</em></div>
+                <div class="nt"><b>+6</b> par rapport à vendredi</div>
+              </div>
+              <div class="stat">
+                <div class="lb"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B8862B" stroke-width="2.4" stroke-linecap="round"><path d="M12 3l7.5 3v6c0 4.6-3.1 8-7.5 9-4.4-1-7.5-4.4-7.5-9V6z"/></svg>Ratios tenus</div>
+                <div class="vv">5<em> / 6</em></div>
+                <div class="nt"><b class="r">Moyenne section</b> en dépassement</div>
+              </div>
+              <div class="stat">
+                <div class="lb"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5C7148" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5"/></svg>Encaissé</div>
+                <div class="vv">1,84<em> M DZD</em></div>
+                <div class="nt"><b>72 %</b> du facturé de septembre</div>
+              </div>
+              <div class="stat">
+                <div class="lb"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B4502E" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5h.01"/></svg>À relancer</div>
+                <div class="vv">7<em> familles</em></div>
+                <div class="nt"><b class="r">318 000 DZD</b> au-delà de 30 j</div>
+              </div>
+            </div>
+
+            <div class="note">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B8862B" stroke-width="2.2" stroke-linecap="round" style="flex:none;margin-top:1px"><path d="M12 8v5M12 16.5h.01"/><circle cx="12" cy="12" r="9"/></svg>
+              <div>
+                <b>Le ratio de la moyenne section n'est plus tenu depuis 09 h 12</b>
+                <p>18 enfants pour 1 éducatrice. Le décret 19-253 fixe la limite à 1 pour 12 dans cette tranche d'âge. L'écart est consigné au registre de conformité ; une réaffectation régularise la situation immédiatement.</p>
+              </div>
+              <div class="go"><div class="obtn pri">Réaffecter</div></div>
+            </div>
+
+            <div class="row">
+              <div class="card">
+                <h3>Les salles à cette heure <span class="link">Plan de l'établissement →</span></h3>
+                <div class="rlist">
+
+                  <div class="r">
+                    <div class="nm"><div class="em" style="background:#F6E7E0">🍼</div><div><b>Pouponnière</b><div class="ag">3 – 18 mois · Samira, Lamia, Rym</div></div></div>
+                    <div class="dots">
+                      <i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#E4DACA"></i><i style="background:#E4DACA"></i><i style="background:#E4DACA"></i><i style="background:#E4DACA"></i>
+                    </div>
+                    <div class="cnt"><b>12</b> présents / 16</div>
+                    <span class="pill ok">1 pour 4</span>
+                  </div>
+
+                  <div class="r">
+                    <div class="nm"><div class="em" style="background:#E9EFE2">🧸</div><div><b>Petite section</b><div class="ag">18 mois – 2 ans · Amina, Fatima</div></div></div>
+                    <div class="dots">
+                      <i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#E4DACA"></i><i style="background:#E4DACA"></i>
+                    </div>
+                    <div class="cnt"><b>18</b> présents / 20</div>
+                    <span class="pill ok">1 pour 9</span>
+                  </div>
+
+                  <div class="r" style="background:#FDF8EC;margin:0 -20px;padding-left:20px;padding-right:20px;border-bottom-color:#EBD9AE">
+                    <div class="nm"><div class="em" style="background:#F8EED8">🎨</div><div><b>Moyenne section</b><div class="ag">2 – 3 ans · Yasmina seule en poste</div></div></div>
+                    <div class="dots">
+                      <i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i><i style="background:#B8862B"></i>
+                    </div>
+                    <div class="cnt"><b>18</b> présents / 18</div>
+                    <span class="pill wr">1 pour 18</span>
+                  </div>
+
+                  <div class="r">
+                    <div class="nm"><div class="em" style="background:#F1EBF3">📚</div><div><b>Grande section</b><div class="ag">3 – 4 ans · Karima, Nawel</div></div></div>
+                    <div class="dots">
+                      <i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#5C7148"></i><i style="background:#E4DACA"></i><i style="background:#E4DACA"></i><i style="background:#E4DACA"></i><i style="background:#E4DACA"></i>
+                    </div>
+                    <div class="cnt"><b>19</b> présents / 23</div>
+                    <span class="pill ok">1 pour 10</span>
+                  </div>
+
+                  <div class="r">
+                    <div class="nm"><div class="em" style="background:#EFEFF4">🌙</div><div><b>Salle de sieste</b><div class="ag">Toutes sections · Houda</div></div></div>
+                    <div class="dots">
+                      <i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i><i style="background:#6D4E75"></i>
+                    </div>
+                    <div class="cnt"><b>17</b> en repos</div>
+                    <span class="pill nu">Surveillée</span>
+                  </div>
+
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:22px">
+                <div class="card">
+                  <h3>Recouvrement de septembre</h3>
+                  <div class="money">
+                    <div class="mline"><span class="amt">1 840 000</span><span class="cur">DZD encaissés</span><span class="pc">72 %</span></div>
+                    <div class="stack">
+                      <i style="width:72%;background:#5C7148"></i><i style="width:16%;background:#B8862B"></i><i style="width:12%;background:#B4502E"></i>
+                    </div>
+                    <div class="keys">
+                      <div><i style="background:#5C7148"></i><span>Réglé</span><b>1 840 000</b></div>
+                      <div><i style="background:#B8862B"></i><span>En attente</span><b>402 000</b></div>
+                      <div><i style="background:#B4502E"></i><span>En retard</span><b>318 000</b></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <h3>Journal du jour <span class="link">Tout lire →</span></h3>
+                  <div class="time">
+                    <div class="ev">
+                      <span class="tm">11 H 42</span>
+                      <b>Déjeuner — Petite section</b>
+                      <p>Tajine de légumes. 16 assiettes terminées, 2 partielles.</p>
+                    </div>
+                    <div class="ev q">
+                      <span class="tm">10 H 58</span>
+                      <b>Atelier peinture</b>
+                      <p>8 photos publiées après vérification des consentements.</p>
+                    </div>
+                    <div class="ev">
+                      <span class="tm">10 H 15</span>
+                      <b>Incident santé — Amine K.</b>
+                      <p>38,2 °C. Parent prévenu par SMS à 10 h 17, réponse reçue.</p>
+                    </div>
+                    <div class="ev q">
+                      <span class="tm">08 H 00</span>
+                      <b>12 factures émises</b>
+                      <p>Échéance au 5 octobre, envoi automatique effectué.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage-block">
+  <h2>Mobile — Flutter</h2>
+  <p class="sub">Le serif fait le travail de « marque » sur petit écran ; le terracotta reste réservé aux actions et aux états.</p>
+  <div class="phones">
+
+    <div class="phone-wrap">
+      <span class="cap">App parents — fil du jour</span>
+      <div class="phone"><div class="phone-screen c3 app">
+        <div class="notch"></div>
+        <div class="statusbar"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+
+        <div class="ah">
+          <div class="d">Lundi 22 septembre</div>
+          <h2>La journée de Lina</h2>
+        </div>
+
+        <div class="asc">
+          <div class="mc terra">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:46px;height:46px;border-radius:15px;background:rgba(255,247,242,.2);display:grid;place-items:center;font-size:20px">👧</div>
+              <div style="flex:1">
+                <b class="serif" style="font-size:17px">Lina, 2 ans</b>
+                <div class="mt2">Moyenne section · arrivée 08 h 12</div>
+              </div>
+              <div style="font-size:11px;font-weight:700;background:rgba(255,247,242,.2);border-radius:7px;padding:5px 10px">PRÉSENTE</div>
+            </div>
+            <div style="display:flex;gap:22px;margin-top:16px">
+              <div><div class="mt2" style="font-size:10px;letter-spacing:.12em">SIESTE</div><b class="serif" style="font-size:17px">1 h 35</b></div>
+              <div><div class="mt2" style="font-size:10px;letter-spacing:.12em">REPAS</div><b class="serif" style="font-size:17px">3 / 3</b></div>
+              <div><div class="mt2" style="font-size:10px;letter-spacing:.12em">HUMEUR</div><b class="serif" style="font-size:17px">Joyeuse</b></div>
+            </div>
+          </div>
+
+          <div class="mc">
+            <div class="mh"><b>Le déjeuner</b><span class="tt">11 H 42</span></div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <span class="pill ok">Entrée · tout</span>
+              <span class="pill ok">Plat · tout</span>
+              <span class="pill wr">Dessert · moitié</span>
+            </div>
+            <p style="margin:12px 0 0;font-size:12.5px;color:#7C7166;line-height:1.55;font-style:italic">
+              « Lina a beaucoup aimé le tajine de légumes, elle a réclamé du pain. » — Yasmina
+            </p>
+          </div>
+
+          <div class="mc">
+            <div class="mh"><b>Photos du jour</b><span class="tt">3 NOUVELLES</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
+              <div style="aspect-ratio:1;border-radius:11px;background:#F6E7E0;display:grid;place-items:center;font-size:26px">🎨</div>
+              <div style="aspect-ratio:1;border-radius:11px;background:#F8EED8;display:grid;place-items:center;font-size:26px">🧩</div>
+              <div style="aspect-ratio:1;border-radius:11px;background:#E9EFE2;display:grid;place-items:center;font-size:26px">🎵</div>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div class="mc" style="display:flex;align-items:center;gap:10px;padding:13px">
+              <div style="width:34px;height:34px;border-radius:11px;background:#F6E7E0;display:grid;place-items:center;font-size:16px">🤒</div>
+              <div><b style="font-size:12.5px;font-weight:650">Absence</b><div class="mt2">Signaler</div></div>
+            </div>
+            <div class="mc" style="display:flex;align-items:center;gap:10px;padding:13px">
+              <div style="width:34px;height:34px;border-radius:11px;background:#F8EED8;display:grid;place-items:center;font-size:16px">💳</div>
+              <div><b style="font-size:12.5px;font-weight:650">18 000 DZD</b><div class="mt2">Due 05/10</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabbar3">
+          <div class="tb on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>Journée</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>Photos</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/></svg>Messages</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Profil</div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="phone-wrap">
+      <span class="cap">App personnel — pointage offline</span>
+      <div class="phone"><div class="phone-screen c3 app">
+        <div class="notch"></div>
+        <div class="statusbar"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+
+        <div class="ah" style="display:flex;align-items:center;gap:11px">
+          <div style="flex:1">
+            <div class="d">Hydra · Moyenne section</div>
+            <h2>Pointage</h2>
+          </div>
+          <div class="av">SM</div>
+        </div>
+
+        <div style="margin:0 16px 12px;display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:10px;background:#E9EFE2;border:1px solid #CFDCC2;color:#3F5230;font-size:11.5px;font-weight:600">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 12a9 9 0 0 1 15-6.7L21 8"/></svg>
+          Synchronisé · 3 actions en attente d'envoi
+        </div>
+
+        <div class="asc">
+          <div class="grid2" style="grid-template-columns:repeat(3,1fr)">
+            <div class="mc" style="padding:12px"><b class="serif" style="font-size:22px">14</b><div class="mt2">présents</div></div>
+            <div class="mc" style="padding:12px"><b class="serif" style="font-size:22px">4</b><div class="mt2">attendus</div></div>
+            <div class="mc" style="padding:12px;background:#FDF8EC;border-color:#EBD9AE"><b class="serif" style="font-size:22px;color:#8A6A1E">1:18</b><div class="mt2" style="color:#8A6A1E">ratio</div></div>
+          </div>
+
+          <div class="mc" style="padding:6px 15px">
+            <div class="kr">
+              <div class="ki" style="background:#E9EFE2">👧</div>
+              <div><b>Lina Bouzid</b><span>08 h 12 · remise par le papa</span></div>
+              <span class="act o">Sortie</span>
+            </div>
+            <div class="kr">
+              <div class="ki" style="background:#F6E7E0">👦</div>
+              <div><b>Amine Kaci</b><span style="color:#B4502E">38,2 °C — à surveiller</span></div>
+              <span class="act o">Sortie</span>
+            </div>
+            <div class="kr">
+              <div class="ki" style="background:#F3EDE4">👧</div>
+              <div><b>Nour Hamdi</b><span>attendue à 08 h 30</span></div>
+              <span class="act">Entrée</span>
+            </div>
+            <div class="kr">
+              <div class="ki" style="background:#F3EDE4">👦</div>
+              <div><b>Yanis Meziane</b><span>attendu à 09 h 00</span></div>
+              <span class="act">Entrée</span>
+            </div>
+            <div class="kr">
+              <div class="ki" style="background:#E9EFE2">👧</div>
+              <div><b>Maya Slimani</b><span>07 h 58 · remise par la maman</span></div>
+              <span class="act o">Sortie</span>
+            </div>
+            <div class="kr">
+              <div class="ki" style="background:#E9EFE2">👦</div>
+              <div><b>Rayan Tabet</b><span>08 h 05 · grand-mère</span></div>
+              <span class="act o">Sortie</span>
+            </div>
+          </div>
+
+          <div class="act" style="margin:0;text-align:center;padding:13px">Ajouter une note de journal</div>
+        </div>
+
+        <div class="tabbar3">
+          <div class="tb on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg>Présence</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg>Journal</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>Médias</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Moi</div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+</section>
+
+<div class="rationale">
+  <div class="r-card good">
+    <h3>Pourquoi ça marche</h3>
+    <ul>
+      <li>Immédiatement reconnaissable : aucun concurrent algérien ne ressemble à ça.</li>
+      <li>Le serif + le crème évoquent le carnet de liaison papier que remplacent vos écrans.</li>
+      <li>Palette terre qui fonctionne culturellement au Maghreb sans folklore appuyé.</li>
+      <li>Pas d'ombres : rendu impeccable en PDF (factures, attestations).</li>
+    </ul>
+  </div>
+  <div class="r-card warn">
+    <h3>À surveiller</h3>
+    <ul>
+      <li>Le serif doit avoir un équivalent arabe crédible — à valider (ex. Rubik, Noto Naskh).</li>
+      <li>Le contraste terracotta/crème demande une vérification AA sur les petits textes.</li>
+      <li>Moins « moderne tech » : peut sembler daté auprès d'un acheteur qui compare à Brightwheel.</li>
+    </ul>
+  </div>
+  <div class="r-card">
+    <h3>Coût d'implémentation</h3>
+    <ul>
+      <li><b>Moyen.</b> Nouvelle famille de police à charger (poids + fallback arabe).</li>
+      <li>Passage ombres → bordures : quelques composants seulement.</li>
+      <li>Flutter : deux familles de polices embarquées, taille APK +0,3 Mo.</li>
+      <li>Icônes en trait fin à uniformiser sur les 23 écrans.</li>
+    </ul>
+  </div>
+</div>
+
+<nav class="stage-nav">
+  <a href="concept-2-bento.html">← Concept 02 · Bento Pro</a>
+  <a href="concept-4-medina.html">Concept 04 · Medina →</a>
+</nav>
+
+<script src="_fit.js"></script>
+</body>
+</html>

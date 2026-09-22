@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cr-cheDZ — 5 concepts de design</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #0d1117;
+  background-image:
+    radial-gradient(1000px 560px at 10% -8%, #1b2431 0%, transparent 60%),
+    radial-gradient(1000px 560px at 90% 0%, #191f2e 0%, transparent 55%);
+  color: #c9d3e0;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  padding-bottom: 90px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+
+header.hero { padding: 66px 0 38px; }
+header.hero .eyebrow {
+  font-size: 12px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: #64748b;
+}
+header.hero h1 {
+  margin: 14px 0 0; font-size: 44px; line-height: 1.08; font-weight: 750;
+  letter-spacing: -.035em; color: #f1f5f9; max-width: 22ch;
+}
+header.hero p.lead {
+  margin: 18px 0 0; font-size: 16.5px; color: #93a3b8; max-width: 66ch; line-height: 1.6;
+}
+header.hero .meta {
+  margin-top: 26px; display: flex; gap: 10px; flex-wrap: wrap;
+}
+header.hero .meta span {
+  font-size: 12.5px; font-weight: 600; color: #8ea0b5; border: 1px solid #2c3743;
+  border-radius: 999px; padding: 6px 14px;
+}
+
+h2.sec {
+  margin: 52px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .17em;
+  text-transform: uppercase; color: #7b8a9c;
+}
+p.secsub { margin: 0 0 22px; font-size: 14px; color: #6b7a8c; max-width: 70ch; }
+
+/* ── Cartes concept ───────────────────────────────────────────────────── */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; }
+
+a.concept {
+  display: flex; flex-direction: column; text-decoration: none; color: inherit;
+  background: #131920; border: 1px solid #242d39; border-radius: 16px; overflow: hidden;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+a.concept:hover {
+  transform: translateY(-3px); border-color: #3d4d61;
+  box-shadow: 0 22px 44px -22px rgba(0,0,0,.85);
+}
+
+/* Aperçu miniature — chaque concept dessine son propre langage */
+.prev { height: 168px; position: relative; overflow: hidden; display: flex; }
+.prev .sb { width: 30%; }
+.prev .bd { flex: 1; padding: 13px; display: flex; flex-direction: column; gap: 8px; }
+.prev .ln { border-radius: 4px; }
+.prev .tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+.prev .tile { border-radius: 6px; height: 34px; }
+
+/* 1 Sérénité */
+.p1 { background: #F4F7F5; }
+.p1 .sb { background: #fff; border-right: 1px solid #E6EDEA; padding: 12px 9px; display: flex; flex-direction: column; gap: 6px; }
+.p1 .sb .i { height: 9px; border-radius: 5px; background: #ECFDF8; }
+.p1 .sb .i:first-child { background: #0F766E; height: 16px; }
+.p1 .tile { background: #fff; box-shadow: 0 4px 12px -8px rgba(16,40,36,.4); }
+.p1 .ln { background: #fff; box-shadow: 0 4px 12px -8px rgba(16,40,36,.4); }
+
+/* 2 Bento */
+.p2 { background: #0A0C10; }
+.p2 .sb { width: 15%; background: #0C0F14; border-right: 1px solid #222834; padding: 10px 6px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.p2 .sb .i { width: 17px; height: 17px; border-radius: 5px; background: #1A1F29; }
+.p2 .sb .i:first-child { background: #A3E635; }
+.p2 .tile { background: #12151C; border: 1px solid #222834; }
+.p2 .ln { background: #12151C; border: 1px solid #222834; }
+
+/* 3 Atelier */
+.p3 { background: #FAF6F0; }
+.p3 .sb { background: #F3EDE4; border-right: 1px solid #E4DACA; padding: 12px 9px; display: flex; flex-direction: column; gap: 6px; }
+.p3 .sb .i { height: 9px; border-radius: 4px; background: #E4DACA; }
+.p3 .sb .i:first-child { background: #B4502E; height: 16px; }
+.p3 .tile { background: #FFFDFA; border: 1px solid #E4DACA; }
+.p3 .ln { background: #FFFDFA; border: 1px solid #E4DACA; }
+
+/* 4 Medina */
+.p4 { background: #F7F9FA;
+  background-image:
+    linear-gradient(45deg, rgba(27,79,114,.05) 25%, transparent 25%, transparent 75%, rgba(27,79,114,.05) 75%),
+    linear-gradient(45deg, rgba(27,79,114,.05) 25%, transparent 25%, transparent 75%, rgba(27,79,114,.05) 75%);
+  background-size: 18px 18px; background-position: 0 0, 9px 9px;
+}
+.p4 .sb { background: #1B4F72; padding: 12px 9px; display: flex; flex-direction: column; gap: 6px; }
+.p4 .sb .i { height: 9px; border-radius: 4px; background: rgba(255,255,255,.14); }
+.p4 .sb .i:first-child { background: #fff; height: 16px; }
+.p4 .tile { background: #fff; border: 1px solid #DDE6EC; border-top: 3px solid #1B4F72; }
+.p4 .tile:nth-child(2) { border-top-color: #0E7A5F; }
+.p4 .tile:nth-child(3) { border-top-color: #C98A16; }
+.p4 .ln { background: #fff; border: 1px solid #DDE6EC; }
+
+/* 5 Kiosque */
+.p5 { background: #fff; }
+.p5 .sb { background: #F2F4F7; border-right: 3px solid #101418; padding: 12px 9px; display: flex; flex-direction: column; gap: 7px; }
+.p5 .sb .i { height: 11px; border-radius: 4px; border: 2px solid #C3CBD4; }
+.p5 .sb .i:first-child { background: #101418; border-color: #101418; height: 17px; }
+.p5 .tile { background: #fff; border: 3px solid #101418; }
+.p5 .ln { background: #fff; border: 3px solid #101418; }
+
+.cbody { padding: 18px 20px 20px; display: flex; flex-direction: column; flex: 1; }
+.cbody .top { display: flex; align-items: baseline; gap: 10px; }
+.cbody .num { font-size: 11.5px; font-weight: 700; letter-spacing: .15em; color: #5b6b80; }
+.cbody h3 { margin: 0; font-size: 21px; font-weight: 720; letter-spacing: -.025em; color: #f1f5f9; }
+.cbody .tagline { margin: 7px 0 0; font-size: 13.5px; color: #8fa0b4; line-height: 1.55; }
+.cbody .chips { margin-top: 14px; display: flex; gap: 6px; flex-wrap: wrap; }
+.cbody .chips span {
+  font-size: 11px; font-weight: 650; color: #9fb0c4; border: 1px solid #2c3743;
+  border-radius: 6px; padding: 3px 9px;
+}
+.cbody .pal { margin-top: 15px; display: flex; gap: 5px; }
+.cbody .pal i { width: 26px; height: 26px; border-radius: 7px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+.cbody .go {
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid #222b36;
+  font-size: 13px; font-weight: 650; color: #cbd5e1; display: flex; align-items: center; gap: 7px;
+}
+a.concept:hover .go { color: #fff; }
+a.concept:hover .go .arrow { transform: translateX(3px); }
+.go .arrow { transition: transform .18s; }
+
+/* ── Tableau comparatif ───────────────────────────────────────────────── */
+.cmp { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13.5px; }
+.cmp th, .cmp td { text-align: left; padding: 12px 14px; border-bottom: 1px solid #222b36; }
+.cmp thead th {
+  font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #7b8a9c;
+  border-bottom: 1px solid #2c3743;
+}
+.cmp tbody th { font-weight: 650; color: #cbd5e1; }
+.cmp td { color: #93a3b8; }
+.cmp .s { font-weight: 700; }
+.cmp .s5 { color: #4ade80; } .cmp .s4 { color: #a3e635; }
+.cmp .s3 { color: #fbbf24; } .cmp .s2 { color: #fb923c; } .cmp .s1 { color: #f87171; }
+.cmp-scroll { overflow-x: auto; border: 1px solid #242d39; border-radius: 14px; background: #131920; padding: 4px 6px 6px; }
+
+.reco {
+  margin-top: 26px; background: #131920; border: 1px solid #242d39; border-left: 3px solid #4ade80;
+  border-radius: 14px; padding: 20px 22px;
+}
+.reco h3 { margin: 0 0 10px; font-size: 15px; color: #f1f5f9; font-weight: 700; }
+.reco p { margin: 0 0 10px; font-size: 14px; color: #9fb0c4; line-height: 1.65; max-width: 84ch; }
+.reco p:last-child { margin-bottom: 0; }
+.reco b { color: #dbe4ee; }
+.reco code { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; background: #1a212b; border-radius: 4px; padding: 1px 6px; color: #a3e635; }
+
+footer.f { margin-top: 56px; font-size: 12.5px; color: #58637a; }
+footer.f code { font-family: ui-monospace, Menlo, monospace; background: #161c25; border-radius: 4px; padding: 2px 7px; }
+
+@media (max-width: 640px) {
+  header.hero h1 { font-size: 32px; }
+  header.hero { padding: 42px 0 26px; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">cr-cheDZ · exploration visuelle</div>
+    <h1>Cinq directions de design pour le logiciel de crèche</h1>
+    <p class="lead">
+      Chaque concept est une maquette complète et cohérente : la console web de direction
+      <em>et</em> les deux applications mobiles (parents, personnel). Les écrans reprennent vos
+      fonctionnalités réelles — présences, ratios du décret 19-253, journal quotidien,
+      facturation en DZD, conformité loi 25-11, synchronisation hors-ligne.
+      Toutes les données affichées sont fictives.
+    </p>
+    <div class="meta">
+      <span>5 concepts</span>
+      <span>Web + 2 apps mobiles</span>
+      <span>FR &amp; عربي</span>
+      <span>Données synthétiques</span>
+    </div>
+  </header>
+
+  <h2 class="sec">Les concepts</h2>
+  <p class="secsub">Cliquez sur une carte pour voir la maquette en grand, avec les écrans mobiles et une analyse coût / risque.</p>
+
+  <div class="grid">
+
+    <a class="concept" href="concept-1-serenite.html">
+      <div class="prev p1">
+        <div class="sb"><div class="i"></div><div class="i"></div><div class="i"></div><div class="i"></div><div class="i"></div></div>
+        <div class="bd">
+          <div class="tiles"><div class="tile"></div><div class="tile"></div><div class="tile"></div></div>
+          <div class="ln" style="flex:1"></div>
+        </div>
+      </div>
+      <div class="cbody">
+        <div class="top"><span class="num">01</span><h3>Sérénité</h3></div>
+        <p class="tagline">Clair, arrondi, teal et sauge. Le registre du soin : rassurant pour les parents, reposant pour un usage quotidien de huit heures.</p>
+        <div class="chips"><span>Valeur sûre</span><span>Migration rapide</span><span>Peu différenciant</span></div>
+        <div class="pal"><i style="background:#0F766E"></i><i style="background:#0D9488"></i><i style="background:#ECFDF8"></i><i style="background:#D97706"></i><i style="background:#12211F"></i></div>
+        <div class="go">Voir la maquette <span class="arrow">→</span></div>
+      </div>
+    </a>
+
+    <a class="concept" href="concept-2-bento.html">
+      <div class="prev p2">
+        <div class="sb"><div class="i"></div><div class="i"></div><div class="i"></div><div class="i"></div></div>
+        <div class="bd">
+          <div class="tiles" style="grid-template-columns:2fr 1fr"><div class="tile" style="height:52px"></div><div class="tile" style="height:52px"></div></div>
+          <div class="tiles"><div class="tile"></div><div class="tile"></div><div class="tile"></div></div>
+          <div class="ln" style="flex:1"></div>
+        </div>
+      </div>
+      <div class="cbody">
+        <div class="top"><span class="num">02</span><h3>Bento Pro</h3></div>
+        <p class="tagline">Sombre et dense, tuiles de tailles inégales. Un centre de contrôle multi-sites où la taille d'une tuile encode son importance.</p>
+        <div class="chips"><span>Densité max</span><span>Premium B2B</span><span>Froid pour les parents</span></div>
+        <div class="pal"><i style="background:#0A0C10"></i><i style="background:#12151C"></i><i style="background:#A3E635"></i><i style="background:#38BDF8"></i><i style="background:#FB7185"></i></div>
+        <div class="go">Voir la maquette <span class="arrow">→</span></div>
+      </div>
+    </a>
+
+    <a class="concept" href="concept-3-atelier.html">
+      <div class="prev p3">
+        <div class="sb"><div class="i"></div><div class="i"></div><div class="i"></div><div class="i"></div><div class="i"></div></div>
+        <div class="bd">
+          <div class="tiles"><div class="tile"></div><div class="tile"></div><div class="tile"></div></div>
+          <div class="ln" style="flex:1"></div>
+        </div>
+      </div>
+      <div class="cbody">
+        <div class="top"><span class="num">03</span><h3>Atelier</h3></div>
+        <p class="tagline">Éditorial : papier crème, titres en serif, terracotta et ocre, filets fins au lieu d'ombres. L'anti-SaaS générique.</p>
+        <div class="chips"><span>Très différenciant</span><span>Chaleureux</span><span>Police arabe à valider</span></div>
+        <div class="pal"><i style="background:#FAF6F0"></i><i style="background:#B4502E"></i><i style="background:#B8862B"></i><i style="background:#5C7148"></i><i style="background:#221E1A"></i></div>
+        <div class="go">Voir la maquette <span class="arrow">→</span></div>
+      </div>
+    </a>
+
+    <a class="concept" href="concept-4-medina.html">
+      <div class="prev p4">
+        <div class="sb"><div class="i"></div><div class="i"></div><div class="i"></div><div class="i"></div><div class="i"></div></div>
+        <div class="bd">
+          <div class="tiles"><div class="tile"></div><div class="tile"></div><div class="tile"></div></div>
+          <div class="ln" style="flex:1"></div>
+        </div>
+      </div>
+      <div class="cbody">
+        <div class="top"><span class="num">04</span><h3>Medina</h3></div>
+        <p class="tagline">Bleu de Ghardaïa, vert du drapeau, zellige à 4 %. L'arabe traité en langue de premier rang, avec un RTL réellement démontré.</p>
+        <div class="chips"><span>Ancrage local</span><span>RTL natif</span><span>Chantier i18n</span></div>
+        <div class="pal"><i style="background:#1B4F72"></i><i style="background:#0E7A5F"></i><i style="background:#C98A16"></i><i style="background:#F7F9FA"></i><i style="background:#12222C"></i></div>
+        <div class="go">Voir la maquette <span class="arrow">→</span></div>
+      </div>
+    </a>
+
+    <a class="concept" href="concept-5-kiosque.html">
+      <div class="prev p5">
+        <div class="sb"><div class="i"></div><div class="i"></div><div class="i"></div><div class="i"></div></div>
+        <div class="bd">
+          <div class="tiles"><div class="tile"></div><div class="tile"></div><div class="tile"></div></div>
+          <div class="ln" style="flex:1"></div>
+        </div>
+      </div>
+      <div class="cbody">
+        <div class="top"><span class="num">05</span><h3>Kiosque</h3></div>
+        <p class="tagline">Accessibilité d'abord : contraste AAA, très gros texte, cibles ≥ 64 px, statut jamais porté par la couleur seule. Pour la tablette murale en plein soleil.</p>
+        <div class="chips"><span>WCAG AAA</span><span>Zéro formation</span><span>Austère</span></div>
+        <div class="pal"><i style="background:#101418"></i><i style="background:#0B4FCC"></i><i style="background:#0A6B3D"></i><i style="background:#8A5200"></i><i style="background:#FFFFFF"></i></div>
+        <div class="go">Voir la maquette <span class="arrow">→</span></div>
+      </div>
+    </a>
+
+  </div>
+
+  <h2 class="sec">Comparatif</h2>
+  <p class="secsub">Notes de 1 à 5 pour situer les compromis. Il n'y a pas de gagnant absolu : le bon choix dépend de qui vous voulez séduire en premier.</p>
+
+  <div class="cmp-scroll">
+    <table class="cmp">
+      <thead>
+        <tr>
+          <th style="min-width:180px">Critère</th>
+          <th>01 Sérénité</th>
+          <th>02 Bento Pro</th>
+          <th>03 Atelier</th>
+          <th>04 Medina</th>
+          <th>05 Kiosque</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>Confiance des parents</th>
+          <td><span class="s s5">5</span> · très rassurant</td>
+          <td><span class="s s2">2</span> · froid</td>
+          <td><span class="s s4">4</span> · chaleureux</td>
+          <td><span class="s s5">5</span> · familier</td>
+          <td><span class="s s3">3</span> · fonctionnel</td>
+        </tr>
+        <tr>
+          <th>Densité d'information</th>
+          <td><span class="s s3">3</span></td>
+          <td><span class="s s5">5</span></td>
+          <td><span class="s s4">4</span></td>
+          <td><span class="s s4">4</span></td>
+          <td><span class="s s2">2</span></td>
+        </tr>
+        <tr>
+          <th>Différenciation marché</th>
+          <td><span class="s s2">2</span> · très vu</td>
+          <td><span class="s s3">3</span></td>
+          <td><span class="s s5">5</span></td>
+          <td><span class="s s5">5</span> · unique en DZ</td>
+          <td><span class="s s3">3</span></td>
+        </tr>
+        <tr>
+          <th>Lisibilité tablette / soleil</th>
+          <td><span class="s s4">4</span></td>
+          <td><span class="s s1">1</span> · sombre</td>
+          <td><span class="s s4">4</span></td>
+          <td><span class="s s4">4</span></td>
+          <td><span class="s s5">5</span></td>
+        </tr>
+        <tr>
+          <th>Accessibilité (WCAG)</th>
+          <td><span class="s s4">4</span> · AA</td>
+          <td><span class="s s3">3</span> · AA à vérifier</td>
+          <td><span class="s s3">3</span> · AA à vérifier</td>
+          <td><span class="s s4">4</span> · AA</td>
+          <td><span class="s s5">5</span> · AAA</td>
+        </tr>
+        <tr>
+          <th>Prêt pour l'arabe / RTL</th>
+          <td><span class="s s4">4</span> · symétrique</td>
+          <td><span class="s s3">3</span></td>
+          <td><span class="s s2">2</span> · serif arabe ?</td>
+          <td><span class="s s5">5</span> · démontré</td>
+          <td><span class="s s4">4</span></td>
+        </tr>
+        <tr>
+          <th>Coût de mise en œuvre</th>
+          <td><span class="s s5">5</span> · faible</td>
+          <td><span class="s s2">2</span> · élevé</td>
+          <td><span class="s s3">3</span> · moyen</td>
+          <td><span class="s s2">2</span> · élevé</td>
+          <td><span class="s s4">4</span> · faible</td>
+        </tr>
+        <tr>
+          <th>Écart vs code existant</th>
+          <td>Palette seule</td>
+          <td>Grille + thème sombre</td>
+          <td>Polices + bordures</td>
+          <td>i18n RTL complet</td>
+          <td>Échelle typo</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="reco">
+    <h3>Lecture rapide</h3>
+    <p>
+      <b>Si vous devez livrer vite et sans risque</b> → concept 01. Votre <code>tokens.ts</code> actuel
+      (Inter, radius 6/10/16, bleu #2563EB) est déjà à 80 % de cette direction : c'est un changement de palette,
+      pas une refonte.
+    </p>
+    <p>
+      <b>Si l'argument de vente est « fait pour l'Algérie »</b> → concept 04. C'est le plus coûteux, mais le
+      travail RTL qu'il impose vous attend de toute façon : votre i18n déclare déjà <code>Locale = 'fr' | 'ar'</code>
+      et aucun concurrent importé ne traite l'arabe correctement.
+    </p>
+    <p>
+      <b>Combinaison réaliste</b> : prendre le concept 01 ou 04 comme thème principal, et garder le concept 05
+      comme <em>mode kiosque</em> optionnel pour les tablettes de pointage en salle — c'est un simple jeu de tokens
+      alternatif, pas une deuxième application.
+    </p>
+  </div>
+
+  <footer class="f">
+    Maquettes statiques · HTML/CSS seul, aucune dépendance · <code>docs/design/</code> ·
+    branche <code>arena/01a0ca72-cr-chedz</code>
+  </footer>
+</div>
+
+</body>
+</html>

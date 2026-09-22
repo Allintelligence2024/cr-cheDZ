@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concept 1 — Sérénité · cr-cheDZ</title>
+<link rel="stylesheet" href="_shell.css">
+<style>
+/* ===========================================================================
+ * CONCEPT 1 — « SÉRÉNITÉ »
+ * Clair, calme, arrondi. Teal profond + sauge. Beaucoup de blanc, ombres très
+ * douces, aucune bordure dure. Référence : Famly / Lillio / Headspace.
+ * Objectif : rassurer (on manipule des données d'enfants), lisible 8 h/jour.
+ * ======================================================================== */
+.c1 {
+  --teal: #0F766E;
+  --teal-600: #0D9488;
+  --teal-50: #ECFDF8;
+  --sage: #F4F7F5;
+  --ink: #12211F;
+  --muted: #6B807C;
+  --line: #E6EDEA;
+  --amber: #D97706;
+  --amber-bg: #FEF6E7;
+  --rose: #E11D48;
+  --rose-bg: #FFF1F3;
+  --blue: #3B82F6;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--ink);
+  background: var(--sage);
+  -webkit-font-smoothing: antialiased;
+}
+.c1 *, .c1 *::before, .c1 *::after { box-sizing: border-box; }
+
+/* ── Ossature web ───────────────────────────────────────────────────────── */
+.c1.web { display: flex; width: 1280px; min-height: 800px; }
+.c1 .side {
+  width: 236px; flex: none; background: #fff; padding: 22px 16px;
+  display: flex; flex-direction: column; gap: 26px; border-right: 1px solid var(--line);
+}
+.c1 .brand { display: flex; align-items: center; gap: 11px; padding: 0 6px; }
+.c1 .brand .mark {
+  width: 38px; height: 38px; border-radius: 13px; flex: none;
+  background: linear-gradient(145deg, var(--teal-600), var(--teal));
+  display: grid; place-items: center; color: #fff;
+  box-shadow: 0 6px 14px -5px rgba(15,118,110,.6);
+}
+.c1 .brand b { display: block; font-size: 14.5px; letter-spacing: -.01em; }
+.c1 .brand span { display: block; font-size: 11.5px; color: var(--muted); }
+
+.c1 .navgroup { display: flex; flex-direction: column; gap: 2px; }
+.c1 .navgroup > p {
+  margin: 0 0 7px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: .13em;
+  text-transform: uppercase; color: #A3B3AF;
+}
+.c1 .nav {
+  display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: 11px;
+  font-size: 13.5px; font-weight: 500; color: #435551; cursor: default;
+}
+.c1 .nav svg { flex: none; opacity: .75; }
+.c1 .nav.on { background: var(--teal-50); color: var(--teal); font-weight: 650; }
+.c1 .nav.on svg { opacity: 1; }
+.c1 .nav .pill {
+  margin-left: auto; font-size: 10.5px; font-weight: 700; background: var(--rose);
+  color: #fff; border-radius: 999px; padding: 1px 7px;
+}
+.c1 .side .who {
+  margin-top: auto; display: flex; align-items: center; gap: 10px;
+  padding: 11px; background: var(--sage); border-radius: 13px;
+}
+.c1 .avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  font-size: 12.5px; font-weight: 700; color: #fff; background: #0F766E;
+}
+.c1 .side .who b { font-size: 12.5px; display: block; }
+.c1 .side .who span { font-size: 11px; color: var(--muted); }
+
+/* ── Contenu ────────────────────────────────────────────────────────────── */
+.c1 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.c1 .topbar {
+  display: flex; align-items: center; gap: 16px; padding: 16px 28px;
+  background: #fff; border-bottom: 1px solid var(--line);
+}
+.c1 .topbar h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+.c1 .topbar .date { font-size: 12.5px; color: var(--muted); }
+.c1 .search {
+  margin-left: auto; display: flex; align-items: center; gap: 8px; width: 260px;
+  background: var(--sage); border-radius: 11px; padding: 9px 13px; color: #97A8A4; font-size: 13px;
+}
+.c1 .iconbtn {
+  width: 38px; height: 38px; border-radius: 11px; background: var(--sage);
+  display: grid; place-items: center; color: #4B5E5A; position: relative;
+}
+.c1 .iconbtn .dot {
+  position: absolute; top: 9px; right: 10px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--rose); box-shadow: 0 0 0 2px var(--sage);
+}
+.c1 .langtog {
+  display: flex; background: var(--sage); border-radius: 10px; padding: 3px; font-size: 12px; font-weight: 600;
+}
+.c1 .langtog span { padding: 5px 11px; border-radius: 8px; color: var(--muted); }
+.c1 .langtog span.on { background: #fff; color: var(--teal); box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+
+.c1 .canvas { padding: 24px 28px 32px; display: flex; flex-direction: column; gap: 20px; }
+
+/* ── Cartes ─────────────────────────────────────────────────────────────── */
+.c1 .card {
+  background: #fff; border-radius: 18px; padding: 20px;
+  box-shadow: 0 1px 2px rgba(16,40,36,.04), 0 8px 24px -16px rgba(16,40,36,.18);
+}
+.c1 .card h3 {
+  margin: 0 0 3px; font-size: 14.5px; font-weight: 700; letter-spacing: -.01em;
+  display: flex; align-items: center; gap: 9px;
+}
+.c1 .card .hint { margin: 0 0 16px; font-size: 12px; color: var(--muted); }
+.c1 .card .more { margin-left: auto; font-size: 12px; color: var(--teal); font-weight: 600; }
+
+.c1 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.c1 .kpi { position: relative; overflow: hidden; }
+.c1 .kpi .ico {
+  width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; margin-bottom: 14px;
+}
+.c1 .kpi p { margin: 0; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.c1 .kpi .val {
+  font-size: 30px; font-weight: 750; letter-spacing: -.035em; line-height: 1.1; margin: 4px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.c1 .kpi .val small { font-size: 15px; font-weight: 600; color: #A3B3AF; letter-spacing: 0; }
+.c1 .trend { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 650; }
+.c1 .trend.up { color: #059669; } .c1 .trend.down { color: var(--rose); } .c1 .trend.flat { color: var(--muted); }
+.c1 .spark { position: absolute; right: 0; bottom: 0; opacity: .5; }
+
+.c1 .row2 { display: grid; grid-template-columns: 1.55fr 1fr; gap: 20px; align-items: start; }
+
+/* ── Salles ─────────────────────────────────────────────────────────────── */
+.c1 .room {
+  display: grid; grid-template-columns: 34px 1fr 150px 108px 92px; align-items: center;
+  gap: 14px; padding: 13px 10px; border-radius: 13px;
+}
+.c1 .room:nth-child(odd) { background: #FBFCFC; }
+.c1 .room .rdot { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; font-size: 15px; }
+.c1 .room b { font-size: 13.5px; display: block; font-weight: 650; }
+.c1 .room span { font-size: 11.5px; color: var(--muted); }
+.c1 .bar { height: 7px; border-radius: 999px; background: #EDF2F0; overflow: hidden; }
+.c1 .bar i { display: block; height: 100%; border-radius: 999px; }
+.c1 .barlabel { font-size: 11px; color: var(--muted); margin-top: 5px; display: block; font-variant-numeric: tabular-nums; }
+.c1 .chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 650;
+  padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+}
+.c1 .chip.ok { background: var(--teal-50); color: #0B6B5F; }
+.c1 .chip.warn { background: var(--amber-bg); color: #A35A06; }
+.c1 .chip.bad { background: var(--rose-bg); color: #BE123C; }
+.c1 .chip.info { background: #EFF6FF; color: #1D4ED8; }
+.c1 .miniavs { display: flex; }
+.c1 .miniavs i {
+  width: 25px; height: 25px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 9.5px; font-weight: 700; color: #fff; border: 2px solid #fff; margin-left: -7px; font-style: normal;
+}
+.c1 .miniavs i:first-child { margin-left: 0; }
+
+/* ── Alerte conformité ──────────────────────────────────────────────────── */
+.c1 .alert {
+  display: flex; gap: 13px; padding: 15px 16px; border-radius: 15px;
+  background: var(--amber-bg); border: 1px solid #F6E0B8;
+}
+.c1 .alert .ai { width: 34px; height: 34px; border-radius: 11px; background: #F59E0B; display: grid; place-items: center; flex: none; color: #fff; }
+.c1 .alert b { font-size: 13px; display: block; color: #92400E; }
+.c1 .alert p { margin: 3px 0 0; font-size: 12px; color: #A16207; line-height: 1.45; }
+.c1 .alert .act {
+  margin-left: auto; align-self: center; background: #fff; color: #92400E; font-size: 12px; font-weight: 650;
+  padding: 8px 14px; border-radius: 10px; border: 1px solid #F6E0B8; white-space: nowrap;
+}
+
+/* ── Fil journal ────────────────────────────────────────────────────────── */
+.c1 .feed { display: flex; flex-direction: column; }
+.c1 .fitem { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid #F1F5F3; }
+.c1 .fitem:last-child { border-bottom: 0; padding-bottom: 0; }
+.c1 .fico { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex: none; font-size: 14px; }
+.c1 .fitem b { font-size: 12.8px; font-weight: 650; }
+.c1 .fitem p { margin: 2px 0 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.c1 .fitem .t { margin-left: auto; font-size: 11px; color: #A3B3AF; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.c1 .donut { display: flex; align-items: center; gap: 18px; }
+.c1 .legend { display: flex; flex-direction: column; gap: 9px; font-size: 12.5px; }
+.c1 .legend div { display: flex; align-items: center; gap: 8px; }
+.c1 .legend i { width: 9px; height: 9px; border-radius: 3px; }
+.c1 .legend span { color: var(--muted); }
+.c1 .legend b { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.c1 .btn {
+  display: inline-flex; align-items: center; gap: 8px; background: var(--teal); color: #fff;
+  font-size: 13px; font-weight: 650; padding: 11px 17px; border-radius: 12px;
+  box-shadow: 0 6px 14px -7px rgba(15,118,110,.8);
+}
+.c1 .btn.ghost { background: #fff; color: var(--teal); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+.c1.app { height: 100%; display: flex; flex-direction: column; background: var(--sage); }
+.c1.app .statusbar { color: #12211F; background: transparent; }
+.c1 .apphead { padding: 4px 20px 16px; background: transparent; }
+.c1 .apphead .hi { font-size: 12.5px; color: var(--muted); }
+.c1 .apphead h2 { margin: 2px 0 0; font-size: 22px; font-weight: 750; letter-spacing: -.028em; }
+.c1 .appscroll { flex: 1; overflow: hidden; padding: 0 16px 14px; display: flex; flex-direction: column; gap: 13px; }
+
+.c1 .hero {
+  border-radius: 22px; padding: 18px; color: #fff; position: relative; overflow: hidden;
+  background: linear-gradient(140deg, #0D9488, #0F766E 55%, #115E59);
+}
+.c1 .hero::after {
+  content: ''; position: absolute; width: 170px; height: 170px; border-radius: 50%;
+  background: rgba(255,255,255,.09); right: -55px; top: -65px;
+}
+.c1 .hero .kidrow { display: flex; align-items: center; gap: 12px; position: relative; }
+.c1 .hero .kid {
+  width: 46px; height: 46px; border-radius: 16px; background: rgba(255,255,255,.2);
+  display: grid; place-items: center; font-size: 19px; border: 1.5px solid rgba(255,255,255,.3);
+}
+.c1 .hero b { font-size: 16px; display: block; }
+.c1 .hero .sub { font-size: 12px; opacity: .82; }
+.c1 .hero .state {
+  margin-left: auto; background: rgba(255,255,255,.22); border-radius: 999px;
+  padding: 5px 11px; font-size: 11.5px; font-weight: 650;
+  display: inline-flex; gap: 6px; align-items: center;
+}
+.c1 .hero .stats { display: flex; gap: 20px; margin-top: 16px; position: relative; }
+.c1 .hero .stats div span { font-size: 10.5px; opacity: .78; display: block; letter-spacing: .04em; text-transform: uppercase; }
+.c1 .hero .stats div b { font-size: 15px; font-weight: 700; }
+
+.c1 .mcard { background: #fff; border-radius: 20px; padding: 15px; box-shadow: 0 6px 18px -14px rgba(16,40,36,.4); }
+.c1 .mcard .mh { display: flex; align-items: center; margin-bottom: 11px; }
+.c1 .mcard .mh b { font-size: 13.5px; font-weight: 700; }
+.c1 .mcard .mh .t { margin-left: auto; font-size: 11px; color: #A3B3AF; }
+
+.c1 .qgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.c1 .q {
+  background: #fff; border-radius: 17px; padding: 13px; display: flex; flex-direction: column; gap: 8px;
+  box-shadow: 0 6px 18px -14px rgba(16,40,36,.4);
+}
+.c1 .q .qi { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; }
+.c1 .q b { font-size: 12.8px; font-weight: 650; }
+.c1 .q span { font-size: 11px; color: var(--muted); }
+
+.c1 .photorow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.c1 .ph { aspect-ratio: 1; border-radius: 13px; display: grid; place-items: center; font-size: 26px; }
+
+.c1 .tabbar {
+  display: flex; background: #fff; padding: 9px 8px 20px; border-top: 1px solid var(--line); flex: none;
+}
+.c1 .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #A3B3AF; font-size: 10px; font-weight: 600; }
+.c1 .tab.on { color: var(--teal); }
+
+/* App personnel */
+.c1 .stafftop { background: #fff; padding: 4px 18px 14px; }
+.c1 .syncbar {
+  display: flex; align-items: center; gap: 8px; background: var(--teal-50); color: #0B6B5F;
+  font-size: 11.5px; font-weight: 600; padding: 8px 13px; border-radius: 11px; margin-bottom: 13px;
+}
+.c1 .seg { display: flex; background: var(--sage); border-radius: 12px; padding: 4px; }
+.c1 .seg span { flex: 1; text-align: center; font-size: 12px; font-weight: 650; padding: 8px 0; border-radius: 9px; color: var(--muted); }
+.c1 .seg span.on { background: #fff; color: var(--teal); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.c1 .kidlist { flex: 1; overflow: hidden; padding: 13px 16px; display: flex; flex-direction: column; gap: 9px; }
+.c1 .kidrow2 {
+  background: #fff; border-radius: 16px; padding: 12px 13px; display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 5px 16px -14px rgba(16,40,36,.5);
+}
+.c1 .kidrow2 .av { width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; font-size: 17px; flex: none; }
+.c1 .kidrow2 b { font-size: 13.5px; display: block; font-weight: 650; }
+.c1 .kidrow2 span { font-size: 11.5px; color: var(--muted); }
+.c1 .swbtn {
+  margin-left: auto; font-size: 11.5px; font-weight: 700; padding: 8px 13px; border-radius: 11px;
+  background: var(--teal); color: #fff; white-space: nowrap;
+}
+.c1 .swbtn.out { background: var(--sage); color: var(--muted); }
+.c1 .fab {
+  position: absolute; bottom: 92px; right: 18px; width: 56px; height: 56px; border-radius: 20px;
+  background: var(--teal); color: #fff; display: grid; place-items: center;
+  box-shadow: 0 12px 24px -8px rgba(15,118,110,.75); z-index: 20;
+}
+</style>
+</head>
+<body class="stage">
+
+<header class="stage-top">
+  <a class="back" href="index.html">← Les 5 concepts</a>
+  <div class="who">
+    <span class="num">CONCEPT 01</span>
+    <h1>Sérénité</h1>
+    <span class="tag">Clair · arrondi · teal &amp; sauge — « soins bienveillants »</span>
+  </div>
+  <div class="swatches">
+    <i style="background:#0F766E"></i><i style="background:#0D9488"></i>
+    <i style="background:#ECFDF8"></i><i style="background:#D97706"></i><i style="background:#12211F"></i>
+  </div>
+</header>
+
+<section class="stage-block">
+  <h2>Web — Console direction</h2>
+  <p class="sub">Tableau de bord temps réel : présences, ratios encadrant/enfant (décret 19-253), encaissements DZD, fil du journal quotidien.</p>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="url">app.creche.dz/tableau-de-bord</div>
+    </div>
+    <div class="browser-body">
+      <div class="fit c1 web" data-width="1280">
+
+        <!-- Sidebar -->
+        <aside class="side">
+          <div class="brand">
+            <div class="mark">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>
+            </div>
+            <div><b>Les Petits Pas</b><span>Alger-Centre · 3 sites</span></div>
+          </div>
+
+          <div class="navgroup">
+            <p>Pilotage</p>
+            <div class="nav on"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Tableau de bord</div>
+            <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg>Présences</div>
+            <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg>Journal quotidien</div>
+            <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 5.5a3.2 3.2 0 0 1 0 6M18.5 20a6 6 0 0 0-3-5.2"/></svg>Enfants</div>
+            <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5H8a2.75 2.75 0 0 0 0 5.5H17"/></svg>Facturation<span class="pill">7</span></div>
+          </div>
+
+          <div class="navgroup">
+            <p>Établissement</p>
+            <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V4h8v3M3 13h18"/></svg>Salles &amp; sites</div>
+            <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="7" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Personnel &amp; paie</div>
+            <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l7.5 3v6c0 4.6-3.1 8-7.5 9-4.4-1-7.5-4.4-7.5-9V6z"/><path d="M9.3 12l1.9 1.9 3.6-3.6"/></svg>Conformité 25-11</div>
+            <div class="nav"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-2.87 1.2V21a2 2 0 1 1-4 0v-.11a1.7 1.7 0 0 0-2.93-1.14l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 3.5 14.5H3a2 2 0 1 1 0-4h.11A1.7 1.7 0 0 0 4.25 7.6l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.11a1.7 1.7 0 0 0 2.87 1.2l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.11a1.7 1.7 0 0 0-1.49 1.5z"/></svg>Paramètres</div>
+          </div>
+
+          <div class="who">
+            <div class="avatar">NB</div>
+            <div><b>Nadia Benali</b><span>Directrice</span></div>
+          </div>
+        </aside>
+
+        <!-- Main -->
+        <div class="main">
+          <div class="topbar">
+            <div>
+              <h1>Bonjour Nadia 👋</h1>
+              <div class="date">Lundi 22 septembre 2026 · Site Hydra</div>
+            </div>
+            <div class="search">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+              Rechercher un enfant, une facture…
+            </div>
+            <div class="langtog"><span class="on">FR</span><span>عربي</span></div>
+            <div class="iconbtn"><span class="dot"></span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 14 18 8"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></svg></div>
+          </div>
+
+          <div class="canvas">
+
+            <!-- KPI -->
+            <div class="kpis">
+              <div class="card kpi">
+                <div class="ico" style="background:#ECFDF8;color:#0F766E"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 5.5a3.2 3.2 0 0 1 0 6M18.5 20a6 6 0 0 0-3-5.2"/></svg></div>
+                <p>Enfants présents</p>
+                <div class="val">84<small> / 96</small></div>
+                <span class="trend up">▲ 6 vs vendredi</span>
+                <svg class="spark" width="96" height="42" viewBox="0 0 96 42" fill="none"><path d="M0 32 14 28 28 30 42 20 56 24 70 12 84 16 96 8" stroke="#0D9488" stroke-width="2.2" stroke-linecap="round"/><path d="M0 32 14 28 28 30 42 20 56 24 70 12 84 16 96 8V42H0z" fill="#0D9488" opacity=".09"/></svg>
+              </div>
+              <div class="card kpi">
+                <div class="ico" style="background:#EFF6FF;color:#2563EB"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 3l7.5 3v6c0 4.6-3.1 8-7.5 9-4.4-1-7.5-4.4-7.5-9V6z"/><path d="M9.3 12l1.9 1.9 3.6-3.6"/></svg></div>
+                <p>Ratios conformes</p>
+                <div class="val">5<small> / 6 salles</small></div>
+                <span class="trend down">▼ Moyenne section en alerte</span>
+              </div>
+              <div class="card kpi">
+                <div class="ico" style="background:#FEF6E7;color:#D97706"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5H8a2.75 2.75 0 0 0 0 5.5H17"/></svg></div>
+                <p>Encaissé ce mois</p>
+                <div class="val">1,84<small> M DZD</small></div>
+                <span class="trend up">▲ 72 % de l'objectif</span>
+                <svg class="spark" width="96" height="42" viewBox="0 0 96 42" fill="none"><path d="M0 34 16 30 32 32 48 22 64 18 80 14 96 6" stroke="#D97706" stroke-width="2.2" stroke-linecap="round"/><path d="M0 34 16 30 32 32 48 22 64 18 80 14 96 6V42H0z" fill="#D97706" opacity=".09"/></svg>
+              </div>
+              <div class="card kpi">
+                <div class="ico" style="background:#FFF1F3;color:#E11D48"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 9v4.5M12 17h.01"/><path d="M10.3 3.9 2.6 17.3A2 2 0 0 0 4.3 20.3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg></div>
+                <p>Impayés &gt; 30 j</p>
+                <div class="val">7<small> familles</small></div>
+                <span class="trend flat">318 000 DZD à relancer</span>
+              </div>
+            </div>
+
+            <!-- Alerte -->
+            <div class="alert">
+              <div class="ai"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 8v5M12 16.5h.01"/><circle cx="12" cy="12" r="9"/></svg></div>
+              <div>
+                <b>Ratio dépassé — Moyenne section (2–3 ans)</b>
+                <p>18 enfants pour 1 éducatrice depuis 09 h 12. Le décret 19-253 impose 1 pour 12. Une notification a été envoyée à l'équipe.</p>
+              </div>
+              <div class="act">Réaffecter du personnel</div>
+            </div>
+
+            <div class="row2">
+              <!-- Salles -->
+              <div class="card">
+                <h3>Occupation par salle <span class="more">Voir le plan →</span></h3>
+                <p class="hint">Mise à jour en direct depuis les tablettes de pointage · dernière synchro il y a 40 s</p>
+
+                <div class="room">
+                  <div class="rdot" style="background:#ECFDF8">🍼</div>
+                  <div><b>Pouponnière</b><span>3 mois – 18 mois</span></div>
+                  <div><div class="bar"><i style="width:75%;background:#0D9488"></i></div><span class="barlabel">12 / 16 présents</span></div>
+                  <div class="chip ok">✓ 1 pour 4</div>
+                  <div class="miniavs"><i style="background:#0F766E">SM</i><i style="background:#0D9488">LK</i><i style="background:#14B8A6">RB</i></div>
+                </div>
+
+                <div class="room">
+                  <div class="rdot" style="background:#EFF6FF">🧸</div>
+                  <div><b>Petite section</b><span>18 mois – 2 ans</span></div>
+                  <div><div class="bar"><i style="width:90%;background:#0D9488"></i></div><span class="barlabel">18 / 20 présents</span></div>
+                  <div class="chip ok">✓ 1 pour 9</div>
+                  <div class="miniavs"><i style="background:#2563EB">AH</i><i style="background:#3B82F6">FZ</i></div>
+                </div>
+
+                <div class="room" style="background:#FFFBF2 !important;box-shadow:inset 0 0 0 1.5px #F6E0B8;">
+                  <div class="rdot" style="background:#FEF6E7">🎨</div>
+                  <div><b>Moyenne section</b><span>2 ans – 3 ans</span></div>
+                  <div><div class="bar"><i style="width:100%;background:#D97706"></i></div><span class="barlabel">18 / 18 — complet</span></div>
+                  <div class="chip warn">⚠ 1 pour 18</div>
+                  <div class="miniavs"><i style="background:#D97706">YM</i></div>
+                </div>
+
+                <div class="room">
+                  <div class="rdot" style="background:#F5F3FF">📚</div>
+                  <div><b>Grande section</b><span>3 ans – 4 ans</span></div>
+                  <div><div class="bar"><i style="width:82%;background:#0D9488"></i></div><span class="barlabel">19 / 23 présents</span></div>
+                  <div class="chip ok">✓ 1 pour 10</div>
+                  <div class="miniavs"><i style="background:#7C3AED">KB</i><i style="background:#8B5CF6">NT</i></div>
+                </div>
+
+                <div class="room">
+                  <div class="rdot" style="background:#FFF1F3">🌙</div>
+                  <div><b>Salle de sieste</b><span>Toutes sections</span></div>
+                  <div><div class="bar"><i style="width:47%;background:#94A3B8"></i></div><span class="barlabel">17 en repos</span></div>
+                  <div class="chip info">Surveillance active</div>
+                  <div class="miniavs"><i style="background:#64748B">HD</i></div>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:20px">
+                <!-- Donut -->
+                <div class="card">
+                  <h3>Recouvrement — septembre</h3>
+                  <p class="hint">2 560 000 DZD facturés</p>
+                  <div class="donut">
+                    <svg width="118" height="118" viewBox="0 0 42 42">
+                      <circle cx="21" cy="21" r="15.9" fill="none" stroke="#EDF2F0" stroke-width="5.5"/>
+                      <circle cx="21" cy="21" r="15.9" fill="none" stroke="#0D9488" stroke-width="5.5" stroke-dasharray="72 28" stroke-dashoffset="25" stroke-linecap="round"/>
+                      <circle cx="21" cy="21" r="15.9" fill="none" stroke="#D97706" stroke-width="5.5" stroke-dasharray="16 84" stroke-dashoffset="-47" stroke-linecap="round"/>
+                      <text x="21" y="20.4" text-anchor="middle" font-size="7.4" font-weight="750" fill="#12211F">72 %</text>
+                      <text x="21" y="25.6" text-anchor="middle" font-size="3.1" fill="#6B807C">encaissé</text>
+                    </svg>
+                    <div class="legend" style="flex:1">
+                      <div><i style="background:#0D9488"></i><span>Payé</span><b>1,84 M</b></div>
+                      <div><i style="background:#D97706"></i><span>En attente</span><b>0,40 M</b></div>
+                      <div><i style="background:#EDF2F0"></i><span>En retard</span><b>0,32 M</b></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Fil -->
+                <div class="card">
+                  <h3>Fil d'activité <span class="more">Tout voir →</span></h3>
+                  <div class="feed" style="margin-top:12px">
+                    <div class="fitem">
+                      <div class="fico" style="background:#ECFDF8">🥣</div>
+                      <div style="flex:1"><b>Repas servi — Petite section</b><p>16 assiettes terminées, 2 partielles</p></div>
+                      <span class="t">11 h 42</span>
+                    </div>
+                    <div class="fitem">
+                      <div class="fico" style="background:#EFF6FF">📸</div>
+                      <div style="flex:1"><b>8 photos publiées</b><p>Atelier peinture · consentement vérifié</p></div>
+                      <span class="t">10 h 58</span>
+                    </div>
+                    <div class="fitem">
+                      <div class="fico" style="background:#FFF1F3">🌡️</div>
+                      <div style="flex:1"><b>Incident santé — Amine K.</b><p>38,2 °C · parent prévenu par SMS</p></div>
+                      <span class="t">10 h 15</span>
+                    </div>
+                    <div class="fitem">
+                      <div class="fico" style="background:#FEF6E7">📄</div>
+                      <div style="flex:1"><b>12 factures générées</b><p>Échéance 05/10 · envoi automatique</p></div>
+                      <span class="t">08 h 00</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage-block">
+  <h2>Mobile — Flutter</h2>
+  <p class="sub">Même langage : grands rayons, ombres diffuses, une seule couleur d'accent. L'app personnel reste utilisable d'une main, gants ou pas.</p>
+  <div class="phones">
+
+    <!-- Parent -->
+    <div class="phone-wrap">
+      <span class="cap">App parents — fil du jour</span>
+      <div class="phone"><div class="phone-screen c1 app">
+        <div class="notch"></div>
+        <div class="statusbar"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+
+        <div class="apphead">
+          <div class="hi">Bonjour Yasmine</div>
+          <h2>La journée de Lina</h2>
+        </div>
+
+        <div class="appscroll">
+          <div class="hero">
+            <div class="kidrow">
+              <div class="kid">👧</div>
+              <div><b>Lina, 2 ans</b><div class="sub">Moyenne section · Hydra</div></div>
+              <div class="state">● Présente</div>
+            </div>
+            <div class="stats">
+              <div><span>Arrivée</span><b>08 h 12</b></div>
+              <div><span>Sieste</span><b>1 h 35</b></div>
+              <div><span>Humeur</span><b>Joyeuse 😊</b></div>
+            </div>
+          </div>
+
+          <div class="mcard">
+            <div class="mh"><b>Repas de midi</b><span class="t">11 h 42</span></div>
+            <div style="display:flex;gap:9px">
+              <span class="chip ok">Entrée · tout</span>
+              <span class="chip ok">Plat · tout</span>
+              <span class="chip warn">Dessert · moitié</span>
+            </div>
+            <p style="margin:11px 0 0;font-size:12px;color:#6B807C;line-height:1.5">
+              Lina a beaucoup aimé le tajine de légumes. Elle a réclamé du pain !
+            </p>
+          </div>
+
+          <div class="mcard">
+            <div class="mh"><b>Photos du jour</b><span class="t">3 nouvelles</span></div>
+            <div class="photorow">
+              <div class="ph" style="background:#ECFDF8">🎨</div>
+              <div class="ph" style="background:#FEF6E7">🧩</div>
+              <div class="ph" style="background:#EFF6FF">🎵</div>
+            </div>
+          </div>
+
+          <div class="qgrid">
+            <div class="q">
+              <div class="qi" style="background:#FFF1F3">🤒</div>
+              <div><b>Signaler une absence</b><span>Avant 8 h</span></div>
+            </div>
+            <div class="q">
+              <div class="qi" style="background:#FEF6E7">💳</div>
+              <div><b>Facture septembre</b><span>18 000 DZD · due 05/10</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabbar">
+          <div class="tab on"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Journée</div>
+          <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>Photos</div>
+          <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/></svg>Messages</div>
+          <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Profil</div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- Staff -->
+    <div class="phone-wrap">
+      <span class="cap">App personnel — pointage offline</span>
+      <div class="phone"><div class="phone-screen c1 app">
+        <div class="notch"></div>
+        <div class="statusbar" style="background:#fff"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+
+        <div class="stafftop">
+          <div style="display:flex;align-items:center;gap:11px;margin-bottom:14px">
+            <div class="avatar" style="background:#0D9488">SM</div>
+            <div style="flex:1">
+              <b style="font-size:15px;letter-spacing:-.02em">Moyenne section</b>
+              <div style="font-size:11.5px;color:#6B807C">Samira M. · 18 enfants attendus</div>
+            </div>
+            <div class="iconbtn" style="width:34px;height:34px;border-radius:11px">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+            </div>
+          </div>
+          <div class="syncbar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 4v4h-4M3 20v-4h4"/></svg>
+            Synchronisé · 3 actions en file hors-ligne
+          </div>
+          <div class="seg"><span class="on">Présents 14</span><span>Attendus 4</span><span>Absents 0</span></div>
+        </div>
+
+        <div class="kidlist">
+          <div class="kidrow2">
+            <div class="av" style="background:#ECFDF8">👧</div>
+            <div><b>Lina Bouzid</b><span>Arrivée 08 h 12 · papa</span></div>
+            <div class="swbtn out">Sortie</div>
+          </div>
+          <div class="kidrow2">
+            <div class="av" style="background:#EFF6FF">👦</div>
+            <div><b>Amine Kaci</b><span>⚠ 38,2 °C — à surveiller</span></div>
+            <div class="swbtn out">Sortie</div>
+          </div>
+          <div class="kidrow2" style="box-shadow:inset 0 0 0 1.5px #CCFBEF">
+            <div class="av" style="background:#F4F7F5">👧</div>
+            <div><b>Nour Hamdi</b><span>Attendue · 08 h 30</span></div>
+            <div class="swbtn">Entrée</div>
+          </div>
+          <div class="kidrow2" style="box-shadow:inset 0 0 0 1.5px #CCFBEF">
+            <div class="av" style="background:#F4F7F5">👦</div>
+            <div><b>Yanis Meziane</b><span>Attendu · 09 h 00</span></div>
+            <div class="swbtn">Entrée</div>
+          </div>
+          <div class="kidrow2">
+            <div class="av" style="background:#FEF6E7">👧</div>
+            <div><b>Maya Slimani</b><span>Arrivée 07 h 58 · maman</span></div>
+            <div class="swbtn out">Sortie</div>
+          </div>
+          <div class="kidrow2">
+            <div class="av" style="background:#F5F3FF">👦</div>
+            <div><b>Rayan Tabet</b><span>Arrivée 08 h 05 · grand-mère</span></div>
+            <div class="swbtn out">Sortie</div>
+          </div>
+        </div>
+
+        <div class="fab">
+          <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+
+        <div class="tabbar">
+          <div class="tab on"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg>Présence</div>
+          <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg>Journal</div>
+          <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>Médias</div>
+          <div class="tab"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Moi</div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+</section>
+
+<div class="rationale">
+  <div class="r-card good">
+    <h3>Pourquoi ça marche</h3>
+    <ul>
+      <li>Registre visuel « soin » : rassure les parents, crédible pour une tutelle.</li>
+      <li>Une seule couleur d'accent → les alertes ambre/rouge ressortent vraiment.</li>
+      <li>Reprend vos tokens existants (Inter, radius, échelle d'espacement) : migration rapide depuis l'admin-web actuel.</li>
+      <li>Contraste élevé sur fond clair : lisible sur tablette bon marché en salle.</li>
+    </ul>
+  </div>
+  <div class="r-card warn">
+    <h3>À surveiller</h3>
+    <ul>
+      <li>Densité faible : un directeur multi-sites devra scroller davantage.</li>
+      <li>Style très répandu en 2026 — peu différenciant face à Brightwheel/Famly.</li>
+      <li>Fond clair = fatigue visuelle pour le veilleur de nuit / usage prolongé.</li>
+    </ul>
+  </div>
+  <div class="r-card">
+    <h3>Coût d'implémentation</h3>
+    <ul>
+      <li><b>Faible.</b> Palette + rayons + ombres à changer dans <code>tokens.ts</code>.</li>
+      <li>Aucune restructuration de composant côté React.</li>
+      <li>Flutter : ThemeData + Material 3, direct.</li>
+      <li>RTL arabe : symétrique, aucun blocage.</li>
+    </ul>
+  </div>
+</div>
+
+<nav class="stage-nav">
+  <a href="index.html">← Tous les concepts</a>
+  <a href="concept-2-bento.html">Concept 02 · Bento Pro →</a>
+</nav>
+
+<script src="_fit.js"></script>
+</body>
+</html>

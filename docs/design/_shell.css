@@ -1,0 +1,350 @@
+/* ============================================================================
+ * _shell.css — "cadre d'exposition" commun aux 5 maquettes de design.
+ * Ce fichier ne fait PAS partie du langage visuel des concepts : il ne dessine
+ * que la page de présentation (fond, titres, cadre navigateur, cadres
+ * téléphone). Chaque concept apporte son propre style dans sa balise <style>.
+ * ========================================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body.stage {
+  margin: 0;
+  background: #0d1117;
+  background-image:
+    radial-gradient(900px 500px at 12% -5%, #1b2431 0%, transparent 60%),
+    radial-gradient(900px 500px at 88% 0%, #191f2e 0%, transparent 55%);
+  color: #c9d3e0;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  padding-bottom: 80px;
+}
+
+/* ── Barre supérieure de l'exposition ─────────────────────────────────────── */
+.stage-top {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 22px;
+  background: rgba(13, 17, 23, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid #222b36;
+}
+
+.stage-top a.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #9fb0c4;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #2c3743;
+  border-radius: 999px;
+  padding: 6px 14px 6px 11px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.stage-top a.back:hover {
+  color: #fff;
+  border-color: #4a5a6e;
+  background: #172029;
+}
+
+.stage-top .who {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.stage-top .num {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #64748b;
+}
+
+.stage-top h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: -0.01em;
+}
+
+.stage-top .tag {
+  font-size: 12.5px;
+  color: #7b8a9c;
+}
+
+.swatches {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.swatches i {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: block;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+.stage-block {
+  max-width: 1340px;
+  margin: 0 auto;
+  padding: 40px 22px 0;
+}
+
+.stage-block > h2 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #7b8a9c;
+}
+
+.stage-block > p.sub {
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  color: #6b7a8c;
+  max-width: 70ch;
+}
+
+/* ── Cadre navigateur (maquette web) ──────────────────────────────────────── */
+.browser {
+  border-radius: 14px;
+  overflow: hidden;
+  background: #11161d;
+  border: 1px solid #262f3b;
+  box-shadow: 0 30px 70px -25px rgba(0, 0, 0, 0.85);
+}
+
+.browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #171d26;
+  border-bottom: 1px solid #262f3b;
+}
+
+.browser-bar .dots {
+  display: flex;
+  gap: 6px;
+}
+
+.browser-bar .dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: block;
+}
+
+.browser-bar .url {
+  flex: 1;
+  background: #0f141b;
+  border: 1px solid #262f3b;
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  color: #8493a5;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-body {
+  overflow: hidden;
+}
+
+/* Le contenu maquette est conçu à largeur fixe puis mis à l'échelle. */
+.fit {
+  zoom: var(--fit, 1);
+}
+
+/* ── Cadres téléphone (maquettes mobiles) ─────────────────────────────────── */
+.phones {
+  display: flex;
+  gap: 34px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.phone-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.phone-wrap .cap {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7b8a9c;
+  letter-spacing: 0.04em;
+}
+
+.phone {
+  width: 330px;
+  height: 686px;
+  border-radius: 46px;
+  padding: 11px;
+  background: linear-gradient(160deg, #39434f, #191f27 45%, #2a323c);
+  box-shadow:
+    0 34px 60px -22px rgba(0, 0, 0, 0.9),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  flex: none;
+}
+
+.phone-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 36px;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.notch {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 104px;
+  height: 27px;
+  border-radius: 999px;
+  background: #0b0f14;
+  z-index: 40;
+}
+
+/* Barre d'état générique — recolorée par chaque concept. */
+.statusbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 13px 24px 6px;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  flex: none;
+  z-index: 30;
+}
+
+.statusbar .right {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 11px;
+}
+
+/* ── Bloc « pourquoi ce design » ──────────────────────────────────────────── */
+.rationale {
+  max-width: 1340px;
+  margin: 46px auto 0;
+  padding: 0 22px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.rationale .r-card {
+  background: #131920;
+  border: 1px solid #242d39;
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+
+.rationale h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #8ea0b5;
+}
+
+.rationale ul {
+  margin: 0;
+  padding-left: 17px;
+  font-size: 13px;
+  color: #a9b6c6;
+}
+
+.rationale li {
+  margin-bottom: 6px;
+}
+
+.rationale li::marker {
+  color: #4a5a6e;
+}
+
+.rationale .r-card.good {
+  border-color: #1f4436;
+}
+
+.rationale .r-card.good h3 {
+  color: #4ade80;
+}
+
+.rationale .r-card.warn {
+  border-color: #4a3a1c;
+}
+
+.rationale .r-card.warn h3 {
+  color: #fbbf24;
+}
+
+.stage-nav {
+  max-width: 1340px;
+  margin: 46px auto 0;
+  padding: 0 22px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stage-nav a {
+  color: #9fb0c4;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid #2c3743;
+  border-radius: 10px;
+  padding: 10px 16px;
+  transition: all 0.15s;
+}
+
+.stage-nav a:hover {
+  color: #fff;
+  border-color: #4a5a6e;
+  background: #172029;
+}
+
+@media (max-width: 760px) {
+  .phone {
+    transform-origin: top center;
+  }
+}
