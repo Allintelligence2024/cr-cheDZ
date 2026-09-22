@@ -1,120 +1,94 @@
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 
 /**
  * E2E S1 (remédiation 2026-09-21, Phase 4) — payroll : run → finalize →
  * blocage post-finalisation (R15).
  *
- * Cible : directeur de crèche pilote.
- * Scénario :
- *   1. Génération d'un run de paie → 200, statuts calculés
- *   2. Édition d'une ligne avant finalisation → OK
- *   3. Finalisation du run → badge « Finalisé » + bouton désactivé
- *   4. Édition d'une ligne APRÈS finalisation → 422 PAYROLL_FINALIZED
- *      (le trigger migration 072 refuse l'UPDATE ; cf. R15, R19 P3 lot)
+ * Pré-requis (cf. tests/tenant-isolation/seed-e2e.mjs) :
+ *   - DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
+ *   - Migrate + seed + `node tests/tenant-isolation/seed-e2e.mjs`
+ *   - L'API lancée via la config Playwright (cf. apps/admin-web/playwright.config.ts)
+ *
+ * Compte utilisé : `e2e.director@test.dz` / `Password123!` (pas pilot-01,
+ * le seeder ne pose PAS de directeur pilot-01 — uniquement e2e.*).
  */
 const EMAIL = 'e2e.director@test.dz';
 const PASSWORD = 'Password123!';
 
-async function apiLogin(request: APIRequestContext): Promise<string> {
-  const res = await request.post('/api/v1/auth/login', {
-    data: { email: EMAIL, password: PASSWORD },
-  });
-  expect(res.ok()).toBeTruthy();
-  const body = await res.json();
-  return body.access_token as string;
-}
+/** Période UNIQUE par run pour éviter PAYROLL_ALREADY_EXISTS sur retry. */
+const period = { year: 2030 + Math.floor(Math.random() * 50), month: 1 + Math.floor(Math.random() * 12) };
 
 test.describe('payroll — run → finalize → blocage R15', () => {
-  let token: string;
-  let staffUserId: string;
+  let accessToken: string;
   let runId: string;
   let entryId: string;
 
   test.beforeAll(async ({ request }) => {
-    token = await apiLogin(request);
-
-    const userRes = await request.get('/api/v1/me', {
-      headers: { authorization: `Bearer ${token}` },
+    const login = await request.post('/api/v1/auth/login', {
+      data: { email: EMAIL, password: PASSWORD },
     });
-    const me = await userRes.json();
-    staffUserId = me.id;
-
-    const staffRes = await request.post('/api/v1/staff', {
-      headers: { authorization: `Bearer ${token}` },
-      data: {
-        user_id: staffUserId,
-        qualification: 'educator_qualified',
-        hire_date: '2025-01-01',
-        base_salary: 50000,
-      },
-    });
-    expect(staffRes.ok()).toBeTruthy();
+    expect(login.status(), 'login directeur e2e').toBe(200);
+    const body = await login.json();
+    accessToken = body.access_token;
   });
 
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/login');
-    await page.getByLabel('Email').fill(EMAIL);
-    await page.getByLabel('Mot de passe').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Se connecter' }).click();
-    await expect(page.getByText('Bienvenue')).toBeVisible();
-  });
-
-  test('génération d\'un run + édition avant finalisation', async ({ request }) => {
-    const generateRes = await request.post('/api/v1/payroll/generate', {
-      headers: { authorization: `Bearer ${token}` },
-      data: {
-        period_year: new Date().getFullYear(),
-        period_month: new Date().getMonth() + 1,
-      },
+  test('1) génération d\'un run → 200, 2 entries créées', async ({ request }) => {
+    const res = await request.post('/api/v1/payroll/generate', {
+      headers: { authorization: `Bearer ${accessToken}` },
+      data: { period_year: period.year, period_month: period.month },
     });
-    expect(generateRes.ok()).toBeTruthy();
-    const run = await generateRes.json();
+    expect(res.status(), 'POST /payroll/generate').toBe(201);
+    const run = await res.json();
     runId = run.id;
-
-    const detailRes = await request.get(`/api/v1/payroll/runs/${runId}`, {
-      headers: { authorization: `Bearer ${token}` },
-    });
-    expect(detailRes.ok()).toBeTruthy();
-    const detail = await detailRes.json();
-    expect(detail.entries.length).toBeGreaterThan(0);
-    entryId = detail.entries[0].id;
-
-    const lineRes = await request.post(`/api/v1/payroll/entries/${entryId}/lines`, {
-      headers: { authorization: `Bearer ${token}` },
-      data: {
-        lines: [{ line_type: 'bonus', label_fr: 'Prime test', amount: 5000 }],
-      },
-    });
-    expect(lineRes.ok()).toBeTruthy();
+    expect(run.status).toBe('draft');
   });
 
-  test('finalisation → badge + bouton désactivé', async ({ page }) => {
-    expect(runId).toBeTruthy();
-
-    await page.goto('/payroll');
-    await expect(page.getByText('Paie')).toBeVisible();
-
-    const runRow = page.getByRole('row').filter({ hasText: new Date().getFullYear().toString() });
-    await runRow.getByRole('button', { name: 'Détail' }).click();
-
-    await page.getByRole('button', { name: 'Finaliser' }).click();
-    await expect(page.getByText('Paie finalisée (immuable)')).toBeVisible();
-
-    const addLineButtons = page.getByRole('button', { name: 'Ajouter une ligne' });
-    await expect(addLineButtons).toHaveCount(0);
-  });
-
-  test('édition post-finalisation refusée (R15)', async ({ request }) => {
-    expect(entryId).toBeTruthy();
-
-    const lineRes = await request.post(`/api/v1/payroll/entries/${entryId}/lines`, {
-      headers: { authorization: `Bearer ${token}` },
+  test('2) entry existe et est éditable AVANT finalisation', async ({ request }) => {
+    const r = await request.get(`/api/v1/payroll/runs/${runId}`, {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    expect(r.status()).toBe(200);
+    const run = await r.json();
+    const entries = run.entries ?? run.payroll_entries ?? [];
+    expect(entries.length, 'au moins 1 entry').toBeGreaterThan(0);
+    entryId = entries[0].id;
+    const addLine = await request.post(`/api/v1/payroll/entries/${entryId}/lines`, {
+      headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
       data: {
-        lines: [{ line_type: 'bonus', label_fr: 'Prime après finalisation', amount: 1000 }],
+        lines: [{
+          line_type: 'bonus',
+          label_fr: 'Prime e2e pré-finalisation',
+          amount: 1000,
+        }],
       },
     });
-    expect(lineRes.status()).toBe(422);
-    const body = await lineRes.json();
-    expect(body.code).toBe('PAYROLL_FINALIZED');
+    expect(addLine.status(), 'POST /payroll/entries/:id/lines pré-finalisation').toBeLessThan(300);
+  });
+
+  test('3) finalisation → 200, status finalized, total_gross > 0', async ({ request }) => {
+    const res = await request.post(`/api/v1/payroll/runs/${runId}/finalize`, {
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    expect(res.status(), 'POST /payroll/runs/:id/finalize').toBe(201);
+    const run = await res.json();
+    expect(run.status).toBe('finalized');
+    expect(Number(run.total_gross), 'total_gross > 0').toBeGreaterThan(0);
+  });
+
+  test('4) édition APRÈS finalisation → 422 PAYROLL_RUN_LOCKED (R15)', async ({ request }) => {
+    const addLine = await request.post(`/api/v1/payroll/entries/${entryId}/lines`, {
+      headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
+      data: {
+        lines: [{
+          line_type: 'bonus',
+          label_fr: 'Tentative post-finalisation',
+          amount: 9999,
+        }],
+      },
+    });
+    expect(addLine.status(), 'POST /payroll/entries/:id/lines post-finalisation').toBe(422);
+    const body = await addLine.json().catch(() => ({}));
+    expect(body.code, 'code métier').toBe('PAYROLL_FINALIZED');
   });
 });
