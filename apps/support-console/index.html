@@ -14,8 +14,8 @@
       Chargement NON bloquant (media="print" basculé en "all" au load) : sur un
       réseau lent, hors ligne, ou dans un runner CI sans accès à fonts.google.com,
       la page s'affiche immédiatement au lieu d'attendre la feuille distante.
-      (Une balise <link rel=stylesheet> classique bloque le rendu : elle avait
-      fait passer la suite e2e de 17 s à 2 min.)
+      (Une balise <link rel=stylesheet> classique bloque le rendu jusqu'à
+      l'expiration du délai réseau.)
     -->
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;750&display=swap"
