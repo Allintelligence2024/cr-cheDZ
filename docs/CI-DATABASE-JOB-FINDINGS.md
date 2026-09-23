@@ -6,13 +6,12 @@ _Dernière mise à jour : 23/09/2026 — branche `arena/01a0ca72-cr-chedz` (PR #
 
 Le job `database` était **bloqué 6 h puis annulé**, sans aucun diagnostic
 exploitable. Il échoue désormais en ~14 min en nommant précisément ce qui ne va
-pas. Trois défauts **préexistants sur `main`** ont été mis au jour ; deux sont
-corrigés, **deux suites restent rouges** et sont documentées ici.
+pas. Cinq défauts **préexistants sur `main`** ont été mis au jour ; quatre sont
+corrigés, **une assertion reste rouge** et est documentée ici.
 
-Aucun de ces défauts ne vient de la refonte Sérénité : la branche ne modifie que
-`apps/api/src/modules/identity` (3 fichiers) et ajoute une garde de contrat
-compose. `git diff main...HEAD -- apps/api/src/modules/media
-apps/api/src/modules/parents apps/api/src/shared/storage` est **vide**.
+Aucun de ces défauts ne vient de la refonte Sérénité. Ils ont été trouvés
+**parce que** le job est devenu diagnosticable, puis corrigés ici ; ils étaient
+tous déjà présents sur `main` avant cette branche.
 
 ## Pourquoi le blocage était invisible
 
@@ -77,58 +76,76 @@ Le service `backup` n'est pas concerné (outils client uniquement, sans PGDATA).
 Garde : `tests/tenant-isolation/production-compose-contract.test.mjs` vérifie le
 point de montage sur les 3 environnements.
 
-## Reste rouge — deux suites, cause non identifiée
+### 3. Suite `phase62` bloquée : client PostgreSQL jamais fermé (`71e2c27`) ✅
 
-Ces deux suites échouent sur le même périmètre : **les médias parent**. Elles
-n'ont pas été corrigées faute de pouvoir les rejouer (voir plus bas).
+Une fois les sous-gates bornés, la garde a nommé la coupable :
+`phase62-payroll-finalized-lock n'a pas rendu la main en 600s`.
 
-### `phase7-parent.api.test.mjs`
+La suite exécutait tout son travail, affichait « validée », puis figeait. Son
+client d'amorçage (celui qui appelle `ensureAppRole`) n'était jamais fermé : un
+`pg.Client` connecté maintient un socket actif, et Node ne sort pas tant qu'un
+handle reste ouvert. Ses trois autres clients étaient bien fermés ; la suite
+sœur `phase63`, de structure identique, ferme le sien.
 
-```
-✗ Parent A reçoit la photo avec URL signée
-✗ Préférence désactivée : aucun push en file — file=1
-```
+Vérification de l'ensemble des suites : c'était la seule vraie fuite.
+`phase27` (fermeture dans un hook `after`) et `phase32` (teardown groupé) sont
+des faux positifs du comptage textuel.
 
-L'assertion attend `status === 200 && body.length === 1 && body[0].url` commençant
-par `http`. Le second échec (file de notifications non vide alors que la
-préférence est désactivée) semble **indépendant** du premier.
+Garde : `tests/tenant-isolation/client-leak-guard.test.mjs` compare `.connect()`
+et `.end()` par suite, avec exemptions justifiées. Statique, donc exécutable
+sans PostgreSQL.
 
-### `phase37-parent-revocation.api.test.mjs`
+### 4. Liste des photos parent toujours vide (`b70e81f`) ✅
 
-```
-✗ authorized: photos: AssertionError [ERR_ASSERTION]
-✗ health revoked: photos: AssertionError [ERR_ASSERTION]
-```
+`GET /parent/children/:id/media` renvoyait **toujours** une liste vide, alors
+que le téléchargement direct de la même photo fonctionnait — asymétrie qui
+rendait le défaut déroutant.
 
-Ligne concernée : `assert.ok(response.body[0].url.includes('X-Amz-Signature='))`
-— `body[0]` est probablement absent (liste vide) plutôt que mal signé.
+`ParentsService.photos()` passait par `MediaService.list()`, qui cloisonne le
+**personnel** par salle : il lit `memberships.room_ids` et retourne `[]` dès que
+c'est vide ou NULL pour un rôle hors `director`/`super_admin`/`accountant`. Or un
+parent (`parent_primary`/`parent_secondary`) n'appartient à aucune salle.
 
-### Piste écartée
+Correctif : `MediaService.listForParent(childId)`, qui filtre sur l'enfant et sur
+`is_visible_to_parents`. Les garde-fous restent portés par l'appelant, seule voie
+d'accès parent : `assertPermission(..., 'can_view_journal')` avant toute lecture,
+`is_visible_to_parents = true` dans la requête, consentement revérifié par
+`photoUrl()` à chaque signature (révocation immédiate), RLS par organisation
+inchangée. Le chemin personnel n'est pas touché.
 
-L'hypothèse « `STORAGE_BACKEND: local` empêche la signature S3 » a été **vérifiée
-et écartée** : `getSignedUrl` est un calcul local (HMAC), sans appel réseau ni
-bucket existant. Reproduit hors CI — l'URL produite contient bien
-`X-Amz-Signature=`. La cause est donc en amont : la liste de médias renvoyée est
-vide, ce qui pointe vers le filtrage par consentement ou la visibilité parent,
-pas vers le stockage.
+Corrige les trois suites : `phase7-parent`, `phase37-parent-revocation`,
+`phase41-photo-consent-scope`. Couvert hors base par
+`apps/api/src/modules/parents/parent-photos.spec.ts` (4 tests).
 
-### Prochaine étape pour qui dispose d'un PostgreSQL
+## Reste ouvert — une assertion
+
+### `phase7-parent` : `Préférence désactivée : aucun push en file — file=1`
+
+Un `check_in` met un push en file alors que le parent a désactivé
+`notification_preferences` pour cet événement. La logique de
+`notifications.service.ts` paraît pourtant correcte (`if (!pref || pref.is_enabled)`),
+l'écriture et la lecture utilisent les mêmes colonnes
+(`organization_id, user_id, channel='push', event_type`), et le test cible bien
+le même utilisateur. L'hypothèse la plus probable est que la préférence n'est pas
+trouvée au moment de la lecture — contexte de tenant, ordre des opérations, ou
+transaction distincte — mais cela demande d'observer la base pendant l'exécution.
+
+**Non corrigé délibérément** : sans PostgreSQL pour reproduire, toute
+modification de la logique de notification serait une supposition. Le symptôme
+est isolé et documenté plutôt que masqué.
+
+### Comment reprendre
 
 ```bash
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/creche_test
 node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
 npm run build --workspace @creche/api
-bash scripts/run-isolation-suites.sh phase7-parent   # puis phase37
-cat /tmp/suite-phase7-parent.api.test.log            # log complet de la suite
+bash scripts/run-isolation-suites.sh phase7-parent
+cat /tmp/suite-phase7-parent.api.test.log
 ```
 
 **Pourquoi ce n'a pas été fait ici** : l'environnement d'agent n'a ni `psql`, ni
-`pg_ctl`, ni `postgres`, ni `pg_isready`, ni `docker`. Ces suites exigent un
-PostgreSQL réel migré et seedé ; elles ne peuvent pas être rejouées, et
-l'API de logs GitHub renvoie `EOF` sur ce dépôt (seules les annotations
-`check-runs` sont lisibles). Corriger à l'aveugle un filtrage de consentement —
-un mécanisme de protection de données sous loi 25-11 — aurait été plus risqué que
-de documenter précisément le symptôme.
+`pg_ctl`, ni `postgres`, ni `pg_isready`, ni `docker`.
 
 ## Lire les échecs CI sur ce dépôt
 
