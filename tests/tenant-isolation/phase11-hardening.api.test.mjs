@@ -143,8 +143,25 @@ const main = async () => {
     ok('data_access_logs : purgé', oldData.rows[0].n === 0);
     const oldMedia = await db.query(`SELECT COUNT(*)::int AS n FROM media_access_logs WHERE accessed_at < NOW() - INTERVAL '5 years'`);
     ok('media_access_logs (RLS) : purgé via SECURITY DEFINER', oldMedia.rows[0].n === 0);
-    const jobState = await db.query(`SELECT status FROM background_jobs WHERE job_type='retention_purge'`);
-    ok('Job retention_purge → done', jobState.rows[0]?.status === 'done', JSON.stringify(jobState.rows));
+    // Course : le worker COMMIT la purge, puis seulement après appelle
+    // jobs_finish_leased(). Observer l'effet (audit_logs vidé) ne prouve donc
+    // pas que le statut terminal est déjà écrit — il reste 'processing' le
+    // temps d'un aller-retour SQL. Lire le statut immédiatement rendait ce test
+    // dépendant de la charge machine. On attend l'état terminal, comme toutes
+    // les autres suites worker (phase13/21/23/28/36).
+    const jobState = await (async () => {
+      let rows;
+      for (let i = 0; i < 60; i += 1) {
+        rows = (await db.query(
+          `SELECT status, failure_reason FROM background_jobs WHERE job_type='retention_purge'`,
+        )).rows;
+        // 'failed' est terminal : inutile d'attendre, on rapporte tout de suite.
+        if (rows[0]?.status === 'done' || rows[0]?.status === 'failed') return rows;
+        await sleep(500);
+      }
+      return rows;
+    })();
+    ok('Job retention_purge → done', jobState?.[0]?.status === 'done', JSON.stringify(jobState));
 
     // ── 3. send_monthly_invoices (idempotent) ───────────────────────────────
     console.log('\n3) Génération mensuelle par le worker (idempotente)');
