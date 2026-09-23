@@ -111,8 +111,13 @@ export class ParentsService {
 
   async photos(userId: string, childId: string, ip?: string): Promise<Array<Record<string, unknown>>> {
     await this.assertPermission(userId, childId, 'can_view_journal');
-    const items = await this.media.list(userId, childId);
-    const visible = items.filter((item) => item.is_visible_to_parents === true);
+    // `media.list()` cloisonne le PERSONNEL par salle (memberships.room_ids).
+    // Un parent n'appartient à aucune salle : ce filtrage renvoyait toujours
+    // une liste vide, alors que le téléchargement direct de la même photo
+    // fonctionnait. On utilise la lecture dédiée aux parents, qui filtre sur
+    // l'enfant et sur is_visible_to_parents ; le lien de filiation vient
+    // d'être vérifié ci-dessus et le consentement l'est à chaque signature.
+    const visible = await this.media.listForParent(childId);
     const result: Array<Record<string, unknown>> = [];
     for (const item of visible) {
       try {
