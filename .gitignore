@@ -50,3 +50,6 @@ tests/load/capacity-report.json
 apps/*/android/key.properties
 *.jks
 *.keystore
+
+# Dossier temporaire du test de libellés (supprimé automatiquement ; filet de sécurité)
+packages/design-system/src/.tmp-label-test-*/

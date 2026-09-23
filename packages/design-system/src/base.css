@@ -120,6 +120,21 @@ textarea:disabled {
   border: 2px solid var(--c-background);
 }
 
+/* ── Libellés de champ ───────────────────────────────────────────────────── */
+/*
+  L'astérisque des champs obligatoires est générée en CSS, jamais insérée
+  dans le DOM. Le texte d'un <label> étant la concaténation de ses nœuds de
+  texte descendants, un « * » réel transformerait « Prénom » en « Prénom * »
+  et casserait toute recherche par libellé exact (tests Playwright
+  getByLabel(..., { exact: true }), outils d'accessibilité, automatisation).
+  Le contenu de ::after n'appartient pas au DOM : le libellé reste intact.
+  L'état obligatoire est porté par l'attribut `required` de l'<input>.
+*/
+.ds-field-required::after {
+  content: ' *';
+  color: var(--c-danger);
+}
+
 /* ── Bouton de bascule de thème ──────────────────────────────────────────── */
 .ds-theme-toggle {
   display: inline-flex;

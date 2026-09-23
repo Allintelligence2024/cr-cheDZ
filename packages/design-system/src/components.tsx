@@ -93,8 +93,26 @@ export function TextField(props: {
 }): React.JSX.Element {
   return (
     <label style={{ display: 'block', marginBottom: tokens.spacing.md }}>
+      {/*
+        L'astérisque « champ obligatoire » est dessinée en CSS (::after sur
+        .ds-field-required, cf. base.css) et NON insérée dans le DOM.
+
+        Raison : le texte d'un <label> est calculé par concaténation des
+        nœuds de texte descendants. Un <span> « * », même en aria-hidden,
+        reste un nœud de texte : le libellé devient « Prénom * » et toute
+        recherche par libellé exact ne trouve plus le champ — y compris
+        getByLabel(..., { exact: true }) côté Playwright, qui n'applique
+        aucun filtre aria-hidden (vérifié dans son implémentation : seuls
+        SCRIPT/NOSCRIPT/STYLE et <head> sont ignorés).
+
+        Le contenu généré par ::after n'appartient pas au DOM : le libellé
+        reste exactement « Prénom ». L'état obligatoire est porté par
+        l'attribut `required` de l'<input>, source de vérité pour
+        l'accessibilité comme pour la validation native.
+      */}
       {props.label && (
         <span
+          className={props.required ? 'ds-field-label ds-field-required' : 'ds-field-label'}
           style={{
             display: 'block',
             marginBottom: 6,
@@ -104,19 +122,6 @@ export function TextField(props: {
           }}
         >
           {props.label}
-          {/* L'astérisque est purement visuelle : `aria-hidden` la retire du
-              nom accessible du champ. Sans cela le libellé devient
-              « Prénom * », et toute recherche par libellé exact
-              (getByLabel(..., { exact: true }), lecteurs d'écran, tests)
-              ne retrouve plus le champ. L'état obligatoire reste porté par
-              l'attribut `required` de l'<input>, qui est la source de
-              vérité pour l'accessibilité. */}
-          {props.required && (
-            <span aria-hidden="true" style={{ color: tokens.colors.danger }}>
-              {' '}
-              *
-            </span>
-          )}
         </span>
       )}
       <input

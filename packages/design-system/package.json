@@ -5,7 +5,7 @@
   "description": "Design tokens + composants React partagés (admin-web, support-console) — thème Sérénité clair/sombre",
   "main": "src/index.ts",
   "scripts": {
-    "test": "node --test src/contrast.test.mjs src/flutter-parity.test.mjs"
+    "test": "node --test src/contrast.test.mjs src/flutter-parity.test.mjs src/label-text.test.mjs"
   },
   "exports": {
     ".": "./src/index.ts",
