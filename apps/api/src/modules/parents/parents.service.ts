@@ -102,7 +102,12 @@ export class ParentsService {
     return this.tenantContext.withTenantConnection(async (client) => (await client.query(
       `INSERT INTO notification_preferences (organization_id,user_id,channel,event_type,is_enabled,quiet_hours_start,quiet_hours_end)
        VALUES ($1,$2,'push',$3,$4,$5,$6)
-       ON CONFLICT (user_id,channel,event_type) DO UPDATE SET is_enabled=EXCLUDED.is_enabled,
+       -- La contrainte unique inclut organization_id depuis la migration 073
+       -- (R19) : un même utilisateur peut gérer ses préférences indépendamment
+       -- par crèche. Viser (user_id,channel,event_type) ne correspond plus à
+       -- aucune contrainte — PostgreSQL rejette alors la requête entière, donc
+       -- la préférence n'était jamais enregistrée.
+       ON CONFLICT (organization_id,user_id,channel,event_type) DO UPDATE SET is_enabled=EXCLUDED.is_enabled,
          quiet_hours_start=EXCLUDED.quiet_hours_start, quiet_hours_end=EXCLUDED.quiet_hours_end
        RETURNING event_type,is_enabled,quiet_hours_start,quiet_hours_end`,
       [tenantId, userId, dto.event_type, dto.is_enabled, dto.quiet_hours_start ?? null, dto.quiet_hours_end ?? null],
