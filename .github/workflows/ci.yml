@@ -94,19 +94,29 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Client PostgreSQL (fallback PATH — le drill préfère les binaires embedded 18)
-        # backup-drill (S5 / R9) : pg_dump + psql sont obligatoires. Sans
-        # apt-get update d'abord, le cache d'Actions peut être obsolète et
-        # l'install échoue silencieusement → drill rouge. On force un update
-        # frais pour stabiliser le drill (cf. historique : 4 échecs / 8 PRs
-        # observés sur la branche).
+      - name: Client PostgreSQL 18 (doit être ≥ au serveur du service)
+        # backup-drill (S5 / R9) : pg_dump + psql sont obligatoires, et
+        # pg_dump REFUSE de sauvegarder un serveur plus récent que lui.
+        # Le service tourne en postgres:18 tandis que le runner
+        # ubuntu-latest fournit un client v16 : l'ancienne version de cette
+        # étape ne réinstallait rien (`if ! command -v pg_dump`), laissait le
+        # client v16 en place, et le drill échouait systématiquement sur
+        # « pg_dump v16 < serveur PostgreSQL v18 : client trop ancien ».
+        # On installe donc explicitement le client 18 depuis le dépôt PGDG
+        # officiel et on le place en tête du PATH.
         run: |
-          if ! command -v pg_dump >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends postgresql-client
-          fi
-          pg_dump --version
-          psql --version
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+          https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/18/bin/pg_dump --version
+          /usr/lib/postgresql/18/bin/psql --version
       - name: npm ci
         run: npm ci
       - name: Migrations + seeds
