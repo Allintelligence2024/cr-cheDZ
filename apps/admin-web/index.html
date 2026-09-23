@@ -8,10 +8,27 @@
     <title>Crèche SaaS — Administration</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Inter est un CONFORT, pas une dépendance : la pile de repli
+      (system-ui / -apple-system / Segoe UI) est déjà définie dans base.css.
+      Chargement NON bloquant (media="print" basculé en "all" au load) : sur un
+      réseau lent, hors ligne, ou dans un runner CI sans accès à fonts.google.com,
+      la page s'affiche immédiatement au lieu d'attendre la feuille distante.
+      (Une balise <link rel=stylesheet> classique bloque le rendu : elle avait
+      fait passer la suite e2e de 17 s à 2 min.)
+    -->
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;750&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all';this.onload=null"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;750&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <!--
       Anti-flash (FOUC) : pose data-theme sur <html> AVANT la première peinture.
       Sans ce script, un utilisateur en thème sombre verrait un flash blanc le
