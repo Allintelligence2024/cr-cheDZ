@@ -135,4 +135,18 @@ export class AcceptInvitationDto {
   @IsOptional()
   @IsString()
   device_id?: string;
+
+  /**
+   * R14 : identique à LoginDto.web_client — accepter une invitation ouvre
+   * une session, le navigateur doit donc recevoir le cookie httpOnly du
+   * refresh token, exactement comme après un login.
+   *
+   * Ce champ manquait alors qu'admin-web l'envoie déjà : avec
+   * `forbidNonWhitelisted: true` (app.factory.ts), la requête partait en
+   * 400 « property web_client should not exist » et l'activation de compte
+   * échouait systématiquement depuis le navigateur.
+   */
+  @IsOptional()
+  @IsBoolean()
+  web_client?: boolean;
 }
