@@ -118,9 +118,24 @@ for s in "${SUITES[@]}"; do
     failed=$((failed+1)); continue
   fi
   log="$ISOLATION_LOG_DIR/suite-$(basename "$s" .mjs).log"
-  if node "$f" >"$log" 2>&1; then
+  # Chaque suite est bornée : sans cela, une seule suite qui n'ouvre jamais
+  # son port (ou attend une entrée) fige la batterie entière, et donc le job,
+  # jusqu'au plafond GitHub — sans jamais nommer la coupable.
+  printf '▶ %s\n' "$s"
+  if timeout --signal=TERM --kill-after=30s "${SUITE_TIMEOUT:-600}" node "$f" >"$log" 2>&1; then
     RESULTS+=("PASS|$s|$(grep -c '✓' "$log" 2>/dev/null || echo '?') assertions ✓")
   else
+    rc=$?
+    # 124 = délai dépassé (convention de `timeout`) : à distinguer d'un
+    # échec d'assertion, sinon on cherche un bug qui n'existe pas.
+    if [[ $rc -eq 124 || $rc -eq 137 ]]; then
+      RESULTS+=("TIMEOUT|$s|aucune sortie en ${SUITE_TIMEOUT:-600}s — suite bloquée, voir $log")
+      failed=$((failed+1))
+      if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        echo "::error title=Suite bloquée::$s n'a pas rendu la main en ${SUITE_TIMEOUT:-600}s (arrêt forcé)"
+      fi
+      continue
+    fi
     RESULTS+=("FAIL|$s|$(grep -c '✗' "$log" 2>/dev/null || echo '?') échecs — voir $log")
     failed=$((failed+1))
     # G5 : les logs bruts des jobs privés ne sont pas toujours lisibles par
