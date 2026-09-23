@@ -1,4 +1,4 @@
-# Job CI « database » — état, corrections et reliquat
+# Job CI « database » — du blocage de 6 h au vert
 
 _Dernière mise à jour : 23/09/2026 — branche `arena/01a0ca72-cr-chedz` (PR #49)._
 
@@ -7,7 +7,9 @@ _Dernière mise à jour : 23/09/2026 — branche `arena/01a0ca72-cr-chedz` (PR #
 Le job `database` était **bloqué 6 h puis annulé**, sans aucun diagnostic
 exploitable. Il nomme désormais précisément ce qui ne va pas, et chaque cause
 a été traitée. **Six défauts préexistants sur `main`** ont été mis au jour ;
-**tous sont corrigés**.
+**tous sont corrigés**, et le job **passe désormais en 27 min** (`52e6ef3`),
+avec les gates G security, H2 confidentiality, F2/F4 Flutter et H1 dev/staging
+tous verts.
 
 Le déblocage s'est fait par élimination successive : chaque correctif laissait
 le job aller plus loin et révélait la cause suivante, jusqu'à épuisement.
@@ -19,6 +21,7 @@ le job aller plus loin et révélait la cause suivante, jusqu'à épuisement.
 | `baef7b6` | échec à 38 min | `phase62` ne rendait jamais la main + 3 suites parents |
 | `8c64924` | 1 suite rouge | `ON CONFLICT` obsolète (préférences jamais enregistrées) |
 | `18b159c` | 1 assertion rouge | course de lecture dans `phase11` (pas un bug produit) |
+| `52e6ef3` | **succès en 27 min** | — |
 
 Aucun de ces défauts ne vient de la refonte Sérénité. Ils ont été trouvés
 **parce que** le job est devenu diagnosticable, puis corrigés ici ; ils étaient
