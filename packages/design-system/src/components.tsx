@@ -104,7 +104,19 @@ export function TextField(props: {
           }}
         >
           {props.label}
-          {props.required && <span style={{ color: tokens.colors.danger }}> *</span>}
+          {/* L'astérisque est purement visuelle : `aria-hidden` la retire du
+              nom accessible du champ. Sans cela le libellé devient
+              « Prénom * », et toute recherche par libellé exact
+              (getByLabel(..., { exact: true }), lecteurs d'écran, tests)
+              ne retrouve plus le champ. L'état obligatoire reste porté par
+              l'attribut `required` de l'<input>, qui est la source de
+              vérité pour l'accessibilité. */}
+          {props.required && (
+            <span aria-hidden="true" style={{ color: tokens.colors.danger }}>
+              {' '}
+              *
+            </span>
+          )}
         </span>
       )}
       <input
