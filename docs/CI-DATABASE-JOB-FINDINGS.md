@@ -5,9 +5,20 @@ _Dernière mise à jour : 23/09/2026 — branche `arena/01a0ca72-cr-chedz` (PR #
 ## Résumé
 
 Le job `database` était **bloqué 6 h puis annulé**, sans aucun diagnostic
-exploitable. Il échoue désormais en ~14 min en nommant précisément ce qui ne va
-pas. Cinq défauts **préexistants sur `main`** ont été mis au jour ; quatre sont
-corrigés, **une assertion reste rouge** et est documentée ici.
+exploitable. Il nomme désormais précisément ce qui ne va pas, et chaque cause
+a été traitée. **Six défauts préexistants sur `main`** ont été mis au jour ;
+**tous sont corrigés**.
+
+Le déblocage s'est fait par élimination successive : chaque correctif laissait
+le job aller plus loin et révélait la cause suivante, jusqu'à épuisement.
+
+| Run | Symptôme | Cause trouvée |
+|---|---|---|
+| avant | 6 h, annulé | aucun garde-temps |
+| `4bf1b3b` | échec à 14 min | PostgreSQL 18 ne démarrait pas |
+| `baef7b6` | échec à 38 min | `phase62` ne rendait jamais la main + 3 suites parents |
+| `8c64924` | 1 suite rouge | `ON CONFLICT` obsolète (préférences jamais enregistrées) |
+| `18b159c` | 1 assertion rouge | course de lecture dans `phase11` (pas un bug produit) |
 
 Aucun de ces défauts ne vient de la refonte Sérénité. Ils ont été trouvés
 **parce que** le job est devenu diagnosticable, puis corrigés ici ; ils étaient
@@ -117,35 +128,59 @@ Corrige les trois suites : `phase7-parent`, `phase37-parent-revocation`,
 `phase41-photo-consent-scope`. Couvert hors base par
 `apps/api/src/modules/parents/parent-photos.spec.ts` (4 tests).
 
-## Reste ouvert — une assertion
+## Corrigé — 5. Préférences de notification jamais enregistrées
 
-### `phase7-parent` : `Préférence désactivée : aucun push en file — file=1`
+**Symptôme** : `phase7-parent` — `Préférence désactivée : aucun push en file — file=1`.
+Un parent qui désactivait ses notifications continuait d'en recevoir.
 
-Un `check_in` met un push en file alors que le parent a désactivé
-`notification_preferences` pour cet événement. La logique de
-`notifications.service.ts` paraît pourtant correcte (`if (!pref || pref.is_enabled)`),
-l'écriture et la lecture utilisent les mêmes colonnes
-(`organization_id, user_id, channel='push', event_type`), et le test cible bien
-le même utilisateur. L'hypothèse la plus probable est que la préférence n'est pas
-trouvée au moment de la lecture — contexte de tenant, ordre des opérations, ou
-transaction distincte — mais cela demande d'observer la base pendant l'exécution.
+**Cause** : la logique de `notifications.service.ts` était correcte ; c'est
+l'écriture de la préférence qui échouait, en amont. La migration `073` a
+remplacé, sur `notification_preferences`, `UNIQUE (user_id, channel, event_type)`
+par `UNIQUE (organization_id, user_id, channel, event_type)` pour permettre à un
+utilisateur multi-crèche d'avoir des préférences par tenant. `savePreference()`
+visait toujours l'ancienne combinaison. PostgreSQL exige qu'un `ON CONFLICT`
+corresponde exactement à une contrainte existante : la requête était rejetée, la
+préférence jamais écrite. Le test n'inspectant pas la réponse du POST, l'erreur
+restait invisible jusqu'au check-in suivant.
 
-**Non corrigé délibérément** : sans PostgreSQL pour reproduire, toute
-modification de la logique de notification serait une supposition. Le symptôme
-est isolé et documenté plutôt que masqué.
+**Pourquoi aucun outil ne pouvait le voir** : ni TypeScript, ni ESLint, ni les
+tests unitaires ne lisent le SQL. Seule une base réelle rejette la requête.
 
-### Comment reprendre
+**Garde** : `tests/tenant-isolation/on-conflict-targets.test.mjs` rejoue les
+migrations **dans l'ordre** puis vérifie chaque `ON CONFLICT` du code. Trois
+pièges ont produit des faux négatifs avant qu'il soit fiable, et méritent
+d'être connus de quiconque écrira un garde SQL statique :
 
-```bash
-export DATABASE_URL=postgres://postgres:postgres@localhost:5432/creche_test
-node scripts/migrate.mjs --reset && node scripts/migrate.mjs && node scripts/seed.mjs
-npm run build --workspace @creche/api
-bash scripts/run-isolation-suites.sh phase7-parent
-cat /tmp/suite-phase7-parent.api.test.log
-```
+- unionner les migrations au lieu de les rejouer **ignore les `DROP CONSTRAINT`** ;
+- un commentaire SQL citant l'ancienne contrainte crée une **correspondance fantôme** ;
+- une contrainte anonyme `UNIQUE(...)` dans un `CREATE TABLE` doit être mappée au
+  nom généré par PostgreSQL (`<table>_<cols>_key`) pour être reliée à son drop.
 
-**Pourquoi ce n'a pas été fait ici** : l'environnement d'agent n'a ni `psql`, ni
-`pg_ctl`, ni `postgres`, ni `pg_isready`, ni `docker`.
+Audit des autres `ON CONFLICT` du dépôt : tous valides.
+
+## Corrigé — 6. Course de lecture dans `phase11` (pas un bug produit)
+
+**Symptôme** : `✗ Job retention_purge → done — [{"status":"processing"}]`.
+
+**Ce n'était pas une régression** : la purge avait bien eu lieu, et les quatre
+assertions qui la mesurent étaient vertes. Seule la lecture du statut terminal
+échouait.
+
+**Cause** : le worker COMMIT le travail métier, **puis** appelle
+`jobs_finish_leased()` dans un aller-retour SQL distinct. Entre les deux, la
+ligne reste légitimement `processing`. Le test lisait le statut immédiatement
+après avoir observé l'**effet** de la purge, supposant que l'effet et le statut
+deviennent visibles au même instant.
+
+**Pourquoi maintenant** : la suite était verte sur `baef7b6` et `8c64924`. Plus
+les correctifs précédents libèrent de temps machine, plus worker et test
+s'exécutent concurremment, et la fenêtre finit par s'ouvrir. Laissée en l'état,
+elle aurait produit un échec **intermittent** — le pire type à diagnostiquer.
+
+**Correctif** : attendre l'état terminal, comme le font déjà toutes les autres
+suites worker (`phase13`, `21`, `23`, `28`, `36`) ; `phase11` était la seule du
+dépôt à lire ce statut sans attendre. `failed` est traité comme terminal : un
+vrai échec est signalé immédiatement, jamais masqué en `done`.
 
 ## Lire les échecs CI sur ce dépôt
 
