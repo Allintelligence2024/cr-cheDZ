@@ -12,6 +12,12 @@ on:
 jobs:
   database:
     runs-on: ubuntu-latest
+    # Aucun job n'avait de timeout-minutes : un blocage consommait donc le
+    # plafond GitHub de 6 h avant d'être annulé (observé sur main en 348bd74,
+    # job « database » : 14:39 → 20:40 puis cancelled). Les budgets ci-dessous
+    # valent ~2 à 3 fois la durée normale : un job sain n'est jamais coupé,
+    # mais un blocage est signalé en minutes au lieu d'immobiliser la file.
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:18
@@ -72,6 +78,7 @@ jobs:
     # Source en postgres:16 : version de docker-compose.prod.yml ET du
     # client pg_dump préinstallé sur le runner (≥ serveur exigé par le drill).
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:18
@@ -132,6 +139,7 @@ jobs:
     # B1 (remédiation audits combinés) : lint et tests unitaires API étaient
     # écrits mais JAMAIS exécutés en CI — un rouge ici est un vrai signal.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -171,6 +179,7 @@ jobs:
     # Jamais exécutés avant ce job — un rouge est honnête et non bloquant
     # (seul le check `database` est requis par la branch protection).
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:18
@@ -296,6 +305,7 @@ jobs:
 
   admin-web:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -308,6 +318,7 @@ jobs:
 
   support-console:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -320,6 +331,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
