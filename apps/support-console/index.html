@@ -2,8 +2,35 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#F4F7F5" />
+    <meta name="color-scheme" content="light dark" />
     <title>Crèche SaaS — Console support</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;750&display=swap"
+      rel="stylesheet"
+    />
+    <!--
+      Anti-flash (FOUC) : pose data-theme sur <html> AVANT la première peinture.
+      Sans ce script, un utilisateur en thème sombre verrait un flash blanc le
+      temps que React monte. Doit rester inline et synchrone.
+      Même clé de stockage que l'admin-web (`creche_theme`).
+    -->
+    <script>
+      (function () {
+        try {
+          var m = localStorage.getItem('creche_theme') || 'system';
+          var d = m === 'dark' || (m === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = d ? 'dark' : 'light';
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', d ? '#0B1413' : '#F4F7F5');
+        } catch (e) {
+          /* localStorage bloqué : on reste sur la préférence système via CSS. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

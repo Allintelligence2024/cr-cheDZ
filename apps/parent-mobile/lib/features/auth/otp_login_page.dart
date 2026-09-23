@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
+import '../../theme/serenite_theme.dart';
 
 class OtpLoginPage extends StatefulWidget {
   const OtpLoginPage({super.key, required this.api, required this.onAuthenticated});
@@ -79,7 +80,12 @@ class _OtpLoginPageState extends State<OtpLoginPage> {
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
-                    child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: SereniteStatusColors.of(context).danger,
+                      ),
+                    ),
                   ),
                 const SizedBox(height: 20),
                 FilledButton(

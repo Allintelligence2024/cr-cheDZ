@@ -49,9 +49,9 @@ class _PhotosPageState extends State<PhotosPage> {
               child: Image.network(
                 p['url'] as String,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => const ColoredBox(
-                  color: Colors.black12,
-                  child: Icon(Icons.broken_image),
+                errorBuilder: (_, __, ___) => ColoredBox(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: const Icon(Icons.broken_image),
                 ),
               ),
             );

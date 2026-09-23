@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../theme/serenite_theme.dart';
 
 /// Écran de connexion (email + mot de passe) — Phase 4.
 /// La navigation après succès est déléguée au shell via [onAuthenticated].
@@ -49,7 +50,11 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.child_care, size: 64, color: Color(0xFF2563EB)),
+                Icon(
+                  Icons.child_care,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(height: 8),
                 Text('Crèche — Personnel', style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 24),
@@ -68,7 +73,12 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 12),
-                  Text(_error!, style: const TextStyle(color: Color(0xFFDC2626))),
+                  Text(
+                    _error!,
+                    style: TextStyle(
+                      color: SereniteStatusColors.of(context).danger,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 20),
                 SizedBox(
