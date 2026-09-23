@@ -6,7 +6,13 @@
  * réelle : n'importe quel mot de passe est accepté.
  *
  * ⚠️ NE JAMAIS déployer ni importer depuis le code applicatif.
- * Usage :  node scripts/dev-preview-api.mjs   (port 3100 par défaut)
+ * Usage (deux terminaux) :
+ *   npm run preview:api    — ce serveur, port 3100
+ *   npm run preview:web    — l'admin-web, proxy /api redirigé vers 3100
+ *
+ * Le proxy de vite.config.ts vise 3000 (la vraie API NestJS) par défaut :
+ * sans API_PROXY_TARGET=http://127.0.0.1:3100, tout appel /api renvoie 500
+ * (ECONNREFUSED). C'est ce que fait `npm run preview:web`.
  */
 import { createServer } from 'node:http';
 
