@@ -45,6 +45,7 @@ vérification).
 |---|---|---|---|---|---|
 | **L1** | **Gardiens orphelins + garde de config + CSP edge** | vérif. §4.3, F2, F3 | ~2 h | 4 gardiens en CI ; test unitaire prod-config ; test de contrat en-têtes | **FAIT** + régression CI du 24/09 corrigée et verrouillée (§3, L1.4) |
 | **L1.5** | **5ᵉ gardien orphelin + cliquet « gardiens câblés »** | vérif. §4.3 | ~0,5 h | gardien `check-guards-wired.mjs` en CI ; `audit-seeds-pii --strict` exécuté | **FAIT (2026-09-24)** — 12 gardiens recensés, 0 orphelin, 3 mutations détectées (§5) |
+| **L1.6** | **Diagnostic H1 exploitable** : nommer l'image qui refuse le tirage | CI (`database`) | ~0,2 h | message d'erreur citant l'image + test unitaire | **FAIT (2026-09-24)** — « Registry pull failed for <image> » ; comportement inchangé (aucun repli vert) |
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | planifié |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
@@ -53,7 +54,7 @@ vérification).
 
 **Ordre recommandé** : L1 (fait) → **L2** (bloque l'usage réel) → L3 (bloque les parents) → L5
 (pas de dépendance, peut glisser entre les deux) → L4 (attend une décision DPO) → L6.
-**État au 2026-09-24 (soir)** : L1 (+ L1.5), L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
+**État au 2026-09-24 (soir)** : L1 (+ L1.5, L1.6), L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
 bloqué par l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée
 possible) ; L4 attend la décision DPO ; il ne reste de L6 que D3 (`compress_media`) et k6.
 
@@ -661,6 +662,21 @@ I — nouveau gardien sans appelant            rc=1  ['ORPHELIN scripts/check-mu
 J — PII « réelle » injectée dans un seed     rc=1  ['domaine gmail.com non reconnu comme synthétique'] (audit --strict)
 restaurations                                12/12 câblés ; audit PII rc=0
 ```
+
+### L1.6 — H1 : nommer l'image qui refuse le tirage (2026-09-24, soir)
+
+`scripts/test-staging-stack.mjs` **construit** ses images applicatives localement et ne tire du
+registre que **deux images publiques** (`postgres:18-alpine`, `quay.io/minio/minio`). L'annotation CI
+disait « Registry pull failed … unauthorized » **sans dire laquelle** : inexploitable pour l'ops, qui
+ne pouvait pas distinguer « registre privé sans credentials » de « tirage anonyme refusé ».
+
+**Correctif** : `scripts/registry-pull.mjs` nomme l'image dans l'erreur
+(`Registry pull failed for <image>: …`). Le comportement est **inchangé** : réessais uniquement sur
+timeout réseau, échec définitif immédiat sinon, aucun repli vert.
+
+**Preuve** : `tests/tenant-isolation/registry-pull.test.mjs` — nouveau cas « the failing image is
+named in the error » pour les **deux** images (9/9 verts) ; **mutation K** (retrait du nom) →
+`not ok 8`, restauration → 9/9. Le test est exécuté en CI (Gate D, lot E2).
 
 ## 6. Décisions en attente (propriétaire explicite)
 

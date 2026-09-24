@@ -35,6 +35,19 @@ for (const message of ['pull access denied', 'manifest unknown', 'unauthorized: 
     assert.equal(f.calls.length, 1); assert.deepEqual(f.pauses, []);
   });
 }
+// H1 tire DEUX images (postgres + minio) : « unauthorized » sans le nom de
+// l'image est inexploitable pour l'ops — le message doit désigner la coupable.
+test('the failing image is named in the error (H1 pulls two images)', async () => {
+  for (const target of ['postgres:18-alpine', 'quay.io/minio/minio']) {
+    const f = fixture([{status:1, stderr:'unauthorized: access to the requested resource is not authorized'}]);
+    await assert.rejects(pullRegistryImage(target, f.options), (error) => {
+      assert.match(error.message, /Registry pull failed for /);
+      assert.ok(error.message.includes(target), `le message doit citer ${target} : ${error.message}`);
+      assert.match(error.message, /unauthorized/);
+      return true;
+    });
+  }
+});
 test('persistent network failure stays red after three attempts', async () => {
   const f = fixture([timeout]);
   await assert.rejects(pullRegistryImage(image, f.options), /Registry pull failed/);

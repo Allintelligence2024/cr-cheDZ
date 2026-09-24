@@ -209,6 +209,31 @@ avec `PRODUCTION_ROLE_TESTS` non défini, et `RATE_LIMIT_DISABLED` n'entre en je
 que dans les spawns de production) et **rouge en CI** pour une variable
 d'environnement du job. C'est exactement le cas ici.
 
+### H1 — ce que le code dit exactement (mesuré le 24/09, soir)
+
+`scripts/test-staging-stack.mjs:66-68` : la stack de staging **construit** ses images
+applicatives localement (`docker build -f apps/api/Dockerfile -t ghcr.io/creche-saas/api:staging .`,
+idem worker) puis **ne tire du registre que deux images d'infrastructure publiques** :
+
+```js
+for (const name of ['postgres', 'minio']) process.stdout.write(await pullRegistryImage(config.services[name].image, { env }));
+```
+
+Autrement dit, l'`unauthorized` observé ne concerne **ni un dépôt privé ni des
+credentials GHCR manquants** : ce sont `postgres:18-alpine` (Docker Hub) et
+`quay.io/minio/minio` (Quay) qui refusent le tirage **anonyme** depuis le runner —
+ce qui oriente le diagnostic vers le runner lui-même (authentification/miroir
+configurés sur le démon, ou blocage réseau/rate-limit de ces registres) plutôt que
+vers le dépôt.
+
+**Instrumentation ajoutée (lot 1.6)** : l'erreur **nomme désormais l'image**
+(`Registry pull failed for quay.io/minio/minio: … unauthorized …`) — l'annotation
+CI citait « unauthorized » sans dire laquelle des deux, ce qui était inexploitable
+pour l'ops. Vérifié par test : `tests/tenant-isolation/registry-pull.test.mjs`
+(« the failing image is named in the error »), exécuté en CI. Le comportement de
+fond est inchangé : réessais uniquement sur timeout réseau, échec définitif
+immédiat sinon, **aucun repli « vert de complaisance »**.
+
 ### Correctif — 24/09
 
 - `tests/tenant-isolation/helpers.mjs` : nouvelle constante partagée
