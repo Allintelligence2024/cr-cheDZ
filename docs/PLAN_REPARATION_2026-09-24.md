@@ -664,12 +664,100 @@ restaurations                                12/12 câblés ; audit PII rc=0
 
 ## 6. Décisions en attente (propriétaire explicite)
 
-| # | Décision | Propriétaire | Bloque |
-|---|---|---|---|
-| D1 | Stockage : option **A** (stream same-origin) ou **B** (sous-domaine + TLS) | produit + ops | Lot 2 |
-| D2 | Rétention `notification_queue`/`messages` : purger ou justifier | DPO | Lot 4 |
-| D3 | `compress_media` : implémenter ou retirer | produit | Lot 6 |
-| D4 | `parent-mobile` : offline-first complet maintenant, ou refresh + états d'erreur seuls | produit | portée du Lot 3 |
+| # | Décision | Propriétaire | Bloque | État |
+|---|---|---|---|---|
+| D1 | Stockage : option **A** (stream same-origin) ou **B** (sous-domaine + TLS) | produit + ops | Lot 2 | ✅ **tranchée : A** (lots 2A/2B livrés) |
+| D2 | Rétention `notification_queue`/`messages` : purger ou justifier | DPO | Lot 4 | dossier ci-dessous |
+| D3 | `compress_media` : implémenter ou retirer | produit | Lot 6 | dossier ci-dessous |
+| D4 | `parent-mobile` : offline-first complet maintenant, ou refresh + états d'erreur seuls | produit | portée du Lot 3 | dossier ci-dessous |
+| D5 | Clips vidéo : quel plafond de taille et quelle voie (API ou S3 direct) | produit + ops | usage réel de la vidéosurveillance en prod | dossier ci-dessous |
+
+### D2 — Rétention de `notification_queue` et `messages` *(DPO)*
+
+**Faits mesurés (2026-09-24)** :
+- `notification_queue` (migration 009) garde `title_fr/ar`, `body_fr/ar`, `data` JSONB, `status`,
+  `sent_at`, `failed_at`, `failure_reason`, `attempts`, `created_at` ; `messages` (009) garde `body`,
+  `attachment_id`, `sent_at`, `deleted_at` (suppression logique).
+- La purge livrée (migration 034, job `retention_purge`) ne couvre **que** `audit_logs`,
+  `data_access_logs`, `media_access_logs` (5 ans, `RETENTION_DAYS=1825`). Aucun `DELETE` de
+  `notification_queue` ni de `messages` n'existe dans le dépôt : ces deux tables **croissent sans
+  borne**.
+- Le patron technique est déjà là (fonction `SECURITY DEFINER` + job worker + test) : le coût de la
+  décision « purger » est **S** (≈ 0,5 j avec preuve), pas un chantier.
+
+**Options** :
+- **(a) Purger avec des seuils dédiés** — file de notifications : lignes `sent`/`failed` au-delà de
+  `NOTIFICATION_RETENTION_DAYS` (proposition : 90 j, l'inbox reste la voie de lecture durable) ;
+  messages : contenu au-delà de `MESSAGES_RETENTION_DAYS` (proposition : 365 j) — même patron que
+  034, purge par lots, testée. *Coût S ; l'audit la citait comme attente du DPO.*
+- **(b) Conserver et le justifier au registre** — utile si les messages servent de preuve
+  d'information des familles ; à écrire noir sur blanc (durée, base légale, qui y accède).
+- **(c) Anonymiser au lieu de supprimer** — garde les métadonnées (volumétrie, délais) sans conserver
+  le contenu ; plus coûteux (2 tables × 2 langues + JSONB) et n'apporte rien ici : les journaux
+  d'audit conservent déjà la trace des actions.
+
+**Recommandation (à trancher par le DPO)** : **(a)**, avec des seuils distincts par table et un test
+qui prouve qu'une notification en cours de retry ou un message non lu du mois n'est **pas** purgé.
+Si le DPO préfère (b), le registre doit citer la durée exacte — sinon la dette reste ouverte.
+
+### D3 — `compress_media` : implémenter ou retirer *(produit)*
+
+**Faits mesurés** : `apps/worker/src/main.ts:306` — `compress_media` **échoue explicitement**
+(`NOT_IMPLEMENTED: compression média`), aucun chemin de code ne le met en file ; les envois média
+sont plafonnés à **8 Mio** (`MEDIA_MAX_UPLOAD_BYTES`, `media.service.ts:16`) et à **12 Mio** au bord
+(nginx `client_max_body_size 12M`, `media.controller.ts:52`) ; aucune bibliothèque de traitement
+d'image n'est présente dans le dépôt.
+
+**Options** :
+- **(a) Retirer le handler** et l'annoncer comme tel (« les médias sont stockés tels quels, plafonnés
+  à 8 Mio ») : zéro dépendance, zéro surface d'attaque nouvelle, rien à prouver. *Coût XS.*
+- **(b) Implémenter côté serveur** (ex. `sharp`) : gain de stockage/bande passante, mais introduit
+  une dépendance native dans le worker et **une surface d'attaque à dimensionner** (bombes de
+  décompression : plafond de pixels obligatoire, mémoire du conteneur). *Coût M + tests de limites.*
+- **(c) Compresser côté clients** (Flutter/web) avant envoi : pas de dépendance serveur, mais aucune
+  garantie (un client modifié envoie ce qu'il veut) et le chemin `base64` staff n'a pas d'UI.
+
+**Recommandation** : **(a)** maintenant (le stub « qui échoue » est honnête mais c'est une dette
+silencieuse annoncée comme intégration), et **(c)** le jour où l'UI photo staff est câblée — la
+limite serveur de 8 Mio reste la garantie. (b) seulement si le coût de stockage devient mesurable.
+
+### D4 — Portée du lot 3 (`parent-mobile`) *(produit)*
+
+**Faits mesurés** : `refresh_token` stocké mais **jamais utilisé** ; session de 15 min
+(`expiresIn: '15m'`) ; `photos_page`/`consents_page` affichent un spinner **infini** en cas d'échec ;
+`apps/parent-mobile/test/` **n'existe pas** ; `pubspec.lock` non versionné ; `flutter.yml` ne lance
+`flutter test` que pour `staff-mobile`. Blocage d'exécution de ce lot dans l'environnement de
+rédaction : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` (mesure au §5, lot 3).
+
+**Options** :
+- **(a) Correctif court** — intercepteur Dio `401 → refresh` single-flight + purge/retour OTP, états
+  d'erreur + réessai sur les 2 écrans, `pubspec.lock` commité, `flutter test` branché en CI :
+  ≈ 1–2 j, **supprime le défaut bloquant** (app inutilisable après 15 min).
+- **(b) Offline-first complet** — cache local + file d'envoi + résolution de conflits côté parent :
+  plusieurs semaines, et le serveur porte déjà `sync_push`/`sync_pull` (le staff l'utilise) ; à
+  cadrer comme une mission, pas comme un lot de réparation.
+
+**Recommandation** : **(a)** d'abord (c'est ce que le rapport d'audit qualifiait de bloquant),
+**(b)** ensuite si le terrain le demande.
+
+### D5 — Clips vidéo : plafond et voie d'envoi *(produit + ops)*
+
+**Faits mesurés** : l'envoi de clips passe par un **presign S3** (`POST /video/clips/presign-upload`) ;
+la décision D1 = **A** (contenu servi par l'API, pas de sous-domaine public) rend ce presign
+**inutilisable en production** (il est déjà *fail-closed* côté média, lot 2B). Les plafonds actuels
+(8/12 Mio) sont dimensionnés pour des photos, pas pour des clips.
+
+**Options** :
+- **(a) Envoi par l'API avec plafond dédié** (ex. 100–200 Mio, streaming vers le stockage sans
+  bufferiser en mémoire, `client_max_body_size` et timeouts associés) : cohérent avec D1 = A,
+  *coût M + tests de limites*.
+- **(b) Voie S3 directe** (sous-domaine public) pour les clips uniquement : contredit D1 = A, rouvre
+  la question des URLs publiques.
+- **(c) Retirer la vidéosurveillance du discours produit** tant que le dimensionnement n'est pas
+  fait : le module est déjà derrière un drapeau d'organisation (`video_surveillance`).
+
+**Recommandation** : **(a)** si la vidéosurveillance est au programme du pilote ; sinon **(c)**, pour
+ne pas laisser croire que la fonction est opérationnelle.
 
 ## 7. Définition de « fait » (par lot)
 
