@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -89,6 +91,26 @@ class ParentApiClient {
       if (start != null) 'quiet_hours_start': start,
       if (end != null) 'quiet_hours_end': end,
     });
+  }
+
+  /// Contenu binaire d'une photo (LOT 2 — P0 F5).
+  ///
+  /// L'API ne renvoie plus d'URL signée MinIO (injoignable depuis un
+  /// téléphone : MinIO est lié à 127.0.0.1 en production) mais un chemin
+  /// same-origin `/parent/children/<child>/media/<id>/content`. Ce chemin
+  /// exige l'en-tête Authorization : Flutter ne peut donc pas l'afficher avec
+  /// `Image.network(url)` seul — les octets sont récupérés ici, déjà soumis
+  /// aux contrôles serveur (filiation + consentement photo courant).
+  Future<Uint8List> photoContent(String childId, String mediaId) async {
+    final token = await _storage.read(key: 'access_token');
+    final res = await _dio.get<List<int>>(
+      '/parent/children/$childId/media/$mediaId/content',
+      options: Options(
+        headers: {'authorization': 'Bearer $token'},
+        responseType: ResponseType.bytes,
+      ),
+    );
+    return Uint8List.fromList(res.data ?? const <int>[]);
   }
 
   Future<Response<dynamic>> _authedGet(String path) async {

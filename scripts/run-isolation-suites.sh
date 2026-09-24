@@ -95,6 +95,9 @@ SUITES=(
   phase63-sync-retention.pg.test.mjs
   phase64-auth-cookies.api.test.mjs
   phase65-feature-flag-disable.api.test.mjs
+  # LOT 2 (P0 F5) : contenu servi par l'API, same-origin — preuve d'octets
+  # réels (médias, photos parent, exports, PDF, clips) + verrou anti-régression.
+  phase66-content-same-origin.api.test.mjs
 )
 
 FILTER="${1:-}"

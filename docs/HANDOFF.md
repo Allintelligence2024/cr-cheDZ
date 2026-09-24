@@ -316,3 +316,18 @@ npm run typecheck --workspace @creche/support-console
 # Restaurer la CI
 git add .github && git commit -m "ci: restore workflows" && git push
 ```
+
+---
+
+## Mise à jour 2026-09-24 — lot 2 du plan de réparation (lecture des contenus)
+
+Le contrat de **lecture** des fichiers a changé (P0 « F5 », décision A) : l'API ne rend plus
+d'URL signée S3/MinIO — inexploitable, MinIO étant lié à `127.0.0.1` en production. Photos,
+photos parent, exports, PDF de facture et clips sont servis **same-origin** par l'API
+(`/api/v1/…/content`) et le lien rendu est un **chemin relatif**. Les clients le consomment avec
+le JWT (`apiOpenBlob` côté web, `ParentApiClient.photoContent` côté parent) : un `<img src>`/
+`window.open` nu recevrait 401, le garde JWT n'acceptant que l'en-tête `Authorization`.
+Détails, tableau avant/après et preuves : `docs/PLAN_REPARATION_2026-09-24.md` §4 (lot 2) ;
+suite de preuve : `tests/tenant-isolation/phase66-content-same-origin.api.test.mjs`.
+**Reste ouvert** : l'**upload** (`presign-upload` PUT) n'est pas encore proxyfié par l'API —
+téléversement photo/clip impossible en production tant que le volet B n'est pas livré.

@@ -1,7 +1,8 @@
-import { Body, Controller, Get, HttpStatus, Param, Post, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { sendStorageObject } from '../../shared/storage/object-stream';
 import { CreateExportDto, ExportIdParam } from './dto/exports.dto';
 import { ExportsService } from './exports.service';
 
@@ -24,11 +25,18 @@ export class ExportsController {
 
   @Get(':id/download')
   @Roles('director', 'accountant', 'super_admin')
-  async download(@Param() p: ExportIdParam, @Res() res: Response) {
+  async download(@Param() p: ExportIdParam, @Req() req: Request, @Res() res: Response) {
+    // LOT 2 (P0 F5) : flux same-origin (plus de redirection vers MinIO).
     const result = await this.exports.download(p.id);
-    if (result.kind === 'redirect') return res.redirect(HttpStatus.FOUND, result.url);
-    res.setHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('content-disposition', `attachment; filename="${result.filename}"`);
-    res.send(result.buffer);
+    sendStorageObject(res, req, result.object, {
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: result.filename,
+      inline: false,
+      onStreamError: {
+        code: 'EXPORT_FILE_MISSING',
+        messageFr: 'Le fichier d’export est introuvable sur le stockage',
+        messageAr: 'ملف التصدير غير موجود في التخزين',
+      },
+    });
   }
 }

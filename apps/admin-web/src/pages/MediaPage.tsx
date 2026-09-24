@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { apiOpenBlob, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface MediaItem {
@@ -51,11 +51,17 @@ export function MediaPage(): React.JSX.Element {
     }
   };
 
+  /**
+   * LOT 2 (P0 F5) : l'API ne rend plus d'URL signée S3 (`http://minio:9000`
+   * était injoignable depuis un navigateur). Le contenu est servi par l'API,
+   * same-origin, et exige l'en-tête Authorization → blob authentifié ; un
+   * `window.open` sur une URL nue recevrait 401 (le garde JWT n'accepte pas
+   * de cookie de session).
+   */
   const download = async (id: string): Promise<void> => {
     setError(null);
     try {
-      const { url } = await http.get<{ url: string; key: string }>(`/media/${id}/download`);
-      window.open(url, '_blank', 'noopener');
+      await apiOpenBlob(`/media/${id}/content`);
     } catch (e: unknown) {
       setError((e as { messageFr?: string }).messageFr ?? '');
     }

@@ -7,8 +7,9 @@
  *  1. Journal HTTP : meal → daily_log_events + agrégats ; note privée hors fil ;
  *     incident → notification parent ; correction append-only
  *  2. Action groupée (repas de section) : 12 enfants → 12 événements
- *  3. Médias : presign (URL signée S3), register, consentement obligatoire (422),
- *     consentement OK → visible, download journalisé, cross-tenant 404,
+ *  3. Médias : presign upload (URL signée PUT), register, consentement obligatoire
+ *     (422), consentement OK → visible, download journalisé (chemin same-origin
+ *     + octets réellement servis — LOT 2), cross-tenant 404,
  *     rôles (éducatrice ne publie pas), consentement révoqué → 422
  *  4. Sync : add_photo → media créé non visible ; log_incident → notification
  *  5. Notifications : check_in → notification_queue + inbox (gardien can_receive_push)
@@ -20,6 +21,7 @@
 import { execSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
@@ -47,6 +49,9 @@ async function main() {
   await ensureAppRole(admin);
   process.env.DATABASE_URL = appUrl();
   process.env.RATE_LIMIT_DISABLED = 'true';
+  // LOT 2 : backend local + répertoire explicite pour prouver les OCTETS servis.
+  process.env.STORAGE_BACKEND = 'local';
+  process.env.STORAGE_LOCAL_DIR = process.env.STORAGE_LOCAL_DIR ?? '/tmp/pgtest/p6store';
 
   const { createApp } = await import(pathToFileURL(join(REPO, 'apps/api/dist/app.factory.js')).href);
   const app = await createApp();
@@ -233,6 +238,12 @@ async function main() {
       && presign.body.storage_key?.startsWith(`${A.org}/photo/`),
       JSON.stringify(presign.body));
 
+    // Fichier réel écrit dans le stockage (le presign n'a pas d'upload réel ici).
+    const storeDir = process.env.STORAGE_LOCAL_DIR;
+    const photoBytes = Buffer.from(`P6-PHOTO-${randomUUID()}`);
+    mkdirSync(dirname(join(storeDir, presign.body.storage_key)), { recursive: true });
+    writeFileSync(join(storeDir, presign.body.storage_key), photoBytes);
+
     const reg = await api('POST', '/media', tokenA, {
       storage_key: presign.body.storage_key, mime_type: 'image/jpeg',
       child_id: childA, children_in_photo: [childA],
@@ -261,8 +272,16 @@ async function main() {
       && withConsent.body.is_visible_to_parents === true);
 
     const download = await api('GET', `/media/${reg.body.id}/download`, tokenA);
-    check('Download → URL signée + journalisée', download.status === 200
-      && download.body.url.includes('X-Amz-Signature'));
+    check('Download → chemin same-origin + journalisé (LOT 2 : plus d’URL MinIO)', download.status === 200
+      && download.body.url === `/api/v1/media/${reg.body.id}/content`);
+    // Preuve de JOIGNABILITÉ : ce que l'ancien test ne vérifiait pas — les
+    // octets réellement servis par l'API sur le lien rendu.
+    const origin = base.slice(0, -'/api/v1'.length); // le lien rendu est déjà absolu depuis la racine
+    const contentRes = await fetch(`${origin}${download.body.url}`, { headers: { authorization: `Bearer ${tokenA}` } });
+    const contentBytes = Buffer.from(await contentRes.arrayBuffer());
+    check('Contenu servi sur le lien rendu : octets identiques au fichier stocké',
+      contentRes.status === 200 && contentBytes.equals(photoBytes),
+      `status=${contentRes.status} ${contentBytes.length}/${photoBytes.length}`);
     const accessLogs = await admin.query(
       `SELECT COUNT(*)::int AS n FROM media_access_logs WHERE media_id = $1`,
       [reg.body.id],

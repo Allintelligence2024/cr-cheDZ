@@ -154,12 +154,33 @@ export async function api<T = unknown>(
 /**
  * Téléchargement binaire authentifié (A3) : même renouvellement automatique
  * du token que `api()` — plus de 401 sec après expiration des 15 minutes
- * de l'access token. Les redirections (URL signée S3) sont suivies.
+ * de l'access token.
+ *
+ * LOT 2 (P0 F5) : l'API ne rend plus d'URL signée S3 à suivre ; le fichier
+ * est servi par l'API elle-même, same-origin, et exige l'en-tête
+ * `Authorization` (le garde JWT n'accepte QUE le Bearer — le cookie httpOnly
+ * ne sert qu'au refresh). D'où le passage par `fetch` + blob plutôt qu'un
+ * `window.open` sur une URL nue, qui partirait sans en-tête et recevrait 401.
  */
 export async function apiDownload(path: string, retry = true): Promise<Blob> {
-  const res = await authenticatedFetch(path, { method: 'GET', redirect: 'follow' }, retry);
+  const res = await authenticatedFetch(path, { method: 'GET' }, retry);
   if (!res.ok) throw await toApiError(res);
   return res.blob();
+}
+
+/**
+ * Ouvre un contenu authentifié dans un nouvel onglet (photos, clips, PDF).
+ *
+ * Le blob est révoqué après 60 s : assez pour que le nouvel onglet charge
+ * l'objet: URL, sans fuite mémoire durable. À noter (limite connue,
+ * documentée au plan) : le contenu transite en mémoire — acceptable pour des
+ * photos/PDF, à surveiller pour de gros clips vidéo.
+ */
+export async function apiOpenBlob(path: string): Promise<void> {
+  const blob = await apiDownload(path);
+  const objectUrl = URL.createObjectURL(blob);
+  window.open(objectUrl, '_blank', 'noopener');
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
 }
 
 export const http = {

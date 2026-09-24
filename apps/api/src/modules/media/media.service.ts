@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { assertStorageKeyInTenant } from '../../shared/authorization/storage-key';
 export { assertStorageKeyInTenant } from '../../shared/authorization/storage-key';
 import { photoConsentsAllowed } from '../../shared/authorization/photo-consent';
+import type { StorageObject } from '../../shared/storage/object-stream';
 import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -9,6 +10,16 @@ import { AppError, Errors } from '../../shared/errors';
 import { AuditService } from '../privacy/audit.service';
 import { PresignUploadDto, RegisterMediaDto } from './dto/media.dto';
 import { StorageService } from './storage.service';
+
+/**
+ * Chemin de lecture same-origin d'un média (LOT 2 — P0 F5).
+ * Relatif à l'origine PUBLIQUE : le web le résout sur la même origine, les
+ * apps mobiles le préfixent par l'origine de leur `API_URL`. Jamais d'hôte de
+ * stockage dans une réponse d'API.
+ */
+export function mediaContentPath(mediaId: string): string {
+  return `/api/v1/media/${mediaId}/content`;
+}
 
 /**
  * Médias (photos, documents) — objets en S3/MinIO, références en base.
@@ -218,7 +229,15 @@ export class MediaService {
     });
   }
 
-  /** Téléchargement : URL signée + journalisation d'accès (loi 25-11). */
+  /**
+   * Lien de lecture pour le personnel : **chemin relatif same-origin**.
+   *
+   * LOT 2 (P0 F5) : l'API rendait une URL signée S3 bâtie sur `S3_ENDPOINT`
+   * (`http://minio:9000` en production, MinIO lié à 127.0.0.1) — inutilisable
+   * par un client. Le client appelle désormais ce chemin sur l'API elle-même
+   * (avec son JWT) : `GET /media/:id/content`. Le journal d'accès reste
+   * inchangé (l'URL n'est plus qu'un chemin, la lecture réelle re-journalise).
+   */
   async downloadUrl(userId: string, mediaId: string, ipAddress?: string): Promise<{ url: string; key: string }> {
     const tenantId = requireTenant(this.tenantContext);
     const media = await this.tenantContext.withTenantConnection(async (client) => {
@@ -229,8 +248,61 @@ export class MediaService {
       if (res.rows.length === 0) throw Errors.notFound();
       return res.rows[0];
     });
-    const url = await this.storage.presignGet(media.storage_key);
-    // Journal d'accès médias dédié (loi 25-11).
+    await this.logView(tenantId, userId, mediaId, media.child_id, ipAddress);
+    return { url: mediaContentPath(mediaId), key: media.storage_key };
+  }
+
+  /**
+   * Contenu binaire d'un média, servi en flux par l'API (same-origin).
+   *
+   * Mêmes autorisations que `downloadUrl` (RLS + rôle au contrôleur) et même
+   * journalisation (media_access_logs + carnet d'accès loi 25-11). Un objet
+   * absent du stockage est un 404, jamais un 500.
+   */
+  async streamContent(
+    userId: string,
+    mediaId: string,
+    ipAddress?: string,
+  ): Promise<{ object: StorageObject; mimeType: string; filename: string | null; childId: string | null }> {
+    const tenantId = requireTenant(this.tenantContext);
+    const media = await this.tenantContext.withTenantConnection(async (client) => {
+      const res = await client.query(
+        `SELECT id, storage_key, mime_type, original_filename, child_id
+         FROM media_assets WHERE id = $1 AND deleted_at IS NULL`,
+        [mediaId],
+      );
+      if (res.rows.length === 0) throw Errors.notFound();
+      return res.rows[0];
+    });
+    // C3 : le client ne choisit pas le périmètre de ses objets — la clé doit
+    // être préfixée par le tenant, y compris en lecture locale.
+    assertStorageKeyInTenant(media.storage_key, tenantId);
+    const object = await this.storage.open(media.storage_key);
+    if (!object) {
+      throw new AppError(
+        'MEDIA_CONTENT_MISSING',
+        'Le fichier du média est introuvable sur le stockage',
+        'ملف الوسائط غير موجود في التخزين',
+        404,
+      );
+    }
+    await this.logView(tenantId, userId, mediaId, media.child_id, ipAddress);
+    return {
+      object,
+      mimeType: media.mime_type ?? 'application/octet-stream',
+      filename: media.original_filename ?? null,
+      childId: media.child_id ?? null,
+    };
+  }
+
+  /** Journal d'accès médias dédié (loi 25-11) + carnet d'accès (ADR-010). */
+  private async logView(
+    tenantId: string,
+    userId: string,
+    mediaId: string,
+    childId: string | null,
+    ipAddress?: string,
+  ): Promise<void> {
     await this.tenantContext.withTenantConnection(async (client) => {
       await client.query(
         `INSERT INTO media_access_logs (media_id, organization_id, accessed_by, access_type, ip_address)
@@ -242,13 +314,12 @@ export class MediaService {
       organizationId: tenantId,
       userId,
       dataType: 'media',
-      dataSubjectId: media.child_id ?? media.id,
-      dataSubjectType: media.child_id ? 'child' : 'media',
+      dataSubjectId: childId ?? mediaId,
+      dataSubjectType: childId ? 'child' : 'media',
       accessType: 'view',
       justification: 'consultation_media',
       ipAddress: ipAddress ?? null,
     });
-    return { url, key: media.storage_key };
   }
 
   /**

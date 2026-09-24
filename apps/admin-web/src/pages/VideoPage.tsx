@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
-import { http } from '../api/client';
+import { apiOpenBlob, http } from '../api/client';
 import { useI18n } from '../i18n';
 
 interface Camera {
@@ -72,13 +72,13 @@ export function VideoPage(): React.JSX.Element {
       .catch(handleError);
   };
 
+  /**
+   * LOT 2 (P0 F5) : `content_url` est un chemin same-origin pour les DEUX
+   * backends (le backend S3 renvoyait une URL signée MinIO injoignable). Le
+   * visionnage reste journalisé côté API ; le blob est récupéré avec le JWT.
+   */
   const viewClip = (clip: Clip): void => {
-    http.get<{ storage_backend: string; download_url?: string; content_url?: string }>(`/video/clips/${clip.id}/download`)
-      .then((r) => {
-        if (r.content_url) window.open(r.content_url, '_blank');
-        else if (r.download_url) window.open(r.download_url, '_blank');
-      })
-      .catch(handleError);
+    apiOpenBlob(`/video/clips/${clip.id}/content`).catch(handleError);
   };
 
   const visibleClips = filter ? clips.filter((c) => c.camera_id === filter) : clips;

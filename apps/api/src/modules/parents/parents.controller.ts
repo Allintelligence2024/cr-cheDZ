@@ -1,5 +1,6 @@
-import { Body, Controller, Get, HttpStatus, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { sendStorageObject } from '../../shared/storage/object-stream';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { ChildIdParam, InvoiceIdParam, PaymentIdParam, ReportAbsenceDto, SaveConsentDto, SaveNotificationPreferenceDto } from './dto/parent.dto';
 import { ParentsService } from './parents.service';
@@ -18,7 +19,28 @@ export class ParentsController {
   @Get('children/:childId/media') photos(@CurrentUser() u: CurrentUserPayload, @Param() child: ChildIdParam, @Req() req: Request) { return this.parents.photos(u.sub, child.childId, req.ip); }
   @Get('children/:childId/health') health(@CurrentUser() u: CurrentUserPayload, @Param() child: ChildIdParam, @Req() req: Request) { return this.parents.childHealth(u.sub, child.childId, req.ip); }
   @Get('children/:childId/media/:mediaId/download') photo(@CurrentUser() u: CurrentUserPayload, @Param('childId') childId: string, @Param('mediaId') mediaId: string, @Req() req: Request) {
+    // LOT 2 (P0 F5) : renvoie un chemin same-origin, plus jamais une URL
+    // signée MinIO inexploitable depuis un téléphone.
     return this.parents.photoUrl(u.sub, childId, mediaId, req.ip);
+  }
+
+  /**
+   * Contenu de la photo — flux same-origin, re-contrôlé avant chaque octet
+   * (filiation, visibilité, consentement photo courant) et journalisé.
+   */
+  @Get('children/:childId/media/:mediaId/content')
+  async photoContent(@CurrentUser() u: CurrentUserPayload, @Param('childId') childId: string, @Param('mediaId') mediaId: string, @Req() req: Request, @Res() res: Response): Promise<void> {
+    const { object, mimeType, filename } = await this.parents.photoContent(u.sub, childId, mediaId, req.ip);
+    sendStorageObject(res, req, object, {
+      contentType: mimeType,
+      filename: filename ?? undefined,
+      inline: true,
+      onStreamError: {
+        code: 'MEDIA_CONTENT_MISSING',
+        messageFr: 'Le fichier de la photo est introuvable sur le stockage',
+        messageAr: 'ملف الصورة غير موجود في التخزين',
+      },
+    });
   }
 
   // ── Factures et reçus — lecture seule, permission can_receive_invoices ────
@@ -26,11 +48,18 @@ export class ParentsController {
   @Get('invoices') invoices(@CurrentUser() u: CurrentUserPayload) { return this.parents.invoices(u.sub); }
   @Get('invoices/:invoiceId') invoice(@CurrentUser() u: CurrentUserPayload, @Param() p: InvoiceIdParam) { return this.parents.invoiceDetail(u.sub, p.invoiceId); }
   @Get('invoices/:invoiceId/pdf') async invoicePdf(@CurrentUser() u: CurrentUserPayload, @Param() p: InvoiceIdParam, @Req() req: Request, @Res() res: Response) {
+    // LOT 2 (P0 F5) : flux same-origin, plus de redirection vers MinIO.
     const result = await this.parents.invoicePdf(u.sub, p.invoiceId, req.ip);
-    if (result.kind === 'redirect') return res.redirect(HttpStatus.FOUND, result.url);
-    res.setHeader('content-type', 'application/pdf');
-    res.setHeader('content-disposition', `inline; filename="${result.invoice.invoice_number ?? 'facture'}.pdf"`);
-    res.send(result.buffer);
+    sendStorageObject(res, req, result.object, {
+      contentType: 'application/pdf',
+      filename: `${result.invoice.invoice_number ?? 'facture'}.pdf`,
+      inline: true,
+      onStreamError: {
+        code: 'PDF_NOT_READY',
+        messageFr: 'Le PDF n’est pas encore généré',
+        messageAr: 'لم يتم إنشاء ملف PDF بعد',
+      },
+    });
   }
   @Get('receipts') receipts(@CurrentUser() u: CurrentUserPayload) { return this.parents.receipts(u.sub); }
   @Get('receipts/:paymentId') receipt(@CurrentUser() u: CurrentUserPayload, @Param() p: PaymentIdParam) { return this.parents.receiptDetail(u.sub, p.paymentId); }

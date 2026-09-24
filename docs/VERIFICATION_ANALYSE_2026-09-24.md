@@ -117,9 +117,19 @@ correctement l'erreur, alors que `photos_page.dart:33` et `consents_page.dart:30
   l'autorisation et la journalisation, pas la **joignabilité** de l'URL rendue).
 - **Preuve la plus courte** : `curl -s "$API/media/$ID/download" -H "authorization: Bearer …" | jq -r .url`
   → l'hôte doit être celui de `S3_ENDPOINT`. C'est précisément ce qu'aucun test actuel n'affirme.
-- Traitement : **lot 2** du plan de réparation (`docs/PLAN_REPARATION_2026-09-24.md`), décision
-  A (contenu same-origin via l'API) ou B (sous-domaine de stockage + TLS). Preuve de sortie
-  exigée : une suite qui échoue si l'URL rendue vise `minio`, `127.0.0.1` ou `localhost`.
+- **État après lot 2 (2026-09-24, décision A) : corrigé pour la LECTURE.** Plus aucune URL signée
+  n'est rendue au client : `presignGet` a été supprimé, le contenu (photos, photos parent, exports,
+  PDF de facture, clips) est servi **en flux par l'API, same-origin**, et le lien rendu est un
+  **chemin** (`/api/v1/media/:id/content`, …). Preuve : `phase66-content-same-origin.api.test.mjs`
+  (30 vérifications, dont octets identiques au fichier de stockage et « aucun `presignGet(` dans
+  `apps/api/src` ») + les suites historiques mises à jour (`phase6`, `phase7`, `phase37`, `phase41`,
+  `phase13`, `phase21`, `phase38`) — journal complet au plan §4.
+- **Reste ouvert (volet B, écriture) :** `POST /media/presign-upload` et
+  `POST /video/clips/presign-upload` rendent toujours une URL signée **PUT** sur `S3_ENDPOINT` :
+  en production, `staff-mobile` et un DVR/NVR ne peuvent pas **téléverser**. Correctif suivant :
+  endpoints d'upload multipart servis par l'API (`multer` déjà présent) + branchement client.
+- **Hors périmètre** : `children.photo_url` (colonne jamais écrite par l'API — si elle venait à
+  recevoir une URL signée, elle serait inexploitable : y stocker une **clé**, pas une URL).
 
 ---
 
@@ -224,7 +234,7 @@ Légende : ✅ confirmé · 🟡 partiel/nuancé · ❌ faux · ➕ question ouv
 | 51 | Preuves par mutation sur les chemins critiques | ✅ | `scripts/mutation-proof.sh`, `mutation-phase23-proof.sh`, `mutation-phase24-proof.sh` |
 | 52 | 4 workflows CI, pas de CD automatique | ✅ | `ci`, `docker`, `flutter`, `security-audit` ; aucun job de déploiement |
 | 53 | « Tests de charge k6 » | 🟡 | **1 seul** fichier k6 (`tests/load/sync.k6.js`), et il **n'est jamais exécuté** (k6 absent) — `capacity-bench.mjs` le documente lui-même ; la charge réelle est un banc Node (`capacity-bench.mjs`, `mvp-bench.mjs`) |
-| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **67** suites `phaseNN`, **82** fichiers dans `tests/tenant-isolation/`, **69** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) |
+| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **68** suites `phaseNN`, **83** fichiers dans `tests/tenant-isolation/`, **70** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66` (lot 2) |
 | 55 | Densité de test (non chiffrée par le rapport) | ✅ | `tests/**/*.mjs` = **17 123 lignes** vs **16 926** lignes de code API : la suite de tests est **plus grosse que l'API qu'elle teste** |
 | 56 | « 15+ ADR » | 🟡 | **14** (ADR-000 → ADR-013) |
 | 57 | « 45+ runbooks » | 🟡 | **32** fichiers `*RUNBOOK*.md` (56 `.md` au total dans `docs/`) |
@@ -280,7 +290,7 @@ Restent **4 scripts réellement orphelins** — présents, documentés, jamais e
 **Correctif court** (≈ 1 h) : ajouter ces 4 appels au job `quality` (aucune base requise, `npm ci`
 fournit `typescript`).
 Bonus : le nom de l'étape `ci.yml:69` (« phase3 → phase24 (auto) ») est **périmé** — le runner va
-jusqu'à `phase65` (69 entrées).
+jusqu'à `phase66` (70 entrées, libellé corrigé au lot 1 puis étendu au lot 2).
 
 ### 4.4 🟠 Le worker est plus mince que présenté — et le dit honnêtement
 977 lignes de TypeScript, **7 handlers** (`apps/worker/src/main.ts:290-306`) dont **1 stub explicite**
@@ -327,7 +337,7 @@ mutation), 4 gardiens orphelins câblés en CI, `Content-Security-Policy` étape
 ### 🔴 Bloquant avant toute mise en main de parents
 | # | Problème | Preuve | Effort |
 |---|---|---|---|
-| 0 | **F5** : aucune URL signée n'est joignable par un client (photos, PDF, exports, vidéos) en configuration s3 de production | `.env.prod.example:41` + `docker-compose.prod.yml:64` + `media.service.ts:232` | 1–2 j (lot 2) |
+| 0 | **F5** : aucune URL signée n'est joignable par un client (photos, PDF, exports, vidéos) en configuration s3 de production — **lecture corrigée par le lot 2 (contenu same-origin, phase66) ; reste le volet upload** | `.env.prod.example:41` + `docker-compose.prod.yml:64` + `media.service.ts:232` | fait (2A) / 1 j (2B) |
 | 1 | `parent-mobile` : session de 15 min sans refresh → app inutilisable, spinners infinis | `identity.module.ts:25`, `api_client.dart` (aucun refresh) | ~1 j |
 | 2 | `parent-mobile` : zéro test, zéro gestion d'erreur sur 2 écrans | pas de `test/` ; `photos_page.dart:33`, `consents_page.dart:30` | ~1 j |
 
@@ -383,7 +393,7 @@ grep -rc "@Public()" apps/api/src/modules/*/*.controller.ts | grep -v ':0'
 
 # 6. suites d'isolation
 ls tests/tenant-isolation/phase*.test.mjs | wc -l                                   # 67
-sed -n '/^SUITES=(/,/^)/p' scripts/run-isolation-suites.sh | grep -c test.mjs        # 69
+sed -n '/^SUITES=(/,/^)/p' scripts/run-isolation-suites.sh | grep -c test.mjs        # 68 (+ schema-check + rls-behavior-check = 70 entrées)
 ```
 
 **Fichiers/lignes cités** : voir la colonne « Preuve » du §3 ; toutes les références ont été

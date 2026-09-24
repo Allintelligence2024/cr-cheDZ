@@ -690,15 +690,25 @@ export class BillingService {
       justification: 'consultation_facture',
       ipAddress: ipAddress ?? null,
     });
-    if (this.pdfStorage.isLocal()) {
-      // C4 : vérifier l'existence AVANT de lire — un pdf_url orphelin ne doit
-      // pas produire un 500 (ENOENT) mais le même 404 que « pas encore généré ».
-      if (!this.pdfStorage.exists(invoice.pdf_url as string)) {
-        throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
-      }
-      return { kind: 'buffer' as const, buffer: await this.pdfStorage.read(invoice.pdf_url as string), invoice };
+    // Défense croisée (audit) : la clé doit rester sous le préfixe DU TENANT
+    // (« ${org}/invoices/… », format écrit par le worker) — une clé corrompue
+    // en base ne doit jamais faire lire le PDF d'une autre organisation.
+    if (!String(invoice.pdf_url).startsWith(`${org}/`)) {
+      throw new AppError(
+        'STORAGE_POLICY',
+        'Clé de stockage hors du périmètre de l’organisation',
+        'مفتاح تخزين خارج نطاق المؤسسة',
+        422,
+      );
     }
-    return { kind: 'redirect' as const, url: await this.pdfStorage.presign(invoice.pdf_url as string), invoice };
+    // LOT 2 (P0 F5) : plus de redirection vers une URL signée S3 (MinIO est
+    // lié à 127.0.0.1 en production — l'URL était inexploitable). Lecture en
+    // flux same-origin ; C4 conservé : un pdf_url orphelin → 404, jamais un 500.
+    const object = await this.pdfStorage.open(invoice.pdf_url as string);
+    if (!object) {
+      throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
+    }
+    return { kind: 'object' as const, object, invoice };
   }
 
   // ── Mapping des erreurs PostgreSQL (triggers C04 / 023) ───────────────────

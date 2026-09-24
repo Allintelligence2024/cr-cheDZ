@@ -44,7 +44,7 @@ vérification).
 | Lot | Objectif | Origine | Effort | Preuve de sortie | Statut |
 |---|---|---|---|---|---|
 | **L1** | **Gardiens orphelins + garde de config + CSP edge** | vérif. §4.3, F2, F3 | ~2 h | 4 gardiens en CI ; test unitaire prod-config ; test de contrat en-têtes | **FAIT (ce commit)** |
-| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | à démarrer |
+| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture), phase66** ; volet B (upload) planifié |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | planifié |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | planifié |
@@ -79,7 +79,8 @@ sémantique du garde (pas de sur-blocage de valeurs que le garde n'interprète p
 requise, `npm ci` fournit `typescript`). Deux noms d'étapes périmés corrigés :
 `schema-check (+ garde RLS anti-bypass)` → `schema-check (structure RLS, dérive migrations)` et
 `Suites d'isolation (isolation + phase3 → phase24 (auto))` → nom exact (garde RLS + 69 suites,
-`isolation` + `phase3 → phase65`).
+`isolation` + `phase3 → phase65`). *(L2 ajoute la suite phase66 → le libellé devient « 70 suites,
+phase3 → phase66 ».)*
 
 **Preuve** : les 4 gardiens exécutés ici en local avant câblage, **verts** (sorties citées au §5).
 
@@ -132,6 +133,84 @@ client est exploitable** — hôte ∈ {origine publique configurée} et **jamai
 paiement SATIM). À défaut, c'est exactement le genre de « ça marche » qu'aucun test actuel ne
 démentirait.
 
+#### Décision : **option A** (propriétaire, 2026-09-24) — appliquée au volet lecture
+
+**Ce qui est fait (volet A / 2A — lecture), ce commit :**
+
+| Surface | Avant | Après |
+|---|---|---|
+| Média (personnel) | `GET /media/:id/download` → URL signée MinIO | `…/download` → chemin `/api/v1/media/:id/content` ; `GET …/content` sert le flux |
+| Média (parent) | `…/media/:mediaId/download` → URL signée | chemin **parent-scopé** `/api/v1/parent/children/:child/media/:mediaId/content`, consentement photo re-vérifié **à chaque lecture** |
+| Exports Excel | backend S3 → redirection 302 vers MinIO | flux `attachment` par l'API (backend local **et** S3) |
+| PDF facture | personnel/parent → redirection 302 | flux `application/pdf` same-origin, `404 PDF_NOT_READY` conservé (C4) |
+| Clips vidéo | backend S3 → `download_url` signé | `content_url` same-origin pour **les deux** backends, plus aucun `download_url` |
+| Client web | `window.open(url_signée)` | `apiOpenBlob()` : blob **authentifié** puis `object:` URL (le garde JWT n'accepte que `Authorization` — un `window.open` nu recevrait 401) |
+| Client parent | `Image.network(url_signée)` | `ParentApiClient.photoContent()` (octets + JWT) → `Image.memory` |
+
+**Pourquoi le blob côté web et non un simple `<img src>`** : le contenu est protégé par JWT
+(l'en-tête, pas de cookie de session pour l'API). Un `<img src="…">` ou un `window.open` part sans
+en-tête et recevrait 401. Le prix est assumé : le contenu transite en mémoire du navigateur
+(acceptable pour photos/PDF/exports ; **limite connue** pour de gros clips vidéo — si la charge le
+justifie, l'option B reprend un lien public signé **sur une origine publique**, jamais sur
+`S3_ENDPOINT`).
+
+**Gains de sécurité au passage** : `presignGet` est **supprimé** du client S3 (`getSignedUrl` ne
+sert plus qu'à l'**upload** PUT) ; garde `containment` (anti `..`) partagée pour toute lecture
+disque ; défense croisée **nouvelle** sur `invoices.pdf_url` (préfixe `{org}/` + containment) —
+`invoices` ne figurait dans aucune contrainte de la migration 049, contrairement à
+`media_assets`/`video_clips`/`staff_documents`/`report_exports` ; `cache-control: private, no-store`.
+
+**Ce qui reste — volet B (écriture/upload), non livré ici et dit tel quel** :
+`POST /media/presign-upload` et `POST /video/clips/presign-upload` rendent toujours une URL signée
+**PUT** bâtie sur `S3_ENDPOINT` (`storage.service.ts:54`, `video.service.ts:175`) : en production,
+`staff-mobile` (photo) et un DVR/NVR (clip) ne peuvent **pas** téléverser. Correctif (prochain
+incrément) : `POST /media/uploads` (multipart, `multer` déjà présent) + `POST /video/clips/uploads`
+générique, `storage.put()` côté API, puis branchement `media_uploader.dart`. Suite de preuve :
+phase66 étendue (octets reçus = octets lus par la suite).
+
+#### Preuves exécutées (2026-09-24, PostgreSQL 18.4 réel, `STORAGE_BACKEND=local`)
+
+```
+node tests/tenant-isolation/phase66-content-same-origin.api.test.mjs
+  → ✓ Phase 66 validée — 30 vérifications (média personnel, parent, exports, PDF, clips, verrou statique)
+  dont : « GET sur le lien rendu → 200 et OCTETS IDENTIQUES au fichier stocké »,
+         « Consentement révoqué : le MÊME lien → 422 CONSENT_REVOKED, aucun octet »,
+         « Clé `..` (hors racine de stockage) → 422 PATH_TRAVERSAL, aucune lecture »,
+         « Personnel : PDF → 200 application/pdf … AUCUNE redirection 302 vers le stockage »,
+         « Clip S3 : toujours un chemin same-origin (aucun `http://minio…` rendu au client) »,
+         « Aucun `presignGet(` dans apps/api/src ».
+
+# Suites historiques mises à jour (elles affirmaient l'ancien contrat cassé) :
+phase6.api.test.mjs                      → ✓ Phase 6 validée (média : chemin same-origin + octets servis)
+phase7-parent.api.test.mjs               → ✓ Phase 7 validée (photo parent : chemin + octets réels)
+phase13-exports.api.test.mjs             → ✓ Phase 13 exports validée (8 cas)
+phase21-video-surveillance.api.test.mjs  → ✓ Phase 21 validée (8 cas)
+phase38-parent-financial-projection.api  → H2d financial projection: 44 passed, 0 failed
+phase41-photo-consent-scope.api.test.mjs → H2g photo consent: 58 passed, 0 failed
+phase37-parent-revocation.api.test.mjs   → H2c parent access: 157 passed, 0 failed (+1 preuve d'octets)
+phase25-security-audit-c.api.test.mjs    → ✓ phase25 — tous les scénarios C1/C2/C4/C3/C5 verts
+phase34-sync-completion.api.test.mjs     → F completion: 10 passed, 0 failed
+phase3.api.test.mjs (base fraîche)       → ✓ Phase 3 validée
+
+# Qualité (cliquets inchangés) :
+npm run test:unit   → 13 suites, 95 tests, 0 échec
+npm run lint        → exit 0 (0 erreur, 0 warning)   npm run typecheck → exit 0 (4 workspaces)
+npm run test:unit --workspace @creche/admin-web → 7 tests, 0 échec
+node scripts/inventory-route-guards.mjs → 197 routes (195 + 2 routes `/content`) — 50 « sans
+  @Roles ni @Public » (49 + la route parent, dont le périmètre est la filiation, pas un rôle)
+
+# Deux suites NON rejouables dans ce bac à sable (prérequis Gate D) :
+phase22-audit-fixes.api / phase49-storage-selection → échec AU DÉMARRAGE du process de production
+  (« DATABASE_ROLE_UNSAFE : creche_app NOSUPERUSER NOBYPASSRLS requis ») : le rôle de production
+  `creche_app` n'existe pas ici (seul `creche_app_test` est bootstrappé). Ce n'est pas une
+  régression du lot 2 — l'échec précède toute route — et ces suites tournent en Gate D.
+```
+
+**Hors périmètre / non vérifié ici** : les deux fichiers Dart modifiés
+(`apps/parent-mobile/lib/core/api_client.dart`, `…/features/photos/photos_page.dart`) ne sont
+**pas compilés** dans cet environnement (aucun SDK Flutter/Dart) — même blocage que le lockfile du
+lot 3. Ils sont écrits pour `dio` + `flutter_secure_storage` déjà en dépendance.
+
 ### Lot 3 — `parent-mobile` : session, erreurs, tests, lockfile
 1. **Session** : intercepteur Dio `401 → POST /auth/refresh` (single-flight), purge du stockage et
    retour à l'écran OTP sur échec — le `refresh_token` est stocké mais **jamais utilisé**
@@ -174,6 +253,8 @@ Sur le modèle d'`openapi-contract.test.mjs` (un test qui échoue si la doc rede
 
 ## 5. Journal des preuves — Lot 1 (exécuté le 2026-09-24)
 
+*(Le journal du lot 2 est dans sa section (§4 « Lot 2 ») — mêmes règles : sorties réelles.)*
+
 Environnement : `node v22.22.3`, `npm 10.9.8`, `npm ci` → 929 paquets. Poste **sans** PostgreSQL,
 Docker ni SDK Flutter (d'où les tâches marquées BLOQUÉES). Toutes les sorties ci-dessous sont
 **réelles**, copiées des commandes exécutées.
@@ -183,6 +264,8 @@ Docker ni SDK Flutter (d'où les tâches marquées BLOQUÉES). Toutes les sortie
 node scripts/check-env-example.mjs        → exit 0  (« .env.prod.example : 14 variables requises présentes », « .env.example : 5 »)
 node scripts/check-android-manifest.mjs   → exit 0  (« 2 app(s) conformes, 4 avertissements »)
 node scripts/inventory-route-guards.mjs   → exit 0  (« 195 routes HTTP inventoriées — 49 sans @Roles ni @Public (à revoir) »)
+  # après L2 (2 routes `/content` ajoutées) : « 197 routes — 50 sans @Roles ni @Public » — le +1 vient
+  # de la route parent, dont le périmètre est la filiation (child_guardians), pas un rôle.
 node scripts/verify-load-tests.mjs        → exit 0  (« Sanity checks load tests : OK »)
 node scripts/check-rls-usage.mjs          → exit 0  (mode FALLBACK sans DATABASE_URL : « 52 accès pool.query brut(s) tous conformes »)
 node scripts/check-spa-static-paths.mjs   → exit 0  (déjà en CI, non régressé)

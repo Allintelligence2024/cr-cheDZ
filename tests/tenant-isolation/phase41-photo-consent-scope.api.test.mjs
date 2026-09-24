@@ -87,14 +87,15 @@ try {
         const before = await countAccess(id);
         const response = await req('GET', `/parent/children/${child}/media/${id}/download`, parent);
         assert.equal(response.status, item.allowed ? 200 : 422, JSON.stringify(response.body));
-        if (item.allowed) assert.ok(response.body.url.includes('X-Amz-Signature=')); else assert.equal(response.body.url, undefined);
+        // LOT 2 (P0 F5) : chemin same-origin exact (plus d'URL signée S3).
+        if (item.allowed) assert.equal(response.body.url, `/api/v1/parent/children/${child}/media/${id}/content`); else assert.equal(response.body.url, undefined);
         assert.equal(await countAccess(id), before + (item.allowed ? 1 : 0));
       });
       await check(`${item.name}: parent list`, async () => {
         const before = await countAccess(id), response = await req('GET', `/parent/children/${child}/media`, parent);
         assert.equal(response.status, 200, JSON.stringify(response.body));
         assert.equal(response.body.some(row => row.id === id), item.allowed);
-        if (item.allowed) assert.ok(response.body.find(row => row.id === id).url.includes('X-Amz-Signature='));
+        if (item.allowed) assert.equal(response.body.find(row => row.id === id).url, `/api/v1/parent/children/${child}/media/${id}/content`);
         assert.equal(await countAccess(id), before + (item.allowed ? 1 : 0));
       });
       await check(`${item.name}: withdrawal always possible, metadata retained`, async () => {
@@ -116,7 +117,7 @@ try {
   });
   await consent(parent, child, true);
   await check('restoring primary consent restores legitimate parent access', async () => {
-    const response = await req('GET', `/parent/children/${child}/media/${late}/download`, parent); assert.equal(response.status, 200); assert.ok(response.body.url.includes('X-Amz-Signature='));
+    const response = await req('GET', `/parent/children/${child}/media/${late}/download`, parent); assert.equal(response.status, 200); assert.equal(response.body.url, `/api/v1/parent/children/${child}/media/${late}/content`);
   });
   for (const [name, user] of [['peer', peer], ['foreign', foreign]]) await check(`${name} cannot get another child URL`, async () => {
     assert.ok([403, 404].includes((await req('GET', `/parent/children/${child}/media/${late}/download`, user)).status));
@@ -129,7 +130,7 @@ try {
   await check('parent cannot bypass via staff download', async () => { assert.equal((await req('GET', `/media/${late}/download`, parent)).status, 403); });
   await check('authorized staff retain download even when parent consent is revoked', async () => {
     await consent(parent, child, false);
-    const response = await req('GET', `/media/${late}/download`, director); assert.equal(response.status, 200); assert.ok(response.body.url.includes('X-Amz-Signature='));
+    const response = await req('GET', `/media/${late}/download`, director); assert.equal(response.status, 200); assert.equal(response.body.url, `/api/v1/media/${late}/content`);
   });
   await check('missing primary consent cannot be hidden by consented group-only registration', async () => {
     const response = await publish(late); assert.equal(response.status, 422);
