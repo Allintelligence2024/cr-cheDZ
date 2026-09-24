@@ -31,6 +31,20 @@
 - **Webhook** : signature HMAC-SHA256 sur le corps brut, idempotence par
   `external_reference`.
 - **Erreurs** : `AppError` FR/AR, jamais de SQL brut ni d'anglais exposé.
+- **En-têtes de bord (2026-09-24, lot 1 du plan de réparation)** :
+  `Content-Security-Policy` servie par nginx (`default-src 'self'`, `object-src 'none'`,
+  `base-uri 'self'`, `frame-ancestors 'none'`, `form-action 'self'`, `connect-src 'self'`).
+  **Étape 1 sur 2** : `script-src` tolère encore `'unsafe-inline'` pour le bootstrap
+  anti-FOUC et le chargement non bloquant de la police écrits dans `index.html` ; l'étape 2
+  (extraction de ces deux inline → `script-src 'self'` strict) exige la vérification
+  navigateur du job `e2e`. Vérifié par `tests/tenant-isolation/edge-headers-contract.test.mjs`.
+- **Limitation de débit** : en production, `RATE_LIMIT_DISABLED=true|1` **bloque le démarrage**
+  (`@creche/prod-config`) — le garde applicatif interprète ces valeurs comme une désactivation
+  sans regarder `NODE_ENV`. Correspondance stricte avec la sémantique du garde, `false`/absent
+  admis.
+- **Gardiens exécutés en CI** : les gardes `.env.example`, manifest Android, inventaire des
+  gardes de route et seuils de charge sont désormais lancés par le job `quality` (ils ne
+  l'étaient par **aucun** workflow avant le 2026-09-24).
 
 ## Dépendances — `npm audit --omit=dev` : **0 vulnérabilité** ✅
 

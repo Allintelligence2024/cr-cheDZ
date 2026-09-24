@@ -51,14 +51,19 @@ jobs:
         run: npm run typecheck
       - name: admin-web — matrice d'accès UI par rôle (F3)
         run: npm run test:unit --workspace @creche/admin-web
-      - name: Migrations (reset + status 001→063)
+      # Nom corrigé (lot 1) : 75 migrations sur disque (001 → 075), pas 063.
+      - name: Migrations (reset + status 001→075)
         run: |
           node scripts/migrate.mjs --reset
           node scripts/migrate.mjs
           node scripts/migrate.mjs --status
       - name: Seeds
         run: node scripts/seed.mjs
-      - name: schema-check (+ garde RLS anti-bypass)
+      # Nom corrigé (plan de réparation 2026-09-24, lot 1) : schema-check ne
+      # lance PAS le garde anti-bypass — c'est run-isolation-suites.sh qui
+      # l'exécute avant les suites (le libellé précédent laissait croire
+      # l'inverse).
+      - name: schema-check (structure RLS, dérive migrations)
         run: node tests/tenant-isolation/schema-check.mjs --verbose
       - name: rls-behavior-check (rôle NOBYPASSRLS)
         run: node tests/tenant-isolation/rls-behavior-check.mjs
@@ -66,7 +71,13 @@ jobs:
         run: |
           npm run build --workspace @creche/api
           npm run build --workspace @creche/worker
-      - name: Suites d'isolation (isolation + phase3 → phase24 (auto))
+      # Nom corrigé (plan de réparation 2026-09-24, lot 1) : l'étape rejouait
+      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase65 (69 entrées
+      # dans SUITES, plus le garde anti-bypass RLS en tête).
+      # (nom entre guillemets : un « : » non échappé dans une valeur YAML la
+      # transformerait en mapping imbriqué — le workflow deviendrait invalide
+      # et la CI s'arrêterait de tourner sans que le diff le montre)
+      - name: "Suites d'isolation (garde RLS anti-bypass + 69 suites — isolation, phase3 → phase65)"
         run: bash scripts/run-isolation-suites.sh
 
   backup-drill:
@@ -149,6 +160,19 @@ jobs:
       - run: npm ci
       - name: Lint (eslint --max-warnings=0)
         run: npm run lint
+      # ── Gardiens jusqu'ici ORPHELINS (plan de réparation 2026-09-24, lot 1) ─
+      # Écrits, documentés et référencés dans package.json, mais appelés par
+      # AUCUN workflow : un rouge chez eux ne pouvait pas être vu avant une
+      # revue humaine. Aucun n'a besoin de base ni de Docker (npm ci fournit
+      # `typescript`, requis par l'inventaire des gardes de route).
+      - name: Garde .env.example (variables requises documentées)
+        run: node scripts/check-env-example.mjs
+      - name: Garde manifest Android (INTERNET en release)
+        run: node scripts/check-android-manifest.mjs
+      - name: Inventaire des gardes de route (196 routes × @Roles/@Public)
+        run: node scripts/inventory-route-guards.mjs
+      - name: Sanity check des scripts de charge (seuils p95)
+        run: node scripts/verify-load-tests.mjs
       # Design system : contraste WCAG AA des deux thèmes + parité des
       # couleurs Sérénité entre theme.css (web) et serenite_theme.dart
       # (les 2 apps Flutter, qui ne peuvent pas importer le CSS).
