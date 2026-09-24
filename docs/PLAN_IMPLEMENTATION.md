@@ -270,7 +270,7 @@ Légende estimation : **PD** = jours-personne nets (à majorer de +25–35 % : r
 2. Initialiser `apps/api` (NestJS 10 + TS strict), `apps/worker` (NestJS standalone), `apps/admin-web` + `apps/support-console` (Vite + React 18 + TS), `apps/parent-mobile` + `apps/staff-mobile` (`flutter create`, org `dz.creche`), `packages/*`.
 3. `pnpm` workspaces + Turborepo ; scripts racine `dev`, `build`, `test`, `lint`, `typecheck`.
 4. Tooling : ESLint + Prettier + tsconfig partagés (`packages/shared-config`) ; `husky` pre-commit (lint + typecheck + format).
-5. `infrastructure/docker/docker-compose.dev.yml` corrigé : postgres + minio + api + worker + admin-web ; healthcheck Docker **postgres uniquement** (mesure du 24/09/2026, vérif. § F2) ; `docker-entrypoint-initdb.d` **retiré** au profit du runner de migrations (C05).
+5. `infrastructure/docker/docker-compose.dev.yml` corrigé : postgres + minio + api + worker + admin-web ; healthcheck Docker **postgres uniquement** en dev (mesure du 24/09/2026, vérif. § F2 ; prod et staging sondaient déjà `postgres` et sonde désormais aussi `api` + `worker` depuis le lot 6.1) ; `docker-entrypoint-initdb.d` **retiré** au profit du runner de migrations (C05).
 6. GitHub Actions : workflow `ci.yml` (lint + tests + build, matrix Node 20 / Flutter stable) ; workflow `cd-staging.yml` (déploiement auto sur merge `develop`).
 7. Git flow : branches `main` (prod) / `develop` (staging) / `feature/*` ; **Conventional Commits** ; template de PR avec checklist DoD.
 8. Écrire les ADR 000–006 (C12) et le template `docs/adr/adr-template.md`.

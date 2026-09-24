@@ -37,6 +37,8 @@ Accès :
 |---|---|
 | Admin web | `http://localhost:4000` (proxy `/api` → `api:3000`) |
 | Santé API | `http://localhost:3000/api/v1/health` |
+| Sonde conteneur API | `docker compose … exec api node apps/api/dist/healthcheck.js` (identique au `HEALTHCHECK`) |
+| Sonde conteneur worker | `docker compose … exec worker node apps/worker/dist/healthcheck.js` (marqueur de vivacité) |
 | MinIO API / console (dev) | `http://127.0.0.1:9000` / `http://127.0.0.1:9001` |
 
 Comptes de test : `docs/pilot/ONBOARDING.md` (mot de passe = `PILOT_PASSWORD`).

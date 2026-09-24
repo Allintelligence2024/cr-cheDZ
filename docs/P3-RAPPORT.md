@@ -93,8 +93,11 @@ dans la conception des Dockerfiles :
    CI réussi.
 5. **EXPOSE alignés** : api/worker sur `3000` (api EXPOSE 3000,
    worker sans port), web sur `80`. **Healthcheck Docker : `postgres` uniquement**
-   (mesure du 24/09/2026) : aucun `HEALTHCHECK` ne sonde l'API, qui expose
+   (mesure du 24/09/2026, matin) : aucun `HEALTHCHECK` ne sondait l'API, qui exposait
    seulement `GET /api/v1/health` (voir `docs/VERIFICATION_ANALYSE_2026-09-24.md` § F2).
+   **Corrigé le même jour (lot 6.1)** : `api` et `worker` sont désormais sondés en production et
+   en staging (`apps/{api,worker}/dist/healthcheck.js` via Compose) — cette phrase décrit
+   l'état d'avant correction.
 
 ## Dépendances runtime (ÉTAPE 0)
 

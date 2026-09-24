@@ -409,8 +409,11 @@ Docker** → exécuté dans le job CI `quality`). Il recalcule la réalité et l
 documents :
 - aucune occurrence de l'ordonnanceur externe dans le code/config, et chaque mention
   documentaire doit être une mise en garde (l'ordonnancement est en base : `scheduler_ticks`) ;
-- healthcheck Docker : 1 par fichier compose, **sur `postgres`**, 0 dans les Dockerfiles — et
-  aucune phrase ne peut revendiquer plus ;
+- healthcheck Docker : mesuré **fichier par fichier** (`postgres` partout, `api` + `worker` en
+  production et staging depuis le lot 6.1, `postgres` seul en dev — le motif est écrit dans le
+  fichier), **aucun** `HEALTHCHECK` dans les Dockerfiles (sans `curl` ni `wget`, l'image
+  `node:22-slim` impose une sonde Node appelée par Compose) — et aucune phrase de documentation ne
+  peut revendiquer plus, ni citer un décompte périmé (`grep -c healthcheck … # n`) ;
 - compteurs recalculés à chaque exécution (migrations, entrées du runner, suites `phaseNN`,
   fichiers du dossier d'isolation, ADR, runbooks, routes HTTP via l'inventaire, chemins OpenAPI) ;
 - phrases bannies (les affirmations fausses de l'audit + `presignGet(`) : interdites sauf corrigées
@@ -422,7 +425,56 @@ friction voulue — mettre à jour le **document**, jamais le contrat (sauf déc
 Une volumétrie brute de fichiers doit porter sa **date** (« N fichiers au 2026-09-24 ») : elle
 n'est pas verrouillée, une mesure datée n'est pas une propriété.
 
-**Preuve par mutation** : 4 mutations (route périmée, healthcheck non qualifié, phrase fausse
-canonique réintroduite, compteur de suites périmé) → 4 rouges ; restaurations → 8/8 vert.
+**Preuve par mutation** : 6 mutations exécutées (route périmée, phrase « healthcheck » non
+qualifiée, phrase fausse canonique réintroduite, compteur de suites périmé, décompte de
+healthchecks périmé, sonde renommée sur disque) → mutation : 6 rouges ; restaurations → 9/9 vert
+(journal au plan §5).
 Mesure du jour : 198 routes / 50 sans `@Roles`, 75 migrations, 71 entrées, 69 suites `phaseNN`,
 85 fichiers d'isolation, 14 ADR, 32 runbooks.
+
+---
+
+## Mise à jour 2026-09-24 — lot 6.1 : sondes de vivacité API et worker (F2)
+
+**Ce qui manquait** : `postgres` était le seul service sondé par Docker. L'API exposait bien
+`GET /api/v1/health` (proxifié par nginx), mais **Docker ne l'interrogeait pas** ; le worker
+n'exposant aucun port, il n'avait aucun marqueur de vie. Un processus vivant mais figé (pool
+saturé, boucle bloquée) restait donc en service indéfiniment — la panne silencieuse par
+excellence.
+
+**Livré** :
+- `apps/api/src/healthcheck.ts` → sonde qui interroge le **vrai** endpoint public
+  (`http://127.0.0.1:$APP_PORT/api/v1/health`), sortie 0/1, timeout `HEALTHCHECK_TIMEOUT_MS`.
+  Pourquoi un script Node : l'image d'exécution est `node:22-slim`, **sans `curl` ni `wget`**.
+- `apps/worker/src/liveness.ts` → marqueur local (`WORKER_LIVENESS_FILE`, défaut
+  `/tmp/creche-worker-alive`) réécrit toutes les 10 s (`WORKER_LIVENESS_INTERVAL_MS`), écriture
+  **atomique** (`rename`), supprimé à l'arrêt propre ; `apps/worker/src/healthcheck.ts` refuse un
+  marqueur absent ou plus vieux que 3 intervalles. Le heartbeat en base (`jobs_heartbeat`, 053)
+  n'existe que **pendant un job** : un worker sain et au repos aurait paru mort — d'où un marqueur
+  de processus.
+- Compose : sondes `api` + `worker` en **production et staging** (`interval 30s`, `timeout 5s`,
+  `retries 3`, `start_period` 30 s / 60 s). En **dev** : pas de sonde, motif écrit dans le fichier
+  (sources montées + compilation à chaud, `dist/` non garanti au démarrage).
+- Redémarrage : `restart: unless-stopped` existait déjà ; un conteneur `unhealthy` est redémarré
+  par l'ordonnanceur/`docker` selon la politique d'exploitation, et le bail du job en cours est
+  repris par `jobs_reap_stale` (053) — **aucun job perdu**.
+- Le contrat de vérité documentaire (lot 5) a été **mis à jour, pas contourné** : la mesure attendue
+  par fichier est explicite, et un nouveau verrou compare tout décompte cité dans la doc
+  (`grep -c healthcheck … # n`) à la mesure du disque.
+
+**Preuves exécutées (24/09)** :
+1. `apps/worker` a désormais sa porte de tests (`apps/worker/jest.config.mts`, `npm run test:unit`
+   à la racine couvre api **et** worker) : **5 tests** du marqueur (dont péremption, atomicité,
+   câblage réel dans `main.ts`).
+2. API : **6 tests** de la sonde (`apps/api/src/healthcheck.spec.ts`) lançant le script **compilé**
+   contre un vrai serveur HTTP (200 `{"status":"ok"}` → 0 ; 500, corps inattendu, corps non-JSON,
+   rien n'écoute, serveur muet → 1).
+3. Bout en bout, hors Docker : API réelle `node apps/api/dist/main.js` sur :3399 →
+   `node apps/api/dist/healthcheck.js` ⇒ **rc=0** (« API saine ») ; même sonde sur un port mort ⇒
+   **rc=1**.
+4. Worker réel `node apps/worker/dist/main.js` (rôle `creche_app_test`, boucle de jobs active) :
+   marqueur écrit puis rafraîchi ⇒ sonde **rc=0** ; marqueur antidaté de 60 s ⇒ **rc=1**
+   (« marqueur périmé de 60 s (maximum 6 s) ») ; après `SIGTERM` et arrêt propre ⇒ marqueur
+   **supprimé** et sonde **rc=1** (« marqueur absent »).
+5. `docker compose config` : les trois fichiers restent valides (analyse YAML) ; sondes confirmées
+   sur `api` et `worker` en prod/staging.

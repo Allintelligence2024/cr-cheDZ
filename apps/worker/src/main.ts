@@ -5,6 +5,7 @@ import { Pool, PoolClient, types } from 'pg';
 import { assertApplicationDatabaseRole, assertProductionConfig, BUSINESS_TIME_ZONE, dateOnly, monthBounds, notificationAllowed, NOTIFICATION_DENIED_REASON } from '@creche/prod-config';
 import { buildXlsx, storeExport, type ExportPayload } from './exports';
 import { runWorker, type ClaimedJob, type JobHandlers } from './job-runtime';
+import { startLiveness } from './liveness';
 import { buildInvoicePdf, deleteFile, storePdf } from './pdf';
 
 // MISSION P1 (feat(config)) : garde de config au boot — en production, un
@@ -480,6 +481,13 @@ async function initSentry(): Promise<void> {
 
 async function run(): Promise<void> {
   await assertApplicationDatabaseRole(pool);
+  // F2 (audit 2026-09-24) : marqueur de vivacité lu par le HEALTHCHECK Docker.
+  // Démarré APRÈS les gardes de boot (un conteneur mal configuré ne doit pas
+  // paraître sain) et arrêté sur SIGTERM/SIGINT avec le worker.
+  const stopLiveness = await startLiveness();
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => void stopLiveness());
+  }
   await initSentry();
   await runWorker(pool, JOB_HANDLERS, drainNotificationQueue, (error) => {
     sentry?.captureException(error);

@@ -43,7 +43,7 @@ Trois réserves changent néanmoins la décision opérationnelle :
 |---|---|---|
 | **Priorité n°1** | « pas d'offline-first » sur `parent-mobile` | **la session meurt au bout de 15 minutes** et l'app n'a aucun chemin de récupération (`JWT_ACCESS_EXPIRES_IN=15m`, aucun refresh appelé, aucun intercepteur 401) : c'est un **défaut**, pas une limitation de confort |
 | **Gardiens** | `check-rls-usage`, `check-env-example`, `inventory-route-guards` sont « des gardiens » | **4** d'entre eux ne sont câblés dans aucun workflow — dont l'inventaire des gardes de route et le garde Android ; `check-rls-usage`, lui, **est** bien exécuté en CI (voir §4.3, correction) |
-| **Ce qui est protégé** | « HEALTHCHECK sur les services », « refusé en prod », « QuartzJobs » | 1 seul healthcheck (Postgres), aucun refus de `RATE_LIMIT_DISABLED`, **aucun Quartz** dans le dépôt |
+| **Ce qui est protégé** | « HEALTHCHECK sur les services », « refusé en prod », « QuartzJobs » | au 24/09 : 1 seul healthcheck (Postgres), aucun refus de `RATE_LIMIT_DISABLED`, **aucun Quartz** dans le dépôt. **Corrigé depuis** : sondes `api` + `worker` livrées (lot 6.1) |
 
 À l'inverse, le rapport **sous-estime** la CI : le job `database` ne se contente pas de rejouer la
 suite d'isolation, il la rejoue **avec les rôles de production**, fait tourner **de vrais tests
@@ -72,12 +72,21 @@ supprime de ligne de `notification_queue` ou de `messages` (aucun `DELETE FROM n
 dans le dépôt ; la migration `065` **réclame** les lignes bloquées, elle ne les purge pas).
 
 ### F2 — « HEALTHCHECK présent sur les services » → **1 seul healthcheck, sur Postgres**
-`grep -c healthcheck infrastructure/docker/docker-compose.prod.yml` = **1**, et il est sur le
-service `postgres` (ligne 50). L'API, le worker, l'admin-web et la console n'en déclarent aucun ;
-`apps/api/Dockerfile` ne contient pas de directive `HEALTHCHECK`. L'API expose bien
-`GET /api/v1/health` (proxifié par nginx `location = /healthz`, `nginx.conf:127-128`), mais
-**Docker ne l'interroge pas**. Ce qui est vrai : 13 politiques `restart: unless-stopped` et un
-`stop_grace_period: 60s` sur le worker (ligne 158).
+**Mesure du 2026-09-24 (état d'origine)** : `grep -c healthcheck` sur le fichier compose de
+production = **1**, et il est sur le service `postgres`. L'API, le worker, l'admin-web et la console
+n'en déclaraient aucun ; `apps/api/Dockerfile` ne contenait pas de directive `HEALTHCHECK`. L'API
+exposait bien `GET /api/v1/health` (proxifié par nginx `location = /healthz`,
+`nginx.conf:127-128`), mais **Docker ne l'interrogeait pas** : un processus vivant mais figé
+restait en service. Ce qui était vrai : 13 politiques `restart: unless-stopped` et un
+`stop_grace_period: 60s` sur le worker.
+
+**✅ Corrigé (lot 6.1, 2026-09-24)** : `api` et `worker` déclarent désormais une sonde en production
+**et** en staging, exécutée par le script Node compilé du conteneur (`node:22-slim` n'a ni `curl` ni
+`wget`) — API = `apps/api/dist/healthcheck.js` interrogeant le vrai `GET /api/v1/health` ; worker =
+`apps/worker/dist/healthcheck.js` lisant le marqueur de vivacité réécrit toutes les 10 s
+(`WORKER_LIVENESS_FILE`, absent/périmé = conteneur redémarré, le bail de job étant repris par
+`jobs_reap_stale`, migration 053). En dev, l'absence est **motivée dans le fichier** (sources
+montées, compilation à chaud). Preuves exécutées : plan de réparation, lot 6.1.
 
 ### F3 — « RATE_LIMIT_DISABLED … mais refusé en prod » → **aucun refus n'existe**
 Le garde de configuration de production (`packages/prod-config/src/index.ts:106`,
@@ -401,7 +410,7 @@ git ls-files | wc -l ; ls docs/adr/*.md | wc -l ; ls docs/*RUNBOOK*.md | wc -l
 
 # 2. « QuartzJobs », « HEALTHCHECK », « CSP », « refresh » parent
 grep -ri quartz --include='*.ts' --include='*.sql' --include='*.md' . | wc -l        # 0
-grep -c healthcheck infrastructure/docker/docker-compose.prod.yml                    # 1 (postgres)
+grep -c healthcheck infrastructure/docker/docker-compose.prod.yml                    # 3 (postgres, api, worker)
 grep -ri "content-security-policy" . --exclude-dir=node_modules | wc -l              # 0
 grep -rn "expiresIn" apps/api/src/modules/identity/identity.module.ts                # 15m
 grep -rn refresh apps/parent-mobile/lib                                              # stockage seul

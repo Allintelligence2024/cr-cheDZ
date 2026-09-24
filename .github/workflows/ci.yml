@@ -196,7 +196,10 @@ jobs:
         run: node scripts/check-spa-static-paths.mjs
       # P1-4 : couverture mesurée, seuils-cliquets (jest.config.mts) — un
       # recul sur une unité de sécurité/argent couverte fait échouer le job.
-      - name: Tests unitaires API (jest --coverage, seuils)
+      # Lot 6.1 : `test:unit` couvre désormais aussi le worker (sonde de
+      # vivacité F2) — l'API garde le cliquet de couverture, le worker ses
+      # tests propres (apps/worker/jest.config.mts).
+      - name: Tests unitaires api + worker (jest --coverage, seuils)
         run: npm run test:unit
       - name: Rapport de couverture (artifact)
         if: always()

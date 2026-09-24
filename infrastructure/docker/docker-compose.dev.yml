@@ -75,6 +75,10 @@ services:
 
   api:
     <<: *api-image
+    # F2 : pas de healthcheck Docker en dev — le conteneur monte `src/` et tourne
+    # en `nest start --watch` (`dist/` apparaît par compilation à chaud, la sonde
+    # `apps/api/dist/healthcheck.js` n'est donc pas garantie au démarrage).
+    # Les sondes sont opérées en staging et en production (images compilées).
     ports:
       - "${DEV_WEB_BIND:-127.0.0.1}:${DEV_API_PORT:-3000}:3000"
     environment:
@@ -96,6 +100,8 @@ services:
 
   worker:
     image: creche-local-worker:dev
+    # F2 : pas de healthcheck Docker en dev, même raison que pour `api` (services
+    # compilés à chaud depuis les sources montées).
     build:
       context: ../..
       dockerfile: apps/worker/Dockerfile.dev

@@ -137,7 +137,7 @@ ssh prod
 cd /opt/creche
 git pull origin arena/01a0c77a-cr-chedz
 docker compose -f infrastructure/docker/docker-compose.prod.yml up -d --build api worker
-docker compose -f infrastructure/docker/docker-compose.prod.yml ps   # etat des services (healthcheck Docker : postgres uniquement — verif. F2)
+docker compose -f infrastructure/docker/docker-compose.prod.yml ps   # etat des services (healthcheck Docker : postgres + api + worker depuis le lot 6.1 ; en dev, postgres uniquement — verif. F2)
 ```
 
 ### Étape 2.3 — Test synthétique (obligatoire)

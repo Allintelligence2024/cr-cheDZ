@@ -11,9 +11,11 @@
  * Ce contrat verrouille quatre choses :
  *  1. « Quartz » — aucune implémentation dans le dépôt, et aucune mention de
  *     documentation qui ne soit pas une mise en garde (jamais une revendication) ;
- *  2. healthcheck Docker — la réalité mesurée (1 par fichier compose, sur
- *     `postgres` uniquement ; 0 dans les Dockerfiles) ne peut pas être contredite
- *     par une phrase de documentation non qualifiée ;
+ *  2. healthcheck Docker — la réalité mesurée (postgres partout ; api et worker
+ *     en prod/staging depuis le lot 6.1 ; 0 `HEALTHCHECK` dans les Dockerfiles,
+ *     les sondes étant des scripts Node appelés par Compose — l'image
+ *     `node:22-slim` n'a ni curl ni wget) ne peut pas être contredite par une
+ *     phrase de documentation non qualifiée, ni par un décompte périmé ;
  *  3. compteurs revendiqués (migrations, entrées d'isolation, suites, fichiers du
  *     dossier d'isolation, ADR, runbooks, routes HTTP, chemins OpenAPI) —
  *     confrontés au DISQUE à chaque exécution ;
@@ -38,7 +40,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -169,6 +171,12 @@ test('F1 — « Quartz » n’existe pas dans le dépôt et n’est jamais reven
 });
 
 // ── 2. Healthcheck Docker : la réalité mesurée, et personne ne la dépasse ───
+/** Contenu d'un service (bloc YAML d'indentation 2 espaces, borné au suivant). */
+function serviceBlock(source, service) {
+  const m = source.match(new RegExp(`^  ${service}:\\n([\\s\\S]*?)(?=^  \\S|\\Z)`, 'm'));
+  return m ? m[1] : null;
+}
+
 /** Services propriétaires d'un bloc `healthcheck:` (indentation 4 espaces). */
 function healthcheckOwners(source) {
   const owners = [];
@@ -181,18 +189,70 @@ function healthcheckOwners(source) {
   return owners;
 }
 
-test('F2 — healthcheck Docker : 1 par fichier compose, sur `postgres` ; 0 dans les Dockerfiles', () => {
-  for (const file of ['docker-compose.prod.yml', 'docker-compose.dev.yml', 'docker-compose.staging.yml']) {
+/**
+ * Propriétaires attendus, par fichier — l'état RÉEL, daté du lot 6.1 :
+ * postgres partout ; api + worker en prod et en staging (images compilées,
+ * sondes `dist/healthcheck.js`). En dev, les conteneurs montent `src/` et
+ * compilent à chaud : la sonde n'y est pas garantie au démarrage, l'absence est
+ * documentée dans le fichier — un décompte générique serait ici un mensonge.
+ */
+const HEALTHCHECK_OWNERS = {
+  'docker-compose.prod.yml': ['postgres', 'api', 'worker'],
+  'docker-compose.staging.yml': ['postgres', 'api', 'worker'],
+  'docker-compose.dev.yml': ['postgres'],
+};
+
+test('F2 — healthcheck Docker : les services réellement sondés, par fichier ; 0 dans les Dockerfiles', () => {
+  for (const [file, expected] of Object.entries(HEALTHCHECK_OWNERS)) {
     const owners = healthcheckOwners(read(`infrastructure/docker/${file}`));
     assert.deepEqual(
       owners,
-      ['postgres'],
-      `${file} : healthcheck attendu sur « postgres » uniquement (mesuré : ${JSON.stringify(owners)})`,
+      expected,
+      `${file} : healthcheck attendus ${JSON.stringify(expected)} (mesuré : ${JSON.stringify(owners)})`,
     );
   }
   const dockerfiles = walk(REPO, (p) => /Dockerfile/.test(p) && !SKIP_DIRS.has(p.split('/').slice(-2)[0]));
   const withHealthcheck = dockerfiles.filter((f) => /^\s*HEALTHCHECK/mi.test(readFileSync(f, 'utf8'))).map(rel);
   assert.deepEqual(withHealthcheck, [], `HEALTHCHECK inattendu dans : ${withHealthcheck.join(', ')}`);
+  // Les sondes déclarées par Compose doivent exister dans la SOURCE (`dist/` est
+  // un artefact de build, absent du dépôt) : une sonde renommée laisserait un
+  // conteneur éternellement « unhealthy » sans que rien ne le signale. La
+  // recherche se fait DANS le bloc du service (un motif qui déborderait sur le
+  // service suivant attribuerait la sonde de l'API à `postgres`).
+  for (const [file, owners] of Object.entries(HEALTHCHECK_OWNERS)) {
+    const source = read(`infrastructure/docker/${file}`);
+    for (const service of owners) {
+      // Toute sonde Node du bloc est contrôlée, quelle que soit son extension :
+      // un renommage (« healthcheck.js » → autre chose) doit se voir ici.
+      const probe = serviceBlock(source, service)?.match(/node\s+(apps\/[^\s"]+)\/dist\/([^\s"]+\.js)/);
+      if (!probe) continue; // postgres : sonde `pg_isready`, pas un script Node
+      const sourceFile = `${probe[1]}/src/${probe[2].replace(/\.js$/, '.ts')}`;
+      assert.ok(
+        existsSync(join(REPO, sourceFile)),
+        `${file}/${service} : sonde ${probe[1]}/dist/${probe[2]} mais ${sourceFile} est introuvable`,
+      );
+    }
+  }
+});
+
+test('F2 — un décompte de healthchecks cité dans la doc correspond au disque', () => {
+  // Forme verrouillée : `grep -c healthcheck <fichier>  # <n> …`. Le jour où un
+  // service gagne (ou perd) une sonde, la ligne de mesure devient fausse : le
+  // contrat rougit au lieu de laisser un chiffre périmé dans un rapport.
+  const bad = [];
+  for (const file of docFiles()) {
+    lines(file).forEach((line, index) => {
+      const m = line.match(/grep -c healthcheck\s+(\S*docker-compose[\w.-]*\.yml)[^#]*#\s*(\d+)/i);
+      if (!m) return;
+      const compose = m[1].replace(/^.*?(infrastructure\/docker\/)/, '$1');
+      if (!existsSync(join(REPO, compose))) return; // citation d'un fichier d'un autre dépôt
+      const actual = healthcheckOwners(read(compose)).length;
+      if (Number(m[2]) !== actual) {
+        bad.push(`${rel(file)}:${index + 1} → cite ${m[2]} healthcheck(s) dans ${compose}, mesuré : ${actual}`);
+      }
+    });
+  }
+  assert.deepEqual(bad, [], `décompte de healthcheck périmé :\n  ${bad.join('\n  ')}`);
 });
 
 test('F2 — aucune documentation ne revendique une couverture healthcheck non qualifiée', () => {

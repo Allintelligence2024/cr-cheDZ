@@ -30,7 +30,7 @@
     "check:routes-inventory": "node scripts/inventory-route-guards.mjs",
     "check:android-manifest": "node scripts/check-android-manifest.mjs",
     "test:production-roles": "node scripts/test-production-roles.mjs",
-    "test:unit": "npm run test --workspace @creche/api",
+    "test:unit": "npm run test --workspace @creche/api && npm run test --workspace @creche/worker",
     "test:api-phase57": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase57-invoice-reminders.api.test.mjs",
     "test:api-phase58": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase58-ratios-attestations.api.test.mjs",
     "test:api-phase59": "npm run build --workspace @creche/api && node tests/tenant-isolation/phase59-contracts-enrollment-schedule.api.test.mjs",

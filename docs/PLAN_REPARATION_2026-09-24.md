@@ -47,14 +47,14 @@ vérification).
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | planifié |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
-| **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (8 contrôles, branche CI `quality`) + 6 documents corrigés |
-| **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | optionnel |
+| **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (9 contrôles, branche CI `quality`) + 6 documents corrigés |
+| **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6.1 (sondes API + worker) FAIT** ; restent D3 (`compress_media`) et k6 |
 
 **Ordre recommandé** : L1 (fait) → **L2** (bloque l'usage réel) → L3 (bloque les parents) → L5
 (pas de dépendance, peut glisser entre les deux) → L4 (attend une décision DPO) → L6.
-**État au 2026-09-24 (soir)** : L1, L2A, L2B et **L5** sont faits et prouvés ; L3 reste bloqué par
-l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée possible) ; L4
-attend la décision DPO ; L6 reste optionnel.
+**État au 2026-09-24 (soir)** : L1, L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
+bloqué par l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée
+possible) ; L4 attend la décision DPO ; il ne reste de L6 que D3 (`compress_media`) et k6.
 
 ---
 
@@ -366,7 +366,7 @@ redevient flatteuse. Livré : `tests/tenant-isolation/claims-contract.test.mjs`
 | Contrôle | Ce qu'il verrouille |
 |---|---|
 | **1. Ordonnanceur externe** | le mot n'apparaît dans **aucun** fichier de code/config (l'ordonnancement est en base : `scheduler_ticks` + `scheduler_enqueue_due()`), et chaque mention documentaire doit être une **mise en garde** (négation, citation de l'affirmation auditée, commande de mesure) |
-| **2. Healthcheck Docker** | la **réalité mesurée** : exactement 1 bloc `healthcheck` par fichier compose, **sur `postgres`** ; **aucun** `HEALTHCHECK` dans les Dockerfiles ; et aucune ligne de documentation ne peut revendiquer une couverture non qualifiée |
+| **2. Healthcheck Docker** | la **réalité mesurée** : au lot 5, 1 bloc `healthcheck` par fichier compose **sur `postgres`** — **mis à jour au lot 6.1** (`postgres` + `api` + `worker` en prod/staging, `postgres` seul en dev) ; **aucun** `HEALTHCHECK` dans les Dockerfiles ; toute ligne de documentation qui cite un décompte (`grep -c healthcheck … # n`) doit correspondre au disque |
 | **3. Compteurs** | migrations (75), entrées du runner (71), suites `phaseNN` (69), fichiers du dossier d'isolation (85), ADR (14), runbooks (32), routes HTTP (198) et chemins OpenAPI (13) sont **recalculés à chaque exécution** (dont l'inventaire des routes, exécuté) et confrontés aux documents qui les revendiquent |
 | **4. Phrases bannies** | les deux affirmations fausses de l'audit (healthcheck généralisé, ordonnanceur externe pour les purges) et `presignGet(` ne peuvent réapparaître que **corrigées sur la même ligne** (`❌`, `→`, « aucun », « 1 seul »…) |
 
@@ -400,12 +400,21 @@ migration ou une suite sans mettre à jour les documents : c'est la friction
 voulue — mettre à jour le document, jamais le contrat.
 
 ### Lot 6 (optionnel) — Worker et charge
+- **L6.1 — santé API + worker : FAIT (2026-09-24).** Aucun `HEALTHCHECK` n'est écrit dans les
+  Dockerfiles (l'image `node:22-slim` n'a ni `curl` ni `wget`) : les sondes sont des scripts Node
+  appelés par Compose — et désormais `api` et `worker` sont sondés
+  en **production et en staging** (les images `node:22-slim` n'ont ni `curl` ni `wget` :
+  les sondes sont des scripts Node compilés, `apps/{api,worker}/dist/healthcheck.js`). API = `fetch`
+  sur le vrai `GET /api/v1/health` ; worker = marqueur de vivacité local réécrit toutes les 10 s
+  (`WORKER_LIVENESS_FILE`, écriture atomique), absent/périmé ⇒ conteneur redémarré, le bail de job
+  en cours étant repris par `jobs_reap_stale` (migration 053). En **dev**, les sondes sont absentes
+  *à dessein* (sources montées + compilation à chaud : `dist/` n'est pas garanti au démarrage) — le
+  motif est écrit dans `docker-compose.dev.yml`, et le contrat de vérité mesure fichier par fichier.
+  Preuves : §5 « L6.1 » ;
 - `compress_media` : stub qui échoue explicitement (`main.ts:305`) — **décider** : implémenter
   (sharp/worker) ou retirer du handler (un stub permanent est une dette silencieuse) ;
 - `tests/load/sync.k6.js` : **jamais exécuté** (k6 absent) — soit l'exécuter sur une cible
-  prod-like et publier les résultats, soit le retirer du discours « tests de charge » ;
-- `HEALTHCHECK` Docker : n'existe que pour Postgres ; en ajouter un pour l'API (`/api/v1/health`)
-  et le worker (heartbeat `scheduler_health()`), avec `depends_on: service_healthy`.
+  prod-like et publier les résultats, soit le retirer du discours « tests de charge ».
 
 ---
 
@@ -549,6 +558,64 @@ node --test …/claims-contract.test.mjs    → 8/8
 Le contrat a également attrapé **sa propre** documentation : un commentaire CI
 introduit pendant ce lot nommait l'ordonnanceur absent → contrôle 1 rouge
 (« implémentation inattendue : .github/workflows/ci.yml »), reformulé sans le mot.
+
+### L6.1 — sondes de vivacité API et worker : correctif, verrous, mutations (2026-09-24, soir)
+
+**Défaut corrigé (F2)** : seul `postgres` était sondé ; l'API exposait `GET /api/v1/health` sans que
+Docker l'interroge, et le worker — sans port — n'avait **aucun** marqueur de vie. Un processus vivant
+mais figé restait en service.
+
+**Correctif livré** :
+- `apps/api/src/healthcheck.ts` : sonde Node (`fetch`, `AbortSignal.timeout`) sur le vrai endpoint
+  public ; `apps/worker/src/healthcheck.ts` + `apps/worker/src/liveness.ts` : marqueur local réécrit
+  toutes les 10 s, écriture atomique, supprimé à l'arrêt propre ; marqueur absent/périmé ⇒ sortie 1.
+- `docker-compose.prod.yml` / `.staging.yml` : sonde Docker (`node apps/<ws>/dist/healthcheck.js`)
+  sur `api` (start_period 30 s) et `worker` (60 s), interval 30 s / timeout 5 s / retries 3 ; en
+  **dev**, aucune sonde et le motif est écrit dans le fichier. Le heartbeat `jobs_heartbeat` (053) n'existe que pendant un job : il ne pouvait pas servir
+  de vivacité au repos (décision tracée).
+- Portes de tests : `apps/worker/jest.config.mts` (le worker n'en avait aucune) et `test:unit`
+  racine = api **puis** worker ; CI `quality` renommée « Tests unitaires api + worker ».
+
+**Preuves exécutées** :
+```bash
+# 1) unités (porte racine) : api 16 suites/116 tests, worker 1 suite/5 tests — tous verts
+npm run test:unit
+
+# 2) bout en bout hors Docker (API réelle reconstruite, PG 18 local, rôle creche_app_test)
+node apps/api/dist/main.js &                    # :3399, « API prête »
+APP_PORT=3399 node apps/api/dist/healthcheck.js # rc=0 « API saine » ; port mort → rc=1 « API indisponible »
+
+# 3) worker réel : marqueur rafraîchi → rc=0 ; antidaté 60 s → rc=1 « périmé » ;
+#    après SIGTERM (arrêt propre) marqueur supprimé → rc=1 « absent »
+WORKER_LIVENESS_INTERVAL_MS=2000 node apps/worker/dist/main.js &
+node apps/worker/dist/healthcheck.js
+
+# 4) compensations de l'audit du 2026-09-24, cohérence de forme
+node -e "…js-yaml…"   # prod/staging : healthcheck = [postgres, api, worker] ; dev : [postgres]
+```
+
+**Verrous ajoutés au contrat (mesure mise à jour, jamais contournée)** :
+1. mesure **par fichier** des services sondés (`postgres` partout ; `api` + `worker` en prod/staging) ;
+2. toute sonde Node référencée par Compose doit avoir sa **source** dans le dépôt
+   (`apps/<ws>/dist/<f>.js` ⇒ `apps/<ws>/src/<f>.ts`) — un renommage laisse un conteneur
+   éternellement `unhealthy` ;
+3. tout décompte cité dans la doc (`grep -c healthcheck <compose> # n`) doit correspondre au disque.
+
+**Mutations (6 exécutées, 6 rouges, restaurations → 9/9 vert)** :
+```
+A — route périmée (lots 1/5)                        rc=1  ['not ok 7 - compteurs — routes HTTP…']  (lot 5)
+B — phrase « healthcheck » non qualifiée            rc=1  ['not ok 4 - F2 — aucune documentation…'] (lot 5)
+C — phrase fausse canonique réintroduite            rc=1  ['not ok 9 - affirmations fausses…']    (lot 5)
+D — compteur de suites périmé                       rc=1  ['not ok 6 - compteurs — batterie…']    (lot 5)
+E — décompte de healthchecks périmé dans la doc     rc=1  ['not ok 3 - F2 — un décompte…']
+F — sonde renommée sans source (compose prod)       rc=1  ['not ok 2 - … sonde … introuvable']
+G — service qui gagne une sonde (minio, mutation exploratoire) rc=1 ['not ok 2 — mesuré : postgres,minio,…']
+restaurations                                       rc=0  9/9 vert
+```
+Le verrou a d'ailleurs attrapé **deux défauts de sa propre écriture** avant d'être accepté : un motif
+qui débordait du bloc `postgres` vers `api` (sonde attribuée au mauvais service) et un contrôle
+d'existence portant sur `dist/` (artefact de build, absent du dépôt) au lieu de la source. Un verrou
+qui n'a jamais rien attrapé n'est pas un verrou.
 
 ## 6. Décisions en attente (propriétaire explicite)
 
