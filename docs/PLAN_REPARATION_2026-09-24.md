@@ -583,7 +583,11 @@ mais figé restait en service.
 
 **Correctif livré** :
 - `apps/api/src/healthcheck.ts` : sonde Node (`fetch`, `AbortSignal.timeout`) sur le vrai endpoint
-  public ; `apps/worker/src/healthcheck.ts` + `apps/worker/src/liveness.ts` : marqueur local réécrit
+  public — logique dans `checkApiHealth()` (testable **sans build**) et entrée CLI sous
+  `require.main === module` ; **pourquoi** : la première version du test lançait l'artefact compilé
+  `apps/api/dist/healthcheck.js`, or le job CI `quality` **ne construit pas** l'API (contrairement à
+  `database`) → la spec tombait au chargement et rougissait la CI. Le CLI compilé reste prouvé par
+  exécution (rc=0 contre l'API réelle, rc=1 sur port mort) ; `apps/worker/src/healthcheck.ts` + `apps/worker/src/liveness.ts` : marqueur local réécrit
   toutes les 10 s, écriture atomique, supprimé à l'arrêt propre ; marqueur absent/périmé ⇒ sortie 1.
 - `docker-compose.prod.yml` / `.staging.yml` : sonde Docker (`node apps/<ws>/dist/healthcheck.js`)
   sur `api` (start_period 30 s) et `worker` (60 s), interval 30 s / timeout 5 s / retries 3 ; en
@@ -594,7 +598,7 @@ mais figé restait en service.
 
 **Preuves exécutées** :
 ```bash
-# 1) unités (porte racine) : api 16 suites/116 tests, worker 1 suite/5 tests — tous verts
+# 1) unités (porte racine) : api 16 suites/117 tests, worker 1 suite/5 tests — tous verts
 npm run test:unit
 
 # 2) bout en bout hors Docker (API réelle reconstruite, PG 18 local, rôle creche_app_test)
@@ -617,7 +621,7 @@ node -e "…js-yaml…"   # prod/staging : healthcheck = [postgres, api, worker]
    éternellement `unhealthy` ;
 3. tout décompte cité dans la doc (`grep -c healthcheck <compose> # n`) doit correspondre au disque.
 
-**Mutations (6 exécutées, 6 rouges, restaurations → 9/9 vert)** :
+**Mutations (7 exécutées, 7 rouges, restaurations → 9/9 vert)** :
 ```
 A — route périmée (lots 1/5)                        rc=1  ['not ok 7 - compteurs — routes HTTP…']  (lot 5)
 B — phrase « healthcheck » non qualifiée            rc=1  ['not ok 4 - F2 — aucune documentation…'] (lot 5)
@@ -626,6 +630,7 @@ D — compteur de suites périmé                       rc=1  ['not ok 6 - compt
 E — décompte de healthchecks périmé dans la doc     rc=1  ['not ok 3 - F2 — un décompte…']
 F — sonde renommée sans source (compose prod)       rc=1  ['not ok 2 - … sonde … introuvable']
 G — service qui gagne une sonde (minio, mutation exploratoire) rc=1 ['not ok 2 — mesuré : postgres,minio,…']
+K — nom de l'image retiré de l'erreur H1 (lot 1.6)   rc=1  ['not ok 8 — the failing image is named…'] (registry-pull)
 restaurations                                       rc=0  9/9 vert
 ```
 Le verrou a d'ailleurs attrapé **deux défauts de sa propre écriture** avant d'être accepté : un motif

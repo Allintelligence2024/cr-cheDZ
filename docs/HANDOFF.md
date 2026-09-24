@@ -488,10 +488,13 @@ excellence.
 **Preuves exécutées (24/09)** :
 1. `apps/worker` a désormais sa porte de tests (`apps/worker/jest.config.mts`, `npm run test:unit`
    à la racine couvre api **et** worker) : **5 tests** du marqueur (dont péremption, atomicité,
-   câblage réel dans `main.ts`).
-2. API : **6 tests** de la sonde (`apps/api/src/healthcheck.spec.ts`) lançant le script **compilé**
-   contre un vrai serveur HTTP (200 `{"status":"ok"}` → 0 ; 500, corps inattendu, corps non-JSON,
-   rien n'écoute, serveur muet → 1).
+   câblage réel dans `main.ts`) — soit **122 tests unitaires** au total avec l'API.
+2. API : **7 cas** de la sonde (`apps/api/src/healthcheck.spec.ts`) exécutés **en cours de
+   processus** contre de vrais serveurs HTTP (200 `{"status":"ok"}` → saine ; 500, corps inattendu,
+   corps non-JSON, rien n'écoute, serveur muet → malsaine). Pourquoi pas le script compilé : le job
+   CI `quality` **ne construit pas** l'API — la première version lançait `apps/api/dist/healthcheck.js`
+   et a rougi la CI ; la logique vit maintenant dans `checkApiHealth()`, et la sonde **compilée** est
+   prouvée hors CI (rc=0 contre l'API réelle, rc=1 sur port mort).
 3. Bout en bout, hors Docker : API réelle `node apps/api/dist/main.js` sur :3399 →
    `node apps/api/dist/healthcheck.js` ⇒ **rc=0** (« API saine ») ; même sonde sur un port mort ⇒
    **rc=1**.
