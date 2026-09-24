@@ -12,7 +12,7 @@ import { inflateSync } from 'node:zlib';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import ExcelJS from 'exceljs';
-import { appUrl, ensureAppRole } from './helpers.mjs';
+import { appUrl, ensureAppRole, PRODUCTION_SPAWN_ENV } from './helpers.mjs';
 
 const adminUrl = process.env.DATABASE_URL;
 assert.ok(new URL(adminUrl).pathname.endsWith('_test'));
@@ -27,7 +27,11 @@ async function waitFor(fn, label, ms = 10000) {
 }
 function startWorker(extra = {}) {
   const child = spawn(process.execPath, ['apps/worker/dist/main.js'], {
-    env: { ...process.env, DATABASE_URL: appUrl(), NODE_ENV: process.env.PRODUCTION_ROLE_TESTS === '1' ? 'production' : 'test',
+    env: { ...process.env, DATABASE_URL: appUrl(),
+      // Production réelle sous le gate : ne jamais y propager le raccourci
+      // RATE_LIMIT_DISABLED du banc d'essai (refusé au boot, garde lot 1).
+      ...(process.env.PRODUCTION_ROLE_TESTS === '1' ? PRODUCTION_SPAWN_ENV : {}),
+      NODE_ENV: process.env.PRODUCTION_ROLE_TESTS === '1' ? 'production' : 'test',
       JWT_SECRET: 'phase28-worker-jwt-only-32-characters-long', PAYMENT_WEBHOOK_SECRET: 'phase28-worker-webhook-32-characters-long',
       // G5 : la garde production (partagée api/worker) exige la clé TOTP au boot ;
       // le worker ne l'utilise pas, mais le contrat de déploiement la fournit partout.

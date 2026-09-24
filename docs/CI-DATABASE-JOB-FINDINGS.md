@@ -1,6 +1,12 @@
 # Job CI « database » — du blocage de 6 h au vert
 
-_Dernière mise à jour : 23/09/2026 — branche `arena/01a0ca72-cr-chedz` (PR #49)._
+_Dernière mise à jour : 24/09/2026 — branche `arena/01a0d3c1-cr-chedz` (PR #50, plan de réparation)._
+
+> **24/09/2026 — le job est redevenu rouge, pour deux causes distinctes** : un H1
+> environnemental (tirage de registre refusé sur le runner, `main` incluse) et une
+> **régression du lot 1 du plan de réparation** (raccourci `RATE_LIMIT_DISABLED`
+> hérité par les spawns de production) — cette seconde cause est corrigée et
+> verrouillée. Détail et preuves : section « 24/09/2026 » en fin de document.
 
 ## Résumé
 
@@ -184,6 +190,68 @@ elle aurait produit un échec **intermittent** — le pire type à diagnostiquer
 suites worker (`phase13`, `21`, `23`, `28`, `36`) ; `phase11` était la seule du
 dépôt à lire ce statut sans attendre. `failed` est traité comme terminal : un
 vrai échec est signalé immédiatement, jamais masqué en `done`.
+
+## 24/09/2026 — le job redevient rouge : deux causes distinctes
+
+Le job avait été remis au vert le 23/09 (`52e6ef3`). Les runs du 24/09 sur `main`
+(`3b8f51b`) puis sur la branche du plan de réparation (`f73c7c0`, `e3728cc`,
+`225fead`) sont rouges **pour deux raisons différentes**, qualifiées par les
+annotations `check-runs` (méthode ci-dessous — `gh run view --log-failed` et
+`gh api …/jobs/<id>/logs` échouent toujours en `EOF`).
+
+| Run | Symptôme observé | Cause | État |
+|---|---|---|---|
+| `3b8f51b` (main) | gate **terminé**, `rc=1` | H1 dev **et** staging : `Registry pull failed … unauthorized: access to the requested resource is not authorized` — tirage de `postgres:18-alpine` et `quay.io/minio/minio` **avant** tout `docker compose` | **préexistant, environnemental** : le job était vert la veille (`52e6ef3`) et aucun fichier de registre/stack n'a changé. Le runner GitHub n'obtient plus le tirage anonyme. Non reproductible ici (pas de Docker) → **non corrigé**, à traiter côté credentials/miroir |
+| `f73c7c0`, `e3728cc`, `225fead` | gate **interrompu AVANT la batterie** : `Gate D interrompu :: … phase26-production-roles.test.mjs (exit 1)` | **régression du lot 1** : le job CI exporte `RATE_LIMIT_DISABLED: 'true'` (raccourci de banc d'essai) ; `phase26` lance les **entrées de production** avec `...process.env` → la garde de configuration refuse le démarrage (« GARDE CONFIG PRODUCTION — RATE_LIMIT_DISABLED ») au lieu de rendre `DATABASE_ROLE_UNSAFE`. 2 tests rouges → **la batterie d'isolation n'a jamais tourné en CI sur ces trois commits** | **corrigé** (voir ci-dessous) |
+
+Conséquence à retenir : un lot peut être vert en local (les suites tournent alors
+avec `PRODUCTION_ROLE_TESTS` non défini, et `RATE_LIMIT_DISABLED` n'entre en jeu
+que dans les spawns de production) et **rouge en CI** pour une variable
+d'environnement du job. C'est exactement le cas ici.
+
+### Correctif — 24/09
+
+- `tests/tenant-isolation/helpers.mjs` : nouvelle constante partagée
+  **`PRODUCTION_SPAWN_ENV = { RATE_LIMIT_DISABLED: 'false' }`** — un environnement
+  de production ne désactive jamais la limitation de débit.
+- Les **cinq** suites qui lançaient une entrée de production avec `...process.env`
+  la neutralisent désormais : `phase22`, `phase26`, `phase27`, `phase28`, `phase49`
+  (`phase27`/`phase28` seulement en mode gate : `PRODUCTION_ROLE_TESTS=1`).
+- **Verrou anti-régression** dans `phase26` : toute suite qui lance
+  `dist/main.js` en production sans neutraliser le raccourci fait échouer le gate.
+  Mesuré avant/après : **5 fichiers signalés** (contenu de `HEAD`) → **0** après
+  correctif.
+
+### Preuve (bac à sable, PG 18.4 réel, sans Docker)
+
+```bash
+# Reproduction de la condition CI (le job exporte RATE_LIMIT_DISABLED=true) :
+DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test \
+  ALLOW_DATABASE_RESET=1 RATE_LIMIT_DISABLED=true \
+  node --test tests/tenant-isolation/phase26-production-roles.test.mjs
+# AVANT : # pass 12 / # fail 2  — « Boot exit 1 : GARDE CONFIG PRODUCTION …
+#          RATE_LIMIT_DISABLED » et « input did not match /DATABASE_ROLE_UNSAFE/ »
+# APRÈS : # pass 15 / # fail 0
+
+# Gate D complet, environnement fidèle au job « database » :
+DATABASE_URL=… RATE_LIMIT_DISABLED=true NODE_ENV=test STORAGE_BACKEND=local \
+  STORAGE_LOCAL_DIR=/tmp/creche-storage-ci PAYMENT_WEBHOOK_SECRET=phase8-test-secret \
+  ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
+```
+
+**Résultat du gate complet rejoué localement avec cet environnement : `rc=0`,
+`72/72 suites vertes`** (phase26 `# pass 15 / # fail 0`, phase22 44 assertions,
+phase27 14, phase28 23, phase47 38, phase49 48, phase66 35, phase67 37 ; preuves
+H2a–H2l et G1–G5 émises ; sous-gates Docker/Flutter « NOT EXECUTED locally »).
+
+Ce rejeu a une vertu propre : la batterie est allée jusqu'au bout pour la
+première fois depuis l'apparition du rouge et elle a **trouvé un défaut dans le
+correctif lui-même** — un import oublié dans
+`phase22` (`ReferenceError: PRODUCTION_SPAWN_ENV is not defined`, 1 suite rouge
+sur 72). Les suites `phase27` (14/0), `phase28` (23/0), `phase47` (38/0) et
+`phase49` (48/0) sont vertes en mode rôles de production. Le défaut a été
+corrigé puis rejoué seul (`phase22` : 44 assertions ✓), avant le gate complet de
+contrôle.
 
 ## Lire les échecs CI sur ce dépôt
 

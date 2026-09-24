@@ -365,3 +365,35 @@ la lecture parent sous consentement).
    corps JSON de cette route — décision non prise.
 3. **Clips vidéo** : presign *fail-closed* en production, mais téléversement **par l'API** non
    livré (fichiers volumineux : dimensionnement dédié).
+
+## Mise à jour 2026-09-24 (soir) — CI : régression du lot 1 corrigée, verrou ajouté
+
+**Contrat à respecter par toute nouvelle suite** : un processus `NODE_ENV=production`
+ne doit JAMAIS hériter du raccourci de banc d'essai `RATE_LIMIT_DISABLED`
+(le runner d'isolation l'exporte à `1`, le job CI `database` à `true`). Depuis le
+lot 1, la garde de configuration refuse ce raccourci en production : une suite qui
+lance `apps/api/dist/main.js` ou `apps/worker/dist/main.js` avec `...process.env`
+voit le processus mourir au boot (« GARDE CONFIG PRODUCTION ») au lieu du motif
+qu'elle teste. Utiliser `PRODUCTION_SPAWN_ENV` (`tests/tenant-isolation/helpers.mjs`) —
+`phase26` refuse tout spawn de production non neutralisé (verrou, 5 fichiers
+signalés sur `HEAD` avant correctif, 0 après). Suites corrigées : `phase22`,
+`phase26`, `phase27`, `phase28`, `phase49`.
+
+**État CI au 2026-09-24** — le job `database` est rouge, pour deux causes :
+1. **H1 (préexistant, environnemental, non corrigé)** : le runner ne peut plus
+   tirer `postgres:18-alpine` ni `quay.io/minio/minio` (`unauthorized`). Le gate
+   se terminait la veille (`52e6ef3`) : rien de code n'a changé de ce côté.
+2. **Régression du lot 1 (corrigée ici)** : `Gate D interrompu :: … phase26 …`
+   → le gate s'arrêtait **avant la batterie**, qui n'a donc pas tourné en CI sur
+   `f73c7c0`, `e3728cc`, `225fead`.
+
+**Rejouer la CI en local** (le mode 1 ne suffit pas — il ne joue ni phase26 ni
+les rôles de production) :
+```bash
+DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test \
+  RATE_LIMIT_DISABLED=true NODE_ENV=test STORAGE_BACKEND=local \
+  STORAGE_LOCAL_DIR=/tmp/creche-storage-ci PAYMENT_WEBHOOK_SECRET=phase8-test-secret \
+  ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
+```
+Lire les échecs CI par les **annotations check-runs** (les logs par API/job
+échouent en `EOF`) : voir `docs/CI-DATABASE-JOB-FINDINGS.md`, dernière section.

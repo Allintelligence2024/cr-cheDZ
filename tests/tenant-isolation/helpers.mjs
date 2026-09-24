@@ -131,3 +131,19 @@ export function appUrl() {
   u.password = APP_TEST_PASSWORD;
   return u.toString();
 }
+
+/**
+ * Raccourci de banc d'essai à NE JAMAIS propager à un processus NODE_ENV=production.
+ *
+ * Le runner (`run-isolation-suites.sh`) exporte `RATE_LIMIT_DISABLED=1` et le
+ * job CI `true`, pour que les suites puissent marteler l'API d'un même process.
+ * Un spawn de production qui fait `...process.env` transmet donc ce raccourci —
+ * or la garde de configuration (plan de réparation 2026-09-24, lot 1) le REFUSE
+ * en production : le processus meurt au boot (« GARDE CONFIG PRODUCTION ») et le
+ * test échoue pour la mauvaise raison, en accusant les rôles de base.
+ *
+ * Un environnement de production ne désactive jamais la limitation de débit :
+ * tout spawn `NODE_ENV=production` le dit donc explicitement.
+ * Verrou anti-régression : phase26 (§ « raccourci de banc d'essai »).
+ */
+export const PRODUCTION_SPAWN_ENV = { RATE_LIMIT_DISABLED: 'false' };

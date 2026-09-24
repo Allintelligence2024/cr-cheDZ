@@ -7,7 +7,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { appUrl, ensureAppRole } from './helpers.mjs';
+import { appUrl, ensureAppRole, PRODUCTION_SPAWN_ENV } from './helpers.mjs';
 
 assert.ok(new URL(process.env.DATABASE_URL).pathname.endsWith('_test'), 'Base jetable *_test requise');
 const admin = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -30,6 +30,9 @@ function worker(extra = {}) {
     env: {
       ...process.env, DATABASE_URL: appUrl(), PGAPPNAME: tag,
       // Production réelle pour le gate ; le mode historique utilise le clone.
+      // En production, le raccourci de banc d'essai RATE_LIMIT_DISABLED est
+      // refusé par la garde de configuration : jamais propagé au worker.
+      ...(process.env.PRODUCTION_ROLE_TESTS === '1' ? PRODUCTION_SPAWN_ENV : {}),
       NODE_ENV: process.env.PRODUCTION_ROLE_TESTS === '1' ? 'production' : 'test',
       JWT_SECRET: 'phase-e-local-only-jwt-secret-at-least-32',
       PAYMENT_WEBHOOK_SECRET: 'phase-e-local-only-webhook-secret-at-least-32',

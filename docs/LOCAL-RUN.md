@@ -112,7 +112,11 @@ npm run db:reset                        # migrate --reset && migrate && seed
    application role ») sont **par conception** : en mode normal, `appUrl()`
    renvoie `creche_app_test` alors que la garde `DATABASE_ROLE_UNSAFE` exige
    exactement `creche_app` sous `NODE_ENV=production`. Ces checks ne passent
-   qu'en mode 2.
+   qu'en mode 2. (Compteur historique : la batterie compte désormais **71
+   entrées** — 69 `phaseNN` + `schema-check` + `rls-behavior-check`.)
+   **Le mode 1 ne suffit pas à qualifier un lot** : il ne joue ni phase26 ni les
+   rôles de production, et c'est précisément là que le 24/09 une régression a
+   échappé (voir `docs/CI-DATABASE-JOB-FINDINGS.md` § 24/09/2026).
 2. **Gate D — mode rôles de production (l'équivalent exact du job `database` CI)** :
    ```bash
    ALLOW_DATABASE_RESET=1 \
@@ -126,6 +130,20 @@ npm run db:reset                        # migrate --reset && migrate && seed
    (« NOT EXECUTED locally (Docker required) »). **Résultat du 2026-09-21 sur
    PG 18.4 : 65/65 suites vertes, preuves H2a–H2l et G1–G5 OK, rc=0.**
    C'est le gate à rejouer avant tout merge sensible.
+
+   **Reproduire la condition du job CI** (et non seulement celle du bac à
+   sable) — le job `database` exporte `RATE_LIMIT_DISABLED: 'true'`, que les
+   spawns de production refusent depuis le lot 1 du plan de réparation :
+   ```bash
+   DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test \
+     RATE_LIMIT_DISABLED=true NODE_ENV=test STORAGE_BACKEND=local \
+     STORAGE_LOCAL_DIR=/tmp/creche-storage-ci PAYMENT_WEBHOOK_SECRET=phase8-test-secret \
+     ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
+   ```
+   Toute suite qui lance une **entrée de production** (`apps/api/dist/main.js`,
+   `apps/worker/dist/main.js`) neutralise le raccourci avec
+   `PRODUCTION_SPAWN_ENV` (`tests/tenant-isolation/helpers.mjs`) ; `phase26` le
+   vérifie pour tout le dépôt (verrou).
 
 ## État de validation (2026-09-21, sandbox sans Docker)
 

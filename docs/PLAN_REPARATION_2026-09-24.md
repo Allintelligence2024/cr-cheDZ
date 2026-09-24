@@ -43,7 +43,7 @@ vérification).
 
 | Lot | Objectif | Origine | Effort | Preuve de sortie | Statut |
 |---|---|---|---|---|---|
-| **L1** | **Gardiens orphelins + garde de config + CSP edge** | vérif. §4.3, F2, F3 | ~2 h | 4 gardiens en CI ; test unitaire prod-config ; test de contrat en-têtes | **FAIT (ce commit)** |
+| **L1** | **Gardiens orphelins + garde de config + CSP edge** | vérif. §4.3, F2, F3 | ~2 h | 4 gardiens en CI ; test unitaire prod-config ; test de contrat en-têtes | **FAIT** + régression CI du 24/09 corrigée et verrouillée (§3, L1.4) |
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | planifié |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
@@ -104,6 +104,43 @@ touche le chemin de démarrage du SPA, donc exige une vérification navigateur (
 contient les 6 directives structurantes, et les conteneurs SPA ne publient pas de port.
 
 ---
+
+### L1.4 — Suivi du 24/09 : régression de ce lot détectée en qualifiant la CI
+
+Le job CI `database` est rouge le 24/09, pour **deux causes distinctes**. L'une
+**vient du lot 1** : le job exporte `RATE_LIMIT_DISABLED: 'true'` (raccourci de
+banc d'essai) et `phase26-production-roles.test.mjs` lançait les entrées de
+production avec `...process.env` — la garde L1.1 refuse ce raccourci en
+production, donc le processus API/worker mourait au boot
+(« GARDE CONFIG PRODUCTION — RATE_LIMIT_DISABLED ») au lieu de rendre
+`DATABASE_ROLE_UNSAFE`. Deux tests rouges → le gate s'arrête **avant la
+batterie** : sur `f73c7c0`, `e3728cc` et `225fead`, **aucune suite d'isolation
+n'a tourné en CI**. Les tests unitaires de L1.1 ne pouvaient pas le voir : ils
+testaient la fonction, jamais un spawn de production à environnement hérité.
+
+**Correctif** : constante partagée `PRODUCTION_SPAWN_ENV`
+(`tests/tenant-isolation/helpers.mjs`) — un environnement de production ne
+désactive jamais la limitation de débit — neutralisée dans les **5 suites** qui
+lancent une entrée de production (`phase22`, `phase26`, `phase27`, `phase28`,
+`phase49`), plus un **verrou** dans `phase26` qui refuse tout spawn de production
+héritant du raccourci.
+
+**Preuve** (PG 18.4 réel, condition CI `RATE_LIMIT_DISABLED=true`) :
+
+```
+phase26 avant : # pass 12 / # fail 2   (« Boot exit 1 : GARDE CONFIG PRODUCTION … »)
+phase26 après : # pass 15 / # fail 0
+verrou        : 5 fichiers signalés sur HEAD → 0 après correctif
+Gate D complet avec l'environnement du job CI → 72/72 suites vertes, rc=0
+                (journal détaillé : §5, « L1.4 — reproduction, correctif, verrou »)
+```
+
+La **seconde cause** du rouge CI est environnementale et préexistante : H1 ne
+parvient plus à tirer `postgres:18-alpine` / `quay.io/minio/minio` sur le runner
+(`unauthorized`), y compris sur `main` où le gate se terminait pourtant la veille
+(`52e6ef3`). Elle n'est **pas corrigée ici** (Docker absent du bac à sable) et
+reste ouverte ; elle empêche le job d'être vert même quand le code l'est.
+Détail : `docs/CI-DATABASE-JOB-FINDINGS.md` § 24/09/2026.
 
 ## 4. Lots suivants — contenu, décisions, preuves
 
@@ -385,6 +422,66 @@ fichier de ces suites n'est modifié par L1). Le job `flutter-check` reste **non
 fichier Dart touché dans ce lot).
 
 ---
+
+### L1.4 — régression du lot 1 : reproduction, correctif, verrou (2026-09-24, soir)
+
+Environnement : PostgreSQL 18.4 embarqué (port 54329), `node v22.22.3`, `apps/api` +
+`apps/worker` compilés. Docker et SDK Flutter absents (les sous-gates H1/F2/F4 s'écartent
+d'eux-mêmes : « NOT EXECUTED locally (Docker required) »).
+
+```
+# 1) Reproduction de la condition du job CI — le job exporte RATE_LIMIT_DISABLED=true
+$ DATABASE_URL=… ALLOW_DATABASE_RESET=1 RATE_LIMIT_DISABLED=true \
+    node --test tests/tenant-isolation/phase26-production-roles.test.mjs
+not ok 10 - D2 : vrais entrypoints API ET worker sortent en erreur, avant de servir/claim
+    The input did not match the regular expression /DATABASE_ROLE_UNSAFE/. Input:
+      "- RATE_LIMIT_DISABLED: désactivation de la limitation de débit interdite en production …"
+not ok 13 - D2 : API et worker démarrent réellement en production avec creche_app
+    Boot exit 1 : GARDE CONFIG PRODUCTION — démarrage REFUSÉ (corrigez le .env puis relancez) :
+      - RATE_LIMIT_DISABLED: … interdite en production
+# pass 12
+# fail 2                       ← signature EXACTE du rouge CI « Gate D interrompu :: … phase26 »
+
+# 2) Même commande après correctif
+# pass 15
+# fail 0
+
+# 3) Verrou anti-régression — mesuré sur le contenu de HEAD puis sur l'arbre
+HEAD (avant) → 5 fichier(s) : phase22-audit-fixes.api.test.mjs, phase26-production-roles.test.mjs,
+                             phase27-worker-lifecycle.test.mjs, phase28-worker-reliability.test.mjs,
+                             phase49-storage-selection.test.mjs
+arbre (après) → 0 fichier(s) :
+
+# 4) Premier passage de la batterie avec le correctif : elle a trouvé UN défaut de plus,
+#    oublié dans le correctif lui-même (import manquant) — 71/72 et une seule suite rouge :
+FAIL  phase22-audit-fixes.api.test.mjs           0
+  ReferenceError: PRODUCTION_SPAWN_ENV is not defined
+  → corrigé, puis rejoué seul en mode rôles de production : « PASS phase22 … 44 assertions ✓ »
+
+# 5) Gate D COMPLET, environnement fidèle au job « database » (correctif + verrou)
+$ DATABASE_URL=… RATE_LIMIT_DISABLED=true NODE_ENV=test STORAGE_BACKEND=local \
+    STORAGE_LOCAL_DIR=/tmp/creche-storage-ci PAYMENT_WEBHOOK_SECRET=phase8-test-secret \
+    ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
+… phase26 : # pass 15 / # fail 0
+PASS  phase22-audit-fixes.api.test.mjs           44 assertions ✓
+PASS  phase27-worker-lifecycle.test.mjs          14 assertions ✓
+PASS  phase28-worker-reliability.test.mjs        23 assertions ✓
+PASS  phase47-invitations.api.test.mjs           38 assertions ✓   (rouge « par conception » en mode 1)
+PASS  phase49-storage-selection.test.mjs         48 assertions ✓   (idem)
+═══════════ 72/72 suites vertes ═══════════
+✓ GATE D : régressions Phase D + 59 suites/contrôles (E1–E6 incluses) avec rôles et grants de production.
+GATE EXIT=0                        ← première fois que la batterie va au bout sous cette condition
+```
+
+C'est la **première** exécution de bout en bout de la batterie sous l'environnement du
+job CI : les contrôles `phase27`, `phase28`, `phase47` et `phase49` (rouges « par
+conception » en mode canon local, cf. `docs/LOCAL-RUN.md`) sont **verts en mode rôles
+de production**, et les deux suites du lot 2 (`phase66` : 35 assertions, `phase67` :
+37 assertions) passent avec les rôles de production.
+
+**Non couvert localement** : les sous-gates Docker (H1 staging/dev) et Flutter (F2/F4)
+— leur échec CI (`Registry pull failed … unauthorized`) reste **ouvert et
+environnemental** (voir `docs/CI-DATABASE-JOB-FINDINGS.md`).
 
 ## 6. Décisions en attente (propriétaire explicite)
 
