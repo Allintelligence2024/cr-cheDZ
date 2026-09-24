@@ -345,8 +345,22 @@ demanderait de relever la limite de corps JSON pour cette route (décision non p
    **exécutés en CI** (aujourd'hui `flutter.yml` ne lance `flutter test` que pour `staff-mobile`).
 4. **Lockfile** : `pubspec.lock` absent + `flutter pub get` sans `--enforce-lockfile` côté parent,
    alors que `staff-mobile` est verrouillé (`check-staff-sync.mjs`). Aligner les deux.
-   **BLOQUÉ localement** : aucun SDK Flutter dans l'environnement de rédaction → à produire par un
-   poste avec Flutter 3.47.1 (`flutter pub get` puis commit du lockfile).
+   **BLOQUÉ — outillage requis, mesuré le 2026-09-24 (l'environnement de rédaction n'est pas le bon
+   poste)** :
+   - `git ls-files apps/parent-mobile | grep pubspec` → **`pubspec.yaml` seulement** (aucun
+     `pubspec.lock`) ; côté `staff-mobile`, `pubspec.lock` **est** versionné. Les deux apps ont des
+     plages `^` (parent : `dio ^5.7.0`, `flutter_secure_storage ^9.2.2`, `intl ^0.20.3`) ;
+   - `apps/parent-mobile/test/` **n'existe pas** : `flutter.yml` ne lance `flutter test` que pour
+     `staff-mobile` (parent = `pub get + analyze`) ;
+   - les deux hôtes nécessaires sont **injoignables depuis cet environnement** :
+     `storage.googleapis.com` (SDK Flutter, code HTTP **000**) et `pub.dev` (résolution des
+     dépendances, **000**) — seuls `github.com` et `registry.npmjs.org` répondent (200). Un
+     `pubspec.lock` écrit à la main serait **faux** (hashes des archives inconnus) : il ne sera pas
+     fabriqué.
+   - **À faire depuis un poste avec Flutter 3.47.1 et accès à pub.dev** : `flutter pub get` dans
+     `apps/parent-mobile`, commiter `pubspec.lock`, ajouter `--enforce-lockfile` à l'étape CI, puis
+     livrer le lot 3 (session + erreurs + tests). Ces points sont vérifiables **en CI** (le job
+     `flutter` a le réseau) mais pas dans la sandbox de rédaction.
 
 ### Lot 4 — Rétention et mineurs *(décision DPO requise)*
 - **File de notifications / messages** : aucune purge n'existe (`notification_queue`, `messages`) ;

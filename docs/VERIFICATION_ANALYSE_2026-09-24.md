@@ -292,6 +292,20 @@ coûteux que l'absence d'offline (qui est un confort). **Correctif court** (≈ 
 Dio `401 → POST /auth/refresh` avec single-flight + purge de session + redirection vers l'OTP ;
 **puis** l'offline-first si le besoin terrain le justifie.
 
+> **État au 2026-09-24 (soir) — BLOQUÉ, outillage requis, mesuré.** Le correctif appartient à
+> `apps/parent-mobile` (Dart) : sa preuve est un test widget (`flutter test`). Or cet environnement
+> de rédaction n'a **ni SDK Flutter ni accès aux hôtes nécessaires** :
+> `storage.googleapis.com` (téléchargement du SDK) et `pub.dev` (résolution des dépendances)
+> répondent **000** (timeout), seuls `github.com` et `registry.npmjs.org` répondent (test
+> `curl -s -o /dev/null -w '%{http_code}'`). Mesures complémentaires : `apps/parent-mobile/test/`
+> **n'existe pas**, `pubspec.lock` **n'est pas versionné** côté parent (alors que `staff-mobile`
+> l'est), et `flutter.yml` ne lance `flutter test` **que** pour `staff-mobile`.
+> **Ce qu'il faut pour lever le blocage** : un poste (ou la CI, qui a le réseau) avec Flutter 3.47.1
+> — `flutter pub get` → commit de `pubspec.lock` → `--enforce-lockfile` → puis le correctif de
+> session et ses tests. Aucun de ces points ne peut être *prouvé* ici ; rien n'a donc été écrit
+> « en aveugle » dans `apps/parent-mobile` (un correctif non compilé serait un mensonge, pas un
+> progrès). Détail : plan de réparation, lot 3.
+
 ### 4.3 🟠 Quatre gardiens qui ne gardent rien (hors CI) — ✅ corrigé, et la CLASSE est verrouillée
 
 > **Suite (2026-09-24, soir)** : les 4 gardiens ci-dessous sont câblés en CI depuis le lot 1. En
