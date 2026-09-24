@@ -141,7 +141,7 @@ export function StaffPage(): React.JSX.Element {
         <Button type="submit">{t('staff.create')}</Button>
       </form>
       {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-      {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+      {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
       <Table
         headers={['Nom', 'Email', t('staff.qualification'), 'Contrat', t('staff.hireDate'), 'Affect.', t('common.actions')]}
         rows={items.map((s) => [

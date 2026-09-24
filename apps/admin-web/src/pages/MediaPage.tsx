@@ -76,7 +76,7 @@ export function MediaPage(): React.JSX.Element {
           <Button variant="ghost" onClick={load}>{t('common.refresh')}</Button>
         </div>
         {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-        {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+        {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
         {items.length === 0 && <p style={{ color: tokens.colors.textMuted }}>{t('media.noMedia')}</p>}
         <Table
           headers={['Fichier', 'Type', 'Taille', t('media.visible'), t('common.actions')]}
@@ -84,7 +84,7 @@ export function MediaPage(): React.JSX.Element {
             item.original_filename ?? item.id.slice(0, 8),
             item.media_type,
             size(item.file_size_bytes),
-            <span key="v" style={{ color: item.is_visible_to_parents ? '#16A34A' : tokens.colors.textMuted }}>
+            <span key="v" style={{ color: item.is_visible_to_parents ? tokens.colors.success : tokens.colors.textMuted }}>
               {item.is_visible_to_parents ? t('media.visible') : t('media.pending')}
             </span>,
             <div key="a" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>

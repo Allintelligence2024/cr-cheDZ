@@ -102,7 +102,12 @@ export class ParentsService {
     return this.tenantContext.withTenantConnection(async (client) => (await client.query(
       `INSERT INTO notification_preferences (organization_id,user_id,channel,event_type,is_enabled,quiet_hours_start,quiet_hours_end)
        VALUES ($1,$2,'push',$3,$4,$5,$6)
-       ON CONFLICT (user_id,channel,event_type) DO UPDATE SET is_enabled=EXCLUDED.is_enabled,
+       -- La contrainte unique inclut organization_id depuis la migration 073
+       -- (R19) : un même utilisateur peut gérer ses préférences indépendamment
+       -- par crèche. Viser (user_id,channel,event_type) ne correspond plus à
+       -- aucune contrainte — PostgreSQL rejette alors la requête entière, donc
+       -- la préférence n'était jamais enregistrée.
+       ON CONFLICT (organization_id,user_id,channel,event_type) DO UPDATE SET is_enabled=EXCLUDED.is_enabled,
          quiet_hours_start=EXCLUDED.quiet_hours_start, quiet_hours_end=EXCLUDED.quiet_hours_end
        RETURNING event_type,is_enabled,quiet_hours_start,quiet_hours_end`,
       [tenantId, userId, dto.event_type, dto.is_enabled, dto.quiet_hours_start ?? null, dto.quiet_hours_end ?? null],
@@ -111,8 +116,13 @@ export class ParentsService {
 
   async photos(userId: string, childId: string, ip?: string): Promise<Array<Record<string, unknown>>> {
     await this.assertPermission(userId, childId, 'can_view_journal');
-    const items = await this.media.list(userId, childId);
-    const visible = items.filter((item) => item.is_visible_to_parents === true);
+    // `media.list()` cloisonne le PERSONNEL par salle (memberships.room_ids).
+    // Un parent n'appartient à aucune salle : ce filtrage renvoyait toujours
+    // une liste vide, alors que le téléchargement direct de la même photo
+    // fonctionnait. On utilise la lecture dédiée aux parents, qui filtre sur
+    // l'enfant et sur is_visible_to_parents ; le lien de filiation vient
+    // d'être vérifié ci-dessus et le consentement l'est à chaque signature.
+    const visible = await this.media.listForParent(childId);
     const result: Array<Record<string, unknown>> = [];
     for (const item of visible) {
       try {

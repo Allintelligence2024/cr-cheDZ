@@ -7,6 +7,7 @@ import 'features/feed/feed_page.dart';
 import 'features/photos/photos_page.dart';
 import 'features/consents/consents_page.dart';
 import 'features/preferences/preferences_page.dart';
+import 'theme/serenite_theme.dart';
 
 void main() => runApp(const ParentApp());
 
@@ -38,10 +39,11 @@ class _ParentAppState extends State<ParentApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: ThemeData(
-        colorSchemeSeed: Colors.teal,
-        useMaterial3: true,
-      ),
+      // Sérénité — mêmes couleurs que le web (packages/design-system).
+      // `themeMode: system` suit le réglage clair/sombre de l'appareil.
+      theme: SereniteTheme.light,
+      darkTheme: SereniteTheme.dark,
+      themeMode: ThemeMode.system,
       home: _authenticated
           ? ParentHome(api: _api)
           : OtpLoginPage(

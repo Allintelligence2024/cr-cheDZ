@@ -104,7 +104,7 @@ export function MessagingPage(): React.JSX.Element {
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing.lg }}>
       <Card title={t('msg.title')}>
         {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-        {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+        {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
 
         <div style={{ display: 'flex', gap: tokens.spacing.md, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: tokens.spacing.md }}>
           <div style={{ minWidth: 240 }}>
@@ -140,8 +140,8 @@ export function MessagingPage(): React.JSX.Element {
                 key={m.id}
                 style={{
                   alignSelf: mine(m) ? 'flex-end' : 'flex-start',
-                  background: mine(m) ? tokens.colors.primary : '#F1F5F9',
-                  color: mine(m) ? '#fff' : '#0F172A',
+                  background: mine(m) ? tokens.colors.primary : tokens.colors.surfaceHover,
+                  color: mine(m) ? tokens.colors.primaryContrast : tokens.colors.text,
                   borderRadius: 10,
                   padding: '8px 12px',
                   maxWidth: '75%',

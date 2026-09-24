@@ -1,0 +1,604 @@
+/* ============================================================================
+ * SÉRÉNITÉ — feuille de base partagée (admin-web, support-console)
+ * ----------------------------------------------------------------------------
+ * Habille les éléments HTML natifs et fournit les classes de mise en page.
+ * Aucune couleur en dur : tout passe par les variables de `theme.css`.
+ *
+ * Stratégie responsive : mobile-first, puis 3 points de rupture
+ *   ≤ 640 px   téléphone   — navigation en tiroir, tables en cartes
+ *   ≤ 900 px   tablette    — sidebar masquée, grilles resserrées
+ *   ≥ 1280 px  desktop     — largeur de contenu plafonnée
+ * ========================================================================= */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* Compense le décalage d'ancre sous l'en-tête collant. */
+  scroll-padding-top: 76px;
+}
+
+body {
+  margin: 0;
+  background: var(--c-background);
+  color: var(--c-text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Respiration sous l'encoche / la barre système sur mobile. */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+h1, h2, h3, h4 {
+  color: var(--c-text);
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+a {
+  color: var(--c-primary);
+}
+
+/* Focus visible homogène — obligatoire pour l'accessibilité clavier. */
+:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Champs de formulaire natifs : suivent le thème (sinon fond blanc en sombre). */
+input,
+select,
+textarea,
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--c-text);
+}
+
+input,
+select,
+textarea {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+  /* Anti-zoom iOS : sous 16 px, Safari zoome au focus. */
+  font-size: max(16px, 1em);
+}
+
+@media (min-width: 641px) {
+  input,
+  select,
+  textarea {
+    font-size: 14px;
+  }
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--c-primary);
+  box-shadow: var(--c-shadow-focus);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--c-text-faint);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background: var(--c-surface-hover);
+  color: var(--c-text-faint);
+  cursor: not-allowed;
+}
+
+/* Barres de défilement discrètes, accordées au thème. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--c-border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--c-background);
+}
+
+/* ── Libellés de champ ───────────────────────────────────────────────────── */
+/*
+  L'astérisque des champs obligatoires est générée en CSS, jamais insérée
+  dans le DOM. Le texte d'un <label> étant la concaténation de ses nœuds de
+  texte descendants, un « * » réel transformerait « Prénom » en « Prénom * »
+  et casserait toute recherche par libellé exact (tests Playwright
+  getByLabel(..., { exact: true }), outils d'accessibilité, automatisation).
+  Le contenu de ::after n'appartient pas au DOM : le libellé reste intact.
+  L'état obligatoire est porté par l'attribut `required` de l'<input>.
+*/
+.ds-field-required::after {
+  content: ' *';
+  color: var(--c-danger);
+}
+
+/* ── Bouton de bascule de thème ──────────────────────────────────────────── */
+.ds-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--c-surface);
+  color: var(--c-text-muted);
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+  min-height: 40px;
+}
+
+.ds-theme-toggle:hover {
+  color: var(--c-primary);
+  border-color: var(--c-primary-border);
+  background: var(--c-primary-soft);
+}
+
+/* ── Layout principal ────────────────────────────────────────────────────── */
+.layout {
+  display: flex;
+  min-height: 100vh;
+  /* Unité dynamique : évite que la barre d'URL mobile rogne le contenu. */
+  min-height: 100dvh;
+  background: var(--c-background);
+}
+
+.layout-sidebar {
+  width: 248px;
+  flex-shrink: 0;
+  background: var(--c-sidebar);
+  border-inline-end: 1px solid var(--c-border);
+  color: var(--c-sidebar-text);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* La navigation reste visible pendant le défilement du contenu. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+}
+
+.layout-sidebar h1 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+  padding: 8px 10px 14px;
+  color: var(--c-text);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.layout-main {
+  flex: 1;
+  padding: 24px 28px 48px;
+  min-width: 0;
+}
+
+/* Plafonne la largeur de lecture sur très grand écran. */
+.layout-main > * {
+  max-width: 1400px;
+}
+
+/* Liens de navigation */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--c-sidebar-text);
+  text-decoration: none;
+  transition: background .13s ease, color .13s ease;
+  /* Cible tactile confortable. */
+  min-height: 40px;
+}
+
+.nav-link:hover {
+  background: var(--c-surface-hover);
+  color: var(--c-text);
+}
+
+.nav-link.active {
+  background: var(--c-primary-soft);
+  color: var(--c-primary);
+  font-weight: 650;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-footer button {
+  background: transparent;
+  border: 1px solid var(--c-border);
+  color: var(--c-text-muted);
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: start;
+  transition: all .15s ease;
+  min-height: 40px;
+}
+
+.sidebar-footer button:hover {
+  border-color: var(--c-primary-border);
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
+}
+
+.sidebar-footer button.danger {
+  border-color: transparent;
+  color: var(--c-danger);
+}
+
+.sidebar-footer button.danger:hover {
+  background: var(--c-danger-bg);
+  border-color: var(--c-danger-border);
+  color: var(--c-danger);
+}
+
+/* Burger — masqué au-dessus de 900 px */
+.layout-burger {
+  display: none;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  border-radius: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Voile derrière le tiroir mobile */
+.layout-scrim {
+  display: none;
+}
+
+/* ── Tablette & mobile : la sidebar devient un tiroir ────────────────────── */
+@media (max-width: 900px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .layout-sidebar {
+    width: 100%;
+    height: auto;
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    flex-wrap: wrap;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--c-border);
+    box-shadow: var(--c-shadow-sm);
+    overflow: visible;
+  }
+
+  .layout-sidebar h1 {
+    padding: 0;
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+  }
+
+  .layout-sidebar h1 span.app-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .layout-burger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    order: 3;
+  }
+
+  .layout-sidebar nav {
+    display: none;
+    width: 100%;
+    order: 10;
+    flex-direction: column;
+    gap: 2px;
+    max-height: min(62vh, 460px);
+    overflow-y: auto;
+    padding-top: 8px;
+    margin-top: 8px;
+    border-top: 1px solid var(--c-border);
+  }
+
+  .layout-sidebar.open nav {
+    display: flex;
+  }
+
+  .layout-sidebar .sidebar-footer {
+    display: none;
+    width: 100%;
+    order: 11;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--c-border);
+    margin-top: 0;
+  }
+
+  .layout-sidebar.open .sidebar-footer {
+    display: flex;
+  }
+
+  .layout-sidebar .sidebar-footer button {
+    flex: 1;
+    min-width: 130px;
+    text-align: center;
+  }
+
+  /* Le bouton de thème reste accessible sans ouvrir le tiroir. */
+  .layout-sidebar > .ds-theme-toggle {
+    order: 2;
+    padding: 8px;
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .layout-sidebar > .ds-theme-toggle span {
+    display: none;
+  }
+
+  .layout-main {
+    padding: 16px 14px 40px;
+  }
+
+  .layout.sidebar-open .layout-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: var(--c-overlay);
+    z-index: 50;
+    animation: ds-fade .18s ease;
+  }
+}
+
+@keyframes ds-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  .layout-main {
+    padding: 12px 10px 36px;
+  }
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+}
+
+.ds-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.ds-table th {
+  text-align: start;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ds-table td {
+  padding: 12px 13px;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-text);
+}
+
+.ds-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.ds-table tbody tr {
+  transition: background .12s ease;
+}
+
+.ds-table tbody tr:hover {
+  background: var(--c-surface-hover);
+}
+
+/* Sur téléphone, chaque ligne devient une carte : plus de scroll horizontal.
+   Les libellés viennent de data-label posé par le composant Table. */
+@media (max-width: 640px) {
+  .ds-table.ds-table-cards,
+  .ds-table.ds-table-cards tbody,
+  .ds-table.ds-table-cards tr,
+  .ds-table.ds-table-cards td {
+    display: block;
+    width: 100%;
+  }
+
+  .ds-table.ds-table-cards thead {
+    display: none;
+  }
+
+  .ds-table.ds-table-cards tr {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: 12px;
+    padding: 6px 12px;
+    margin-bottom: 10px;
+    box-shadow: var(--c-shadow-sm);
+  }
+
+  .ds-table.ds-table-cards td {
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--c-border);
+    text-align: end;
+  }
+
+  .ds-table.ds-table-cards tr td:last-child {
+    border-bottom: 0;
+  }
+
+  .ds-table.ds-table-cards td::before {
+    content: attr(data-label);
+    flex: none;
+    color: var(--c-text-muted);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    text-align: start;
+  }
+
+  /* Cellule sans libellé (actions) : occupe toute la largeur. */
+  .ds-table.ds-table-cards td[data-label='']::before {
+    display: none;
+  }
+}
+
+/* ── Grilles ─────────────────────────────────────────────────────────────── */
+.grid-responsive {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .grid-responsive {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* ── Cartes ──────────────────────────────────────────────────────────────── */
+.ds-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: var(--c-shadow-md);
+}
+
+@media (max-width: 640px) {
+  .ds-card,
+  .card-responsive {
+    padding: 14px !important;
+    border-radius: 12px;
+  }
+}
+
+/* ── Badges d'état ───────────────────────────────────────────────────────── */
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 650;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.ds-badge-success { background: var(--c-success-bg); color: var(--c-success); border-color: var(--c-success-border); }
+.ds-badge-warning { background: var(--c-warning-bg); color: var(--c-warning); border-color: var(--c-warning-border); }
+.ds-badge-danger  { background: var(--c-danger-bg);  color: var(--c-danger);  border-color: var(--c-danger-border); }
+.ds-badge-info    { background: var(--c-info-bg);    color: var(--c-info);    border-color: var(--c-info-border); }
+.ds-badge-neutral { background: var(--c-surface-hover); color: var(--c-text-muted); border-color: var(--c-border); }
+
+/* ── Impression : toujours en clair, sans ornement ───────────────────────── */
+@media print {
+  :root {
+    --c-background: #FFFFFF;
+    --c-surface: #FFFFFF;
+    --c-text: #000000;
+    --c-text-muted: #333333;
+    --c-border: #CCCCCC;
+    --c-shadow-sm: none;
+    --c-shadow-md: none;
+    --c-shadow-lg: none;
+  }
+
+  .layout-sidebar,
+  .layout-burger,
+  .ds-theme-toggle,
+  .layout-scrim {
+    display: none !important;
+  }
+
+  .layout-main {
+    padding: 0;
+  }
+
+  .ds-card {
+    border: 1px solid #CCC;
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}
+
+/* ── Respect de « réduire les animations » ───────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

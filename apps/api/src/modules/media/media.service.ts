@@ -251,6 +251,43 @@ export class MediaService {
     return { url, key: media.storage_key };
   }
 
+  /**
+   * Médias d'un enfant visibles par ses parents.
+   *
+   * `list()` est réservé au personnel : il résout le rôle et les `room_ids`
+   * du membership pour cloisonner par aire. Un parent (`parent_primary` /
+   * `parent_secondary`) n'appartient à aucune salle — `room_ids` est NULL —
+   * donc ce filtrage renvoyait toujours une liste vide, alors même que le
+   * téléchargement direct de la MÊME photo fonctionnait. La liste parent
+   * était donc systématiquement vide.
+   *
+   * On interroge ici sur le lien de filiation plutôt que sur les salles.
+   * Les garde-fous ne sont pas relâchés, ils sont seulement portés par
+   * l'appelant, qui reste la seule voie d'accès parent :
+   *   - `assertPermission(..., 'can_view_journal')` vérifie le lien tuteur ;
+   *   - `is_visible_to_parents = true` est exigé ci-dessous ;
+   *   - le consentement photo est revérifié par `photoUrl()` au moment de
+   *     signer chaque URL, donc une révocation reste immédiate.
+   * RLS continue de cloisonner par organisation.
+   */
+  async listForParent(childId: string): Promise<Array<Record<string, unknown>>> {
+    requireTenant(this.tenantContext);
+    return this.tenantContext.withTenantConnection(async (client) => {
+      const res = await client.query(
+        `SELECT id, child_id, media_type, mime_type, original_filename,
+                file_size_bytes, taken_at, is_visible_to_parents,
+                all_consents_checked, children_in_photo, created_at
+         FROM media_assets
+         WHERE child_id = $1
+           AND is_visible_to_parents = true
+           AND deleted_at IS NULL
+         ORDER BY created_at DESC`,
+        [childId],
+      );
+      return res.rows;
+    });
+  }
+
   // ── Sync : commande add_photo (offline) ──────────────────────────────────
 
   /** Enregistre une photo poussée par le mobile (jamais visible sans consentement). */

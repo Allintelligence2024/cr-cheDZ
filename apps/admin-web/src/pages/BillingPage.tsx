@@ -76,7 +76,7 @@ export function BillingPage(): React.JSX.Element {
         ))}
       </div>
       {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-      {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+      {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
       {tab === 'contracts' && <ContractsTab onError={setError} onMessage={setMessage} />}
       {tab === 'invoices' && <InvoicesTab onError={setError} onMessage={setMessage} />}
       {tab === 'payments' && <PaymentsTab onError={setError} onMessage={setMessage} />}
@@ -226,7 +226,7 @@ function InvoicesTab({ onError, onMessage }: { onError: (m: string) => void; onM
           `${String(i.period_month).padStart(2, '0')}/${i.period_year}`,
           `${Number(i.total_amount).toLocaleString('fr-FR')} DZD`,
           `${Number(i.paid_amount).toLocaleString('fr-FR')} DZD`,
-          <span key="b" style={{ color: Number(i.balance) > 0 ? '#F59E0B' : '#16A34A' }}>{`${Number(i.balance).toLocaleString('fr-FR')} DZD`}</span>,
+          <span key="b" style={{ color: Number(i.balance) > 0 ? tokens.colors.warning : tokens.colors.success }}>{`${Number(i.balance).toLocaleString('fr-FR')} DZD`}</span>,
           t(`invoice.status.${i.status}`) ?? i.status,
           i.due_date,
           i.pdf_url ? <Button key="p" variant="ghost" onClick={() => void downloadPdf(i.id)}>{t('bill.pdf')}</Button> : '—',

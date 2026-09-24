@@ -19,7 +19,11 @@ services:
     ports:
       - "127.0.0.1:${DEV_POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_dev_data:/var/lib/postgresql/data
+      # postgres:18 stocke les données dans $PGDATA=/var/lib/postgresql/18/docker
+      # et déclare son VOLUME sur /var/lib/postgresql (docker-library/postgres#1259).
+      # Monter l'ancien chemin /var/lib/postgresql/data fait REFUSER le démarrage,
+      # même sur un volume neuf. On monte donc le répertoire parent.
+      - postgres_dev_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d ${DEV_POSTGRES_DB:-creche_dev}"]
       interval: 5s

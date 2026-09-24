@@ -127,7 +127,7 @@ export function HealthPage(): React.JSX.Element {
     'health.adminConfirmed',
   );
 
-  const sevColor = (s: string): string => (s === 'life_threatening' || s === 'severe' ? '#DC2626' : s === 'moderate' ? '#B45309' : '#16A34A');
+  const sevColor = (s: string): string => (s === 'life_threatening' || s === 'severe' ? tokens.colors.danger : s === 'moderate' ? tokens.colors.warning : tokens.colors.success);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing.lg }}>
@@ -139,7 +139,7 @@ export function HealthPage(): React.JSX.Element {
           <Button variant="ghost" onClick={load}>{t('common.refresh')}</Button>
         </div>
         {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
-        {message && <p style={{ color: '#16A34A' }}>{message}</p>}
+        {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
         {data && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing.lg }}>
             <div>
@@ -219,7 +219,7 @@ export function HealthPage(): React.JSX.Element {
                   a.observations ?? '—',
                   a.administered_by_name,
                   a.confirmed_by
-                    ? <span key="c" style={{ color: '#16A34A' }}>{t('health.adminConfirmed')}</span>
+                    ? <span key="c" style={{ color: tokens.colors.success }}>{t('health.adminConfirmed')}</span>
                     : <Button key="b" variant="ghost" onClick={() => void confirmAdmin(a.id)}>{t('health.confirm')}</Button>,
                 ])}
               />

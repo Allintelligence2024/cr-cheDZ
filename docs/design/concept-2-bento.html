@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concept 2 — Bento Pro · cr-cheDZ</title>
+<link rel="stylesheet" href="_shell.css">
+<style>
+/* ===========================================================================
+ * CONCEPT 2 — « BENTO PRO »
+ * Sombre, dense, tuiles de tailles inégales (bento). Un seul accent électrique
+ * (lime/émeraude) sur graphite. Référence : Linear / Vercel / Ramp.
+ * Objectif : centre de contrôle multi-sites, beaucoup de chiffres sans bruit.
+ * ======================================================================== */
+.c2 {
+  --bg: #0A0C10;
+  --tile: #12151C;
+  --tile2: #161A23;
+  --line: #222834;
+  --line2: #2C3341;
+  --ink: #E8ECF3;
+  --muted: #7A8699;
+  --dim: #58637A;
+  --lime: #A3E635;
+  --lime-dim: #4D5F1E;
+  --cyan: #38BDF8;
+  --amber: #FBBF24;
+  --rose: #FB7185;
+  --violet: #A78BFA;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+.c2 *, .c2 *::before, .c2 *::after { box-sizing: border-box; }
+.c2 .mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-variant-numeric: tabular-nums; }
+
+/* ── Ossature ───────────────────────────────────────────────────────────── */
+.c2.web { display: flex; width: 1280px; min-height: 800px; }
+.c2 .rail {
+  width: 62px; flex: none; background: #0C0F14; border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 14px 0;
+}
+.c2 .rail .logo {
+  width: 34px; height: 34px; border-radius: 10px; background: var(--lime); color: #0A0C10;
+  display: grid; place-items: center; font-weight: 800; font-size: 14px; margin-bottom: 11px;
+}
+.c2 .rail .ri {
+  width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+  color: var(--dim); position: relative;
+}
+.c2 .rail .ri.on { background: #1A1F29; color: var(--lime); }
+.c2 .rail .ri.on::before {
+  content: ''; position: absolute; left: -12px; top: 9px; width: 2.5px; height: 20px;
+  border-radius: 0 3px 3px 0; background: var(--lime);
+}
+.c2 .rail .ri .n {
+  position: absolute; top: 5px; right: 4px; min-width: 15px; height: 15px; border-radius: 8px;
+  background: var(--rose); color: #0A0C10; font-size: 9px; font-weight: 800;
+  display: grid; place-items: center; padding: 0 3px;
+}
+.c2 .rail .sp { margin-top: auto; }
+
+.c2 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.c2 .topbar {
+  display: flex; align-items: center; gap: 14px; padding: 13px 22px;
+  border-bottom: 1px solid var(--line); background: #0C0F14;
+}
+.c2 .crumb { font-size: 12.5px; color: var(--dim); }
+.c2 .crumb b { color: var(--ink); font-weight: 650; }
+.c2 .sitepick {
+  display: flex; align-items: center; gap: 8px; background: var(--tile); border: 1px solid var(--line2);
+  border-radius: 9px; padding: 6px 11px; font-size: 12.5px; font-weight: 600;
+}
+.c2 .live {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700;
+  letter-spacing: .07em; color: var(--lime); background: rgba(163,230,53,.09);
+  border: 1px solid rgba(163,230,53,.22); border-radius: 999px; padding: 4px 10px;
+}
+.c2 .live i { width: 6px; height: 6px; border-radius: 50%; background: var(--lime); display: block; }
+.c2 .cmdk {
+  margin-left: auto; display: flex; align-items: center; gap: 9px; width: 250px;
+  background: var(--tile); border: 1px solid var(--line2); border-radius: 9px;
+  padding: 7px 11px; font-size: 12.5px; color: var(--dim);
+}
+.c2 .cmdk kbd {
+  margin-left: auto; font-family: inherit; font-size: 10.5px; border: 1px solid var(--line2);
+  border-radius: 5px; padding: 1px 6px; color: var(--muted); background: #0E1117;
+}
+.c2 .av2 {
+  width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(140deg,#A3E635,#65A30D);
+  color: #0A0C10; display: grid; place-items: center; font-size: 11.5px; font-weight: 800;
+}
+
+/* ── Grille bento ───────────────────────────────────────────────────────── */
+.c2 .bento {
+  padding: 18px 22px 26px; display: grid; gap: 14px;
+  grid-template-columns: repeat(12, 1fr);
+  grid-auto-rows: minmax(0, auto);
+}
+.c2 .t {
+  background: var(--tile); border: 1px solid var(--line); border-radius: 14px; padding: 16px;
+  position: relative; overflow: hidden; min-width: 0;
+}
+.c2 .t.raised { background: linear-gradient(160deg, #161B24, #11141B); }
+.c2 .th { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+.c2 .th h3 {
+  margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+}
+.c2 .th .r { margin-left: auto; font-size: 11px; color: var(--dim); display: flex; gap: 8px; align-items: center; }
+
+.c2 .big { font-size: 38px; font-weight: 750; letter-spacing: -.04em; line-height: 1; }
+.c2 .big small { font-size: 16px; color: var(--dim); font-weight: 600; letter-spacing: 0; }
+.c2 .mid { font-size: 25px; font-weight: 720; letter-spacing: -.03em; line-height: 1.05; }
+.c2 .lbl { font-size: 11.5px; color: var(--muted); }
+.c2 .delta { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; }
+.c2 .delta.up { color: var(--lime); } .c2 .delta.dn { color: var(--rose); }
+
+.c2 .tag {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .04em; padding: 3px 8px; border-radius: 6px; text-transform: uppercase;
+}
+.c2 .tag.ok { background: rgba(163,230,53,.12); color: var(--lime); }
+.c2 .tag.warn { background: rgba(251,191,36,.12); color: var(--amber); }
+.c2 .tag.bad { background: rgba(251,113,133,.13); color: var(--rose); }
+.c2 .tag.cy { background: rgba(56,189,248,.12); color: var(--cyan); }
+.c2 .tag.vi { background: rgba(167,139,250,.12); color: var(--violet); }
+
+/* Bandes de ratio */
+.c2 .rbar { display: flex; flex-direction: column; gap: 9px; }
+.c2 .rline { display: grid; grid-template-columns: 96px 1fr 62px; align-items: center; gap: 10px; }
+.c2 .rline .nm { font-size: 12px; color: var(--ink); font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.c2 .track { height: 22px; border-radius: 6px; background: #0D1016; border: 1px solid var(--line); overflow: hidden; display: flex; }
+.c2 .track i { display: block; height: 100%; }
+.c2 .rline .vv { font-size: 11.5px; text-align: right; color: var(--muted); }
+
+/* Heures */
+.c2 .hours { display: flex; align-items: flex-end; gap: 4px; height: 92px; }
+.c2 .hours div { flex: 1; border-radius: 4px 4px 2px 2px; background: #1E2530; position: relative; }
+.c2 .hours div i { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 4px 4px 2px 2px; background: var(--lime); opacity: .85; }
+.c2 .hours-x { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--dim); margin-top: 7px; }
+
+/* Table */
+.c2 table { width: 100%; border-collapse: collapse; }
+.c2 th {
+  text-align: left; font-size: 10px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase;
+  color: var(--dim); padding: 0 0 9px; border-bottom: 1px solid var(--line);
+}
+.c2 td { padding: 10px 0; border-bottom: 1px solid #1A1F29; font-size: 12.5px; }
+.c2 tr:last-child td { border-bottom: 0; }
+.c2 td.num { text-align: right; }
+.c2 .who2 { display: flex; align-items: center; gap: 9px; }
+.c2 .who2 i {
+  width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; flex: none;
+  font-size: 10px; font-weight: 800; font-style: normal; color: #0A0C10;
+}
+
+/* Log */
+.c2 .log { display: flex; flex-direction: column; gap: 0; }
+.c2 .lg { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #1A1F29; align-items: baseline; }
+.c2 .lg:last-child { border-bottom: 0; }
+.c2 .lg .tm { font-size: 10.5px; color: var(--dim); width: 42px; flex: none; }
+.c2 .lg .msg { font-size: 12px; color: #C4CCDA; flex: 1; }
+.c2 .lg .msg b { color: var(--ink); font-weight: 650; }
+
+.c2 .ring { position: relative; display: grid; place-items: center; }
+.c2 .ring .cc { position: absolute; text-align: center; }
+.c2 .ring .cc b { font-size: 21px; font-weight: 750; letter-spacing: -.03em; display: block; }
+.c2 .ring .cc span { font-size: 9.5px; color: var(--dim); letter-spacing: .1em; text-transform: uppercase; }
+
+.c2 .btn2 {
+  display: inline-flex; align-items: center; gap: 7px; background: var(--lime); color: #0A0C10;
+  font-size: 12px; font-weight: 750; padding: 8px 14px; border-radius: 9px;
+}
+.c2 .btn2.g { background: var(--tile2); color: var(--ink); border: 1px solid var(--line2); }
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+.c2.app { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+.c2.app .statusbar { color: var(--ink); }
+.c2 .ahead { padding: 4px 18px 14px; display: flex; align-items: center; gap: 11px; }
+.c2 .ahead .t1 { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.c2 .ahead h2 { margin: 1px 0 0; font-size: 20px; font-weight: 750; letter-spacing: -.03em; }
+.c2 .ascroll { flex: 1; overflow: hidden; padding: 0 14px 12px; display: flex; flex-direction: column; gap: 11px; }
+.c2 .mt { background: var(--tile); border: 1px solid var(--line); border-radius: 15px; padding: 14px; }
+.c2 .mt.accent { background: linear-gradient(150deg,#1A2410,#12151C 60%); border-color: #2F3F19; }
+.c2 .mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.c2 .mrow { display: flex; align-items: center; gap: 11px; padding: 11px 0; border-bottom: 1px solid #1A1F29; }
+.c2 .mrow:last-child { border-bottom: 0; }
+.c2 .mrow .mi { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none; font-size: 15px; }
+.c2 .mrow b { font-size: 13px; display: block; font-weight: 620; }
+.c2 .mrow span { font-size: 11px; color: var(--muted); }
+.c2 .swi { margin-left: auto; font-size: 11px; font-weight: 750; padding: 7px 12px; border-radius: 8px; background: var(--lime); color: #0A0C10; }
+.c2 .swi.o { background: #1A1F29; color: var(--muted); border: 1px solid var(--line2); }
+.c2 .tabbar2 {
+  display: flex; background: #0C0F14; border-top: 1px solid var(--line); padding: 9px 6px 20px; flex: none;
+}
+.c2 .tb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--dim); font-size: 9.5px; font-weight: 650; letter-spacing: .03em; }
+.c2 .tb.on { color: var(--lime); }
+.c2 .offline {
+  display: flex; align-items: center; gap: 8px; margin: 0 14px 11px; padding: 9px 12px; border-radius: 10px;
+  background: rgba(251,191,36,.08); border: 1px solid rgba(251,191,36,.22); color: var(--amber);
+  font-size: 11.5px; font-weight: 600;
+}
+</style>
+</head>
+<body class="stage">
+
+<header class="stage-top">
+  <a class="back" href="index.html">← Les 5 concepts</a>
+  <div class="who">
+    <span class="num">CONCEPT 02</span>
+    <h1>Bento Pro</h1>
+    <span class="tag">Sombre · dense · tuiles bento — « centre de contrôle »</span>
+  </div>
+  <div class="swatches">
+    <i style="background:#0A0C10"></i><i style="background:#12151C"></i>
+    <i style="background:#A3E635"></i><i style="background:#38BDF8"></i><i style="background:#FB7185"></i>
+  </div>
+</header>
+
+<section class="stage-block">
+  <h2>Web — Console multi-sites</h2>
+  <p class="sub">Tuiles de tailles inégales : la taille encode l'importance. Tout tient sur un écran, aucun scroll pour le directeur régional.</p>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="url">app.creche.dz/ops</div>
+    </div>
+    <div class="browser-body">
+      <div class="fit c2 web" data-width="1280">
+
+        <aside class="rail">
+          <div class="logo">c</div>
+          <div class="ri on"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div>
+          <div class="ri"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg></div>
+          <div class="ri"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 5.5a3.2 3.2 0 0 1 0 6M18.5 20a6 6 0 0 0-3-5.2"/></svg></div>
+          <div class="ri"><span class="n">7</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5H8a2.75 2.75 0 0 0 0 5.5H17"/></svg></div>
+          <div class="ri"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg></div>
+          <div class="ri"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3l7.5 3v6c0 4.6-3.1 8-7.5 9-4.4-1-7.5-4.4-7.5-9V6z"/></svg></div>
+          <div class="ri sp"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-2.87 1.2V21a2 2 0 1 1-4 0v-.11a1.7 1.7 0 0 0-2.93-1.14l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 3.5 14.5H3a2 2 0 1 1 0-4h.11A1.7 1.7 0 0 0 4.25 7.6l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.11a1.7 1.7 0 0 0 2.87 1.2l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.11a1.7 1.7 0 0 0-1.49 1.5z"/></svg></div>
+          <div class="av2">NB</div>
+        </aside>
+
+        <div class="main">
+          <div class="topbar">
+            <div class="crumb">Opérations / <b>Vue consolidée</b></div>
+            <div class="sitepick">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V4h8v3"/></svg>
+              3 sites · Alger
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <span class="live"><i></i>TEMPS RÉEL</span>
+            <div class="cmdk">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+              Rechercher…<kbd>⌘K</kbd>
+            </div>
+          </div>
+
+          <div class="bento">
+
+            <!-- Grande tuile présence -->
+            <div class="t raised" style="grid-column: span 5">
+              <div class="th"><h3>Présence consolidée</h3><span class="r">22 sept · 11 h 47</span></div>
+              <div style="display:flex;align-items:flex-end;gap:14px">
+                <div class="big mono">247<small> / 289</small></div>
+                <span class="delta up" style="margin-bottom:6px">▲ 4,2 % vs S-1</span>
+              </div>
+              <div class="lbl" style="margin-top:4px">enfants pointés sur 3 sites · 42 absences déclarées</div>
+              <div class="hours" style="margin-top:18px">
+                <div style="height:100%"><i style="height:22%"></i></div>
+                <div style="height:100%"><i style="height:48%"></i></div>
+                <div style="height:100%"><i style="height:86%"></i></div>
+                <div style="height:100%"><i style="height:96%"></i></div>
+                <div style="height:100%"><i style="height:100%"></i></div>
+                <div style="height:100%"><i style="height:92%"></i></div>
+                <div style="height:100%"><i style="height:88%"></i></div>
+                <div style="height:100%"><i style="height:74%"></i></div>
+                <div style="height:100%"><i style="height:55%"></i></div>
+                <div style="height:100%"><i style="height:30%"></i></div>
+                <div style="height:100%"><i style="height:12%"></i></div>
+              </div>
+              <div class="hours-x"><span>07h</span><span>08h</span><span>09h</span><span>10h</span><span>11h</span><span>12h</span><span>13h</span><span>14h</span><span>15h</span><span>16h</span><span>17h</span></div>
+            </div>
+
+            <!-- Ratios -->
+            <div class="t" style="grid-column: span 4">
+              <div class="th"><h3>Ratios encadrement</h3><span class="tag warn">1 alerte</span></div>
+              <div class="rbar">
+                <div class="rline"><span class="nm">Pouponnière</span><div class="track"><i style="width:62%;background:linear-gradient(90deg,#65A30D,#A3E635)"></i></div><span class="vv mono">1:4</span></div>
+                <div class="rline"><span class="nm">Petite sect.</span><div class="track"><i style="width:75%;background:linear-gradient(90deg,#65A30D,#A3E635)"></i></div><span class="vv mono">1:9</span></div>
+                <div class="rline"><span class="nm">Moyenne sect.</span><div class="track"><i style="width:100%;background:linear-gradient(90deg,#B45309,#FBBF24)"></i></div><span class="vv mono" style="color:#FBBF24">1:18</span></div>
+                <div class="rline"><span class="nm">Grande sect.</span><div class="track"><i style="width:68%;background:linear-gradient(90deg,#65A30D,#A3E635)"></i></div><span class="vv mono">1:10</span></div>
+                <div class="rline"><span class="nm">Périscolaire</span><div class="track"><i style="width:44%;background:linear-gradient(90deg,#0369A1,#38BDF8)"></i></div><span class="vv mono">1:7</span></div>
+              </div>
+              <div style="margin-top:13px;font-size:11px;color:var(--dim);border-top:1px solid var(--line);padding-top:11px">
+                Seuil décret 19-253 · dépassement journalisé automatiquement
+              </div>
+            </div>
+
+            <!-- Conformité ring -->
+            <div class="t" style="grid-column: span 3">
+              <div class="th"><h3>Conformité 25-11</h3></div>
+              <div class="ring" style="margin:2px 0 10px">
+                <svg width="112" height="112" viewBox="0 0 42 42">
+                  <circle cx="21" cy="21" r="16" fill="none" stroke="#1C222D" stroke-width="4.5"/>
+                  <circle cx="21" cy="21" r="16" fill="none" stroke="#A3E635" stroke-width="4.5" stroke-dasharray="91 9" stroke-dashoffset="25" stroke-linecap="round"/>
+                </svg>
+                <div class="cc"><b class="mono">91%</b><span>conforme</span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;font-size:11.5px">
+                <div style="display:flex;justify-content:space-between"><span class="lbl">Consentements photo</span><span class="tag ok">OK</span></div>
+                <div style="display:flex;justify-content:space-between"><span class="lbl">Registre DPIA</span><span class="tag ok">OK</span></div>
+                <div style="display:flex;justify-content:space-between"><span class="lbl">Certificats médicaux</span><span class="tag warn">4 exp.</span></div>
+              </div>
+            </div>
+
+            <!-- Encaissements -->
+            <div class="t" style="grid-column: span 3">
+              <div class="th"><h3>Encaissé · septembre</h3></div>
+              <div class="mid mono">5 412 000 <span style="font-size:13px;color:var(--dim)">DZD</span></div>
+              <div class="lbl" style="margin-top:3px">sur 7 340 000 facturés</div>
+              <div class="track" style="margin-top:14px;height:9px">
+                <i style="width:74%;background:var(--lime)"></i><i style="width:11%;background:var(--amber)"></i>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:9px;font-size:11px">
+                <span style="color:var(--lime)">● Payé 74 %</span>
+                <span style="color:var(--amber)">● Attente 11 %</span>
+                <span style="color:var(--dim)">● Retard 15 %</span>
+              </div>
+            </div>
+
+            <!-- Impayés -->
+            <div class="t" style="grid-column: span 5">
+              <div class="th"><h3>Relances prioritaires</h3><span class="r"><span class="btn2 g" style="padding:5px 10px;font-size:11px">Relancer tout</span></span></div>
+              <table>
+                <thead><tr><th>Famille</th><th>Site</th><th>Retard</th><th class="num">Montant</th><th class="num">État</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><div class="who2"><i style="background:#FB7185">BK</i>Bouzid Karim</div></td>
+                    <td class="lbl">Hydra</td><td class="mono" style="color:#FB7185">68 j</td>
+                    <td class="num mono">96 000</td><td class="num"><span class="tag bad">Mise en demeure</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="who2"><i style="background:#FBBF24">HS</i>Hamdi Sofiane</div></td>
+                    <td class="lbl">Kouba</td><td class="mono" style="color:#FBBF24">45 j</td>
+                    <td class="num mono">54 000</td><td class="num"><span class="tag warn">2ᵉ relance</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="who2"><i style="background:#FBBF24">MA</i>Meziane Amel</div></td>
+                    <td class="lbl">Hydra</td><td class="mono" style="color:#FBBF24">38 j</td>
+                    <td class="num mono">48 000</td><td class="num"><span class="tag warn">2ᵉ relance</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="who2"><i style="background:#38BDF8">TR</i>Tabet Rachid</div></td>
+                    <td class="lbl">Birkhadem</td><td class="mono">31 j</td>
+                    <td class="num mono">42 000</td><td class="num"><span class="tag cy">1ʳᵉ relance</span></td>
+                  </tr>
+                  <tr>
+                    <td><div class="who2"><i style="background:#38BDF8">SL</i>Slimani Lyes</div></td>
+                    <td class="lbl">Kouba</td><td class="mono">30 j</td>
+                    <td class="num mono">36 000</td><td class="num"><span class="tag cy">1ʳᵉ relance</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Sync -->
+            <div class="t" style="grid-column: span 4">
+              <div class="th"><h3>Santé synchronisation</h3><span class="tag ok">Nominal</span></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:13px">
+                <div><div class="mid mono">18</div><div class="lbl">tablettes en ligne</div></div>
+                <div><div class="mid mono">0,9<span style="font-size:13px;color:var(--dim)">s</span></div><div class="lbl">latence p95 sync</div></div>
+              </div>
+              <div class="log">
+                <div class="lg"><span class="tm mono">11:47</span><span class="msg"><b>Kouba-T3</b> — 14 événements poussés</span></div>
+                <div class="lg"><span class="tm mono">11:44</span><span class="msg"><b>Hydra-T1</b> — reprise après 6 min hors-ligne</span></div>
+                <div class="lg"><span class="tm mono">11:39</span><span class="msg"><b>Worker</b> — 12 factures PDF générées</span></div>
+              </div>
+            </div>
+
+            <!-- Journal -->
+            <div class="t" style="grid-column: span 3">
+              <div class="th"><h3>Journal — flux</h3><span class="r">live</span></div>
+              <div class="log">
+                <div class="lg"><span class="tm mono">11:42</span><span class="msg">Repas · <b>Petite section</b></span></div>
+                <div class="lg"><span class="tm mono">11:20</span><span class="msg">Sieste démarrée · <b>16 enfants</b></span></div>
+                <div class="lg"><span class="tm mono">10:58</span><span class="msg">8 photos · <b>atelier peinture</b></span></div>
+                <div class="lg"><span class="tm mono">10:15</span><span class="msg" style="color:#FB7185">Fièvre 38,2 °C · <b>A. Kaci</b></span></div>
+                <div class="lg"><span class="tm mono">09:12</span><span class="msg" style="color:#FBBF24">Ratio dépassé · <b>Moyenne</b></span></div>
+                <div class="lg"><span class="tm mono">08:30</span><span class="msg">Ouverture caisse · <b>Hydra</b></span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage-block">
+  <h2>Mobile — Flutter</h2>
+  <p class="sub">Le thème sombre descend tel quel sur mobile. Cibles tactiles &gt; 44 px malgré la densité ; l'accent lime signale toujours « action possible ».</p>
+  <div class="phones">
+
+    <!-- Parent -->
+    <div class="phone-wrap">
+      <span class="cap">App parents — fil du jour</span>
+      <div class="phone"><div class="phone-screen c2 app">
+        <div class="notch"></div>
+        <div class="statusbar"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+
+        <div class="ahead">
+          <div style="flex:1">
+            <div class="t1">Lundi 22 septembre</div>
+            <h2>Lina · Moyenne</h2>
+          </div>
+          <span class="live"><i></i>PRÉSENTE</span>
+        </div>
+
+        <div class="ascroll">
+          <div class="mt accent">
+            <div class="th" style="margin-bottom:11px"><h3 style="color:#A3E635">Aujourd'hui</h3><span class="r mono">08:12 →</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+              <div><div class="mid mono" style="font-size:19px">3 h 30</div><div class="lbl">sur place</div></div>
+              <div><div class="mid mono" style="font-size:19px">1 h 35</div><div class="lbl">sieste</div></div>
+              <div><div class="mid mono" style="font-size:19px">3/3</div><div class="lbl">repas</div></div>
+            </div>
+          </div>
+
+          <div class="mgrid">
+            <div class="mt">
+              <div class="lbl" style="margin-bottom:6px">Humeur</div>
+              <div style="font-size:26px">😊</div>
+              <div style="font-size:12.5px;font-weight:650;margin-top:4px">Joyeuse</div>
+            </div>
+            <div class="mt">
+              <div class="lbl" style="margin-bottom:6px">Facture sept.</div>
+              <div class="mono" style="font-size:18px;font-weight:720;letter-spacing:-.02em">18 000</div>
+              <span class="tag warn" style="margin-top:6px">DUE 05/10</span>
+            </div>
+          </div>
+
+          <div class="mt">
+            <div class="th"><h3>Fil du jour</h3><span class="r">6 événements</span></div>
+            <div class="mrow">
+              <div class="mi" style="background:rgba(163,230,53,.1)">🥣</div>
+              <div style="flex:1"><b>Déjeuner terminé</b><span>Tajine légumes · a tout mangé</span></div>
+              <span class="lbl mono">11:42</span>
+            </div>
+            <div class="mrow">
+              <div class="mi" style="background:rgba(56,189,248,.1)">😴</div>
+              <div style="flex:1"><b>Sieste</b><span>12:10 → 13:45</span></div>
+              <span class="lbl mono">13:45</span>
+            </div>
+            <div class="mrow">
+              <div class="mi" style="background:rgba(167,139,250,.1)">🎨</div>
+              <div style="flex:1"><b>Atelier peinture</b><span>3 photos ajoutées</span></div>
+              <span class="lbl mono">10:58</span>
+            </div>
+          </div>
+
+          <div class="mgrid">
+            <div class="mt" style="display:flex;align-items:center;gap:9px">
+              <div class="mi" style="background:rgba(251,113,133,.1)">🤒</div>
+              <div><b style="font-size:12.5px">Absence</b><div class="lbl">Déclarer</div></div>
+            </div>
+            <div class="mt" style="display:flex;align-items:center;gap:9px">
+              <div class="mi" style="background:rgba(163,230,53,.1)">💬</div>
+              <div><b style="font-size:12.5px">Message</b><div class="lbl">L'équipe</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabbar2">
+          <div class="tb on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Journée</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>Photos</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/></svg>Chat</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5H8a2.75 2.75 0 0 0 0 5.5H17"/></svg>Factures</div>
+        </div>
+      </div></div>
+    </div>
+
+    <!-- Staff -->
+    <div class="phone-wrap">
+      <span class="cap">App personnel — pointage offline</span>
+      <div class="phone"><div class="phone-screen c2 app">
+        <div class="notch"></div>
+        <div class="statusbar"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+
+        <div class="ahead">
+          <div style="flex:1">
+            <div class="t1">Moyenne section · Hydra</div>
+            <h2>Pointage</h2>
+          </div>
+          <div class="av2">SM</div>
+        </div>
+
+        <div class="offline">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5"/><path d="m3 3 18 18"/></svg>
+          Hors-ligne · 3 actions en file — envoi auto
+        </div>
+
+        <div class="ascroll">
+          <div class="mgrid" style="grid-template-columns:repeat(3,1fr)">
+            <div class="mt" style="padding:11px"><div class="mid mono" style="font-size:20px;color:#A3E635">14</div><div class="lbl">présents</div></div>
+            <div class="mt" style="padding:11px"><div class="mid mono" style="font-size:20px">4</div><div class="lbl">attendus</div></div>
+            <div class="mt" style="padding:11px"><div class="mid mono" style="font-size:20px;color:#FBBF24">1:18</div><div class="lbl">ratio</div></div>
+          </div>
+
+          <div class="mt" style="padding:12px 14px">
+            <div class="mrow">
+              <div class="mi" style="background:rgba(163,230,53,.1)">👧</div>
+              <div style="flex:1"><b>Lina Bouzid</b><span class="mono">08:12 · papa</span></div>
+              <span class="swi o">Sortie</span>
+            </div>
+            <div class="mrow">
+              <div class="mi" style="background:rgba(251,113,133,.1)">👦</div>
+              <div style="flex:1"><b>Amine Kaci</b><span style="color:#FB7185">38,2 °C · surveiller</span></div>
+              <span class="swi o">Sortie</span>
+            </div>
+            <div class="mrow">
+              <div class="mi" style="background:#1A1F29">👧</div>
+              <div style="flex:1"><b>Nour Hamdi</b><span>attendue 08:30</span></div>
+              <span class="swi">Entrée</span>
+            </div>
+            <div class="mrow">
+              <div class="mi" style="background:#1A1F29">👦</div>
+              <div style="flex:1"><b>Yanis Meziane</b><span>attendu 09:00</span></div>
+              <span class="swi">Entrée</span>
+            </div>
+            <div class="mrow">
+              <div class="mi" style="background:rgba(163,230,53,.1)">👧</div>
+              <div style="flex:1"><b>Maya Slimani</b><span class="mono">07:58 · maman</span></div>
+              <span class="swi o">Sortie</span>
+            </div>
+            <div class="mrow">
+              <div class="mi" style="background:rgba(163,230,53,.1)">👦</div>
+              <div style="flex:1"><b>Rayan Tabet</b><span class="mono">08:05 · grand-mère</span></div>
+              <span class="swi o">Sortie</span>
+            </div>
+          </div>
+
+          <div class="btn2" style="justify-content:center;padding:13px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Note de journal groupée
+          </div>
+        </div>
+
+        <div class="tabbar2">
+          <div class="tb on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg>Présence</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg>Journal</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>Médias</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 12a9 9 0 0 1 15-6.7L21 8"/></svg>Sync</div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+</section>
+
+<div class="rationale">
+  <div class="r-card good">
+    <h3>Pourquoi ça marche</h3>
+    <ul>
+      <li>Densité maximale : le directeur régional voit 3 sites sans scroller.</li>
+      <li>Chiffres en tabulaire monospace → colonnes alignées, lecture rapide DZD.</li>
+      <li>Look « outil sérieux » qui justifie un prix B2B plus élevé.</li>
+      <li>Sombre = confort pour l'équipe support en poste long.</li>
+    </ul>
+  </div>
+  <div class="r-card warn">
+    <h3>À surveiller</h3>
+    <ul>
+      <li>Froid pour une app <em>parents</em> : peu de chaleur émotionnelle autour de l'enfant.</li>
+      <li>Sombre + soleil d'Alger sur tablette en salle = lisibilité dégradée.</li>
+      <li>Exige un vrai thème double (clair obligatoire en plus) : double maintenance.</li>
+      <li>Photos d'enfants rendues moins bien sur fond noir.</li>
+    </ul>
+  </div>
+  <div class="r-card">
+    <h3>Coût d'implémentation</h3>
+    <ul>
+      <li><b>Moyen-élevé.</b> Refonte de la grille du dashboard en CSS Grid bento.</li>
+      <li>Thème sombre à créer <em>et</em> thème clair à maintenir.</li>
+      <li>Flutter : ColorScheme.dark complet + revue de contraste WCAG.</li>
+      <li>Impression PDF/attestations : nécessite une feuille claire dédiée.</li>
+    </ul>
+  </div>
+</div>
+
+<nav class="stage-nav">
+  <a href="concept-1-serenite.html">← Concept 01 · Sérénité</a>
+  <a href="concept-3-atelier.html">Concept 03 · Atelier →</a>
+</nav>
+
+<script src="_fit.js"></script>
+</body>
+</html>

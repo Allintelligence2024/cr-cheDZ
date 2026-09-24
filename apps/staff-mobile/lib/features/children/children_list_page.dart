@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/sync/sync_engine.dart';
+import '../../theme/serenite_theme.dart';
 import '../sync/sync_status_banner.dart';
 import 'child.dart';
 
@@ -64,11 +65,15 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
     if (!mounted) return;
     setState(() => _statusByChild[child.id] = 'present');
     if (mounted) {
+      final palette = SereniteStatusColors.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Arrivée enregistrée ✓'),
-          backgroundColor: Color(0xFF16A34A),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(
+            'Arrivée enregistrée ✓',
+            style: TextStyle(color: palette.onSuccess),
+          ),
+          backgroundColor: palette.success,
+          duration: const Duration(seconds: 2),
         ),
       );
     }
@@ -83,38 +88,46 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
     if (!mounted) return;
     setState(() => _statusByChild[child.id] = 'departed');
     if (mounted) {
+      final palette = SereniteStatusColors.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Départ enregistré ✓'),
-          backgroundColor: Color(0xFF16A34A),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(
+            'Départ enregistré ✓',
+            style: TextStyle(color: palette.onSuccess),
+          ),
+          backgroundColor: palette.success,
+          duration: const Duration(seconds: 2),
         ),
       );
     }
   }
 
   Widget _trailing(Child child) {
+    final palette = SereniteStatusColors.of(context);
     final status = _statusOf(child);
     switch (status) {
       case 'present':
         return ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2563EB),
-            foregroundColor: Colors.white,
+            backgroundColor: palette.info,
+            foregroundColor: palette.onInfo,
           ),
           onPressed: () => _checkOut(child),
           child: const Text('Départ'),
         );
       case 'departed':
-        return const Text(
+        return Text(
           'Parti',
-          style: TextStyle(color: Color(0xFF9E9E9E), fontWeight: FontWeight.w600),
+          style: TextStyle(
+            color: palette.textFaint,
+            fontWeight: FontWeight.w600,
+          ),
         );
       default: // expected, absent → bouton Arrivée
         return ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF16A34A),
-            foregroundColor: Colors.white,
+            backgroundColor: palette.success,
+            foregroundColor: palette.onSuccess,
           ),
           onPressed: () => _checkIn(child),
           child: const Text('Arrivée'),
@@ -123,15 +136,16 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
   }
 
   Color _statusColor(String status) {
+    final palette = SereniteStatusColors.of(context);
     switch (status) {
       case 'present':
-        return const Color(0xFF16A34A);
+        return palette.success;
       case 'departed':
-        return const Color(0xFF9E9E9E);
+        return palette.textFaint;
       case 'absent':
-        return const Color(0xFFDC2626);
+        return palette.danger;
       default:
-        return const Color(0xFF2563EB);
+        return palette.info;
     }
   }
 
@@ -181,7 +195,11 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
                             subtitle: child.allergiesSummary != null
                                 ? Text(
                                     child.allergiesSummary!,
-                                    style: const TextStyle(color: Color(0xFFD97706), fontSize: 12),
+                                    style: TextStyle(
+                                      color: SereniteStatusColors.of(context)
+                                          .warning,
+                                      fontSize: 12,
+                                    ),
                                   )
                                 : null,
                             trailing: _trailing(child),

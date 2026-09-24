@@ -8,9 +8,11 @@ export default defineConfig({
   server: {
     port: 4100,
     host: true,
+    // Prévisualisation derrière un proxy (sandbox e2b) — même réglage que l'admin-web.
+    allowedHosts: ['.e2b.app'],
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: process.env.API_PROXY_TARGET ?? 'http://localhost:3000',
         changeOrigin: true,
       },
     },

@@ -208,6 +208,11 @@ const main = async () => {
       console.error('Nettoyage phase62 partiel :', e.message);
     }
     await cleanup.end();
+    // Le client d'amorçage (ensureAppRole) restait ouvert : un socket actif
+    // empêche Node de sortir, donc la suite se terminait sans jamais rendre
+    // la main — le job CI restait bloqué jusqu'au plafond. Les autres suites
+    // .pg (cf. phase63) ferment bien ce client ; celle-ci l'avait oublié.
+    await db.end();
   }
 
   if (failures.length) {

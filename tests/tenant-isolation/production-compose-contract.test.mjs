@@ -55,3 +55,36 @@ for (const stage of ['prod', 'staging', 'dev']) {
     assert.match(service(text, 'minio'), /image: quay\.io\/minio\/minio:RELEASE\.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e/);
   });
 }
+
+/**
+ * Point de montage des données PostgreSQL.
+ *
+ * À partir de postgres:18, l'image officielle stocke les données dans
+ * $PGDATA=/var/lib/postgresql/18/docker et déclare son VOLUME sur le parent
+ * /var/lib/postgresql (docker-library/postgres#1259). Un volume monté sur
+ * l'ancien chemin /var/lib/postgresql/data n'est alors JAMAIS écrit : le
+ * conteneur refuse de démarrer, même sur un volume neuf.
+ *
+ * Symptôme observé en CI : « Error: in 18+, these Docker images are
+ * configured to store database data in a format which is compatible with
+ * pg_ctlcluster […] there appears to be PostgreSQL data in:
+ * /var/lib/postgresql/data (unused mount/volume) ».
+ *
+ * Le piège est silencieux : le mauvais chemin reste une ligne YAML
+ * parfaitement valide. D'où ce test sur les trois environnements.
+ */
+for (const stage of ['prod', 'staging', 'dev']) {
+  test(`${stage} : le volume PostgreSQL est monté sur /var/lib/postgresql (exigence 18+)`, () => {
+    const block = service(readFileSync(join(directory, `docker-compose.${stage}.yml`), 'utf8'), 'postgres');
+    assert.match(
+      block,
+      /- postgres_\w+_data:\/var\/lib\/postgresql$/m,
+      'le volume doit être monté sur /var/lib/postgresql',
+    );
+    assert.doesNotMatch(
+      block,
+      /:\/var\/lib\/postgresql\/data/,
+      'chemin pré-18 : postgres:18+ refuse de démarrer sur ce montage',
+    );
+  });
+}

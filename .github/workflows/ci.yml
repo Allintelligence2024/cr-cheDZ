@@ -12,6 +12,12 @@ on:
 jobs:
   database:
     runs-on: ubuntu-latest
+    # Aucun job n'avait de timeout-minutes : un blocage consommait donc le
+    # plafond GitHub de 6 h avant d'être annulé (observé sur main en 348bd74,
+    # job « database » : 14:39 → 20:40 puis cancelled). Les budgets ci-dessous
+    # valent ~2 à 3 fois la durée normale : un job sain n'est jamais coupé,
+    # mais un blocage est signalé en minutes au lieu d'immobiliser la file.
+    timeout-minutes: 90
     services:
       postgres:
         image: postgres:18
@@ -72,6 +78,7 @@ jobs:
     # Source en postgres:16 : version de docker-compose.prod.yml ET du
     # client pg_dump préinstallé sur le runner (≥ serveur exigé par le drill).
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:18
@@ -94,19 +101,29 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Client PostgreSQL (fallback PATH — le drill préfère les binaires embedded 18)
-        # backup-drill (S5 / R9) : pg_dump + psql sont obligatoires. Sans
-        # apt-get update d'abord, le cache d'Actions peut être obsolète et
-        # l'install échoue silencieusement → drill rouge. On force un update
-        # frais pour stabiliser le drill (cf. historique : 4 échecs / 8 PRs
-        # observés sur la branche).
+      - name: Client PostgreSQL 18 (doit être ≥ au serveur du service)
+        # backup-drill (S5 / R9) : pg_dump + psql sont obligatoires, et
+        # pg_dump REFUSE de sauvegarder un serveur plus récent que lui.
+        # Le service tourne en postgres:18 tandis que le runner
+        # ubuntu-latest fournit un client v16 : l'ancienne version de cette
+        # étape ne réinstallait rien (`if ! command -v pg_dump`), laissait le
+        # client v16 en place, et le drill échouait systématiquement sur
+        # « pg_dump v16 < serveur PostgreSQL v18 : client trop ancien ».
+        # On installe donc explicitement le client 18 depuis le dépôt PGDG
+        # officiel et on le place en tête du PATH.
         run: |
-          if ! command -v pg_dump >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends postgresql-client
-          fi
-          pg_dump --version
-          psql --version
+          set -euo pipefail
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+          https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client-18
+          echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/18/bin/pg_dump --version
+          /usr/lib/postgresql/18/bin/psql --version
       - name: npm ci
         run: npm ci
       - name: Migrations + seeds
@@ -122,6 +139,7 @@ jobs:
     # B1 (remédiation audits combinés) : lint et tests unitaires API étaient
     # écrits mais JAMAIS exécutés en CI — un rouge ici est un vrai signal.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -131,6 +149,17 @@ jobs:
       - run: npm ci
       - name: Lint (eslint --max-warnings=0)
         run: npm run lint
+      # Design system : contraste WCAG AA des deux thèmes + parité des
+      # couleurs Sérénité entre theme.css (web) et serenite_theme.dart
+      # (les 2 apps Flutter, qui ne peuvent pas importer le CSS).
+      - name: Design system — contraste + parité web/Flutter
+        run: npm test --workspace @creche/design-system
+      # Cohérence base Vite ↔ COPY Docker ↔ nginx : une SPA servie sous un
+      # sous-chemin (/support/) rend une page blanche si le bundle n'est pas
+      # copié au bon endroit. L'image se construit sans erreur : seul ce
+      # contrôle statique l'attrape (les images ne sont jamais démarrées en CI).
+      - name: Chemins statiques des SPA (anti page blanche)
+        run: node scripts/check-spa-static-paths.mjs
       # P1-4 : couverture mesurée, seuils-cliquets (jest.config.mts) — un
       # recul sur une unité de sécurité/argent couverte fait échouer le job.
       - name: Tests unitaires API (jest --coverage, seuils)
@@ -150,6 +179,7 @@ jobs:
     # Jamais exécutés avant ce job — un rouge est honnête et non bloquant
     # (seul le check `database` est requis par la branch protection).
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:18
@@ -275,6 +305,7 @@ jobs:
 
   admin-web:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -287,6 +318,7 @@ jobs:
 
   support-console:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -299,6 +331,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

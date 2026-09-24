@@ -24,7 +24,7 @@ interface PersistedCheck {
   acknowledged_at: string | null;
 }
 
-const RESULT_COLOR: Record<string, string> = { pass: '#16A34A', fail: '#DC2626', warning: '#B45309' };
+const RESULT_COLOR: Record<string, string> = { pass: tokens.colors.success, fail: tokens.colors.danger, warning: tokens.colors.warning };
 
 export function CompliancePage(): React.JSX.Element {
   const { t } = useI18n();
@@ -77,7 +77,7 @@ export function CompliancePage(): React.JSX.Element {
             headers={[t('compliance.rule'), t('common.status'), t('compliance.details')]}
             rows={results.map((r) => [
               <span key="c">{r.code} — {r.message_fr}</span>,
-              <span key="s" style={{ color: RESULT_COLOR[r.result] ?? '#000', fontWeight: 700, textTransform: 'uppercase' }}>{r.result}</span>,
+              <span key="s" style={{ color: RESULT_COLOR[r.result] ?? tokens.colors.text, fontWeight: 700, textTransform: 'uppercase' }}>{r.result}</span>,
               <code key="d" style={{ fontSize: 12 }}>{JSON.stringify(r.details ?? {})}</code>,
             ])}
           />
@@ -91,7 +91,7 @@ export function CompliancePage(): React.JSX.Element {
           headers={[t('compliance.rule'), t('common.status'), t('common.date'), t('compliance.acknowledged')]}
           rows={history.slice(0, 30).map((c) => [
             `${c.code} — ${c.message_fr}`,
-            <span key="s" style={{ color: RESULT_COLOR[c.result] ?? '#000', fontWeight: 700, textTransform: 'uppercase' }}>{c.result}</span>,
+            <span key="s" style={{ color: RESULT_COLOR[c.result] ?? tokens.colors.text, fontWeight: 700, textTransform: 'uppercase' }}>{c.result}</span>,
             new Date(c.checked_at).toLocaleString('fr-FR'),
             c.acknowledged_at
               ? new Date(c.acknowledged_at).toLocaleString('fr-FR')

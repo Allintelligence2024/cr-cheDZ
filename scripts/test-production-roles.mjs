@@ -33,8 +33,51 @@ const env = {
   PRODUCTION_ROLE_TESTS: '1',
   ISOLATION_LOG_DIR: mkdtempSync(join(tmpdir(), 'creche-roles-gate-')),
 };
+/**
+ * Plafond par sous-processus. Aucun sous-gate n'en avait : un seul blocage
+ * (suite qui n'ouvre jamais son port, image qui ne descend pas, moteur
+ * Flutter qui attend une entrée) immobilisait le job entier jusqu'au
+ * plafond GitHub de 6 h, sans jamais dire QUI bloquait.
+ *
+ * 20 min couvre très largement le plus lent des sous-gates observés ; les
+ * scripts qui ont besoin de plus (Docker/Flutter, jusqu'à 15 min à eux
+ * seuls) passent leur propre valeur via `overrides.timeout`.
+ */
+const STEP_TIMEOUT_MS = Number(process.env.GATE_STEP_TIMEOUT_MS ?? 20 * 60 * 1000);
+/** Gates Docker/Flutter : le sous-processus a déjà son propre plafond de
+ *  15 min ; on lui laisse la marge de démarrage du conteneur. */
+const FLUTTER_TIMEOUT_MS = Number(process.env.GATE_FLUTTER_TIMEOUT_MS ?? 25 * 60 * 1000);
+/** La batterie d'isolation enchaîne ~70 suites : budget propre, plus large. */
+const SUITES_TIMEOUT_MS = Number(process.env.GATE_SUITES_TIMEOUT_MS ?? 45 * 60 * 1000);
+
+/** Annonce le coupable AVANT de l'exécuter : si le job est tué par le
+ *  timeout du workflow, la dernière ligne du log nomme le bloqueur. */
+function announce(command, args) {
+  const label = `${command === process.execPath ? 'node' : command} ${args.join(' ')}`;
+  console.log(`▶ Gate D : ${label}`);
+  return label;
+}
+
+/** Message commun aux dépassements de délai, pour ne pas les confondre
+ *  avec un échec d'assertion. */
+function reportTimeout(label, ms) {
+  const message = `Gate D BLOQUÉ : « ${label} » n'a pas rendu la main en ${Math.round(ms / 60000)} min — arrêt forcé.`;
+  console.error(message);
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    console.log(`::error title=Gate D bloqué::${message}`);
+  }
+}
+
 function run(command, args, overrides = {}) {
-  const result = spawnSync(command, args, { env: { ...env, ...overrides }, stdio: 'inherit' });
+  const { timeout = STEP_TIMEOUT_MS, ...envOverrides } = overrides;
+  const label = announce(command, args);
+  const started = Date.now();
+  const result = spawnSync(command, args, { env: { ...env, ...envOverrides }, stdio: 'inherit', timeout, killSignal: 'SIGKILL' });
+  console.log(`✓ ${label} — ${((Date.now() - started) / 1000).toFixed(0)} s`);
+  if (result.error?.code === 'ETIMEDOUT' || result.signal === 'SIGKILL') {
+    reportTimeout(label, timeout);
+    process.exit(1);
+  }
   if (result.error || result.status !== 0) {
     console.error(`Gate D interrompu : ${command} ${args.join(' ')} (exit ${result.status})`);
     // CI : les logs bruts ne sont pas toujours lisibles (portée Actions) —
@@ -52,12 +95,19 @@ function run(command, args, overrides = {}) {
 // GitHub de la ligne d'erreur si le sous-processus échoue. Couvre aussi les
 // échecs antérieurs au grand try de ces scripts (TLA reject ne passe par aucun
 // handler 'unhandledRejection' en Node ≥ 15).
-function runCapture(command, args) {
-  const result = spawnSync(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 });
+function runCapture(command, args, { timeout = STEP_TIMEOUT_MS } = {}) {
+  const label = announce(command, args);
+  const started = Date.now();
+  const result = spawnSync(command, args, { env, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024, timeout, killSignal: 'SIGKILL' });
   const out = String(result.stdout ?? '');
   const err = String(result.stderr ?? '');
   if (out) process.stdout.write(out);
   if (err) process.stderr.write(err);
+  console.log(`✓ ${label} — ${((Date.now() - started) / 1000).toFixed(0)} s`);
+  if (result.error?.code === 'ETIMEDOUT' || result.signal === 'SIGKILL') {
+    reportTimeout(label, timeout);
+    process.exit(1);
+  }
   if (result.error || result.status !== 0) {
     console.error(`Gate D interrompu : ${command} ${args.join(' ')} (exit ${result.status})`);
     if (process.env.GITHUB_ACTIONS === 'true') {
@@ -68,21 +118,27 @@ function runCapture(command, args) {
     process.exit(result.status || 1);
   }
 }
-run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs', 'tests/tenant-isolation/openapi-contract.test.mjs']);
+run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs', 'tests/tenant-isolation/openapi-contract.test.mjs', 'tests/tenant-isolation/client-leak-guard.test.mjs', 'tests/tenant-isolation/on-conflict-targets.test.mjs']);
 // Fast production-layout reproduction before the slower Docker/Flutter gates.
 run(process.execPath, ['scripts/check-api-runtime.mjs']);
 // H1 is independent: collect its failure but still run the sync regressions.
 let stackFailed = false;
 // Never the API test cluster.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_STAGING_STACK === '1') {
-  const staging = spawnSync(process.execPath, ['scripts/test-staging-stack.mjs'], { env, stdio: 'inherit' });
+  // H1 construit de vraies images Docker : budget dédié, plus large que le
+  // plafond commun, mais borné — sans quoi un `docker build` qui n'aboutit
+  // pas fige tout le job.
+  const stackTimeout = Number(process.env.GATE_STACK_TIMEOUT_MS ?? 40 * 60 * 1000);
+  const staging = spawnSync(process.execPath, ['scripts/test-staging-stack.mjs'], { env, stdio: 'inherit', timeout: stackTimeout, killSignal: 'SIGKILL' });
+  if (staging.error?.code === 'ETIMEDOUT' || staging.signal === 'SIGKILL') reportTimeout('scripts/test-staging-stack.mjs', stackTimeout);
   stackFailed = !!staging.error || staging.status !== 0;
-  const development = spawnSync(process.execPath, ['scripts/test-staging-stack.mjs', '--dev'], { env, stdio: 'inherit' });
+  const development = spawnSync(process.execPath, ['scripts/test-staging-stack.mjs', '--dev'], { env, stdio: 'inherit', timeout: stackTimeout, killSignal: 'SIGKILL' });
+  if (development.error?.code === 'ETIMEDOUT' || development.signal === 'SIGKILL') reportTimeout('scripts/test-staging-stack.mjs --dev', stackTimeout);
   stackFailed = stackFailed || !!development.error || development.status !== 0;
 } else { console.log('H1 staging/dev NOT EXECUTED locally (Docker required).'); }
 // F2 first: compile/run the real Flutter client, not just the wire fixture.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_STAFF_SYNC === '1') {
-  run(process.execPath, ['scripts/check-staff-sync.mjs']);
+  run(process.execPath, ['scripts/check-staff-sync.mjs'], { timeout: FLUTTER_TIMEOUT_MS });
 }
 run(process.execPath, ['--test', 'tests/tenant-isolation/production-compose-contract.test.mjs']);
 run(process.execPath, ['--test', 'tests/monitoring/worker-monitoring.test.mjs', 'tests/monitoring/alert-routing.test.mjs', 'tests/monitoring/alert-relay.test.mjs']);
@@ -95,7 +151,7 @@ run(process.execPath, ['scripts/migrate.mjs']);
 run(process.execPath, ['scripts/seed.mjs']);
 // F4 uses the live API and real Flutter engine, before the long historical suites.
 if (env.GITHUB_ACTIONS === 'true' || env.RUN_SYNC_E2E === '1') {
-  run(process.execPath, ['scripts/test-sync-api-flutter.mjs']);
+  run(process.execPath, ['scripts/test-sync-api-flutter.mjs'], { timeout: FLUTTER_TIMEOUT_MS });
   run(process.execPath, ['scripts/migrate.mjs', '--reset']);
   run(process.execPath, ['scripts/migrate.mjs']);
   run(process.execPath, ['scripts/seed.mjs']);
@@ -113,9 +169,9 @@ if (env.GITHUB_ACTIONS === 'true' || env.RUN_MONITORING_STACK === '1') {
   run(process.execPath, ['scripts/seed.mjs']);
 }
 // Fail early on both sides of the wire contract. Dart runs in Docker on GitHub.
-run(process.execPath, ['scripts/check-sync-contract.mjs', ...(env.GITHUB_ACTIONS === 'true' || env.RUN_SYNC_DART === '1' ? [] : ['--node-only'])]);
+run(process.execPath, ['scripts/check-sync-contract.mjs', ...(env.GITHUB_ACTIONS === 'true' || env.RUN_SYNC_DART === '1' ? [] : ['--node-only'])], { timeout: FLUTTER_TIMEOUT_MS });
 console.log(`Logs isolation : ${env.ISOLATION_LOG_DIR}`);
-run('bash', ['scripts/run-isolation-suites.sh']);
+run('bash', ['scripts/run-isolation-suites.sh'], { timeout: SUITES_TIMEOUT_MS });
 const confidentiality = readFileSync(join(env.ISOLATION_LOG_DIR, 'suite-phase35-confidentiality.api.test.log'), 'utf8')
   .match(/H2 confidentiality: (\d+) passed, 0 failed/);
 if (!confidentiality || Number(confidentiality[1]) < 21) throw new Error('H2a confidentiality evidence missing or incomplete');

@@ -129,12 +129,23 @@ export class AuthController {
   @Post('accept-invitation')
   @HttpCode(HttpStatus.OK)
   @RateLimit(5, 60_000)
-  async acceptInvitation(@Body() dto: AcceptInvitationDto, @Req() req: Request): Promise<LoginResult> {
-    return this.authService.acceptInvitation(
+  async acceptInvitation(
+    @Body() dto: AcceptInvitationDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResult> {
+    const result = await this.authService.acceptInvitation(
       dto.invitation_token,
       { firstName: dto.first_name, lastName: dto.last_name, password: dto.password },
       { deviceId: dto.device_id, ipAddress: req.ip, userAgent: req.headers['user-agent'] },
     );
+    // R14 : accepter une invitation ouvre une session au même titre qu'un
+    // login — le navigateur doit donc repartir avec le cookie httpOnly,
+    // sinon le premier refresh échoue et l'utilisateur est redéconnecté.
+    if (dto.web_client === true) {
+      setRefreshCookie(res, result.refresh_token);
+    }
+    return result;
   }
 
   @Post('2fa/enable')

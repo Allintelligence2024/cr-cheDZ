@@ -9,6 +9,7 @@ import 'core/sync/sync_engine.dart';
 import 'core/sync/sync_scope.dart';
 import 'features/children/children_list_page.dart';
 import 'features/login/login_page.dart';
+import 'theme/serenite_theme.dart';
 
 void main() { WidgetsFlutterBinding.ensureInitialized(); runApp(const StaffApp()); }
 
@@ -105,7 +106,11 @@ class _StaffAppState extends State<StaffApp> {
     // Reset Navigator/overlays too: replacing home alone leaves private dialogs.
     key: ValueKey(_epoch),
     title: 'Crèche — Personnel',
-    theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2563EB)), useMaterial3: true),
+    // Sérénité — mêmes couleurs que le web (packages/design-system).
+    // `themeMode: system` suit le réglage clair/sombre de l'appareil.
+    theme: SereniteTheme.light,
+    darkTheme: SereniteTheme.dark,
+    themeMode: ThemeMode.system,
     home: !_ready ? const Scaffold(body: Center(child: CircularProgressIndicator()))
       : _sessionError != null ? Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(_sessionError!), TextButton(onPressed: _logout, child: const Text('Se reconnecter')),

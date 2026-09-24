@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concept 5 — Kiosque · cr-cheDZ</title>
+<link rel="stylesheet" href="_shell.css">
+<style>
+/* ===========================================================================
+ * CONCEPT 5 — « KIOSQUE »
+ * Accessibilité d'abord : très gros texte, contraste AAA, cibles tactiles
+ * ≥ 64 px, couleur JAMAIS seule porteuse de sens (toujours icône + mot).
+ * Bordures épaisses, aucune ombre, aucun dégradé. Pensé pour une tablette
+ * murale en plein soleil et pour une éducatrice qui a les mains occupées.
+ * ======================================================================== */
+.c5 {
+  --bg: #FFFFFF;
+  --alt: #F2F4F7;
+  --ink: #101418;
+  --ink2: #3B454F;
+  --line: #101418;
+  --line-soft: #C3CBD4;
+  --blue: #0B4FCC;
+  --blue-soft: #E3EDFF;
+  --green: #0A6B3D;
+  --green-soft: #DFF3E7;
+  --amber: #8A5200;
+  --amber-soft: #FDF0D8;
+  --red: #A81C1C;
+  --red-soft: #FCE6E6;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+.c5 *, .c5 *::before, .c5 *::after { box-sizing: border-box; }
+
+/* ── Ossature ───────────────────────────────────────────────────────────── */
+.c5.web { display: flex; width: 1280px; min-height: 800px; }
+.c5 .side { width: 252px; flex: none; background: var(--alt); border-right: 3px solid var(--line); padding: 18px 14px; display: flex; flex-direction: column; gap: 20px; }
+.c5 .brand { display: flex; align-items: center; gap: 11px; padding: 4px; }
+.c5 .brand .mark { width: 44px; height: 44px; border-radius: 10px; background: var(--ink); color: #fff; display: grid; place-items: center; flex: none; }
+.c5 .brand b { display: block; font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.c5 .brand span { display: block; font-size: 12px; color: var(--ink2); font-weight: 600; }
+
+.c5 .nav {
+  display: flex; align-items: center; gap: 12px; padding: 13px 13px; border-radius: 10px;
+  font-size: 16px; font-weight: 700; color: var(--ink); border: 2px solid transparent; min-height: 52px;
+}
+.c5 .nav svg { flex: none; }
+.c5 .nav.on { background: #fff; border-color: var(--line); }
+.c5 .nav .n { margin-left: auto; font-size: 14px; font-weight: 800; background: var(--ink); color: #fff; border-radius: 7px; padding: 2px 9px; }
+.c5 .side .u { margin-top: auto; border-top: 3px solid var(--line); padding-top: 14px; display: flex; align-items: center; gap: 11px; }
+.c5 .av { width: 44px; height: 44px; border-radius: 10px; background: var(--blue); color: #fff; display: grid; place-items: center; font-size: 15px; font-weight: 800; flex: none; }
+.c5 .side .u b { font-size: 15px; display: block; font-weight: 700; }
+.c5 .side .u span { font-size: 13px; color: var(--ink2); font-weight: 600; }
+
+.c5 .main { flex: 1; min-width: 0; }
+.c5 .topbar { display: flex; align-items: center; gap: 14px; padding: 18px 24px; border-bottom: 3px solid var(--line); }
+.c5 .topbar h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -.028em; }
+.c5 .topbar .dd { font-size: 15px; color: var(--ink2); font-weight: 600; margin-top: 3px; }
+.c5 .big-btn {
+  display: inline-flex; align-items: center; gap: 9px; background: var(--ink); color: #fff;
+  font-size: 16px; font-weight: 700; padding: 15px 22px; border-radius: 10px; min-height: 56px; white-space: nowrap;
+}
+.c5 .big-btn.o { background: #fff; color: var(--ink); border: 3px solid var(--line); }
+.c5 .big-btn.b { background: var(--blue); }
+.c5 .lang { margin-left: auto; display: flex; border: 3px solid var(--line); border-radius: 10px; overflow: hidden; }
+.c5 .lang span { padding: 12px 17px; font-size: 15px; font-weight: 700; }
+.c5 .lang span.on { background: var(--ink); color: #fff; }
+
+.c5 .canvas { padding: 22px 24px 30px; display: flex; flex-direction: column; gap: 20px; }
+
+/* ── Bandeau d'alerte : jamais la couleur seule ─────────────────────────── */
+.c5 .alert {
+  display: flex; gap: 15px; align-items: center; padding: 18px 20px; border-radius: 12px;
+  background: var(--amber-soft); border: 3px solid var(--amber);
+}
+.c5 .alert .i { width: 46px; height: 46px; border-radius: 10px; background: var(--amber); color: #fff; display: grid; place-items: center; flex: none; }
+.c5 .alert .w { font-size: 13px; font-weight: 800; letter-spacing: .12em; color: var(--amber); text-transform: uppercase; }
+.c5 .alert b { font-size: 19px; display: block; font-weight: 800; letter-spacing: -.02em; margin-top: 2px; }
+.c5 .alert p { margin: 4px 0 0; font-size: 15px; color: #6B4200; font-weight: 500; line-height: 1.45; }
+
+/* ── KPI ────────────────────────────────────────────────────────────────── */
+.c5 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.c5 .k { border: 3px solid var(--line); border-radius: 12px; padding: 17px; }
+.c5 .k .lb { font-size: 14px; font-weight: 700; color: var(--ink2); display: flex; align-items: center; gap: 8px; }
+.c5 .k .vv { font-size: 46px; font-weight: 800; letter-spacing: -.04em; line-height: 1.05; margin: 10px 0 4px; font-variant-numeric: tabular-nums; }
+.c5 .k .vv em { font-style: normal; font-size: 20px; color: var(--ink2); font-weight: 700; }
+.c5 .k .nn { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.c5 .k .nn.g { color: var(--green); } .c5 .k .nn.r { color: var(--red); } .c5 .k .nn.n { color: var(--ink2); }
+
+.c5 .row { display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; align-items: start; }
+.c5 .card { border: 3px solid var(--line); border-radius: 12px; padding: 18px; }
+.c5 .card > h3 { margin: 0 0 16px; font-size: 20px; font-weight: 800; letter-spacing: -.022em; display: flex; align-items: center; gap: 10px; }
+.c5 .card > h3 .lk { margin-left: auto; font-size: 15px; font-weight: 700; color: var(--blue); text-decoration: underline; }
+
+/* ── Statut : icône + mot + couleur (triple encodage) ───────────────────── */
+.c5 .st {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 800;
+  padding: 7px 12px; border-radius: 8px; border: 2px solid; white-space: nowrap;
+}
+.c5 .st.ok { background: var(--green-soft); color: var(--green); border-color: var(--green); }
+.c5 .st.wr { background: var(--amber-soft); color: var(--amber); border-color: var(--amber); }
+.c5 .st.bd { background: var(--red-soft); color: var(--red); border-color: var(--red); }
+.c5 .st.nb { background: var(--blue-soft); color: var(--blue); border-color: var(--blue); }
+
+.c5 .rm { display: grid; grid-template-columns: 1fr 150px 158px; align-items: center; gap: 16px; padding: 15px 0; border-bottom: 2px solid var(--line-soft); }
+.c5 .rm:last-child { border-bottom: 0; padding-bottom: 0; }
+.c5 .rm .n { display: flex; align-items: center; gap: 12px; }
+.c5 .rm .sq { width: 46px; height: 46px; border-radius: 10px; border: 2px solid var(--line); display: grid; place-items: center; font-size: 21px; flex: none; }
+.c5 .rm b { font-size: 17px; display: block; font-weight: 750; letter-spacing: -.015em; }
+.c5 .rm .ag { font-size: 14px; color: var(--ink2); font-weight: 600; }
+.c5 .tr { height: 14px; border-radius: 7px; background: #fff; border: 2px solid var(--line); overflow: hidden; }
+.c5 .tr i { display: block; height: 100%; }
+.c5 .tl { font-size: 14px; color: var(--ink2); margin-top: 6px; display: block; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Motifs de remplissage : distinguables sans couleur (daltonisme) */
+.c5 .fill-ok { background: var(--green); }
+.c5 .fill-wr { background: repeating-linear-gradient(45deg, var(--amber), var(--amber) 5px, #B87400 5px, #B87400 10px); }
+.c5 .fill-nb { background: var(--blue); }
+
+.c5 .money { display: flex; flex-direction: column; gap: 14px; }
+.c5 .money .amt { font-size: 38px; font-weight: 800; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.c5 .money .cur { font-size: 17px; color: var(--ink2); font-weight: 700; }
+.c5 .lgd { display: flex; flex-direction: column; gap: 11px; font-size: 15px; font-weight: 650; }
+.c5 .lgd div { display: flex; align-items: center; gap: 10px; }
+.c5 .lgd i { width: 18px; height: 18px; border-radius: 4px; border: 2px solid var(--line); flex: none; }
+.c5 .lgd b { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 800; }
+
+.c5 .evl { display: flex; gap: 12px; padding: 13px 0; border-bottom: 2px solid var(--line-soft); align-items: center; }
+.c5 .evl:last-child { border-bottom: 0; padding-bottom: 0; }
+.c5 .evl .ei { width: 42px; height: 42px; border-radius: 9px; border: 2px solid var(--line); display: grid; place-items: center; font-size: 19px; flex: none; }
+.c5 .evl b { font-size: 15.5px; display: block; font-weight: 750; }
+.c5 .evl span { font-size: 14px; color: var(--ink2); font-weight: 550; }
+.c5 .evl .t { margin-left: auto; font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+.c5.app { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+.c5.app .statusbar { color: var(--ink); font-weight: 750; }
+.c5 .ah { padding: 5px 18px 14px; border-bottom: 3px solid var(--line); }
+.c5 .ah .d { font-size: 14px; font-weight: 700; color: var(--ink2); }
+.c5 .ah h2 { margin: 3px 0 0; font-size: 26px; font-weight: 800; letter-spacing: -.03em; }
+.c5 .asc { flex: 1; overflow: hidden; padding: 14px 15px; display: flex; flex-direction: column; gap: 13px; }
+.c5 .mc { border: 3px solid var(--line); border-radius: 13px; padding: 15px; }
+.c5 .mh { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.c5 .mh b { font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+.c5 .mh .tt { margin-left: auto; font-size: 14px; font-weight: 750; color: var(--ink2); }
+
+/* Bouton de pointage géant — cible ≥ 72 px */
+.c5 .checkrow {
+  display: flex; align-items: center; gap: 13px; padding: 13px; border: 3px solid var(--line);
+  border-radius: 13px; margin-bottom: 11px;
+}
+.c5 .checkrow .kid { width: 52px; height: 52px; border-radius: 11px; border: 2px solid var(--line); display: grid; place-items: center; font-size: 24px; flex: none; }
+.c5 .checkrow b { font-size: 17px; display: block; font-weight: 750; letter-spacing: -.015em; }
+.c5 .checkrow span { font-size: 14px; color: var(--ink2); font-weight: 600; }
+.c5 .cbtn {
+  margin-left: auto; min-width: 96px; min-height: 60px; border-radius: 11px; display: grid; place-items: center;
+  font-size: 15px; font-weight: 800; background: var(--green); color: #fff; text-align: center; line-height: 1.15; padding: 8px;
+}
+.c5 .cbtn.out { background: #fff; color: var(--ink); border: 3px solid var(--line); }
+
+.c5 .tbar { display: flex; border-top: 3px solid var(--line); padding: 8px 4px 20px; flex: none; }
+.c5 .tb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ink2); font-size: 12px; font-weight: 750; padding: 6px 0; }
+.c5 .tb.on { color: var(--ink); }
+.c5 .tb.on .ic { background: var(--ink); color: #fff; }
+.c5 .tb .ic { width: 46px; height: 32px; border-radius: 9px; display: grid; place-items: center; }
+</style>
+</head>
+<body class="stage">
+
+<header class="stage-top">
+  <a class="back" href="index.html">← Les 5 concepts</a>
+  <div class="who">
+    <span class="num">CONCEPT 05</span>
+    <h1>Kiosque</h1>
+    <span class="tag">Accessibilité AAA · très gros · tactile — « tablette murale, plein soleil »</span>
+  </div>
+  <div class="swatches">
+    <i style="background:#101418"></i><i style="background:#0B4FCC"></i>
+    <i style="background:#0A6B3D"></i><i style="background:#8A5200"></i><i style="background:#FFFFFF"></i>
+  </div>
+</header>
+
+<section class="stage-block">
+  <h2>Web — Console direction</h2>
+  <p class="sub">Contraste AAA partout, bordures 3 px, aucune ombre. Un statut n'est jamais porté par la couleur seule : icône + mot + couleur + motif.</p>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="url">app.creche.dz/tableau-de-bord</div>
+    </div>
+    <div class="browser-body">
+      <div class="fit c5 web" data-width="1280">
+
+        <aside class="side">
+          <div class="brand">
+            <div class="mark"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-6h6v6"/></svg></div>
+            <div><b>Les Petits Pas</b><span>Site Hydra</span></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div class="nav on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Accueil</div>
+            <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg>Présences<span class="n">84</span></div>
+            <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg>Journal</div>
+            <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 5.5a3.2 3.2 0 0 1 0 6"/></svg>Enfants</div>
+            <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5H8a2.75 2.75 0 0 0 0 5.5H17"/></svg>Factures<span class="n">7</span></div>
+            <div class="nav"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><circle cx="12" cy="7" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Personnel</div>
+          </div>
+
+          <div class="u"><div class="av">NB</div><div><b>Nadia Benali</b><span>Directrice</span></div></div>
+        </aside>
+
+        <div class="main">
+          <div class="topbar">
+            <div>
+              <h1>Aujourd'hui</h1>
+              <div class="dd">Lundi 22 septembre · 11 h 47</div>
+            </div>
+            <div class="lang"><span class="on">FR</span><span>عربي</span></div>
+            <div class="big-btn b"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Pointer une arrivée</div>
+          </div>
+
+          <div class="canvas">
+
+            <div class="alert">
+              <div class="i"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 8v5M12 16.5h.01"/><circle cx="12" cy="12" r="9"/></svg></div>
+              <div style="flex:1">
+                <div class="w">⚠ Action requise</div>
+                <b>Moyenne section : 18 enfants pour 1 éducatrice</b>
+                <p>Depuis 09 h 12. La limite réglementaire est de 1 pour 12 (décret 19-253).</p>
+              </div>
+              <div class="big-btn">Réaffecter</div>
+            </div>
+
+            <div class="kpis">
+              <div class="k">
+                <div class="lb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Enfants présents</div>
+                <div class="vv">84<em> / 96</em></div>
+                <div class="nn g">▲ 6 de plus que vendredi</div>
+              </div>
+              <div class="k">
+                <div class="lb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 3l7.5 3v6c0 4.6-3.1 8-7.5 9-4.4-1-7.5-4.4-7.5-9V6z"/></svg>Ratios respectés</div>
+                <div class="vv">5<em> / 6</em></div>
+                <div class="nn r">✕ 1 salle hors limite</div>
+              </div>
+              <div class="k">
+                <div class="lb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5"/></svg>Encaissé ce mois</div>
+                <div class="vv">1,84<em> M DZD</em></div>
+                <div class="nn g">▲ 72 % du facturé</div>
+              </div>
+              <div class="k">
+                <div class="lb"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5h.01"/></svg>Retards de paiement</div>
+                <div class="vv">7<em> familles</em></div>
+                <div class="nn n">318 000 DZD</div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="card">
+                <h3>Les salles <span class="lk">Voir le détail</span></h3>
+
+                <div class="rm">
+                  <div class="n"><div class="sq" style="background:var(--green-soft)">🍼</div><div><b>Pouponnière</b><div class="ag">3 – 18 mois</div></div></div>
+                  <div><div class="tr"><i class="fill-ok" style="width:75%"></i></div><span class="tl">12 sur 16</span></div>
+                  <span class="st ok">✓ Conforme 1:4</span>
+                </div>
+
+                <div class="rm">
+                  <div class="n"><div class="sq" style="background:var(--green-soft)">🧸</div><div><b>Petite section</b><div class="ag">18 mois – 2 ans</div></div></div>
+                  <div><div class="tr"><i class="fill-ok" style="width:90%"></i></div><span class="tl">18 sur 20</span></div>
+                  <span class="st ok">✓ Conforme 1:9</span>
+                </div>
+
+                <div class="rm" style="background:var(--amber-soft);margin:0 -18px;padding:15px 18px;border-bottom:2px solid var(--amber)">
+                  <div class="n"><div class="sq" style="background:#fff;border-color:var(--amber)">🎨</div><div><b>Moyenne section</b><div class="ag">2 – 3 ans · Yasmina seule</div></div></div>
+                  <div><div class="tr" style="border-color:var(--amber)"><i class="fill-wr" style="width:100%"></i></div><span class="tl">18 sur 18 — complet</span></div>
+                  <span class="st wr">⚠ Dépassé 1:18</span>
+                </div>
+
+                <div class="rm">
+                  <div class="n"><div class="sq" style="background:var(--green-soft)">📚</div><div><b>Grande section</b><div class="ag">3 – 4 ans</div></div></div>
+                  <div><div class="tr"><i class="fill-ok" style="width:82%"></i></div><span class="tl">19 sur 23</span></div>
+                  <span class="st ok">✓ Conforme 1:10</span>
+                </div>
+
+                <div class="rm">
+                  <div class="n"><div class="sq" style="background:var(--blue-soft)">🌙</div><div><b>Salle de sieste</b><div class="ag">Toutes sections</div></div></div>
+                  <div><div class="tr"><i class="fill-nb" style="width:47%"></i></div><span class="tl">17 en repos</span></div>
+                  <span class="st nb">◆ Surveillée</span>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:20px">
+                <div class="card">
+                  <h3>Paiements de septembre</h3>
+                  <div class="money">
+                    <div><span class="amt">1 840 000</span> <span class="cur">DZD reçus</span></div>
+                    <div class="tr" style="height:20px"><i class="fill-ok" style="width:72%"></i><i class="fill-wr" style="width:16%"></i></div>
+                    <div class="lgd">
+                      <div><i class="fill-ok"></i><span>✓ Réglé</span><b>1 840 000</b></div>
+                      <div><i class="fill-wr"></i><span>⏳ En attente</span><b>402 000</b></div>
+                      <div><i style="background:#fff"></i><span>✕ En retard</span><b>318 000</b></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <h3>Derniers événements</h3>
+                  <div class="evl">
+                    <div class="ei" style="background:var(--green-soft)">🥣</div>
+                    <div style="flex:1"><b>Repas servi</b><span>Petite section · 16 terminés</span></div>
+                    <span class="t">11:42</span>
+                  </div>
+                  <div class="evl">
+                    <div class="ei" style="background:var(--blue-soft)">📸</div>
+                    <div style="flex:1"><b>8 photos publiées</b><span>Atelier peinture</span></div>
+                    <span class="t">10:58</span>
+                  </div>
+                  <div class="evl" style="background:var(--red-soft);margin:0 -18px;padding:13px 18px;border-bottom-color:var(--red)">
+                    <div class="ei" style="background:#fff;border-color:var(--red)">🌡️</div>
+                    <div style="flex:1"><b style="color:var(--red)">Fièvre — Amine K.</b><span>38,2 °C · parent prévenu</span></div>
+                    <span class="t">10:15</span>
+                  </div>
+                  <div class="evl">
+                    <div class="ei" style="background:var(--amber-soft)">📄</div>
+                    <div style="flex:1"><b>12 factures émises</b><span>Échéance 05/10</span></div>
+                    <span class="t">08:00</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage-block">
+  <h2>Mobile — Flutter</h2>
+  <p class="sub">Boutons de pointage de 96 × 60 px minimum : utilisables avec des gants, une main, ou un enfant dans les bras. Texte à 17 px de base.</p>
+  <div class="phones">
+
+    <div class="phone-wrap">
+      <span class="cap">App personnel — pointage</span>
+      <div class="phone"><div class="phone-screen c5 app">
+        <div class="notch"></div>
+        <div class="statusbar"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+
+        <div class="ah">
+          <div style="display:flex;align-items:center;gap:11px">
+            <div style="flex:1"><div class="d">Moyenne section · Hydra</div><h2>Pointage</h2></div>
+            <div class="av">SM</div>
+          </div>
+        </div>
+
+        <div style="margin:13px 15px 0;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;border:3px solid var(--green);background:var(--green-soft)">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0A6B3D" stroke-width="2.6" stroke-linecap="round"><path d="M21 12a9 9 0 0 1-15 6.7L3 16M3 12a9 9 0 0 1 15-6.7L21 8"/></svg>
+          <span style="font-size:14px;font-weight:750;color:var(--green)">Synchronisé · 3 en attente</span>
+        </div>
+
+        <div class="asc">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div class="mc" style="padding:12px"><div style="font-size:28px;font-weight:800;letter-spacing:-.03em">14</div><div style="font-size:13px;font-weight:700;color:var(--ink2)">présents</div></div>
+            <div class="mc" style="padding:12px"><div style="font-size:28px;font-weight:800;letter-spacing:-.03em">4</div><div style="font-size:13px;font-weight:700;color:var(--ink2)">attendus</div></div>
+            <div class="mc" style="padding:12px;border-color:var(--amber);background:var(--amber-soft)"><div style="font-size:28px;font-weight:800;letter-spacing:-.03em;color:var(--amber)">1:18</div><div style="font-size:13px;font-weight:700;color:var(--amber)">ratio ⚠</div></div>
+          </div>
+
+          <div>
+            <div class="checkrow">
+              <div class="kid" style="background:var(--green-soft)">👧</div>
+              <div><b>Lina Bouzid</b><span>Arrivée 08:12</span></div>
+              <div class="cbtn out">Sortie</div>
+            </div>
+            <div class="checkrow" style="border-color:var(--red);background:var(--red-soft)">
+              <div class="kid" style="background:#fff;border-color:var(--red)">👦</div>
+              <div><b>Amine Kaci</b><span style="color:var(--red);font-weight:750">⚠ 38,2 °C</span></div>
+              <div class="cbtn out">Sortie</div>
+            </div>
+            <div class="checkrow">
+              <div class="kid" style="background:var(--alt)">👧</div>
+              <div><b>Nour Hamdi</b><span>Attendue 08:30</span></div>
+              <div class="cbtn">✓ Entrée</div>
+            </div>
+            <div class="checkrow">
+              <div class="kid" style="background:var(--alt)">👦</div>
+              <div><b>Yanis Meziane</b><span>Attendu 09:00</span></div>
+              <div class="cbtn">✓ Entrée</div>
+            </div>
+            <div class="checkrow" style="margin-bottom:0">
+              <div class="kid" style="background:var(--green-soft)">👧</div>
+              <div><b>Maya Slimani</b><span>Arrivée 07:58</span></div>
+              <div class="cbtn out">Sortie</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tbar">
+          <div class="tb on"><div class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg></div>Présence</div>
+          <div class="tb"><div class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg></div>Journal</div>
+          <div class="tb"><div class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg></div>Photos</div>
+          <div class="tb"><div class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></div>Moi</div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="phone-wrap">
+      <span class="cap">App parents — fil du jour</span>
+      <div class="phone"><div class="phone-screen c5 app">
+        <div class="notch"></div>
+        <div class="statusbar"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+
+        <div class="ah">
+          <div class="d">Lundi 22 septembre</div>
+          <h2>La journée de Lina</h2>
+        </div>
+
+        <div class="asc">
+          <div class="mc" style="background:var(--green-soft);border-color:var(--green)">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="width:52px;height:52px;border-radius:11px;border:2px solid var(--green);background:#fff;display:grid;place-items:center;font-size:24px">👧</div>
+              <div style="flex:1"><b style="font-size:19px;font-weight:800;letter-spacing:-.02em">Lina, 2 ans</b><div style="font-size:14px;font-weight:650;color:var(--green)">Moyenne section</div></div>
+              <div class="st ok">✓ Présente</div>
+            </div>
+            <div style="display:flex;gap:18px;margin-top:15px">
+              <div><div style="font-size:12px;font-weight:750;color:var(--ink2);letter-spacing:.06em">ARRIVÉE</div><b style="font-size:19px;font-weight:800">08:12</b></div>
+              <div><div style="font-size:12px;font-weight:750;color:var(--ink2);letter-spacing:.06em">SIESTE</div><b style="font-size:19px;font-weight:800">1 h 35</b></div>
+              <div><div style="font-size:12px;font-weight:750;color:var(--ink2);letter-spacing:.06em">REPAS</div><b style="font-size:19px;font-weight:800">3 / 3</b></div>
+            </div>
+          </div>
+
+          <div class="mc">
+            <div class="mh"><b>Déjeuner</b><span class="tt">11:42</span></div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <span class="st ok">✓ Entrée</span><span class="st ok">✓ Plat</span><span class="st wr">½ Dessert</span>
+            </div>
+            <p style="margin:12px 0 0;font-size:15px;color:var(--ink2);line-height:1.5;font-weight:550">Lina a beaucoup aimé le tajine de légumes.</p>
+          </div>
+
+          <div class="mc">
+            <div class="mh"><b>Photos</b><span class="tt">3 NOUVELLES</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+              <div style="aspect-ratio:1;border-radius:10px;border:2px solid var(--line);background:var(--blue-soft);display:grid;place-items:center;font-size:28px">🎨</div>
+              <div style="aspect-ratio:1;border-radius:10px;border:2px solid var(--line);background:var(--amber-soft);display:grid;place-items:center;font-size:28px">🧩</div>
+              <div style="aspect-ratio:1;border-radius:10px;border:2px solid var(--line);background:var(--green-soft);display:grid;place-items:center;font-size:28px">🎵</div>
+            </div>
+          </div>
+
+          <div class="mc" style="display:flex;align-items:center;gap:12px;border-color:var(--amber);background:var(--amber-soft)">
+            <div style="width:44px;height:44px;border-radius:10px;border:2px solid var(--amber);background:#fff;display:grid;place-items:center;font-size:20px">💳</div>
+            <div style="flex:1"><b style="font-size:17px;font-weight:800">18 000 DZD</b><div style="font-size:14px;font-weight:700;color:var(--amber)">À régler avant le 05/10</div></div>
+          </div>
+        </div>
+
+        <div class="tbar">
+          <div class="tb on"><div class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg></div>Journée</div>
+          <div class="tb"><div class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg></div>Photos</div>
+          <div class="tb"><div class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/></svg></div>Messages</div>
+          <div class="tb"><div class="ic"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></div>Profil</div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+</section>
+
+<div class="rationale">
+  <div class="r-card good">
+    <h3>Pourquoi ça marche</h3>
+    <ul>
+      <li>Le seul des 5 qui passe WCAG AAA sans discussion — utile si un marché public l'exige.</li>
+      <li>Lisible sur tablette bas de gamme, en plein soleil, écran rayé.</li>
+      <li>Statuts à triple encodage (icône + mot + couleur + motif) : robuste au daltonisme.</li>
+      <li>Formation du personnel quasi nulle : tout est explicite.</li>
+    </ul>
+  </div>
+  <div class="r-card warn">
+    <h3>À surveiller</h3>
+    <ul>
+      <li>Densité faible : un directeur multi-sites scrollera beaucoup.</li>
+      <li>Esthétique austère, peu « premium » face à un acheteur sensible au design.</li>
+      <li>Les bordures 3 px partout peuvent sembler lourdes sur grand écran.</li>
+    </ul>
+  </div>
+  <div class="r-card">
+    <h3>Coût d'implémentation</h3>
+    <ul>
+      <li><b>Faible à moyen.</b> Surtout une augmentation d'échelle typographique et des cibles.</li>
+      <li>Aucune police ni dépendance nouvelle.</li>
+      <li>Flutter : hérite gratuitement des réglages d'accessibilité système.</li>
+      <li>Piste : le garder comme <em>mode kiosque</em> optionnel plutôt que thème unique.</li>
+    </ul>
+  </div>
+</div>
+
+<nav class="stage-nav">
+  <a href="concept-4-medina.html">← Concept 04 · Medina</a>
+  <a href="index.html">Tous les concepts →</a>
+</nav>
+
+<script src="_fit.js"></script>
+</body>
+</html>

@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concept 4 — Medina · cr-cheDZ</title>
+<link rel="stylesheet" href="_shell.css">
+<style>
+/* ===========================================================================
+ * CONCEPT 4 — « MEDINA »
+ * Identité algérienne assumée : bleu de Ghardaïa, vert drapeau, blanc chaux.
+ * Motif zellige discret, arabe traité comme langue de premier rang (RTL natif
+ * démontré). Référence : Alger la Blanche, céramique, mais en sobre.
+ * Objectif : ancrage local fort — argument commercial face aux SaaS importés.
+ * ======================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap');
+
+.c4 {
+  --chaux: #F7F9FA;
+  --white: #FFFFFF;
+  --bleu: #1B4F72;
+  --bleu2: #2E6D9B;
+  --bleu-soft: #E8F0F6;
+  --vert: #0E7A5F;
+  --vert-soft: #E3F4EE;
+  --ink: #12222C;
+  --muted: #64798A;
+  --line: #DDE6EC;
+  --safran: #C98A16;
+  --safran-soft: #FBF1DC;
+  --rouge: #C1402F;
+  --rouge-soft: #FBE9E6;
+  font-family: 'Rubik', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--chaux);
+  -webkit-font-smoothing: antialiased;
+}
+.c4 *, .c4 *::before, .c4 *::after { box-sizing: border-box; }
+
+/* Motif zellige — fond très discret */
+.c4 .zellige {
+  background-image:
+    linear-gradient(45deg, rgba(27,79,114,.045) 25%, transparent 25%, transparent 75%, rgba(27,79,114,.045) 75%),
+    linear-gradient(45deg, rgba(27,79,114,.045) 25%, transparent 25%, transparent 75%, rgba(27,79,114,.045) 75%);
+  background-size: 22px 22px;
+  background-position: 0 0, 11px 11px;
+}
+
+/* ── Ossature ───────────────────────────────────────────────────────────── */
+.c4.web { display: flex; width: 1280px; min-height: 800px; }
+.c4 .side {
+  width: 238px; flex: none; background: var(--bleu); color: #DCE8F0;
+  padding: 20px 14px; display: flex; flex-direction: column; gap: 22px; position: relative; overflow: hidden;
+}
+.c4 .side::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.035) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.035) 75%),
+    linear-gradient(45deg, rgba(255,255,255,.035) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.035) 75%);
+  background-size: 26px 26px; background-position: 0 0, 13px 13px;
+}
+.c4 .side > * { position: relative; }
+.c4 .brand { display: flex; align-items: center; gap: 11px; padding: 2px 6px 0; }
+.c4 .brand .mark {
+  width: 38px; height: 38px; flex: none; background: var(--white); color: var(--bleu);
+  display: grid; place-items: center;
+  /* octogone — clin d'œil au carreau de zellige */
+  clip-path: polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);
+}
+.c4 .brand b { display: block; font-size: 14.5px; color: #fff; font-weight: 600; }
+.c4 .brand span { display: block; font-size: 11px; color: #9DBAD0; }
+.c4 .brand .ar { font-size: 11.5px; color: #9DBAD0; }
+
+.c4 .nsec > p {
+  margin: 0 0 6px 10px; font-size: 10px; font-weight: 600; letter-spacing: .16em;
+  text-transform: uppercase; color: #6E93AF;
+}
+.c4 .nav {
+  display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: 8px;
+  font-size: 13.5px; color: #C7DAE7; font-weight: 400;
+}
+.c4 .nav svg { opacity: .7; flex: none; }
+.c4 .nav.on { background: rgba(255,255,255,.12); color: #fff; font-weight: 600; box-shadow: inset 3px 0 0 #0E7A5F; }
+.c4 .nav.on svg { opacity: 1; }
+.c4 .nav .b { margin-left: auto; font-size: 10.5px; font-weight: 700; background: var(--safran); color: #3A2705; border-radius: 5px; padding: 1px 6px; }
+.c4 .side .u { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 11px; background: rgba(0,0,0,.18); border-radius: 10px; }
+.c4 .av { width: 34px; height: 34px; border-radius: 9px; background: var(--vert); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 600; flex: none; }
+.c4 .side .u b { font-size: 12.5px; color: #fff; display: block; font-weight: 500; }
+.c4 .side .u span { font-size: 11px; color: #9DBAD0; }
+
+.c4 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.c4 .topbar {
+  display: flex; align-items: center; gap: 15px; padding: 15px 26px;
+  background: var(--white); border-bottom: 1px solid var(--line);
+}
+.c4 .topbar h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.015em; }
+.c4 .topbar .dd { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.c4 .topbar .dd .hij { color: var(--vert); }
+.c4 .lang {
+  margin-left: auto; display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; font-size: 12.5px; font-weight: 500;
+}
+.c4 .lang span { padding: 7px 13px; color: var(--muted); }
+.c4 .lang span.on { background: var(--bleu); color: #fff; font-weight: 600; }
+.c4 .ib { width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); position: relative; }
+.c4 .ib .d { position: absolute; top: 8px; right: 9px; width: 7px; height: 7px; border-radius: 50%; background: var(--rouge); box-shadow: 0 0 0 2px #fff; }
+
+.c4 .canvas { padding: 22px 26px 30px; display: flex; flex-direction: column; gap: 18px; }
+
+/* ── Cartes ─────────────────────────────────────────────────────────────── */
+.c4 .card { background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+.c4 .card > h3 {
+  margin: 0 0 4px; font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 9px;
+}
+.c4 .card > h3 .ar { font-size: 12.5px; color: var(--muted); font-weight: 400; }
+.c4 .card > h3 .lk { margin-left: auto; font-size: 12px; color: var(--bleu2); font-weight: 500; }
+.c4 .card .hh { margin: 0 0 15px; font-size: 12px; color: var(--muted); }
+
+.c4 .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.c4 .k { background: var(--white); border: 1px solid var(--line); border-radius: 12px; padding: 16px; border-top: 3px solid var(--bleu); }
+.c4 .k.g { border-top-color: var(--vert); } .c4 .k.s { border-top-color: var(--safran); } .c4 .k.r { border-top-color: var(--rouge); }
+.c4 .k .lb { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+.c4 .k .lb .arl { margin-left: auto; font-size: 11px; color: #96A9B7; }
+.c4 .k .vv { font-size: 30px; font-weight: 600; letter-spacing: -.03em; line-height: 1.15; margin: 8px 0 2px; font-variant-numeric: tabular-nums; }
+.c4 .k .vv em { font-style: normal; font-size: 14px; color: var(--muted); font-weight: 400; }
+.c4 .k .nn { font-size: 11.5px; color: var(--muted); }
+.c4 .k .nn b.up { color: var(--vert); } .c4 .k .nn b.dn { color: var(--rouge); }
+
+.c4 .row { display: grid; grid-template-columns: 1.55fr 1fr; gap: 18px; align-items: start; }
+
+.c4 .ban {
+  display: flex; gap: 13px; align-items: flex-start; padding: 15px 17px; border-radius: 11px;
+  background: var(--safran-soft); border: 1px solid #F0DFB6;
+}
+.c4 .ban .i { width: 34px; height: 34px; flex: none; background: var(--safran); color: #fff; display: grid; place-items: center;
+  clip-path: polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%); }
+.c4 .ban b { font-size: 13.5px; color: #6E4B08; font-weight: 600; }
+.c4 .ban p { margin: 3px 0 0; font-size: 12.5px; color: #85601A; line-height: 1.5; }
+.c4 .ban .bb { margin-left: auto; align-self: center; }
+
+.c4 .btn { display: inline-flex; align-items: center; gap: 7px; background: var(--bleu); color: #fff; font-size: 12.5px; font-weight: 500; padding: 9px 15px; border-radius: 8px; white-space: nowrap; }
+.c4 .btn.g { background: var(--vert); }
+.c4 .btn.o { background: #fff; color: var(--bleu); border: 1px solid var(--line); }
+
+/* Salles */
+.c4 .rm { display: grid; grid-template-columns: 1fr 150px 116px 100px; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid #EEF3F6; }
+.c4 .rm:last-child { border-bottom: 0; padding-bottom: 0; }
+.c4 .rm .n { display: flex; align-items: center; gap: 11px; }
+.c4 .rm .sq {
+  width: 34px; height: 34px; flex: none; display: grid; place-items: center; font-size: 15px;
+  clip-path: polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);
+}
+.c4 .rm b { font-size: 13.5px; display: block; font-weight: 500; }
+.c4 .rm .ar2 { font-size: 11.5px; color: var(--muted); }
+.c4 .tr { height: 8px; border-radius: 4px; background: #EDF2F5; overflow: hidden; }
+.c4 .tr i { display: block; height: 100%; border-radius: 4px; }
+.c4 .tl { font-size: 11px; color: var(--muted); margin-top: 5px; display: block; font-variant-numeric: tabular-nums; }
+.c4 .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; padding: 4px 10px; border-radius: 6px; white-space: nowrap; }
+.c4 .tag.ok { background: var(--vert-soft); color: #085C47; }
+.c4 .tag.wr { background: var(--safran-soft); color: #85601A; }
+.c4 .tag.bd { background: var(--rouge-soft); color: #97301F; }
+.c4 .tag.nb { background: var(--bleu-soft); color: #1B4F72; }
+
+/* ── Démonstration RTL ──────────────────────────────────────────────────── */
+.c4 .rtl { direction: rtl; text-align: right; }
+.c4 .rtl .nav.on { box-shadow: inset -3px 0 0 #0E7A5F; }
+.c4 .rtl .k { border-top-color: var(--vert); }
+.c4 .arabic { font-family: 'Rubik', 'Noto Naskh Arabic', serif; }
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+.c4.app { height: 100%; display: flex; flex-direction: column; background: var(--chaux); }
+.c4.app .statusbar { color: #fff; }
+.c4 .ahero {
+  background: var(--bleu); color: #fff; padding: 0 18px 20px; position: relative; overflow: hidden;
+}
+.c4 .ahero::before {
+  content: ''; position: absolute; inset: 0; opacity: .55;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.04) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.04) 75%),
+    linear-gradient(45deg, rgba(255,255,255,.04) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.04) 75%);
+  background-size: 24px 24px; background-position: 0 0, 12px 12px;
+}
+.c4 .ahero > * { position: relative; }
+.c4 .ahero .hd { display: flex; align-items: center; gap: 11px; padding-top: 6px; }
+.c4 .ahero .hd .ttl { font-size: 11px; color: #9DBAD0; }
+.c4 .ahero .hd h2 { margin: 2px 0 0; font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+.c4 .ahero .kidbox {
+  margin-top: 16px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.16);
+  border-radius: 13px; padding: 14px; display: flex; align-items: center; gap: 12px;
+}
+.c4 .ahero .kidbox .ph2 {
+  width: 46px; height: 46px; background: rgba(255,255,255,.2); display: grid; place-items: center; font-size: 20px; flex: none;
+  clip-path: polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);
+}
+.c4 .ahero .kidbox b { font-size: 15px; display: block; font-weight: 600; }
+.c4 .ahero .kidbox span { font-size: 11.5px; color: #B9D0E0; }
+.c4 .ahero .st { margin-left: auto; font-size: 11px; font-weight: 600; background: var(--vert); border-radius: 6px; padding: 5px 10px; }
+.c4 .ahero .sts { display: flex; gap: 20px; margin-top: 15px; }
+.c4 .ahero .sts div span { font-size: 10px; color: #9DBAD0; display: block; letter-spacing: .08em; text-transform: uppercase; }
+.c4 .ahero .sts div b { font-size: 15px; font-weight: 600; }
+
+.c4 .asc { flex: 1; overflow: hidden; padding: 14px 15px; display: flex; flex-direction: column; gap: 12px; }
+.c4 .mc { background: #fff; border: 1px solid var(--line); border-radius: 13px; padding: 14px; }
+.c4 .mh { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+.c4 .mh b { font-size: 13.5px; font-weight: 600; }
+.c4 .mh .ar3 { font-size: 11.5px; color: var(--muted); }
+.c4 .mh .tt { margin-left: auto; font-size: 11px; color: #96A9B7; }
+.c4 .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.c4 .tbar { display: flex; background: #fff; border-top: 1px solid var(--line); padding: 9px 6px 20px; flex: none; }
+.c4 .tb { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; color: #96A9B7; font-size: 9.5px; font-weight: 500; }
+.c4 .tb.on { color: var(--bleu); }
+.c4 .kr { display: flex; align-items: center; gap: 11px; padding: 11px 0; border-bottom: 1px solid #EEF3F6; }
+.c4 .kr:last-child { border-bottom: 0; }
+.c4 .kr .ki { width: 36px; height: 36px; display: grid; place-items: center; font-size: 16px; flex: none;
+  clip-path: polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%); }
+.c4 .kr b { font-size: 13.5px; display: block; font-weight: 500; }
+.c4 .kr span { font-size: 11.5px; color: var(--muted); }
+.c4 .ac { margin-left: auto; font-size: 11.5px; font-weight: 600; padding: 8px 13px; border-radius: 8px; background: var(--vert); color: #fff; white-space: nowrap; }
+.c4 .ac.o { background: #F1F5F8; color: var(--muted); }
+</style>
+</head>
+<body class="stage">
+
+<header class="stage-top">
+  <a class="back" href="index.html">← Les 5 concepts</a>
+  <div class="who">
+    <span class="num">CONCEPT 04</span>
+    <h1>Medina</h1>
+    <span class="tag">Identité algérienne · bleu Ghardaïa &amp; vert · arabe de premier rang</span>
+  </div>
+  <div class="swatches">
+    <i style="background:#1B4F72"></i><i style="background:#0E7A5F"></i>
+    <i style="background:#C98A16"></i><i style="background:#F7F9FA"></i><i style="background:#12222C"></i>
+  </div>
+</header>
+
+<section class="stage-block">
+  <h2>Web — Console direction (FR)</h2>
+  <p class="sub">Bleu des portes de Ghardaïa, vert du drapeau, motif zellige à 4 % d'opacité, dates grégorienne + hégirienne. Aucun cliché appuyé.</p>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="url">app.creche.dz/tableau-de-bord</div>
+    </div>
+    <div class="browser-body">
+      <div class="fit c4 web zellige" data-width="1280">
+
+        <aside class="side">
+          <div class="brand">
+            <div class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-6h6v6"/></svg></div>
+            <div><b>Les Petits Pas</b><span class="ar">روضة الخطوات الصغيرة</span></div>
+          </div>
+
+          <div class="nsec">
+            <p>Quotidien</p>
+            <div class="nav on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Tableau de bord</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg>Présences</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg>Journal quotidien</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M16 5.5a3.2 3.2 0 0 1 0 6"/></svg>Enfants</div>
+          </div>
+
+          <div class="nsec">
+            <p>Administration</p>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5H8a2.75 2.75 0 0 0 0 5.5H17"/></svg>Facturation<span class="b">7</span></div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="7" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Personnel &amp; paie</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V4h8v3"/></svg>Sites &amp; salles</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 3l7.5 3v6c0 4.6-3.1 8-7.5 9-4.4-1-7.5-4.4-7.5-9V6z"/><path d="M9.3 12l1.9 1.9 3.6-3.6"/></svg>Loi 25-11</div>
+          </div>
+
+          <div class="u"><div class="av">NB</div><div><b>Nadia Benali</b><span>Directrice · مديرة</span></div></div>
+        </aside>
+
+        <div class="main">
+          <div class="topbar">
+            <div>
+              <h1>Tableau de bord</h1>
+              <div class="dd">Lundi 22 septembre 2026 <span class="hij">· 10 rabia ath-thani 1448</span> · Site Hydra</div>
+            </div>
+            <div class="lang"><span class="on">FR</span><span>العربية</span></div>
+            <div class="ib"><span class="d"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 14 18 8"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></svg></div>
+            <div class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Nouveau</div>
+          </div>
+
+          <div class="canvas">
+
+            <div class="kpis">
+              <div class="k">
+                <div class="lb">Enfants présents<span class="arl">الحاضرون</span></div>
+                <div class="vv">84<em> / 96</em></div>
+                <div class="nn"><b class="up">▲ 6</b> vs vendredi</div>
+              </div>
+              <div class="k g">
+                <div class="lb">Ratios conformes<span class="arl">النسب</span></div>
+                <div class="vv">5<em> / 6</em></div>
+                <div class="nn"><b class="dn">1 salle</b> en dépassement</div>
+              </div>
+              <div class="k s">
+                <div class="lb">Encaissé<span class="arl">المحصّل</span></div>
+                <div class="vv">1,84<em> M DZD</em></div>
+                <div class="nn"><b class="up">72 %</b> du facturé</div>
+              </div>
+              <div class="k r">
+                <div class="lb">Impayés &gt; 30 j<span class="arl">المتأخرات</span></div>
+                <div class="vv">7<em> familles</em></div>
+                <div class="nn">318 000 DZD à relancer</div>
+              </div>
+            </div>
+
+            <div class="ban">
+              <div class="i"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 8v5M12 16.5h.01"/><circle cx="12" cy="12" r="9"/></svg></div>
+              <div>
+                <b>Ratio d'encadrement dépassé — Moyenne section</b>
+                <p>18 enfants pour 1 éducatrice depuis 09 h 12. Le décret 19-253 impose 1 pour 12 entre 2 et 3 ans. L'écart est consigné au registre de conformité.</p>
+              </div>
+              <div class="bb"><div class="btn">Réaffecter</div></div>
+            </div>
+
+            <div class="row">
+              <div class="card">
+                <h3>Occupation des salles <span class="ar">شغل القاعات</span> <span class="lk">Voir tout →</span></h3>
+                <p class="hh">Synchronisé depuis les tablettes · il y a 40 secondes</p>
+
+                <div class="rm">
+                  <div class="n"><div class="sq" style="background:var(--bleu-soft)">🍼</div><div><b>Pouponnière</b><div class="ar2">3 – 18 mois · قسم الرضّع</div></div></div>
+                  <div><div class="tr"><i style="width:75%;background:var(--vert)"></i></div><span class="tl">12 / 16</span></div>
+                  <span class="tag ok">✓ 1 pour 4</span>
+                  <span class="tag nb">3 éducatrices</span>
+                </div>
+
+                <div class="rm">
+                  <div class="n"><div class="sq" style="background:var(--vert-soft)">🧸</div><div><b>Petite section</b><div class="ar2">18 mois – 2 ans · القسم الصغير</div></div></div>
+                  <div><div class="tr"><i style="width:90%;background:var(--vert)"></i></div><span class="tl">18 / 20</span></div>
+                  <span class="tag ok">✓ 1 pour 9</span>
+                  <span class="tag nb">2 éducatrices</span>
+                </div>
+
+                <div class="rm" style="background:#FEFAF0;margin:0 -18px;padding:13px 18px;border-bottom-color:#F0DFB6">
+                  <div class="n"><div class="sq" style="background:var(--safran-soft)">🎨</div><div><b>Moyenne section</b><div class="ar2">2 – 3 ans · القسم المتوسط</div></div></div>
+                  <div><div class="tr"><i style="width:100%;background:var(--safran)"></i></div><span class="tl">18 / 18 — complet</span></div>
+                  <span class="tag wr">⚠ 1 pour 18</span>
+                  <span class="tag wr">1 éducatrice</span>
+                </div>
+
+                <div class="rm">
+                  <div class="n"><div class="sq" style="background:var(--bleu-soft)">📚</div><div><b>Grande section</b><div class="ar2">3 – 4 ans · القسم الكبير</div></div></div>
+                  <div><div class="tr"><i style="width:82%;background:var(--vert)"></i></div><span class="tl">19 / 23</span></div>
+                  <span class="tag ok">✓ 1 pour 10</span>
+                  <span class="tag nb">2 éducatrices</span>
+                </div>
+
+                <div class="rm">
+                  <div class="n"><div class="sq" style="background:#EEF1F4">🌙</div><div><b>Salle de sieste</b><div class="ar2">Toutes sections · قاعة القيلولة</div></div></div>
+                  <div><div class="tr"><i style="width:47%;background:#7C93A6"></i></div><span class="tl">17 en repos</span></div>
+                  <span class="tag nb">Surveillée</span>
+                  <span class="tag nb">1 agent</span>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:18px">
+                <div class="card">
+                  <h3>Recouvrement <span class="ar">التحصيل</span></h3>
+                  <p class="hh">2 560 000 DZD facturés en septembre</p>
+                  <div style="display:flex;align-items:center;gap:16px">
+                    <svg width="104" height="104" viewBox="0 0 42 42">
+                      <circle cx="21" cy="21" r="16" fill="none" stroke="#EDF2F5" stroke-width="5"/>
+                      <circle cx="21" cy="21" r="16" fill="none" stroke="#0E7A5F" stroke-width="5" stroke-dasharray="72 28" stroke-dashoffset="25" stroke-linecap="butt"/>
+                      <circle cx="21" cy="21" r="16" fill="none" stroke="#C98A16" stroke-width="5" stroke-dasharray="16 84" stroke-dashoffset="-47" stroke-linecap="butt"/>
+                      <text x="21" y="20.6" text-anchor="middle" font-size="7.2" font-weight="600" fill="#12222C">72 %</text>
+                      <text x="21" y="25.4" text-anchor="middle" font-size="3" fill="#64798A">encaissé</text>
+                    </svg>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:9px;font-size:12.5px">
+                      <div style="display:flex;align-items:center;gap:8px"><i style="width:9px;height:9px;border-radius:2px;background:#0E7A5F"></i><span style="color:var(--muted)">Payé</span><b style="margin-left:auto">1,84 M</b></div>
+                      <div style="display:flex;align-items:center;gap:8px"><i style="width:9px;height:9px;border-radius:2px;background:#C98A16"></i><span style="color:var(--muted)">Attente</span><b style="margin-left:auto">0,40 M</b></div>
+                      <div style="display:flex;align-items:center;gap:8px"><i style="width:9px;height:9px;border-radius:2px;background:#EDF2F5"></i><span style="color:var(--muted)">Retard</span><b style="margin-left:auto">0,32 M</b></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <h3>Activité <span class="lk">Tout voir →</span></h3>
+                  <div style="display:flex;flex-direction:column">
+                    <div style="display:flex;gap:11px;padding:10px 0;border-bottom:1px solid #EEF3F6">
+                      <div class="sq" style="background:var(--vert-soft);width:30px;height:30px;font-size:13px">🥣</div>
+                      <div style="flex:1"><b style="font-size:12.5px;font-weight:500">Repas servi — Petite section</b><div style="font-size:11.5px;color:var(--muted)">16 terminées, 2 partielles</div></div>
+                      <span style="font-size:11px;color:#96A9B7">11 h 42</span>
+                    </div>
+                    <div style="display:flex;gap:11px;padding:10px 0;border-bottom:1px solid #EEF3F6">
+                      <div class="sq" style="background:var(--bleu-soft);width:30px;height:30px;font-size:13px">📸</div>
+                      <div style="flex:1"><b style="font-size:12.5px;font-weight:500">8 photos publiées</b><div style="font-size:11.5px;color:var(--muted)">Consentements vérifiés</div></div>
+                      <span style="font-size:11px;color:#96A9B7">10 h 58</span>
+                    </div>
+                    <div style="display:flex;gap:11px;padding:10px 0;border-bottom:1px solid #EEF3F6">
+                      <div class="sq" style="background:var(--rouge-soft);width:30px;height:30px;font-size:13px">🌡️</div>
+                      <div style="flex:1"><b style="font-size:12.5px;font-weight:500">Fièvre — Amine K.</b><div style="font-size:11.5px;color:var(--muted)">38,2 °C · parent prévenu</div></div>
+                      <span style="font-size:11px;color:#96A9B7">10 h 15</span>
+                    </div>
+                    <div style="display:flex;gap:11px;padding:10px 0">
+                      <div class="sq" style="background:var(--safran-soft);width:30px;height:30px;font-size:13px">📄</div>
+                      <div style="flex:1"><b style="font-size:12.5px;font-weight:500">12 factures générées</b><div style="font-size:11.5px;color:var(--muted)">Échéance 05/10</div></div>
+                      <span style="font-size:11px;color:#96A9B7">08 h 00</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage-block">
+  <h2>Web — Même écran en arabe (RTL)</h2>
+  <p class="sub">La bascule inverse la mise en page complète : sidebar à droite, liseré actif à droite, alignements et chiffres. C'est ce que vos concurrents importés ne font pas.</p>
+  <div class="browser">
+    <div class="browser-bar">
+      <div class="dots"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+      <div class="url">app.creche.dz/ar/لوحة-القيادة</div>
+    </div>
+    <div class="browser-body">
+      <div class="fit c4 web zellige rtl arabic" data-width="1280" style="min-height:0">
+
+        <div class="main">
+          <div class="topbar">
+            <div>
+              <h1>لوحة القيادة</h1>
+              <div class="dd">الاثنين 22 سبتمبر 2026 <span class="hij">· 10 ربيع الثاني 1448</span> · موقع حيدرة</div>
+            </div>
+            <div class="lang"><span class="on">العربية</span><span>FR</span></div>
+            <div class="ib"><span class="d" style="right:auto;left:9px"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 14 18 8"/><path d="M10.3 19a2 2 0 0 0 3.4 0"/></svg></div>
+            <div class="btn">جديد<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+          </div>
+
+          <div class="canvas">
+            <div class="kpis">
+              <div class="k">
+                <div class="lb">الأطفال الحاضرون<span class="arl" style="margin-left:0;margin-right:auto">Présents</span></div>
+                <div class="vv">84<em> / 96</em></div>
+                <div class="nn"><b class="up">▲ 6</b> مقارنة بالجمعة</div>
+              </div>
+              <div class="k g">
+                <div class="lb">النسب المطابقة<span class="arl" style="margin-left:0;margin-right:auto">Ratios</span></div>
+                <div class="vv">5<em> / 6</em></div>
+                <div class="nn"><b class="dn">قاعة واحدة</b> تتجاوز الحد</div>
+              </div>
+              <div class="k s">
+                <div class="lb">المبلغ المحصّل<span class="arl" style="margin-left:0;margin-right:auto">Encaissé</span></div>
+                <div class="vv">1,84<em> M DZD</em></div>
+                <div class="nn"><b class="up">72 %</b> من الفوترة</div>
+              </div>
+              <div class="k r">
+                <div class="lb">متأخرات &gt; 30 يوم<span class="arl" style="margin-left:0;margin-right:auto">Impayés</span></div>
+                <div class="vv">7<em> عائلات</em></div>
+                <div class="nn">318 000 دج للمتابعة</div>
+              </div>
+            </div>
+
+            <div class="ban">
+              <div class="i"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 8v5M12 16.5h.01"/><circle cx="12" cy="12" r="9"/></svg></div>
+              <div>
+                <b>تجاوز نسبة التأطير — القسم المتوسط</b>
+                <p>18 طفلاً لمربية واحدة منذ الساعة 09:12. يفرض المرسوم 19-253 نسبة 1 لكل 12 بين سنتين وثلاث سنوات. تم تسجيل التجاوز في سجل المطابقة.</p>
+              </div>
+              <div class="bb"><div class="btn">إعادة التوزيع</div></div>
+            </div>
+
+            <div class="card">
+              <h3>شغل القاعات <span class="ar">Occupation</span> <span class="lk" style="margin-left:0;margin-right:auto">← عرض الكل</span></h3>
+              <p class="hh">آخر مزامنة من الأجهزة اللوحية · منذ 40 ثانية</p>
+
+              <div class="rm" style="grid-template-columns:1fr 150px 116px 100px">
+                <div class="n"><div class="sq" style="background:var(--bleu-soft)">🍼</div><div><b>قسم الرضّع</b><div class="ar2">3 – 18 شهراً</div></div></div>
+                <div><div class="tr"><i style="width:75%;background:var(--vert)"></i></div><span class="tl">12 / 16</span></div>
+                <span class="tag ok">✓ 1 لكل 4</span>
+                <span class="tag nb">3 مربيات</span>
+              </div>
+              <div class="rm">
+                <div class="n"><div class="sq" style="background:var(--vert-soft)">🧸</div><div><b>القسم الصغير</b><div class="ar2">18 شهراً – سنتان</div></div></div>
+                <div><div class="tr"><i style="width:90%;background:var(--vert)"></i></div><span class="tl">18 / 20</span></div>
+                <span class="tag ok">✓ 1 لكل 9</span>
+                <span class="tag nb">مربيتان</span>
+              </div>
+              <div class="rm" style="background:#FEFAF0;margin:0 -18px;padding:13px 18px;border-bottom-color:#F0DFB6">
+                <div class="n"><div class="sq" style="background:var(--safran-soft)">🎨</div><div><b>القسم المتوسط</b><div class="ar2">سنتان – 3 سنوات</div></div></div>
+                <div><div class="tr"><i style="width:100%;background:var(--safran)"></i></div><span class="tl">18 / 18 — ممتلئ</span></div>
+                <span class="tag wr">⚠ 1 لكل 18</span>
+                <span class="tag wr">مربية واحدة</span>
+              </div>
+              <div class="rm">
+                <div class="n"><div class="sq" style="background:var(--bleu-soft)">📚</div><div><b>القسم الكبير</b><div class="ar2">3 – 4 سنوات</div></div></div>
+                <div><div class="tr"><i style="width:82%;background:var(--vert)"></i></div><span class="tl">19 / 23</span></div>
+                <span class="tag ok">✓ 1 لكل 10</span>
+                <span class="tag nb">مربيتان</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="side">
+          <div class="brand">
+            <div class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-6h6v6"/></svg></div>
+            <div><b>روضة الخطوات الصغيرة</b><span class="ar">الجزائر · 3 مواقع</span></div>
+          </div>
+
+          <div class="nsec">
+            <p>اليومي</p>
+            <div class="nav on"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>لوحة القيادة</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M9 11l2 2 4-4"/><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M8 2v4M16 2v4"/></svg>الحضور</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-1.5z"/><path d="M8 7h7M8 11h7"/></svg>السجل اليومي</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/></svg>الأطفال</div>
+          </div>
+
+          <div class="nsec">
+            <p>الإدارة</p>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 3v18M7 7h8.5a2.75 2.75 0 0 1 0 5.5H8a2.75 2.75 0 0 0 0 5.5H17"/></svg>الفوترة<span class="b" style="margin-left:0;margin-right:auto">7</span></div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="7" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>الموظفون</div>
+            <div class="nav"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 3l7.5 3v6c0 4.6-3.1 8-7.5 9-4.4-1-7.5-4.4-7.5-9V6z"/></svg>المطابقة 25-11</div>
+          </div>
+
+          <div class="u"><div class="av">ن ب</div><div><b>نادية بن علي</b><span>مديرة</span></div></div>
+        </aside>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="stage-block">
+  <h2>Mobile — Flutter</h2>
+  <p class="sub">Un parent arabophone bascule l'app entière en RTL depuis les réglages système : même code, même composants.</p>
+  <div class="phones">
+
+    <div class="phone-wrap">
+      <span class="cap">App parents — FR</span>
+      <div class="phone"><div class="phone-screen c4 app">
+        <div class="notch"></div>
+        <div class="ahero">
+          <div class="statusbar" style="padding-left:0;padding-right:0"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+          <div class="hd">
+            <div style="flex:1"><div class="ttl">Lundi 22 septembre · 10 rabia II</div><h2>Bonjour Yasmine</h2></div>
+          </div>
+          <div class="kidbox">
+            <div class="ph2">👧</div>
+            <div style="flex:1"><b>Lina, 2 ans</b><span>Moyenne section · Hydra</span></div>
+            <div class="st">PRÉSENTE</div>
+          </div>
+          <div class="sts">
+            <div><span>Arrivée</span><b>08 h 12</b></div>
+            <div><span>Sieste</span><b>1 h 35</b></div>
+            <div><span>Repas</span><b>3 / 3</b></div>
+          </div>
+        </div>
+
+        <div class="asc">
+          <div class="mc">
+            <div class="mh"><b>Déjeuner</b><span class="ar3">الغداء</span><span class="tt">11 H 42</span></div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <span class="tag ok">Entrée · tout</span><span class="tag ok">Plat · tout</span><span class="tag wr">Dessert · ½</span>
+            </div>
+            <p style="margin:11px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5">Lina a beaucoup aimé le tajine de légumes.</p>
+          </div>
+
+          <div class="mc">
+            <div class="mh"><b>Photos</b><span class="ar3">الصور</span><span class="tt">3 NOUVELLES</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
+              <div style="aspect-ratio:1;border-radius:10px;background:var(--bleu-soft);display:grid;place-items:center;font-size:25px">🎨</div>
+              <div style="aspect-ratio:1;border-radius:10px;background:var(--safran-soft);display:grid;place-items:center;font-size:25px">🧩</div>
+              <div style="aspect-ratio:1;border-radius:10px;background:var(--vert-soft);display:grid;place-items:center;font-size:25px">🎵</div>
+            </div>
+          </div>
+
+          <div class="g2">
+            <div class="mc" style="display:flex;align-items:center;gap:10px;padding:13px">
+              <div class="ki" style="width:32px;height:32px;background:var(--rouge-soft);display:grid;place-items:center;font-size:15px;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)">🤒</div>
+              <div><b style="font-size:12.5px;font-weight:500">Absence</b><div style="font-size:11px;color:var(--muted)">Signaler</div></div>
+            </div>
+            <div class="mc" style="display:flex;align-items:center;gap:10px;padding:13px">
+              <div class="ki" style="width:32px;height:32px;background:var(--safran-soft);display:grid;place-items:center;font-size:15px;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)">💳</div>
+              <div><b style="font-size:12.5px;font-weight:500">18 000 DZD</b><div style="font-size:11px;color:var(--muted)">Due 05/10</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tbar">
+          <div class="tb on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>Journée</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>Photos</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/></svg>Messages</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Profil</div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="phone-wrap">
+      <span class="cap">App parents — العربية (RTL)</span>
+      <div class="phone"><div class="phone-screen c4 app rtl arabic">
+        <div class="notch"></div>
+        <div class="ahero">
+          <div class="statusbar" style="padding-left:0;padding-right:0;direction:ltr"><span>9:41</span><span class="right">▪▪▪ ᯤ 􀛨</span></div>
+          <div class="hd">
+            <div style="flex:1"><div class="ttl">الاثنين 22 سبتمبر · 10 ربيع الثاني</div><h2>صباح الخير ياسمين</h2></div>
+          </div>
+          <div class="kidbox">
+            <div class="ph2">👧</div>
+            <div style="flex:1"><b>لينا، سنتان</b><span>القسم المتوسط · حيدرة</span></div>
+            <div class="st">حاضرة</div>
+          </div>
+          <div class="sts">
+            <div><span>الوصول</span><b>08:12</b></div>
+            <div><span>القيلولة</span><b>1 س 35</b></div>
+            <div><span>الوجبات</span><b>3 / 3</b></div>
+          </div>
+        </div>
+
+        <div class="asc">
+          <div class="mc">
+            <div class="mh"><b>الغداء</b><span class="ar3">Déjeuner</span><span class="tt" style="margin-left:0;margin-right:auto">11:42</span></div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <span class="tag ok">المقبلات · كاملة</span><span class="tag ok">الطبق · كامل</span><span class="tag wr">الحلوى · نصف</span>
+            </div>
+            <p style="margin:11px 0 0;font-size:12.5px;color:var(--muted);line-height:1.6">أحبّت لينا طاجين الخضار كثيراً وطلبت المزيد من الخبز.</p>
+          </div>
+
+          <div class="mc">
+            <div class="mh"><b>الصور</b><span class="ar3">Photos</span><span class="tt" style="margin-left:0;margin-right:auto">3 جديدة</span></div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
+              <div style="aspect-ratio:1;border-radius:10px;background:var(--bleu-soft);display:grid;place-items:center;font-size:25px">🎨</div>
+              <div style="aspect-ratio:1;border-radius:10px;background:var(--safran-soft);display:grid;place-items:center;font-size:25px">🧩</div>
+              <div style="aspect-ratio:1;border-radius:10px;background:var(--vert-soft);display:grid;place-items:center;font-size:25px">🎵</div>
+            </div>
+          </div>
+
+          <div class="g2">
+            <div class="mc" style="display:flex;align-items:center;gap:10px;padding:13px">
+              <div style="width:32px;height:32px;background:var(--rouge-soft);display:grid;place-items:center;font-size:15px;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)">🤒</div>
+              <div><b style="font-size:12.5px;font-weight:500">الغياب</b><div style="font-size:11px;color:var(--muted)">تبليغ</div></div>
+            </div>
+            <div class="mc" style="display:flex;align-items:center;gap:10px;padding:13px">
+              <div style="width:32px;height:32px;background:var(--safran-soft);display:grid;place-items:center;font-size:15px;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)">💳</div>
+              <div><b style="font-size:12.5px;font-weight:500">18 000 دج</b><div style="font-size:11px;color:var(--muted)">تستحق 05/10</div></div>
+            </div>
+          </div>
+
+          <div class="mc" style="padding:6px 14px">
+            <div class="kr">
+              <div class="ki" style="background:var(--vert-soft)">😴</div>
+              <div><b>القيلولة</b><span>12:10 ← 13:45</span></div>
+              <span style="margin-left:0;margin-right:auto;font-size:11px;color:#96A9B7">13:45</span>
+            </div>
+            <div class="kr">
+              <div class="ki" style="background:var(--bleu-soft)">🎨</div>
+              <div><b>ورشة الرسم</b><span>3 صور مضافة</span></div>
+              <span style="margin-left:0;margin-right:auto;font-size:11px;color:#96A9B7">10:58</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tbar">
+          <div class="tb on"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>اليوم</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/></svg>الصور</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/></svg>الرسائل</div>
+          <div class="tb"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>حسابي</div>
+        </div>
+      </div></div>
+    </div>
+
+  </div>
+</section>
+
+<div class="rationale">
+  <div class="r-card good">
+    <h3>Pourquoi ça marche</h3>
+    <ul>
+      <li>Argument commercial direct : « conçu en Algérie, pour l'Algérie ».</li>
+      <li>L'arabe est traité en langue de premier rang, pas en traduction d'appoint.</li>
+      <li>Double calendrier grégorien/hégirien — attendu par les familles.</li>
+      <li>Rubik couvre latin et arabe : une seule police, cohérence parfaite.</li>
+    </ul>
+  </div>
+  <div class="r-card warn">
+    <h3>À surveiller</h3>
+    <ul>
+      <li>Le motif zellige doit rester sous 5 % d'opacité, sinon ça vire au folklore.</li>
+      <li>Risque de « trop typé » si vous visez ensuite le Maghreb élargi ou l'export.</li>
+      <li>Le bleu institutionnel peut évoquer l'administration plutôt que la petite enfance.</li>
+    </ul>
+  </div>
+  <div class="r-card">
+    <h3>Coût d'implémentation</h3>
+    <ul>
+      <li><b>Moyen-élevé.</b> Le vrai chantier est le RTL, pas la couleur.</li>
+      <li>CSS : passer tout en propriétés logiques (<code>margin-inline</code>, <code>inset-inline</code>).</li>
+      <li>Flutter : <code>Directionality</code> + <code>EdgeInsetsDirectional</code> partout.</li>
+      <li>Mais ce travail RTL vous sera <em>de toute façon</em> nécessaire : <code>Locale = 'fr' | 'ar'</code> est déjà dans votre i18n.</li>
+    </ul>
+  </div>
+</div>
+
+<nav class="stage-nav">
+  <a href="concept-3-atelier.html">← Concept 03 · Atelier</a>
+  <a href="concept-5-kiosque.html">Concept 05 · Kiosque →</a>
+</nav>
+
+<script src="_fit.js"></script>
+</body>
+</html>
