@@ -434,6 +434,29 @@ Mesure du jour : 198 routes / 50 sans `@Roles`, 75 migrations, 71 entrées, 69 s
 
 ---
 
+## Mise à jour 2026-09-24 — lot 1.5 : « un gardien que rien n'appelle ne garde rien »
+
+Le lot 1 avait câblé les 4 gardiens orphelins **cités** par l'audit. En recensant la classe entière
+(et non les seuls cas nommés), un cinquième est apparu : `scripts/audit-seeds-pii.mjs` — la preuve que
+les seeds SQL + pilote sont 100 % synthétiques (téléphones DZ, emails, NIN), écrite pour la CI mais
+appelée par aucun workflow.
+
+Désormais :
+- l'**audit PII des seeds tourne en CI** (`node scripts/audit-seeds-pii.mjs --strict`, job `quality`) :
+  la politique « aucune donnée réelle commitée » est un contrôle, pas une déclaration d'en-tête ;
+- un **cliquet** empêche le retour de la classe : `scripts/check-guards-wired.mjs` calcule par
+  fermeture transitive, depuis les workflows, quels scripts sont atteignables, et refuse tout gardien
+  non câblé. Convention de nommage : `check-*`, `audit-*`, `verify-*`, `inventory-*` — mesuré :
+  **12 gardiens recensés, 0 orphelin**. Il se contrôle lui-même (il est dans sa propre liste).
+- Limite assumée et écrite dans le script : une procédure de runbook qui dit « lancez ce gardien »
+  ne compte pas — un document n'exécute rien.
+
+Preuve par mutation : étape CI du gardien PII retirée → rouge (« 1 gardien que rien n'appelle ») ;
+nouveau gardien fictif sans appelant → rouge ; PII réelle injectée dans un seed → `--strict` rouge
+(« domaine gmail.com non reconnu comme synthétique »). Restaurations : vertes.
+
+---
+
 ## Mise à jour 2026-09-24 — lot 6.1 : sondes de vivacité API et worker (F2)
 
 **Ce qui manquait** : `postgres` était le seul service sondé par Docker. L'API exposait bien

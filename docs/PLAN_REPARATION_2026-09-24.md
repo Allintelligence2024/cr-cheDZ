@@ -44,6 +44,7 @@ vérification).
 | Lot | Objectif | Origine | Effort | Preuve de sortie | Statut |
 |---|---|---|---|---|---|
 | **L1** | **Gardiens orphelins + garde de config + CSP edge** | vérif. §4.3, F2, F3 | ~2 h | 4 gardiens en CI ; test unitaire prod-config ; test de contrat en-têtes | **FAIT** + régression CI du 24/09 corrigée et verrouillée (§3, L1.4) |
+| **L1.5** | **5ᵉ gardien orphelin + cliquet « gardiens câblés »** | vérif. §4.3 | ~0,5 h | gardien `check-guards-wired.mjs` en CI ; `audit-seeds-pii --strict` exécuté | **FAIT (2026-09-24)** — 12 gardiens recensés, 0 orphelin, 3 mutations détectées (§5) |
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | planifié |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
@@ -52,7 +53,7 @@ vérification).
 
 **Ordre recommandé** : L1 (fait) → **L2** (bloque l'usage réel) → L3 (bloque les parents) → L5
 (pas de dépendance, peut glisser entre les deux) → L4 (attend une décision DPO) → L6.
-**État au 2026-09-24 (soir)** : L1, L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
+**État au 2026-09-24 (soir)** : L1 (+ L1.5), L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
 bloqué par l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée
 possible) ; L4 attend la décision DPO ; il ne reste de L6 que D3 (`compress_media`) et k6.
 
@@ -616,6 +617,36 @@ Le verrou a d'ailleurs attrapé **deux défauts de sa propre écriture** avant d
 qui débordait du bloc `postgres` vers `api` (sonde attribuée au mauvais service) et un contrôle
 d'existence portant sur `dist/` (artefact de build, absent du dépôt) au lieu de la source. Un verrou
 qui n'a jamais rien attrapé n'est pas un verrou.
+
+### L1.5 — 5ᵉ gardien orphelin, et cliquet « gardiens câblés » (2026-09-24, soir)
+
+Le lot 1 avait câblé les 4 gardiens orphelins nommés par l'audit (§4.3). En recensant la classe
+**entière** au lieu des 4 cas cités, un cinquième apparaît : `scripts/audit-seeds-pii.mjs` — la preuve
+que les seeds (SQL + pilote) sont 100 % synthétiques (téléphones DZ, emails, NIN), écrite pour la CI
+(« sortie JSON friendly CI », option `--strict`) mais appelée par **aucun** workflow.
+
+**Livré** :
+1. `scripts/check-guards-wired.mjs` : calcule, **par fermeture transitive** depuis les workflows
+   (racines = `.github/workflows/*.yml` ; appelants = `package.json`, `scripts/`, `tests/`, fichiers
+   `.yml` sous `infrastructure/`), si chaque script de garde (`check-*`, `audit-*`, `verify-*`,
+   `inventory-*` — convention de nommage) est atteignable. Un gardien que rien n'appelle ne garde
+   rien : il rougit avec la liste des orphelins ;
+2. les deux étapes CI dans le job `quality` : « Gardiens câblés (aucun gardien orphelin) » et
+   « Audit PII des seeds (100 % synthétiques, mode strict) ».
+
+**Preuves exécutées** :
+```bash
+node scripts/check-guards-wired.mjs --verbose   # 12 gardiens, 0 orphelin, rc=0
+node scripts/audit-seeds-pii.mjs --strict       # 5 occurrences, 5 synthétiques, 0 suspecte, rc=0
+```
+
+**Mutations (3 exécutées, 3 rouges, restaurations vertes)** :
+```
+H — étape CI du gardien PII supprimée        rc=1  ['1 gardien(s) que rien n'appelle : scripts/audit-seeds-pii.mjs']
+I — nouveau gardien sans appelant            rc=1  ['ORPHELIN scripts/check-mutation-fictive.mjs']
+J — PII « réelle » injectée dans un seed     rc=1  ['domaine gmail.com non reconnu comme synthétique'] (audit --strict)
+restaurations                                12/12 câblés ; audit PII rc=0
+```
 
 ## 6. Décisions en attente (propriétaire explicite)
 

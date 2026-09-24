@@ -173,6 +173,19 @@ jobs:
         run: node scripts/inventory-route-guards.mjs
       - name: Sanity check des scripts de charge (seuils p95)
         run: node scripts/verify-load-tests.mjs
+      # LOT 6.2 (audit 2026-09-24, §4.3) : « un gardien que rien n'appelle ne
+      # garde rien ». Le lot 1 avait câblé 4 orphelins ; ce contrôle recense par
+      # CONVENTION DE NOM (`check-*`, `audit-*`, `verify-*`, `inventory-*`) et
+      # refuse tout gardien non atteignable depuis un workflow — il a trouvé le
+      # 5e (`audit-seeds-pii`) et se protège lui-même. Aucune base, aucun Docker.
+      - name: Gardiens câblés (aucun gardien orphelin)
+        run: node scripts/check-guards-wired.mjs
+      # Le 5e gardien trouvé : la preuve que les seeds (SQL + pilote) sont 100 %
+      # synthétiques — téléphones DZ, emails, NIN. `--strict` (exit 1 dès qu'un
+      # motif non synthétique apparaît) : la politique « données réelles jamais
+      # commitées » n'est pas une déclaration d'en-tête, c'est un contrôle.
+      - name: Audit PII des seeds (100 % synthétiques, mode strict)
+        run: node scripts/audit-seeds-pii.mjs --strict
       # LOT 5 (plan de réparation 2026-09-24) : contrat de VÉRITÉ DOCUMENTAIRE.
       # L'audit a relevé des documents annonçant des capacités ABSENTES du dépôt
       # (ordonnanceur externe, healthcheck Docker généralisé) et des compteurs

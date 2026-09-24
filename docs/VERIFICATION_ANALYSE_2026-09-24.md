@@ -292,7 +292,17 @@ coûteux que l'absence d'offline (qui est un confort). **Correctif court** (≈ 
 Dio `401 → POST /auth/refresh` avec single-flight + purge de session + redirection vers l'OTP ;
 **puis** l'offline-first si le besoin terrain le justifie.
 
-### 4.3 🟠 Quatre gardiens qui ne gardent rien (hors CI)
+### 4.3 🟠 Quatre gardiens qui ne gardent rien (hors CI) — ✅ corrigé, et la CLASSE est verrouillée
+
+> **Suite (2026-09-24, soir)** : les 4 gardiens ci-dessous sont câblés en CI depuis le lot 1. En
+> recensant la **classe** au lieu des cas cités, un **5ᵉ** orphelin est apparu :
+> `scripts/audit-seeds-pii.mjs` (preuve « seeds 100 % synthétiques », écrite pour la CI — option
+> `--strict`, sortie JSON — mais appelée par aucun workflow). Il est désormais exécuté dans le job
+> `quality`, **et** un cliquet empêche le retour de la classe entière :
+> `scripts/check-guards-wired.mjs` recense par convention de nom (`check-*`, `audit-*`, `verify-*`,
+> `inventory-*`) et refuse tout gardien non atteignable depuis un workflow — mesuré : **12 gardiens,
+> 0 orphelin** (lots 1 et 1.5 ; preuves et mutations au plan de réparation, §5).
+
 **Correction d'une erreur de la première version de ce document** : un `grep … | head` tronqué
 m'avait fait écrire que `check-rls-usage.mjs` n'était pas exécuté en CI. **Faux** — il l'est,
 et avant toutes les suites : `scripts/run-isolation-suites.sh:106` l'appelle avec `DATABASE_URL`
