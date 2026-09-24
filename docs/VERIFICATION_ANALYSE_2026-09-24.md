@@ -247,7 +247,7 @@ Légende : ✅ confirmé · 🟡 partiel/nuancé · ❌ faux · ➕ question ouv
 | 51 | Preuves par mutation sur les chemins critiques | ✅ | `scripts/mutation-proof.sh`, `mutation-phase23-proof.sh`, `mutation-phase24-proof.sh` |
 | 52 | 4 workflows CI, pas de CD automatique | ✅ | `ci`, `docker`, `flutter`, `security-audit` ; aucun job de déploiement |
 | 53 | « Tests de charge k6 » | 🟡 | **1 seul** fichier k6 (`tests/load/sync.k6.js`), et il **n'est jamais exécuté** (k6 absent) — `capacity-bench.mjs` le documente lui-même ; la charge réelle est un banc Node (`capacity-bench.mjs`, `mvp-bench.mjs`) |
-| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **69** suites `phaseNN`, **84** fichiers dans `tests/tenant-isolation/`, **71** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66`/`phase67` (lots 2A/2B) |
+| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **69** suites `phaseNN`, **85** fichiers dans `tests/tenant-isolation/`, **71** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66`/`phase67` (lots 2A/2B) |
 | 55 | Densité de test (non chiffrée par le rapport) | ✅ | `tests/**/*.mjs` = **17 123 lignes** vs **16 926** lignes de code API : la suite de tests est **plus grosse que l'API qu'elle teste** |
 | 56 | « 15+ ADR » | 🟡 | **14** (ADR-000 → ADR-013) |
 | 57 | « 45+ runbooks » | 🟡 | **32** fichiers `*RUNBOOK*.md` (56 `.md` au total dans `docs/`) |
@@ -313,6 +313,18 @@ qui échoue bruyamment (`compress_media` → `NOT_IMPLEMENTED: compression médi
 push « fiable » comme faites — le code ne le prétend pas, le rapport le laissait croire
 (« QuartzJobs », « files d'attente »).
 
+### 4.4bis ✅ Vérité documentaire — corrigée et VERROUILLÉE (lot 5, 2026-09-24)
+
+Les quatre affirmations fausses de l'audit (F1 ordonnanceur externe, F2 healthcheck généralisé,
+F3 absence de refus, F5 URLs injoignables — cette dernière traitée au lot 2) ne peuvent plus
+revenir en silence : `tests/tenant-isolation/claims-contract.test.mjs` (8 contrôles, exécuté dans
+le job CI `quality`, aucune base requise) confronte les affirmations au **disque** et refuse les
+phrases bannies non corrigées. Les compteurs revendiqués ici (migrations, suites, fichiers, ADR,
+runbooks, routes, chemins OpenAPI) sont recalculés à chaque exécution ; les documents périmés
+(« 70 migrations », « 196 routes », « healthcheck alignés ») sont corrigés, et une volumétrie brute
+de fichiers porte désormais sa **date**. Preuve par mutation : 2 mutations → rouge, restaurations →
+vert (journal au plan §5). Détail des contrôles : plan de réparation, lot 5.
+
 ### 4.5 🟢 La CI est un actif, pas une case cochée
 `scripts/test-production-roles.mjs` (« Gate D ») : base jetable `*_test` obligatoire, mots de passe
 aléatoires par run, DDL par `creche_migrator`, HTTP/RLS par `creche_app`, **plafonds de temps par
@@ -368,8 +380,8 @@ mutation), 4 gardiens orphelins câblés en CI, `Content-Security-Policy` étape
 - Charge : 1 fichier k6 **non exécuté** ; la vraie mesure est le banc Node.
 - Rétention : journaux et clips vidéo outillés, **file de notifications et messages non purgés**
   (§4.7) — à trancher avec le DPO.
-- OpenAPI : 13 chemins écrits à la main sur 196 routes — assumé et testé comme tel.
-- 14 ADR / 32 runbooks / 692 fichiers : corriger les chiffres du rapport.
+- OpenAPI : 13 chemins écrits à la main sur 198 routes — assumé et testé comme tel.
+- 14 ADR / 32 runbooks / 701 fichiers (mesure `git ls-files` au 2026-09-24) : corriger les chiffres du rapport.
 
 ### 🟢 À préserver (ne pas régresser)
 RLS `FORCE` + rôles séparés + `default privileges` · TOTP scellé AES-256-GCM à AAD · révocation

@@ -397,3 +397,32 @@ DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test \
 ```
 Lire les échecs CI par les **annotations check-runs** (les logs par API/job
 échouent en `EOF`) : voir `docs/CI-DATABASE-JOB-FINDINGS.md`, dernière section.
+
+## Mise à jour 2026-09-24 — lot 5 : vérité documentaire verrouillée
+
+L'audit du 2026-09-24 avait relevé quatre documents « flatteurs » (capacités absentes annoncées au
+présent, compteurs périmés) alors que toutes les suites passaient au vert : le code était sain, la
+documentation mentait, rien ne pouvait le signaler. C'est désormais l'inverse.
+
+**Contrat** : `tests/tenant-isolation/claims-contract.test.mjs` (8 contrôles, **aucune base, aucun
+Docker** → exécuté dans le job CI `quality`). Il recalcule la réalité et la confronte aux
+documents :
+- aucune occurrence de l'ordonnanceur externe dans le code/config, et chaque mention
+  documentaire doit être une mise en garde (l'ordonnancement est en base : `scheduler_ticks`) ;
+- healthcheck Docker : 1 par fichier compose, **sur `postgres`**, 0 dans les Dockerfiles — et
+  aucune phrase ne peut revendiquer plus ;
+- compteurs recalculés à chaque exécution (migrations, entrées du runner, suites `phaseNN`,
+  fichiers du dossier d'isolation, ADR, runbooks, routes HTTP via l'inventaire, chemins OpenAPI) ;
+- phrases bannies (les affirmations fausses de l'audit + `presignGet(`) : interdites sauf corrigées
+  sur la même ligne.
+
+**Conséquence pour la suite** : ajouter une migration, une suite, une route ou un ADR **fait
+échouer la CI** tant que les documents qui les revendiquent n'ont pas été mis à jour. C'est la
+friction voulue — mettre à jour le **document**, jamais le contrat (sauf décision explicite).
+Une volumétrie brute de fichiers doit porter sa **date** (« N fichiers au 2026-09-24 ») : elle
+n'est pas verrouillée, une mesure datée n'est pas une propriété.
+
+**Preuve par mutation** : 4 mutations (route périmée, healthcheck non qualifié, phrase fausse
+canonique réintroduite, compteur de suites périmé) → 4 rouges ; restaurations → 8/8 vert.
+Mesure du jour : 198 routes / 50 sans `@Roles`, 75 migrations, 71 entrées, 69 suites `phaseNN`,
+85 fichiers d'isolation, 14 ADR, 32 runbooks.

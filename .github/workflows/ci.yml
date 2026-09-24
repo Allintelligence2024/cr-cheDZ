@@ -169,10 +169,20 @@ jobs:
         run: node scripts/check-env-example.mjs
       - name: Garde manifest Android (INTERNET en release)
         run: node scripts/check-android-manifest.mjs
-      - name: Inventaire des gardes de route (196 routes × @Roles/@Public)
+      - name: Inventaire des gardes de route (198 routes × @Roles/@Public)
         run: node scripts/inventory-route-guards.mjs
       - name: Sanity check des scripts de charge (seuils p95)
         run: node scripts/verify-load-tests.mjs
+      # LOT 5 (plan de réparation 2026-09-24) : contrat de VÉRITÉ DOCUMENTAIRE.
+      # L'audit a relevé des documents annonçant des capacités ABSENTES du dépôt
+      # (ordonnanceur externe, healthcheck Docker généralisé) et des compteurs
+      # périmés, alors que toutes les suites étaient vertes : le code était sain,
+      # la documentation mentait, et rien ne pouvait le signaler. Ce contrat
+      # confronte les affirmations au DISQUE (implémentations, healthchecks des
+      # composes, migrations, suites, ADR, runbooks, routes, chemins OpenAPI) et
+      # refuse les phrases bannies non corrigées. Aucune base, aucun Docker.
+      - name: Contrat de vérité documentaire (affirmations vs disque)
+        run: node --test tests/tenant-isolation/claims-contract.test.mjs
       # Design system : contraste WCAG AA des deux thèmes + parité des
       # couleurs Sérénité entre theme.css (web) et serenite_theme.dart
       # (les 2 apps Flutter, qui ne peuvent pas importer le CSS).

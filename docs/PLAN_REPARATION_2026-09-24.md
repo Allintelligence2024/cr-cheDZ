@@ -47,11 +47,14 @@ vérification).
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | planifié |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
-| **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | planifié |
+| **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (8 contrôles, branche CI `quality`) + 6 documents corrigés |
 | **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | optionnel |
 
 **Ordre recommandé** : L1 (fait) → **L2** (bloque l'usage réel) → L3 (bloque les parents) → L5
 (pas de dépendance, peut glisser entre les deux) → L4 (attend une décision DPO) → L6.
+**État au 2026-09-24 (soir)** : L1, L2A, L2B et **L5** sont faits et prouvés ; L3 reste bloqué par
+l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée possible) ; L4
+attend la décision DPO ; L6 reste optionnel.
 
 ---
 
@@ -353,11 +356,48 @@ demanderait de relever la limite de corps JSON pour cette route (décision non p
   est implémenté ; ce qui manque est la **trace documentaire** au registre des traitements. À
   formaliser par le DPO, pas par du code.
 
-### Lot 5 — Vérité documentaire anti-« regonflage »
-Sur le modèle d'`openapi-contract.test.mjs` (un test qui échoue si la doc redevient flatteuse) :
-1. interdire les affirmations non implémentées (« Quartz », « healthcheck » sans directive réelle) ;
-2. vérifier les compteurs revendiqués (ADR, runbooks, migrations, suites) contre le disque ;
-3. corriger les chiffres des documents existants (`PLAN_*`, `README`, `SECURITY.md`).
+### Lot 5 — Vérité documentaire anti-« regonflage » — **FAIT (2026-09-24)**
+
+Sur le modèle d'`openapi-contract.test.mjs` : un test qui échoue si la documentation
+redevient flatteuse. Livré : `tests/tenant-isolation/claims-contract.test.mjs`
+(**8 contrôles**, aucune base ni Docker → exécuté dans le job CI `quality`, étape
+« Contrat de vérité documentaire »).
+
+| Contrôle | Ce qu'il verrouille |
+|---|---|
+| **1. Ordonnanceur externe** | le mot n'apparaît dans **aucun** fichier de code/config (l'ordonnancement est en base : `scheduler_ticks` + `scheduler_enqueue_due()`), et chaque mention documentaire doit être une **mise en garde** (négation, citation de l'affirmation auditée, commande de mesure) |
+| **2. Healthcheck Docker** | la **réalité mesurée** : exactement 1 bloc `healthcheck` par fichier compose, **sur `postgres`** ; **aucun** `HEALTHCHECK` dans les Dockerfiles ; et aucune ligne de documentation ne peut revendiquer une couverture non qualifiée |
+| **3. Compteurs** | migrations (75), entrées du runner (71), suites `phaseNN` (69), fichiers du dossier d'isolation (85), ADR (14), runbooks (32), routes HTTP (198) et chemins OpenAPI (13) sont **recalculés à chaque exécution** (dont l'inventaire des routes, exécuté) et confrontés aux documents qui les revendiquent |
+| **4. Phrases bannies** | les deux affirmations fausses de l'audit (healthcheck généralisé, ordonnanceur externe pour les purges) et `presignGet(` ne peuvent réapparaître que **corrigées sur la même ligne** (`❌`, `→`, « aucun », « 1 seul »…) |
+
+**Documents corrigés au passage** (le contrat les avait tous attrapés — c'est sa valeur) :
+
+| Document | Affirmation périmée | Correction |
+|---|---|---|
+| `docs/LOCAL-RUN.md` | « 70 migrations » (×4) | 75 (mesure du disque) |
+| `.github/workflows/ci.yml` | étape nommée « (196 routes × @Roles/@Public) » | 198 (inventaire exécuté) |
+| `docs/VERIFICATION_ANALYSE_2026-09-24.md` | « sur 196 routes » ; « 692 fichiers » | 198 ; 700 fichiers **(mesure datée)** |
+| `docs/P3-RAPPORT.md` | « EXPOSE / healthcheck alignés » | `postgres` uniquement + renvoi F2 |
+| `docs/PLAN_IMPLEMENTATION.md` | compose dev avec « healthchecks » | healthcheck `postgres` uniquement (mesure datée) |
+| `HANDOFF-AGENT-ANTIGRAVITY.md` | `# healthcheck OK` après `compose ps` | qualifié : `postgres` uniquement, renvoi F2 |
+
+**Preuve par mutation** (convention du dépôt — un test qui ne peut pas échouer ne prouve rien) —
+4 mutations, chacune détectée, puis restaurations vertes :
+
+```
+A) ci.yml : « 198 routes » → « 196 routes »                  → not ok 7 (compteurs — routes)   rc=1
+B) LOCAL-RUN.md : « healthcheck OK » (non qualifié) ajouté   → not ok 3 (F2 docs)              rc=1
+C) LOCAL-RUN.md : « HEALTHCHECK présent sur les services »   → not ok 3 (F2 docs)              rc=1
+D) VÉRIFICATION : « 69 suites phaseNN » → « 66 »             → not ok 5 (compteurs — batterie)  rc=1
+   restaurations                                             → 8/8 verts, rc=0
+```
+
+Deux limites assumées, écrites dans l'en-tête du contrat : (1) une **mesure de
+volumétrie brute** (nombre de fichiers) n'est pas verrouillée — elle porte sa
+**date** dans la phrase, car elle change à chaque commit ; (2) les compteurs
+verrouillés (migrations, suites, ADR…) font **échouer la CI** quand on ajoute une
+migration ou une suite sans mettre à jour les documents : c'est la friction
+voulue — mettre à jour le document, jamais le contrat.
 
 ### Lot 6 (optionnel) — Worker et charge
 - `compress_media` : stub qui échoue explicitement (`main.ts:305`) — **décider** : implémenter
@@ -482,6 +522,33 @@ de production**, et les deux suites du lot 2 (`phase66` : 35 assertions, `phase6
 **Non couvert localement** : les sous-gates Docker (H1 staging/dev) et Flutter (F2/F4)
 — leur échec CI (`Registry pull failed … unauthorized`) reste **ouvert et
 environnemental** (voir `docs/CI-DATABASE-JOB-FINDINGS.md`).
+
+### L5 — vérité documentaire : contrat, mutations, corrections (2026-09-24)
+
+```
+# Contrat (aucune base, aucun Docker) :
+$ node --test tests/tenant-isolation/claims-contract.test.mjs
+# tests 8 / # pass 8 / # fail 0
+
+# Preuve par mutation (4 mutations, chacune détectée) :
+A — compteur de routes périmé             rc=1  ['not ok 7 - compteurs — routes HTTP et chemins OpenAPI']
+B — affirmation healthcheck non qualifiée rc=1  ['not ok 3 - F2 — aucune documentation ne revendique…']
+C — phrase fausse canonique réintroduite  rc=1  ['not ok 3 - F2 — aucune documentation ne revendique…']
+D — compteur de suites périmé             rc=1  ['not ok 5 - compteurs — batterie d'isolation…']
+restaurations                             rc=0  échecs=0
+
+# Gardiens du job `quality` rejoués localement (tous verts) :
+node scripts/check-env-example.mjs        → ✓ 5 variables (+14 côté .env.prod.example)
+node scripts/check-android-manifest.mjs   → « Un build release aura bien l'accès réseau. »
+node scripts/inventory-route-guards.mjs   → 198 routes HTTP inventoriées — 50 sans @Roles ni @Public
+node scripts/verify-load-tests.mjs        → seuils p95 des scripts de charge OK
+node scripts/check-spa-static-paths.mjs   → ✅ chemins statiques cohérents
+node --test …/claims-contract.test.mjs    → 8/8
+```
+
+Le contrat a également attrapé **sa propre** documentation : un commentaire CI
+introduit pendant ce lot nommait l'ordonnanceur absent → contrôle 1 rouge
+(« implémentation inattendue : .github/workflows/ci.yml »), reformulé sans le mot.
 
 ## 6. Décisions en attente (propriétaire explicite)
 
