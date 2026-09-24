@@ -44,7 +44,7 @@ vérification).
 | Lot | Objectif | Origine | Effort | Preuve de sortie | Statut |
 |---|---|---|---|---|---|
 | **L1** | **Gardiens orphelins + garde de config + CSP edge** | vérif. §4.3, F2, F3 | ~2 h | 4 gardiens en CI ; test unitaire prod-config ; test de contrat en-têtes | **FAIT (ce commit)** |
-| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture), phase66** ; volet B (upload) planifié |
+| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | planifié |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | planifié |
@@ -160,13 +160,42 @@ disque ; défense croisée **nouvelle** sur `invoices.pdf_url` (préfixe `{org}/
 `invoices` ne figurait dans aucune contrainte de la migration 049, contrairement à
 `media_assets`/`video_clips`/`staff_documents`/`report_exports` ; `cache-control: private, no-store`.
 
-**Ce qui reste — volet B (écriture/upload), non livré ici et dit tel quel** :
-`POST /media/presign-upload` et `POST /video/clips/presign-upload` rendent toujours une URL signée
-**PUT** bâtie sur `S3_ENDPOINT` (`storage.service.ts:54`, `video.service.ts:175`) : en production,
-`staff-mobile` (photo) et un DVR/NVR (clip) ne peuvent **pas** téléverser. Correctif (prochain
-incrément) : `POST /media/uploads` (multipart, `multer` déjà présent) + `POST /video/clips/uploads`
-générique, `storage.put()` côté API, puis branchement `media_uploader.dart`. Suite de preuve :
-phase66 étendue (octets reçus = octets lus par la suite).
+**Volet B (écriture/upload) — livré pour les MÉDIAS (ce commit)** :
+`POST /api/v1/media/upload` (multipart, `multer`, stockage mémoire) reçoit les octets, les VÉRIFIE
+puis les écrit par le serveur (`storage.put()`, local **et** S3). En production, plus aucun client
+ne reçoit d'URL signée injoignable : `presignPut` **refuse** (503 `UPLOAD_VIA_API_REQUIRED`) tant que
+`S3_PUBLIC_ENDPOINT` n'est pas configuré — c'est la garde qui transforme le bug F5 en erreur
+explicite au lieu d'un échec silencieux sur le téléphone.
+
+| Contrat du volet B (média) | Valeur |
+|---|---|
+| Route | `POST /api/v1/media/upload` — `multipart/form-data`, champ `file`, rôles personnel |
+| Champs | `child_id`, `log_event_id`, `children_in_photo`, `taken_at`, `checksum` (SHA-256 hex), `exif_stripped` |
+| Clé de stockage | construite **côté serveur** (`storageKey(orgId, …)`) : le client ne choisit jamais son périmètre |
+| Types autorisés | `image/jpeg`, `image/png`, `image/webp`, `application/pdf` (liste blanche **partagée** avec le presign) |
+| Vérifications AVANT écriture | SHA-256 annoncé = reçu (`MEDIA_CHECKSUM_MISMATCH`), **signature binaire** du fichier (`MEDIA_CONTENT_MISMATCH`) |
+| Plafonds | produit **8 Mio** → 422 `MEDIA_TOO_LARGE` bilingue ; dur multer 12 Mio → **413 JSON** bilingue ; nginx `client_max_body_size 12M` (aligné) |
+| Consentement | `children_in_photo` (JSON, champ répété ou valeur unique) → `all_consents_checked`, publication parent soumise à `photoConsentsAllowed` |
+
+**Ce qui reste du volet B, dit tel quel (aucun cliquet baissé)** :
+
+1. **Client `staff-mobile` non basculé** — `media_uploader.dart` appelle encore
+   `POST /media/presign-upload` puis un `PUT` signé. En production, l'API répond désormais 503
+   `UPLOAD_VIA_API_REQUIRED` : le mobile doit appeler `POST /media/upload` en multipart (même
+   jeton). **Non exécutable ici** : aucun SDK Flutter dans l'environnement (l'édition serait livrée
+   sans preuve compilée, ce que la règle du plan interdit) → **BLOQUÉE** (outillage), à faire avec L3.
+2. **Photos hors-ligne (`add_photo`) : octets jamais transférés** — défaut **constaté par exécution**
+   pendant ce lot (preuve en §3.2, bloc « Défaut découvert »). L'asset est créé, aucun objet
+   n'existe, la lecture rend 404 `MEDIA_CONTENT_MISSING`. Correctif = côté client (mettre les
+   octets en file locale puis `POST /media/upload` à la reconnexion) : même blocage outillage.
+   **Décision serveur non prise** : faire transiter du base64 dans `POST /sync/push` suppose de
+   relever la limite de corps JSON (100 ko par défaut Express) pour cette seule route —
+   dimensionnement à trancher, non improvisé ici.
+3. **Clips vidéo** — `POST /video/clips/presign-upload` est désormais **fail-closed** en production
+   (même garde 503, message nommant la dépendance) au lieu de rendre une URL `minio:9000` morte.
+   Le **téléversement de clips par l'API n'est pas livré** : fichiers vidéo (dizaines/centaines de
+   Mio), il demande un dimensionnement dédié (flux, temporisation, quota) — hors du périmètre
+   « photo » de ce lot, explicitement listé ici plutôt que passé sous silence.
 
 #### Preuves exécutées (2026-09-24, PostgreSQL 18.4 réel, `STORAGE_BACKEND=local`)
 
@@ -196,7 +225,7 @@ phase3.api.test.mjs (base fraîche)       → ✓ Phase 3 validée
 npm run test:unit   → 13 suites, 95 tests, 0 échec
 npm run lint        → exit 0 (0 erreur, 0 warning)   npm run typecheck → exit 0 (4 workspaces)
 npm run test:unit --workspace @creche/admin-web → 7 tests, 0 échec
-node scripts/inventory-route-guards.mjs → 197 routes (195 + 2 routes `/content`) — 50 « sans
+node scripts/inventory-route-guards.mjs → 198 routes (195 + 2 `/content` + 1 `/media/upload`) — 50 « sans
   @Roles ni @Public » (49 + la route parent, dont le périmètre est la filiation, pas un rôle)
 
 # Deux suites NON rejouables dans ce bac à sable (prérequis Gate D) :
@@ -210,6 +239,58 @@ phase22-audit-fixes.api / phase49-storage-selection → échec AU DÉMARRAGE du 
 (`apps/parent-mobile/lib/core/api_client.dart`, `…/features/photos/photos_page.dart`) ne sont
 **pas compilés** dans cet environnement (aucun SDK Flutter/Dart) — même blocage que le lockfile du
 lot 3. Ils sont écrits pour `dio` + `flutter_secure_storage` déjà en dépendance.
+
+#### Preuves exécutées — volet B (upload média), 2026-09-24
+
+```
+# Suite d'isolation NOUVELLE (31 vérifications) — PostgreSQL 18.4 réel, STORAGE_BACKEND=local,
+# fichiers réels écrits dans STORAGE_LOCAL_DIR :
+node tests/tenant-isolation/phase67-media-upload.api.test.mjs
+  → ✓ Phase 67 validée
+  dont : « POST /media/upload → 201 (plus jamais d'URL `http://minio…` rendue au mobile) »,
+         « Clé construite côté serveur sous le préfixe de l'organisation »,
+         « Objet réellement écrit dans le stockage » + « Octets stockés IDENTIQUES aux octets envoyés »,
+         « GET sur le lien → 200 et octets identiques (aller-retour complet) »,
+         « SHA-256 annoncé ≠ reçu → 422 MEDIA_CHECKSUM_MISMATCH » + « AUCUNE écriture disque »,
+         « Contenu texte annoncé `image/jpeg` → 422 MEDIA_CONTENT_MISMATCH (signature binaire) »,
+         « 9 Mio → 422 MEDIA_TOO_LARGE bilingue » ; « 13 Mio → 413 JSON (jamais une page HTML) »,
+         « `child_id` d'une AUTRE organisation → refus » ; « rôle parent → 403 » ; « sans jeton → 401 »,
+         « `children_in_photo` JSON en multipart est bien interprété » + « CONSENT_REQUIRED » puis
+         « Avec consentement → publication acceptée » + « Le parent lit la photo téléversée » puis
+         « Consentement révoqué → 422 CONSENT_REVOKED sans octets »,
+         « Presign d'upload refusé en production sans origine publique (503 UPLOAD_VIA_API_REQUIRED) »,
+         « nginx autorise le plafond dur multer (12M) ».
+
+# Tests unitaires NOUVEAUX (15 cas) sur les règles du volet B :
+apps/api/src/modules/media/storage.service.spec.ts → 6 ✓ (garde 503 / presign légitime dev+option B,
+  écriture locale au chemin exact, refus `..` (PATH_TRAVERSAL), assainissement de `storageKey`)
+apps/api/src/modules/media/dto/media.dto.spec.ts   → 9 ✓ (children_in_photo JSON / champ répété /
+  valeur unique / absent, exif_stripped 'true'|'1'|'false', UUID invalide refusé, liste blanche
+  partagée avec le presign — SVG refusé)
+
+# Vérification manuelle de bout en bout (avant d'écrire la suite) : UPLOAD 201 →
+#   DOWNLOAD chemin same-origin → CONTENT 200 « OCTETS IDENTIQUES » → CONSENT_REQUIRED,
+#   puis CHECKSUM FAUX 422 / TYPE MENTEUR 422.
+```
+
+**Défaut découvert pendant ce volet (et non corrigé ici, dit tel quel)** — la photo prise
+**hors ligne** n'atteint jamais le stockage. Le client met bien les octets (base64) dans le payload
+`add_photo`, mais le serveur (`sync.service.ts applyAddPhoto`) ne lit que `storage_key`/`mime_type` :
+l'asset est créé, aucun objet n'est écrit, et la lecture rend un 404. Exécuté (script ad hoc, base
+réelle, supprimé après) :
+
+```
+SYNC PUSH 200 {"accepted":["e9525595-…"],"rejected":[],"conflicts":[]}
+ASSET CRÉÉ  da981832-e869-4f57-adb7-05e996ded8c0/photo/offline-1.jpg
+FICHIERS ÉCRITS DANS LE STOCKAGE []
+LECTURE DU CONTENU 404 {"code":"MEDIA_CONTENT_MISSING", …}
+```
+
+Conséquence : une photo « prise hors ligne » est un enregistrement **fantôme** (visible dans les
+listes, illisible). Le correctif est client (file locale d'octets → `POST /media/upload` à la
+reconnexion) et dépend du point 1 ci-dessus ; le faire transiter en base64 par `POST /sync/push`
+demanderait de relever la limite de corps JSON pour cette route (décision non prise).
+**Découverte reportée à la vérification d'audit** (F5, volet B) plutôt que corrigée à l'aveugle.
 
 ### Lot 3 — `parent-mobile` : session, erreurs, tests, lockfile
 1. **Session** : intercepteur Dio `401 → POST /auth/refresh` (single-flight), purge du stockage et

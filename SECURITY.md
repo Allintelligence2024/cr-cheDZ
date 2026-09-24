@@ -41,6 +41,21 @@
   colonne, contrairement aux quatre tables de la migration 049).
   `cache-control: private, no-store` sur tout contenu. Vérifié par
   `tests/tenant-isolation/phase66-content-same-origin.api.test.mjs`.
+- **Écriture des contenus (2026-09-24, volet B du lot 2)** : les octets des médias passent par
+  l'API — `POST /api/v1/media/upload` (multipart, rôles personnel). La **clé de stockage est
+  construite côté serveur** sous le préfixe de l'organisation (le client ne choisit jamais son
+  périmètre) ; avant toute écriture, le serveur vérifie le **SHA-256** annoncé
+  (`MEDIA_CHECKSUM_MISMATCH`) et la **signature binaire** réelle du fichier
+  (`MEDIA_CONTENT_MISMATCH`) contre une liste blanche de types (`image/jpeg|png|webp`,
+  `application/pdf` — donc **pas de SVG/HTML**, qui seraient du XSS stocké servi same-origin).
+  Plafonds : 8 Mio (produit, 422 bilingue) et 12 Mio (dur, 413 JSON), `client_max_body_size 12M`
+  côté nginx. En production, le presign d'écriture est **refusé** (503
+  `UPLOAD_VIA_API_REQUIRED`) tant que `S3_PUBLIC_ENDPOINT` n'est pas configuré : aucune URL
+  `minio:9000`/`127.0.0.1` ne peut plus être rendue à un client. **Limites connues** : le client
+  `staff-mobile` appelle encore le presign (basculement non livré) ; le téléversement de **clips
+  vidéo** par l'API n'est pas implémenté (presign *fail-closed* en attendant) ; la photo **hors
+  ligne** crée encore un asset sans transférer les octets (défaut consigné au plan §3.2).
+  Vérifié par `tests/tenant-isolation/phase67-media-upload.api.test.mjs` + 15 tests unitaires.
 - **Webhook** : signature HMAC-SHA256 sur le corps brut, idempotence par
   `external_reference`.
 - **Erreurs** : `AppError` FR/AR, jamais de SQL brut ni d'anglais exposé.

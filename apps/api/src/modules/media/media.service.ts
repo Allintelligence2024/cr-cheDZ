@@ -8,8 +8,28 @@ import { TenantContextService } from '../../shared/database/tenant-context.servi
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
 import { AuditService } from '../privacy/audit.service';
-import { PresignUploadDto, RegisterMediaDto } from './dto/media.dto';
+import { MEDIA_MIME_TYPES, PresignUploadDto, RegisterMediaDto, UploadMediaDto } from './dto/media.dto';
+import { createHash } from 'node:crypto';
 import { StorageService } from './storage.service';
+
+/** Plafond produit d'un média téléversé (photo compressée, PDF). */
+export const MEDIA_MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+/** Signatures binaires des types acceptés (le Content-Type d'un client se ment). */
+const MAGIC_BYTES: Record<string, (b: Buffer) => boolean> = {
+  'image/jpeg': (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  'image/png': (b) => b.length > 8 && b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/webp': (b) => b.length > 12 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+  'application/pdf': (b) => b.length > 5 && b.subarray(0, 5).toString('latin1') === '%PDF-',
+};
+
+/** Fichier reçu par l'API (forme minimale de `Express.Multer.File`). */
+export interface UploadedMediaFile {
+  buffer?: Buffer;
+  size: number;
+  mimetype: string;
+  originalname: string;
+}
 
 /**
  * Chemin de lecture same-origin d'un média (LOT 2 — P0 F5).
@@ -56,19 +76,136 @@ export class MediaService {
     return { upload_url: url, storage_key: storageKey };
   }
 
+  // ── Upload proxyfié par l'API (LOT 2B) ───────────────────────────────────
+
+  /**
+   * Téléversement d'un média **par l'API** — chemin supporté en production.
+   *
+   * Pourquoi : `POST /media/presign-upload` rend une URL signée bâtie sur
+   * `S3_ENDPOINT` (`http://minio:9000` en production, MinIO lié à
+   * `127.0.0.1`) — un téléphone ne peut pas y écrire (P0 F5). Ici les octets
+   * passent par l'API, qui les écrit dans le stockage ; la clé est construite
+   * côté serveur (préfixe tenant) et le SHA-256 fourni par le client est
+   * **vérifié**, pas seulement stocké (la dette « le serveur la stocke sans la
+   * recalculer » est levée sur ce chemin).
+   *
+   * L'asset est créé exactement comme `POST /media` (mêmes gardes enfants /
+   * enfants sur la photo, même `sync_changelog`, même audit) et reste
+   * `is_visible_to_parents = false` jusqu'à vérification du consentement.
+   */
+  async upload(userId: string, file: UploadedMediaFile, dto: UploadMediaDto): Promise<Record<string, unknown>> {
+    const tenantId = requireTenant(this.tenantContext);
+    if (!file?.buffer || file.size === 0) {
+      throw new AppError('MEDIA_FILE_REQUIRED', 'Aucun fichier reçu', 'لم يتم استلام أي ملف', 422);
+    }
+    if (!(MEDIA_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
+      throw new AppError(
+        'MEDIA_MIME_NOT_ALLOWED',
+        `Type de fichier non autorisé (autorisés : ${MEDIA_MIME_TYPES.join(', ')})`,
+        'نوع الملف غير مسموح به',
+        422,
+      );
+    }
+    if (file.size > MEDIA_MAX_UPLOAD_BYTES) {
+      throw new AppError(
+        'MEDIA_TOO_LARGE',
+        `Fichier trop volumineux (maximum ${Math.round(MEDIA_MAX_UPLOAD_BYTES / 1024 / 1024)} Mo)`,
+        'الملف كبير جدًا',
+        422,
+      );
+    }
+    if (dto.checksum) {
+      const actual = createHash('sha256').update(file.buffer).digest('hex');
+      if (actual !== dto.checksum.toLowerCase()) {
+        // Intégrité : on refuse AVANT d'écrire — jamais d'objet douteux stocké.
+        throw new AppError(
+          'MEDIA_CHECKSUM_MISMATCH',
+          'Le contenu reçu ne correspond pas au SHA-256 annoncé',
+          'المحتوى المستلم لا يطابق البصمة المعلنة',
+          422,
+        );
+      }
+    }
+    // Le type annoncé par le client ne suffit pas : on vérifie la SIGNATURE
+    // binaire avant d'écrire quoi que ce soit dans le stockage (un fichier
+    // texte annoncé « image/jpeg » n'a rien à faire dans les médias, même
+    // servi en same-origin).
+    if (!MAGIC_BYTES[file.mimetype]?.(file.buffer)) {
+      throw new AppError(
+        'MEDIA_CONTENT_MISMATCH',
+        'Le contenu du fichier ne correspond pas au type annoncé',
+        'محتوى الملف لا يطابق النوع المعلن',
+        422,
+      );
+    }
+    const mediaType = file.mimetype === 'application/pdf' ? 'document' : 'photo';
+    const storageKey = this.storage.storageKey(tenantId, mediaType, file.originalname);
+    await this.storage.put(storageKey, file.buffer, file.mimetype);
+    return this.createAsset(userId, {
+      storageKey,
+      mediaType,
+      mimeType: file.mimetype,
+      originalFilename: file.originalname,
+      fileSizeBytes: file.size,
+      checksum: dto.checksum ?? createHash('sha256').update(file.buffer).digest('hex'),
+      childId: dto.child_id,
+      logEventId: dto.log_event_id,
+      childrenInPhoto: dto.children_in_photo,
+      takenAt: dto.taken_at,
+      exifStripped: dto.exif_stripped ?? true,
+    });
+  }
+
   // ── Étape 2 : enregistrement de l'asset après upload direct ──────────────
 
   async register(userId: string, dto: RegisterMediaDto): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     assertStorageKeyInTenant(dto.storage_key, tenantId);
+    return this.createAsset(userId, {
+      storageKey: dto.storage_key,
+      mediaType: dto.mime_type === 'application/pdf' ? 'document' : 'photo',
+      mimeType: dto.mime_type,
+      originalFilename: dto.original_filename,
+      fileSizeBytes: dto.file_size_bytes,
+      checksum: dto.checksum,
+      childId: dto.child_id,
+      logEventId: dto.log_event_id,
+      childrenInPhoto: dto.children_in_photo,
+      takenAt: dto.taken_at,
+      exifStripped: dto.exif_stripped,
+    });
+  }
+
+  /**
+   * Création de l'asset — chemins `register` (upload direct, dev/legacy) et
+   * `upload` (octets passés par l'API, production) partagent EXACTEMENT les
+   * mêmes gardes : enfants du tenant, `sync_changelog`, audit, et
+   * `is_visible_to_parents = false` tant que le consentement n'est pas vérifié.
+   */
+  private async createAsset(
+    userId: string,
+    input: {
+      storageKey: string;
+      mediaType: 'photo' | 'document';
+      mimeType: string;
+      originalFilename?: string | null;
+      fileSizeBytes?: number | null;
+      checksum?: string | null;
+      childId?: string | null;
+      logEventId?: string | null;
+      childrenInPhoto?: string[] | null;
+      takenAt?: string | null;
+      exifStripped?: boolean | null;
+    },
+  ): Promise<Record<string, unknown>> {
+    const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
-      if (dto.child_id) await this.childOfTenant(client, dto.child_id);
-      if (dto.children_in_photo?.length) {
-        for (const cid of dto.children_in_photo) {
+      if (input.childId) await this.childOfTenant(client, input.childId);
+      if (input.childrenInPhoto?.length) {
+        for (const cid of input.childrenInPhoto) {
           await this.childOfTenant(client, cid);
         }
       }
-      const mediaType = dto.mime_type === 'application/pdf' ? 'document' : 'photo';
       const res = await client.query(
         `INSERT INTO media_assets
            (organization_id, child_id, log_event_id, uploaded_by, media_type,
@@ -79,11 +216,11 @@ export class MediaService {
                  COALESCE($14, false), false)
          RETURNING id, storage_key, media_type, is_visible_to_parents, created_at`,
         [
-          tenantId, dto.child_id ?? null, dto.log_event_id ?? null, userId, mediaType,
-          dto.storage_key, dto.original_filename ?? null, dto.mime_type, dto.file_size_bytes ?? null,
-          dto.taken_at ?? null, dto.exif_stripped ?? false, dto.checksum ?? null,
-          dto.children_in_photo ?? null,
-          dto.children_in_photo != null && dto.children_in_photo.length > 0,
+          tenantId, input.childId ?? null, input.logEventId ?? null, userId, input.mediaType,
+          input.storageKey, input.originalFilename ?? null, input.mimeType, input.fileSizeBytes ?? null,
+          input.takenAt ?? null, input.exifStripped ?? false, input.checksum ?? null,
+          input.childrenInPhoto ?? null,
+          input.childrenInPhoto != null && input.childrenInPhoto.length > 0,
         ],
       );
       const media = res.rows[0];
@@ -95,7 +232,7 @@ export class MediaService {
          VALUES ($1, 'media', $2, 'media_registered', $3)`,
         [
           tenantId, media.id,
-          JSON.stringify({ media_id: media.id, child_id: dto.child_id ?? null, media_type: mediaType }),
+          JSON.stringify({ media_id: media.id, child_id: input.childId ?? null, media_type: input.mediaType }),
         ],
       );
 

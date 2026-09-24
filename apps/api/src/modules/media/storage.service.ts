@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { resolveStorageBackend, type StorageBackend } from '@creche/prod-config';
 import { S3ClientService } from '../../shared/storage/s3-client.service';
-import { openLocalObject, openS3Object, type StorageObject } from '../../shared/storage/object-stream';
+import { containmentPath, openLocalObject, openS3Object, type StorageObject } from '../../shared/storage/object-stream';
+import { AppError } from '../../shared/errors';
 
 /**
  * Stockage objet des médias.
@@ -43,15 +46,62 @@ export class StorageService {
   }
 
   /**
-   * URL signée PUT — l'appareil uploade directement l'objet.
+   * Écrit un objet (LOT 2B) — backend local ou S3/MinIO.
    *
-   * ⚠ TOUJOURS EN PLACE, ET ENCORE INUTILISABLE EN PRODUCTION : c'est la
-   * moitié « upload » du P0 F5, traitée par le lot 2B (endpoint d'upload
-   * proxifié par l'API + client staff-mobile). Ne pas s'appuyer dessus pour
-   * une mise en service réelle tant que le lot 2B n'est pas livré — le plan
-   * de réparation le dit explicitement.
+   * Primitive de l'upload proxyfié par l'API : le client envoie ses octets à
+   * l'API, l'API les écrit dans le stockage. Indispensable depuis que MinIO
+   * n'est plus joignable depuis un client (P0 F5) : sans elle, une photo ne
+   * pouvait être **téléversée** qu'en écrivant directement dans le stockage,
+   * c'est-à-dire jamais depuis un téléphone en production.
+   *
+   * La clé est construite côté serveur (`storageKey(orgId, …)`) : le client ne
+   * choisit pas son périmètre.
    */
-  async presignPut(key: string, contentType: string): Promise<{ url: string; key: string }> {
+  async put(key: string, body: Buffer, contentType: string): Promise<void> {
+    if (this.isLocal()) {
+      const filePath = containmentPath(this.localDir(), key);
+      await mkdir(dirname(filePath), { recursive: true });
+      await writeFile(filePath, body);
+      return;
+    }
+    await this.s3.client.send(new PutObjectCommand({
+      Bucket: this.s3.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }));
+  }
+
+  /**
+   * URL signée PUT — conservée pour le développement (MinIO local + tests).
+   *
+   * ⚠ EN PRODUCTION, REFUSÉE TANT QU'UNE ORIGINE PUBLIQUE N'EST PAS
+   * CONFIGURÉE (`S3_PUBLIC_ENDPOINT`, option B du plan) : une URL signée sur
+   * `S3_ENDPOINT=http://minio:9000` (MinIO lié à 127.0.0.1) est inexploitable
+   * depuis un client, et un 503 explicite vaut mieux qu'une URL qui échoue à
+   * l'usage. En production, le chemin supporté est l'upload proxyfié par
+   * l'API : `POST /api/v1/media/upload`.
+   */
+  /**
+   * URL signée d'ÉCRITURE (PUT). En production sans origine publique
+   * (`S3_PUBLIC_ENDPOINT`), l'URL serait inexploitable : on refuse (503) au
+   * lieu de rendre un lien mort. `hint` nomme la route de remplacement, qui
+   * diffère selon l'appelant (photos vs clips vidéo).
+   */
+  async presignPut(
+    key: string,
+    contentType: string,
+    hint = 'POST /api/v1/media/upload',
+  ): Promise<{ url: string; key: string }> {
+    const publicEndpoint = this.config.get<string>('S3_PUBLIC_ENDPOINT');
+    if (this.config.get<string>('NODE_ENV') === 'production' && !publicEndpoint) {
+      throw new AppError(
+        'UPLOAD_VIA_API_REQUIRED',
+        `Le téléversement direct vers le stockage est désactivé (stockage non exposé publiquement). Utilisez ${hint}`,
+        'التحميل المباشر إلى التخزين معطّل (التخزين غير متاح للعموم)',
+        503,
+      );
+    }
     const command = new PutObjectCommand({
       Bucket: this.s3.bucket,
       Key: key,
@@ -73,7 +123,11 @@ export class StorageService {
 
   /** Clé de stockage hiérarchisée par organisation. */
   storageKey(orgId: string, mediaType: string, filename: string): string {
-    const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-80);
+    const safe = filename
+      .replace(/[^a-zA-Z0-9._-]/g, '_') // ni « / » ni « \ » : aucun séparateur de chemin
+      .replace(/\.{2,}/g, '_')          // pas de « .. » : la clé satisfait le CHECK 049 par construction
+      .replace(/^\.+/, '_')
+      .slice(-80);
     return `${orgId}/${mediaType}/${Date.now()}-${safe}`;
   }
 }

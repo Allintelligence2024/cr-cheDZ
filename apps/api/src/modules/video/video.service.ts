@@ -172,7 +172,15 @@ export class VideoService {
     const tenantId = await this.assertVideoEnabled();
     await this.cameraOfTenant(dto.camera_id);
     const key = `${tenantId}/video/${dto.camera_id}/${Date.now()}-${dto.filename}`;
-    const { url } = await this.storage.presignPut(key, dto.mime_type);
+    // Même garde que les photos (lot 2B) : en production sans origine publique,
+    // AUCUNE URL signée n'est rendue. Le téléversement de clips PAR L'API n'est
+    // pas encore livré (fichiers vidéo : dimensionnement dédié) — l'appelant
+    // reçoit un 503 explicite plutôt qu'une URL injoignable.
+    const { url } = await this.storage.presignPut(
+      key,
+      dto.mime_type,
+      'le téléversement de clips par l’API (non encore disponible — voir docs/PLAN_REPARATION_2026-09-24.md, volet B)',
+    );
     await this.audit.log({
       organizationId: tenantId,
       userId,

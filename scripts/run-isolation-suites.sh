@@ -98,6 +98,10 @@ SUITES=(
   # LOT 2 (P0 F5) : contenu servi par l'API, same-origin — preuve d'octets
   # réels (médias, photos parent, exports, PDF, clips) + verrou anti-régression.
   phase66-content-same-origin.api.test.mjs
+  # LOT 2B (P0 F5) : l'UPLOAD passe par l'API (multipart) — octets écrits par
+  # le serveur, intégrité/signature binaire, plafonds, consentement, verrou
+  # anti-régression du presign d'upload.
+  phase67-media-upload.api.test.mjs
 )
 
 FILTER="${1:-}"

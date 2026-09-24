@@ -124,10 +124,23 @@ correctement l'erreur, alors que `photos_page.dart:33` et `consents_page.dart:30
   (30 vérifications, dont octets identiques au fichier de stockage et « aucun `presignGet(` dans
   `apps/api/src` ») + les suites historiques mises à jour (`phase6`, `phase7`, `phase37`, `phase41`,
   `phase13`, `phase21`, `phase38`) — journal complet au plan §4.
-- **Reste ouvert (volet B, écriture) :** `POST /media/presign-upload` et
-  `POST /video/clips/presign-upload` rendent toujours une URL signée **PUT** sur `S3_ENDPOINT` :
-  en production, `staff-mobile` et un DVR/NVR ne peuvent pas **téléverser**. Correctif suivant :
-  endpoints d'upload multipart servis par l'API (`multer` déjà présent) + branchement client.
+- **Volet B (écriture) — livré pour les MÉDIAS** : `POST /api/v1/media/upload` (multipart) reçoit
+  les octets, vérifie SHA-256 + **signature binaire** + liste blanche de types, puis écrit l'objet
+  par le serveur (local **et** S3) ; la clé est construite côté serveur. `presignPut` **refuse
+  désormais** (503 `UPLOAD_VIA_API_REQUIRED`) en production sans `S3_PUBLIC_ENDPOINT` : plus aucune
+  URL injectable sur `minio:9000`. Preuve : `phase67-media-upload.api.test.mjs`
+  (31 vérifications, dont « octets stockés identiques », « aucune écriture disque après un checksum
+  invalide », « 13 Mio → 413 JSON bilingue », « le parent lit la photo téléversée ») + 15 tests
+  unitaires (`storage.service.spec.ts`, `media.dto.spec.ts`). Plafonds alignés : produit 8 Mio
+  (422), dur 12 Mio (413), nginx `client_max_body_size 12M`.
+- **Reste ouvert du volet B (dit tel quel)** : (1) le client `staff-mobile` appelle encore le
+  presign — en production il reçoit maintenant un 503 explicite ; le basculement vers
+  `POST /media/upload` n'a **pas** pu être livré ici (aucun SDK Flutter → non compilé) ;
+  (2) **défaut confirmé par exécution** : la photo **hors ligne** (`add_photo`) crée un asset
+  **sans jamais transférer les octets** — `LECTURE DU CONTENU 404 MEDIA_CONTENT_MISSING`
+  (journal au plan §3.2) ; (3) `POST /video/clips/presign-upload` est *fail-closed* en production
+  mais le téléversement de clips **par l'API** n'est pas livré (fichiers volumineux : dimensionnement
+  dédié).
 - **Hors périmètre** : `children.photo_url` (colonne jamais écrite par l'API — si elle venait à
   recevoir une URL signée, elle serait inexploitable : y stocker une **clé**, pas une URL).
 
@@ -234,7 +247,7 @@ Légende : ✅ confirmé · 🟡 partiel/nuancé · ❌ faux · ➕ question ouv
 | 51 | Preuves par mutation sur les chemins critiques | ✅ | `scripts/mutation-proof.sh`, `mutation-phase23-proof.sh`, `mutation-phase24-proof.sh` |
 | 52 | 4 workflows CI, pas de CD automatique | ✅ | `ci`, `docker`, `flutter`, `security-audit` ; aucun job de déploiement |
 | 53 | « Tests de charge k6 » | 🟡 | **1 seul** fichier k6 (`tests/load/sync.k6.js`), et il **n'est jamais exécuté** (k6 absent) — `capacity-bench.mjs` le documente lui-même ; la charge réelle est un banc Node (`capacity-bench.mjs`, `mvp-bench.mjs`) |
-| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **68** suites `phaseNN`, **83** fichiers dans `tests/tenant-isolation/`, **70** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66` (lot 2) |
+| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **69** suites `phaseNN`, **84** fichiers dans `tests/tenant-isolation/`, **71** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66`/`phase67` (lots 2A/2B) |
 | 55 | Densité de test (non chiffrée par le rapport) | ✅ | `tests/**/*.mjs` = **17 123 lignes** vs **16 926** lignes de code API : la suite de tests est **plus grosse que l'API qu'elle teste** |
 | 56 | « 15+ ADR » | 🟡 | **14** (ADR-000 → ADR-013) |
 | 57 | « 45+ runbooks » | 🟡 | **32** fichiers `*RUNBOOK*.md` (56 `.md` au total dans `docs/`) |
@@ -290,7 +303,7 @@ Restent **4 scripts réellement orphelins** — présents, documentés, jamais e
 **Correctif court** (≈ 1 h) : ajouter ces 4 appels au job `quality` (aucune base requise, `npm ci`
 fournit `typescript`).
 Bonus : le nom de l'étape `ci.yml:69` (« phase3 → phase24 (auto) ») est **périmé** — le runner va
-jusqu'à `phase66` (70 entrées, libellé corrigé au lot 1 puis étendu au lot 2).
+jusqu'à `phase67` (71 entrées, libellé corrigé au lot 1 puis étendu aux lots 2A/2B).
 
 ### 4.4 🟠 Le worker est plus mince que présenté — et le dit honnêtement
 977 lignes de TypeScript, **7 handlers** (`apps/worker/src/main.ts:290-306`) dont **1 stub explicite**
@@ -393,7 +406,7 @@ grep -rc "@Public()" apps/api/src/modules/*/*.controller.ts | grep -v ':0'
 
 # 6. suites d'isolation
 ls tests/tenant-isolation/phase*.test.mjs | wc -l                                   # 67
-sed -n '/^SUITES=(/,/^)/p' scripts/run-isolation-suites.sh | grep -c test.mjs        # 68 (+ schema-check + rls-behavior-check = 70 entrées)
+sed -n '/^SUITES=(/,/^)/p' scripts/run-isolation-suites.sh | grep -c test.mjs        # 69 (+ schema-check + rls-behavior-check = 71 entrées)
 ```
 
 **Fichiers/lignes cités** : voir la colonne « Preuve » du §3 ; toutes les références ont été

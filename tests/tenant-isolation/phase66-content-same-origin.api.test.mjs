@@ -416,8 +416,13 @@ async function main() {
       withSignedUrl.length === 1 && withSignedUrl[0].endsWith(join('media', 'storage.service.ts')),
       withSignedUrl.join(', '));
     const presignPutFile = readFileSync(join(REPO, 'apps/api/src/modules/media/storage.service.ts'), 'utf8');
-    ok('La signature restante est bien un PUT (upload) et est documentée comme telle',
-      presignPutFile.includes('PutObjectCommand') && presignPutFile.includes('lot 2B'));
+    // Volet B (lot 2B) : la seule signature restante est un PUT d'ÉCRITURE et
+    // elle est désormais gardée (refus 503 en production sans origine
+    // publique) — vérifié en détail par phase67.
+    ok('La signature restante est bien un PUT (upload) et elle est gardée/documentée',
+      presignPutFile.includes('PutObjectCommand')
+      && /lot 2B/i.test(presignPutFile)
+      && presignPutFile.includes('UPLOAD_VIA_API_REQUIRED'));
 
     console.log(`\n${failures.length === 0 ? '✓ Phase 66 validée' : `✗ ${failures.length} échec(s)`}`);
     process.exitCode = failures.length === 0 ? 0 : 1;

@@ -81,6 +81,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       case 403: return 'FORBIDDEN';
       case 404: return 'NOT_FOUND';
       case 409: return 'CONFLICT';
+      case 413: return 'PAYLOAD_TOO_LARGE';
       case 422: return 'VALIDATION';
       case 429: return 'RATE_LIMITED';
       default: return 'INTERNAL_ERROR';
@@ -94,6 +95,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       case 403: return 'Accès refusé';
       case 404: return 'Ressource introuvable';
       case 409: return 'Conflit de données';
+      case 413: return 'Fichier trop volumineux';
       case 422: return 'Données invalides';
       case 429: return 'Trop de tentatives. Réessayez plus tard';
       default: return 'Erreur interne. Réessayez plus tard';
@@ -107,6 +109,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       case 403: return 'تم رفض الوصول';
       case 404: return 'المورد غير موجود';
       case 409: return 'تعارض في البيانات';
+      case 413: return 'الملف كبير جداً';
       case 422: return 'بيانات غير صالحة';
       case 429: return 'محاولات كثيرة جداً. أعد المحاولة لاحقاً';
       default: return 'خطأ داخلي. أعد المحاولة لاحقاً';

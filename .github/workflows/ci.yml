@@ -72,12 +72,12 @@ jobs:
           npm run build --workspace @creche/api
           npm run build --workspace @creche/worker
       # Nom corrigé (plan de réparation 2026-09-24, lot 1) : l'étape rejouait
-      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase66 (70 entrées
+      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase67 (71 entrées
       # dans SUITES, plus le garde anti-bypass RLS en tête).
       # (nom entre guillemets : un « : » non échappé dans une valeur YAML la
       # transformerait en mapping imbriqué — le workflow deviendrait invalide
       # et la CI s'arrêterait de tourner sans que le diff le montre)
-      - name: "Suites d'isolation (garde RLS anti-bypass + 70 suites — isolation, phase3 → phase66)"
+      - name: "Suites d'isolation (garde RLS anti-bypass + 71 suites — isolation, phase3 → phase67)"
         run: bash scripts/run-isolation-suites.sh
 
   backup-drill:

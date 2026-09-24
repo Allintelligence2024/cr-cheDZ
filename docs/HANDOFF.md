@@ -329,5 +329,39 @@ le JWT (`apiOpenBlob` côté web, `ParentApiClient.photoContent` côté parent) 
 `window.open` nu recevrait 401, le garde JWT n'acceptant que l'en-tête `Authorization`.
 Détails, tableau avant/après et preuves : `docs/PLAN_REPARATION_2026-09-24.md` §4 (lot 2) ;
 suite de preuve : `tests/tenant-isolation/phase66-content-same-origin.api.test.mjs`.
-**Reste ouvert** : l'**upload** (`presign-upload` PUT) n'est pas encore proxyfié par l'API —
-téléversement photo/clip impossible en production tant que le volet B n'est pas livré.
+
+## Mise à jour 2026-09-24 — lot 2, volet B : l'upload média passe par l'API
+
+Le contrat d'**écriture** des médias a changé lui aussi. `POST /api/v1/media/upload`
+(`multipart/form-data`, champ `file`, rôles personnel) reçoit les octets, les vérifie puis c'est
+le **serveur** qui écrit l'objet (`storage.put()`, backend local comme S3) — la clé est construite
+côté serveur (`<org>/photo|document/<horodatage>-<nom assaini>`), jamais fournie par le client.
+Enchaînement : `login → POST /media/upload (file + checksum) → GET /media/:id/download →
+GET /api/v1/media/:id/content` (octets identiques ; `phase67` le prouve de bout en bout, jusqu'à
+la lecture parent sous consentement).
+
+- Refus **avant** écriture : `MEDIA_FILE_REQUIRED`, `MEDIA_MIME_NOT_ALLOWED` (liste blanche
+  partagée avec le presign), `MEDIA_CHECKSUM_MISMATCH` (SHA-256 annoncé ≠ reçu),
+  `MEDIA_CONTENT_MISMATCH` (signature binaire ≠ type annoncé) — tous 422 bilingues.
+- Plafonds : produit **8 Mio** → 422 `MEDIA_TOO_LARGE` ; dur multer **12 Mio** → **413 JSON**
+  (jamais une page HTML) ; `client_max_body_size 12M` dans `nginx.conf` (aligné).
+- Production : `presignPut` **refuse** (503 `UPLOAD_VIA_API_REQUIRED`) sans `S3_PUBLIC_ENDPOINT`.
+  C'est le garde qui remplace l'échec silencieux sur le téléphone par une erreur explicite. Il
+  couvre aussi `POST /video/clips/presign-upload` (message adapté par appelant).
+- Preuves : `tests/tenant-isolation/phase67-media-upload.api.test.mjs` (31 vérifications, ajoutée
+  au runner → **71 entrées**) ; tests unitaires `apps/api/src/modules/media/storage.service.spec.ts`
+  et `dto/media.dto.spec.ts` (15 cas, dont la normalisation multipart de `children_in_photo` —
+  sans elle `all_consents_checked` resterait faux et la photo ne serait jamais publiée).
+
+**Reste ouvert (dit tel quel, aucun cliquet baissé)**
+1. `apps/staff-mobile/lib/core/media/media_uploader.dart` appelle **encore** le presign
+   (`presign → putSigned → register`). À basculer sur `POST /media/upload` en multipart avec le
+   même jeton. **Non livré** : aucun SDK Flutter ici → aucun `flutter test` ne pourrait le
+   prouver ; à faire avec le lot 3 (même blocage que le lockfile `parent-mobile`).
+2. **Photo hors ligne** (`add_photo`) : le client envoie `bytes` (base64) mais le serveur ne lit
+   que `storage_key`/`mime_type` → asset créé, **aucun octet écrit**, lecture 404
+   `MEDIA_CONTENT_MISSING` (preuve exécutée, plan §3.2). Correctif côté client (file locale →
+   upload API) ; faire passer les octets dans `POST /sync/push` suppose de relever la limite de
+   corps JSON de cette route — décision non prise.
+3. **Clips vidéo** : presign *fail-closed* en production, mais téléversement **par l'API** non
+   livré (fichiers volumineux : dimensionnement dédié).
