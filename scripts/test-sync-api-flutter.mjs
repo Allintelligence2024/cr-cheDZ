@@ -64,13 +64,19 @@ test "$before" = "$(sha256sum pubspec.lock)"`;
   assert.equal(operations.length, 11, 'replay created duplicate operations');
   assert.equal(operations.find(r => r.event_id === report.accepted_event)?.status, 'accepted');
   assert.deepEqual(operations.find(r => r.event_id === report.conflict_event)?.response_outcome, { status: 'conflict', reason: 'VERSION_MISMATCH', currentVersion: 1 });
-  for (const id of [...report.journal_events, report.photo_event]) assert.equal(operations.find(r=>r.event_id===id)?.status,'accepted');
+  for (const id of report.journal_events) assert.equal(operations.find(r=>r.event_id===id)?.status,'accepted');
+  // D6 (option c) : la photo hors ligne est REFUSÉE — l'opération reste traçable
+  // avec son motif, au lieu d'« accepter » un asset sans octets.
+  assert.equal(report.offline_photo_refused, true, 'le refus de la photo hors ligne doit être prouvé côté client');
+  assert.equal(operations.find(r=>r.event_id===report.photo_event)?.status,'rejected');
+  assert.equal(operations.find(r=>r.event_id===report.photo_event)?.rejection_reason,'OFFLINE_PHOTO_UNSUPPORTED');
   const journal = (await db.query('SELECT sync_event_id,event_type,event_date::text FROM daily_log_events WHERE child_id=$1',[report.child_id])).rows;
   assert.equal(journal.length,9); assert.deepEqual(new Set(journal.map(r=>r.sync_event_id).filter(Boolean)),new Set(report.journal_events));
   assert.deepEqual(new Set(journal.map(r=>r.event_type)),new Set(['meal','nap_start','nap_end','diaper','activity','temperature','note','incident','health_observation']));
-  assert.equal((await db.query('SELECT 1 FROM media_assets WHERE child_id=$1',[report.child_id])).rowCount,2);
+  // 1 photo en LIGNE seulement (la photo hors ligne n'existe plus — D6).
+  assert.equal((await db.query('SELECT 1 FROM media_assets WHERE child_id=$1',[report.child_id])).rowCount,1);
   assert.deepEqual((await db.query('SELECT aggregate_type,count(*)::int AS n FROM sync_changelog WHERE organization_id=$1 GROUP BY aggregate_type ORDER BY aggregate_type',[a.org])).rows,
-    [{aggregate_type:'attendance',n:1},{aggregate_type:'child',n:1},{aggregate_type:'daily_log',n:9},{aggregate_type:'media',n:3}]);
+    [{aggregate_type:'attendance',n:1},{aggregate_type:'child',n:1},{aggregate_type:'daily_log',n:9},{aggregate_type:'media',n:2}]);
   const sessions = (await db.query('SELECT status,version FROM attendance_sessions WHERE child_id=$1', [report.child_id])).rows;
   assert.deepEqual(sessions, [{ status: 'present', version: 1 }], 'conflict/replay changed business state');
   assert.equal((await db.query('SELECT 1 FROM attendance_events WHERE child_id=$1', [report.child_id])).rowCount, 1);

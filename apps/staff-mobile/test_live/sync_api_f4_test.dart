@@ -119,7 +119,7 @@ void main() {
     expect((await b!.db.syncState())['cursor'], cursor);
     expect(await b!.db.select(b!.db.localDailyEvents).get(), hasLength(9));
   });
-  test('media metadata from real HTTP and offline add_photo survives engine pull/replay', () async {
+  test('media from real HTTP is projected ; la photo HORS LIGNE est REFUSÉE (D6, option c)', () async {
     final org = a!.db.scope.organizationId;
     final registered = await auth.post<Map<String, dynamic>>('/media', {
       'child_id': child, 'storage_key': '$org/photos/f4-http.jpg', 'mime_type': 'image/jpeg',
@@ -132,22 +132,30 @@ void main() {
     report['photo_event'] = id;
     await auth.post<Map<String, dynamic>>('/media', {'storage_key': '$org/documents/f4.pdf', 'mime_type': 'application/pdf'});
     await a!.sync(); await b!.sync();
+    // D6 (option c, 2026-09-25) : la photo hors ligne est refusée par l'API. Le
+    // moteur le SAIT et le dit (statut + motif persistés localement) au lieu de
+    // laisser croire à un envoi — le refus n'est donc pas muet.
+    final refused = (await a!.db.select(a!.db.pendingOperations).get())
+        .singleWhere((o) => o.eventId == id);
+    expect(refused.status, 'rejected');
+    expect(refused.lastError, 'OFFLINE_PHOTO_UNSUPPORTED');
+    report['offline_photo_refused'] = true;
     final rows = await b!.db.customSelect('SELECT * FROM local_media').get();
-    expect(rows, hasLength(3));
-    expect(rows.where((r) => r.data['media_type'] == 'photo'), hasLength(2));
+    expect(rows, hasLength(2));
+    expect(rows.where((r) => r.data['media_type'] == 'photo'), hasLength(1));
     expect(rows.where((r) => r.data['media_type'] == 'document'), hasLength(1));
     for (final row in rows) { expect(row.data['child_id'], row.data['media_type'] == 'photo' ? child : null); expect(row.data['organization_id'], org); }
     final cursor = (await b!.db.syncState())['cursor'];
     await a!.replay(id); await b!.sync();
     expect((await b!.db.syncState())['cursor'], cursor);
-    expect(await b!.db.customSelect('SELECT * FROM local_media').get(), hasLength(3));
+    expect(await b!.db.customSelect('SELECT * FROM local_media').get(), hasLength(2));
   });
   test('device restart restores identity/cursor and tenant switch cannot reuse the mirror', () async {
     savedB = await b!.db.syncState(); await b!.close(); b = null;
     b = Device(base, token, File('${dir.path}/b.db')); await b!.sync();
     final restored = await b!.db.syncState();
     expect(await b!.db.select(b!.db.localDailyEvents).get(), hasLength(9));
-    expect(await b!.db.customSelect('SELECT * FROM local_media').get(), hasLength(3));
+    expect(await b!.db.customSelect('SELECT * FROM local_media').get(), hasLength(2));
     for (final field in ['device_id', 'fingerprint', 'cursor']) { expect(restored[field], savedB![field]); }
     final login = await auth.post<Map<String, dynamic>>('/auth/login', {'email': config['other_email'], 'password': config['password']});
     other = Device(base, login['access_token'] as String, File('${dir.path}/other.db')); await other!.sync();
