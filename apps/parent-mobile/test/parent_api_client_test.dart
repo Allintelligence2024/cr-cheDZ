@@ -195,7 +195,7 @@ class _FakeApi implements HttpClientAdapter {
     }
     if (bytes != null) {
       return ResponseBody.fromBytes(bytes!, 200, headers: {
-        Headers.contentTypeHeader: [Headers.octetStreamContentType],
+        Headers.contentTypeHeader: ['application/octet-stream'],
       });
     }
     return _json(const <dynamic>[]);

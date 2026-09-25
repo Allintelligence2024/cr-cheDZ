@@ -1254,6 +1254,18 @@ restants (lockfile, builds APK) étaient déjà sous `set -o pipefail`. Verrou :
 l'assertion matchait la *mention* de `set -o pipefail` dans le commentaire d'en-tête du script et
 laissait donc passer la suppression de la directive : elle est désormais ancrée sur la ligne de code.
 
+**Le premier échec nommé (25/09, nuit — après durcissement)** : le run suivant a rendu le job
+`flutter` **rouge**, et le diagnostic est enfin complet — `flutter analyze` échouait sur mon propre
+fichier de test (`test/parent_api_client_test.dart:198`, `Headers.octetStreamContentType` : ce getter
+n'existe pas dans dio ; les seules constantes mime sont `jsonContentType`, `formUrlEncodedContentType`,
+`textPlainContentType`, `multipartFormDataContentType` — vérifié sur la source `cfug/dio`). Le fichier
+de test ne **compilait donc pas**, ce qui explique mot pour mot le `4 tests passed, 1 failed.`
+d'origine : seuls les 4 tests de widget (`feed_page_test.dart`) s'exécutaient, et l'unique « failed »
+était le chargement de la suite de client — les 8 tests de session, ceux qui portent la preuve du lot,
+ne tournaient pas du tout. Corrigé (`'application/octet-stream'` littéral). Leçon : **l'analyse était
+masquée par le même tube que les tests** ; un « vert » d'analyse ne valait pas mieux qu'un « vert » de
+test tant que `pipefail` manquait.
+
 **Lockfile parent committé** : la résolution publiée par la CI (6 morceaux réassemblés — 519 lignes,
 67 paquets, `dio` 5.11.1, `flutter_secure_storage` 9.2.4, `intl` 0.20.3, `flutter_lints` 4.0.0, Dart
 `>=3.11.0 <4.0.0`) est versionnée : le step dédié passe à `flutter pub get --enforce-lockfile` au run

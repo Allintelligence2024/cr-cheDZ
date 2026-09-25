@@ -431,6 +431,14 @@ bloqué** (avec sa cause mesurée). Rien n'est « en cours » : ce tableau est l
 | **6 — `pubspec.lock` absent pour parent-mobile** | 🟡 **mécanisme livré, committé à faire** | `flutter.yml` publie la résolution **réelle** du run (SDK 3.47.1) pour qu'elle soit committée — un lock écrit à la main resterait faux ; dès qu'il est versionné, la résolution passe en `--enforce-lockfile`. Un lockfile **tronqué** a été reçu au premier essai : une annotation est plafonnée à **4096 caractères** (mesuré) → publication en morceaux numérotés. Commit de la résolution en attente de l'accès GitHub (jeton invalidé en cours de lot, même panne que le 24/09 à la même heure) |
 | **❌ 12 / ❌ 25 / ❌ 37 / ❌ 43** (F3, F1, F4, F2) | ✅ F3, F1, F2 **fermés** ; F4 = items 1/2 **livrés (L3)** | F1 : **0** occurrence de « Quartz » dans le code/config (`apps`, `packages`, `infrastructure`) et phrases bannies verrouillées par `claims-contract` ; F2 : composes **résolus** → `prod`/`staging` sondent `api` **et** `worker` (`postgres` partout, `dev` = postgres seul, volontaire) ; F3 : voir item 4 ; F4 : voir items 1/2 |
 
+**Le diagnostic complet est arrivé avec le durcissement** : le premier run rouge a nommé l'erreur —
+`test/parent_api_client_test.dart:198` (getter `octetStreamContentType` inexistant dans dio ;
+vérifié sur la source `cfug/dio`). Le fichier de test ne compilait pas : le `4 tests passed, 1 failed.`
+d'origine, c'était **4 tests de widget + 1 échec de chargement de suite**, et les 8 tests de session —
+ceux qui portent la preuve du lot L3 — ne s'exécutaient pas. `flutter analyze` était masqué par le même
+tube que `flutter test` : un « vert d'analyse » ne valait pas mieux qu'un « vert de test » tant que
+`pipefail` manquait. Corrigé, et l'analyse est désormais bloquante.
+
 **Mise à jour du 25/09/2026 (nuit) — un « vert » qui ne prouvait rien.** En relevant le verdict du
 run `flutter` (jeton GitHub rétabli), une annotation isolée est apparue dans un job **vert** :
 `::error::4 tests passed, 1 failed.` — les 17 steps étaient verts. Cause : `flutter test | tee
