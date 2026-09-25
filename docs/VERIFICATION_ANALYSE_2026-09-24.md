@@ -439,6 +439,15 @@ ceux qui portent la preuve du lot L3 — ne s'exécutaient pas. `flutter analyze
 tube que `flutter test` : un « vert d'analyse » ne valait pas mieux qu'un « vert de test » tant que
 `pipefail` manquait. Corrigé, et l'analyse est désormais bloquante.
 
+**Ce que le durcissement a nommé (deux itérations)** : d'abord une erreur réelle de mon fichier de
+test (`octetStreamContentType`, getter dio inexistant — le fichier ne compilait pas, d'où le
+`4 tests passed, 1 failed.` : 4 tests de widget, et la suite de session jamais chargée), puis un
+**warning préexistant** (`unnecessary_cast`, `consents_page.dart:49`, rattaché par `git log -L` au
+commit `3b8f51b`, donc antérieur à L3) — `flutter analyze` échoue aussi sur les warnings, et l'étape
+d'analyse n'était **jamais** bloquante avant ce durcissement. Un troisième défaut a été attrapé dans
+le durcissement lui-même : `publish $matches` non quoté découpait le diagnostic en mots — vu par
+exécution, corrigé, et le repli est désormais verrouillé par le contrat.
+
 **Mise à jour du 25/09/2026 (nuit) — un « vert » qui ne prouvait rien.** En relevant le verdict du
 run `flutter` (jeton GitHub rétabli), une annotation isolée est apparue dans un job **vert** :
 `::error::4 tests passed, 1 failed.` — les 17 steps étaient verts. Cause : `flutter test | tee

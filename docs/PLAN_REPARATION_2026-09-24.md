@@ -1266,6 +1266,15 @@ ne tournaient pas du tout. Corrigé (`'application/octet-stream'` littéral). Le
 masquée par le même tube que les tests** ; un « vert » d'analyse ne valait pas mieux qu'un « vert » de
 test tant que `pipefail` manquait.
 
+**Deuxième échec nommé — un warning préexistant, masqué depuis toujours** : avec le diagnostic élargi,
+le step `parent-mobile — pub get + analyze` a livré la cause exacte :
+`warning • Unnecessary cast … lib/features/consents/consents_page.dart:49:22 • unnecessary_cast`
+(1 seule issue, 9,5 s d'analyse). `flutter analyze` échoue **aussi sur un warning** — et cette ligne
+ne vient pas de L3 : `git log -L` la rattache au commit `3b8f51b` (« thème Sérénité », PR #49), donc
+le warning existait avant, simplement masqué par le tube. Corrigé (cast retiré : `item is Map` promeut
+déjà le type). Leçon : `flutter analyze` sans `pipefail` ne garantissait rien — l'analyse parent
+n'avait jamais été bloquante.
+
 **Lockfile parent committé** : la résolution publiée par la CI (6 morceaux réassemblés — 519 lignes,
 67 paquets, `dio` 5.11.1, `flutter_secure_storage` 9.2.4, `intl` 0.20.3, `flutter_lints` 4.0.0, Dart
 `>=3.11.0 <4.0.0`) est versionnée : le step dédié passe à `flutter pub get --enforce-lockfile` au run

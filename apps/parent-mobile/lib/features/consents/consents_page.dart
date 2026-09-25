@@ -46,7 +46,7 @@ class _ConsentsPageState extends State<ConsentsPage> {
         Map<String, dynamic>? photo;
         for (final item in all) {
           if (item is Map && item['consent_type'] == 'photo_individual') {
-            photo = (item as Map).cast<String, dynamic>();
+            photo = item.cast<String, dynamic>();
             break;
           }
         }
