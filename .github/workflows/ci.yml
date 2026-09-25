@@ -222,6 +222,12 @@ jobs:
       # base, aucun build.
       - name: Contrat média client (presign d'écriture mort)
         run: node --test tests/tenant-isolation/media-client-wiring.test.mjs
+      # L3 (C2) : la session parent (15 min) doit se renouveler — un seul refresh
+      # partagé par les appels concurrents, et une session morte renvoie à la
+      # connexion au lieu de laisser l'app en 401. Les tests qui l'exécutent sont
+      # joués par le job `flutter` (aucune base, aucun Docker ici).
+      - name: Contrat session parent (refresh single-flight + erreurs)
+        run: node --test tests/tenant-isolation/parent-session-contract.test.mjs
       # Design system : contraste WCAG AA des deux thèmes + parité des
       # couleurs Sérénité entre theme.css (web) et serenite_theme.dart
       # (les 2 apps Flutter, qui ne peuvent pas importer le CSS).

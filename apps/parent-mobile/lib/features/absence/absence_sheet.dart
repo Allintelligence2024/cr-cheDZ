@@ -22,9 +22,23 @@ Future<void> showAbsenceSheet(
             icon: const Icon(Icons.check),
             label: const Text('Confirmer l’absence / تأكيد الغياب'),
             onPressed: () async {
-              await api.absence(childId);
-              if (sheetContext.mounted) {
-                Navigator.pop(sheetContext);
+              // L'échec n'est plus avalé (avant : l'exception remontait en
+              // « unhandled » et la feuille restait ouverte sans explication).
+              try {
+                await api.absence(childId);
+                if (sheetContext.mounted) {
+                  Navigator.pop(sheetContext);
+                }
+              } on Exception {
+                if (sheetContext.mounted) {
+                  ScaffoldMessenger.of(sheetContext).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Envoi impossible — vérifiez la connexion / تعذّر الإرسال',
+                      ),
+                    ),
+                  );
+                }
               }
             },
           ),

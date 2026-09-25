@@ -47,11 +47,35 @@ jobs:
           # version exacte.
           flutter-version: '3.47.1'
           cache: true
+      # L3 : parent-mobile n'avait aucune résolution figée. Tant que
+      # `pubspec.lock` n'est pas versionné, la CI publie la résolution réelle
+      # (job `flutter`, SDK épinglé) pour qu'elle soit committée — et dès qu'il
+      # l'est, la résolution est CONTRAINTE par le lockfile : une dérive de
+      # dépendance fait échouer le job au lieu de passer inaperçue.
+      - name: parent-mobile — lockfile (résolution contrainte si versionné)
+        working-directory: apps/parent-mobile
+        run: |
+          set -o pipefail
+          if git ls-files --error-unmatch pubspec.lock >/dev/null 2>&1; then
+            echo "pubspec.lock versionné : résolution contrainte au lockfile."
+            flutter pub get --enforce-lockfile | tee parent-lockfile.log
+          else
+            echo "::warning title=parent-mobile lockfile::pubspec.lock non versionné — résolution publiée ci-dessous (base64), à committer"
+            flutter pub get | tee parent-lockfile.log
+            echo "::notice title=parent-mobile pubspec.lock (base64)::$(base64 -w0 pubspec.lock)"
+          fi
       - name: parent-mobile — pub get + analyze
         working-directory: apps/parent-mobile
         run: |
           flutter pub get -v | tee parent-pub-get.log
           flutter analyze -v | tee parent-analyze.log
+      # L3 (audit 2026-09-24, item C2) : le refresh de session et les états
+      # d'erreur sont prouvés par des tests RÉELLEMENT exécutés (l'analyse seule
+      # ne prouve aucune exécution). Le contrat statique correspondant est joué
+      # par le job `quality` ; ici, c'est l'exécution.
+      - name: parent-mobile — tests
+        working-directory: apps/parent-mobile
+        run: flutter test | tee parent-test.log
       - name: Upload parent-mobile logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -60,6 +84,8 @@ jobs:
           path: |
             apps/parent-mobile/parent-pub-get.log
             apps/parent-mobile/parent-analyze.log
+            apps/parent-mobile/parent-test.log
+            apps/parent-mobile/parent-lockfile.log
       - name: staff-mobile — pub get + analyze
         working-directory: apps/staff-mobile
         run: |

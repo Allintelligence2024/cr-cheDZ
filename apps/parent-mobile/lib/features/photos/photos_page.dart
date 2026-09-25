@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+
 import '../../core/api_client.dart';
+import '../../core/error_state.dart';
 
 /// Photos de l'enfant.
 ///
@@ -40,6 +42,14 @@ class _PhotosPageState extends State<PhotosPage> {
     _photos = widget.api.photos(widget.childId);
   }
 
+  void _reload() {
+    setState(() {
+      // Les octets en cache sont invalidés : un nouvel essai relit vraiment.
+      _bytes.clear();
+      _photos = widget.api.photos(widget.childId);
+    });
+  }
+
   Future<Uint8List> _content(String mediaId) =>
       _bytes.putIfAbsent(mediaId, () => widget.api.photoContent(widget.childId, mediaId));
 
@@ -49,16 +59,7 @@ class _PhotosPageState extends State<PhotosPage> {
       future: _photos,
       builder: (context, s) {
         if (s.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text(
-                'Photos indisponibles',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-          );
+          return buildApiError(context, s.error, _reload);
         }
         if (!s.hasData) {
           return const Center(child: CircularProgressIndicator());
