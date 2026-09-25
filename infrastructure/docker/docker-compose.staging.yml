@@ -24,7 +24,10 @@ services:
       retries: 10
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # H1 (tirage d'image) : surchargeable par `MINIO_IMAGE` — un runner ou un VPS
+    # sans accès à Quay pointe ici son miroir SANS toucher au dépôt ; la valeur par
+    # défaut reste ÉPINGLÉE PAR DIGEST (un tag seul redeviendrait mutable).
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e}
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}

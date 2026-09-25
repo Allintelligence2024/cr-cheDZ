@@ -46,6 +46,7 @@ vérification).
 | **L1** | **Gardiens orphelins + garde de config + CSP edge** | vérif. §4.3, F2, F3 | ~2 h | 4 gardiens en CI ; test unitaire prod-config ; test de contrat en-têtes | **FAIT** + régression CI du 24/09 corrigée et verrouillée (§3, L1.4) |
 | **L1.5** | **5ᵉ gardien orphelin + cliquet « gardiens câblés »** | vérif. §4.3 | ~0,5 h | gardien `check-guards-wired.mjs` en CI ; `audit-seeds-pii --strict` exécuté | **FAIT (2026-09-24)** — 12 gardiens recensés, 0 orphelin, 3 mutations détectées (§5) |
 | **L1.6** | **Diagnostic H1 exploitable** : nommer l'image qui refuse le tirage | CI (`database`) | ~0,2 h | message d'erreur citant l'image + test unitaire | **FAIT (2026-09-24)** — « Registry pull failed for <image> » ; comportement inchangé (aucun repli vert) |
+| **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) |
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré (§5, lot 3)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` ici ; à faire depuis un poste Flutter 3.47.1 |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
@@ -54,7 +55,7 @@ vérification).
 
 **Ordre recommandé** : L1 (fait) → **L2** (bloque l'usage réel) → L3 (bloque les parents) → L5
 (pas de dépendance, peut glisser entre les deux) → L4 (attend une décision DPO) → L6.
-**État au 2026-09-24 (soir)** : L1 (+ L1.5, L1.6), L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
+**État au 2026-09-24 (soir)** : L1 (+ L1.5, L1.6, L1.7), L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
 bloqué par l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée
 possible) ; L4 attend la décision DPO ; il ne reste de L6 que D3 (`compress_media`) et k6.
 
@@ -682,6 +683,34 @@ timeout réseau, échec définitif immédiat sinon, aucun repli vert.
 **Preuve** : `tests/tenant-isolation/registry-pull.test.mjs` — nouveau cas « the failing image is
 named in the error » pour les **deux** images (9/9 verts) ; **mutation K** (retrait du nom) →
 `not ok 8`, restauration → 9/9. Le test est exécuté en CI (Gate D, lot E2).
+
+### L1.7 — H1 : diagnostic affiné et remédiations d'exploitation (2026-09-24, soir)
+
+**Diagnostic affiné** (annotations du run `8cc7583`, grâce au nommage du lot 1.6) : la boucle essaie
+`postgres` **en premier** et il **passe** ; c'est **`quay.io/minio/minio`** qui échoue — deux fois
+(staging + dev). Le blocage est donc **précisément Quay.io**, pas « un registre » en général : Docker
+Hub fonctionne depuis le runner.
+
+**Livré (deux voies, aucune ne fabrique un vert)** :
+1. **Miroir** — `image: ${MINIO_IMAGE:-quay.io/minio/minio:…@sha256:14cea493…}` dans les trois
+   composes. L'exploitant pointe son miroir sans toucher au dépôt ; le **défaut** reste épinglé par
+   digest et **identique** dans les trois fichiers. `test-staging-stack.mjs` tire la config RÉSOLUE
+   par compose (`config.services[name].image`), donc la surcharge est réellement opérante.
+2. **Identifiants** — le job `database` expose `QUAY_USERNAME`/`QUAY_PASSWORD` (secrets de dépôt,
+   vides par défaut) et une étape **conditionnelle** `docker login quay.io` (mot de passe par
+   `--password-stdin`). Sans secrets, l'étape est ignorée : comportement inchangé.
+
+**Preuves exécutées** : contrat compose **16/16**, `registry-pull` **11/11**, contrat de vérité
+documentaire **9/9** ; YAML du workflow validé (étape lue : `if: env.QUAY_USERNAME != ''`).
+
+**Mutations (4 exécutées, 4 rouges, restaurations diff-vérifiées)** :
+```
+L — connexion Quay rendue inconditionnelle      rc=1  ['la connexion doit être facultative…']
+M — mot de passe passé en argument (--password) rc=1  ['mot de passe par stdin, jamais en argument']
+N — digest MinIO divergent dans un seul fichier rc=1  ['digest MinIO inattendu' + 'digests divergents']
+O — MinIO revenu en dur (surcharge perdue)      rc=1  ['… doit être image: ${MINIO_IMAGE:-…} (surcharge H1)']
+restaurations (diff -q avec la sauvegarde)      36/36 verts
+```
 
 ## 6. Décisions en attente (propriétaire explicite)
 

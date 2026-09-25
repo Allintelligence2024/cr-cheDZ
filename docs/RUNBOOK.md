@@ -48,6 +48,7 @@ programmer mensuellement).
 | OTP SMS indisponible | Twilio non configuré | Erreur `SMS_UNAVAILABLE` 503 ; configurer `TWILIO_*` |
 | 409 CAPACITY_EXCEEDED | Capacité atteinte | Vérifier `organizations.max_children` (décret 19-253) |
 | Latence fil du jour | Index manquant | `EXPLAIN ANALYZE` ; ajouter un index via migration numérotée |
+| `docker compose up` : `unauthorized: access to the requested resource is not authorized` au **tirage d'image** | le démon n'a pas d'accès **anonyme** au registre (observé sur `quay.io/minio/minio` depuis un runner GitHub, alors que Docker Hub passe) | **miroir** : `MINIO_IMAGE=<votre miroir>/minio:<tag>@sha256:…` dans l'environnement de déploiement (le défaut du dépôt reste épinglé par digest) ; **ou** identifiants : `docker login quay.io` (en CI : secrets `QUAY_USERNAME`/`QUAY_PASSWORD`). Diagnostic : le message d'erreur **nomme l'image** (`Registry pull failed for <image>`), ne pas se fier au seul mot « unauthorized » |
 
 ## 4. Montée de version (expand/contract, zero-downtime)
 

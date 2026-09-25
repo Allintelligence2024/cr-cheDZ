@@ -49,12 +49,53 @@ for (const stage of ['prod', 'staging']) {
   });
 }
 
+/**
+ * MinIO : registre versionné + manifeste IMMUABLE, surchargeable par `MINIO_IMAGE`.
+ *
+ * H1 (24/09/2026) : le runner ne tire plus l'image anonymement depuis Quay
+ * (« unauthorized »), alors que `postgres:18-alpine` (Docker Hub) passe — la
+ * boucle de tirage essaie postgres EN PREMIER. L'exploitant doit donc pouvoir
+ * pointer un miroir sans modifier le dépôt ; la valeur par défaut reste
+ * épinglée par digest (un tag seul redeviendrait mutable) et identique dans les
+ * trois fichiers (aucune dérive silencieuse d'un environnement à l'autre).
+ */
+const MINIO_DEFAULT_DIGEST = 'sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e';
+const minioImageDefault = (text) => {
+  const m = service(text, 'minio').match(/image: \$\{MINIO_IMAGE:-([^}]+)\}/);
+  assert.ok(m, 'MinIO doit être `image: ${MINIO_IMAGE:-<défaut>}` (surcharge H1)');
+  return m[1];
+};
+
 for (const stage of ['prod', 'staging', 'dev']) {
-  test(`${stage}: MinIO uses the available versioned registry and immutable manifest`, () => {
+  test(`${stage}: MinIO — défaut épinglé par digest, surcharge par MINIO_IMAGE`, () => {
     const text = readFileSync(join(directory, `docker-compose.${stage}.yml`), 'utf8');
-    assert.match(service(text, 'minio'), /image: quay\.io\/minio\/minio:RELEASE\.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e/);
+    const image = minioImageDefault(text);
+    // 1) le défaut (MINIO_IMAGE non défini) est immuable
+    assert.match(image, /^quay\.io\/minio\/minio:RELEASE\.2025-09-07T16-13-09Z@sha256:[0-9a-f]{64}$/);
+    assert.equal(image.split('@')[1], MINIO_DEFAULT_DIGEST, 'digest MinIO inattendu');
+    // 2) l'image RÉELLEMENT utilisée est celle que l'on tire (aucune valeur codée
+    //    en dur à côté de la surcharge)
+    assert.doesNotMatch(service(text, 'minio'), /^ {4}image: (?!\$\{MINIO_IMAGE:-)/m);
   });
 }
+
+test('MinIO : les trois environnements partagent le même digest par défaut', () => {
+  const digests = ['prod', 'staging', 'dev'].map((stage) =>
+    minioImageDefault(readFileSync(join(directory, `docker-compose.${stage}.yml`), 'utf8')),
+  );
+  assert.equal(new Set(digests).size, 1, `digests divergents : ${JSON.stringify(digests)}`);
+});
+
+test('MinIO : la stack de qualification tire l’image CONFIGURÉE (surcharge effective)', () => {
+  // `test-staging-stack.mjs` lit `config.services[name].image` (compose résolu) :
+  // c'est ce qui rend `MINIO_IMAGE` opérant pour H1. Un retour à une valeur
+  // codée en dur dans le script court-circuiterait la surcharge en silence.
+  const script = readFileSync(join(directory, '..', '..', 'scripts', 'test-staging-stack.mjs'), 'utf8');
+  assert.match(script, /for \(const name of \['postgres', 'minio'\]\) process\.stdout\.write\(await pullRegistryImage\(config\.services\[name\]\.image/);
+  for (const image of ['postgres', 'minio']) {
+    assert.ok(!new RegExp(`pullRegistryImage\\(['\"]${image}`).test(script), `${image} : image codée en dur au lieu de la config résolue`);
+  }
+});
 
 /**
  * Point de montage des données PostgreSQL.

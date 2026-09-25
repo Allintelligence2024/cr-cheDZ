@@ -39,8 +39,24 @@ jobs:
       STORAGE_BACKEND: local
       STORAGE_LOCAL_DIR: /tmp/creche-storage-ci
       PAYMENT_WEBHOOK_SECRET: phase8-test-secret
+      # H1 : identifiants FACULTATIFS pour le tirage des images d'infrastructure.
+      # Vides par défaut → l'étape de connexion est simplement ignorée (comportement
+      # inchangé). Les fournir (secrets de dépôt) débloque un runner dont l'accès
+      # anonyme à Quay est refusé, sans aucune modification de code.
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      # H1 (24/09/2026) : `unauthorized` sur `quay.io/minio/minio` — l'image est
+      # tirée par `scripts/test-staging-stack.mjs`. Deux remédiations possibles,
+      # documentées dans docs/CI-DATABASE-JOB-FINDINGS.md (§ H1) :
+      #   1. ici : fournir QUAY_USERNAME/QUAY_PASSWORD (secrets de dépôt) ;
+      #   2. sans secret : pointer un miroir via `MINIO_IMAGE` (variables d'env du
+      #      job ou du runner) — la valeur par défaut reste épinglée par digest.
+      # Aucune des deux ne fabrique un vert : sans l'une ni l'autre, H1 reste rouge.
+      - name: Registre Quay (facultatif — H1)
+        if: env.QUAY_USERNAME != ''
+        run: echo "$QUAY_PASSWORD" | docker login quay.io --username "$QUAY_USERNAME" --password-stdin
       - uses: actions/setup-node@v4
         with:
           node-version: 22

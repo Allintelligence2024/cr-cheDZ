@@ -216,7 +216,8 @@ d'environnement du job. C'est exactement le cas ici.
 | `94507aa` | `in_progress` (franchi phase26) | — | la régression du lot 1 est traitée |
 | `9fd826a` | **terminé**, `rc=1` — **H1 seul** | `success` | plus aucun arrêt anticipé : toutes les suites tournent, les preuves G1–G5/H2a–H2l sont émises, seul H1 rougit |
 | `6584c52` (lot 6.1) | terminé `20:01:22 → 20:30:59`, **rc=1 — H1 seul** | **échec** : « Tests unitaires api + worker » | la CI attrape ce que le local ne voyait pas (`quality` ne construit pas l'API) → corrigé en `8cc7583` |
-| `8cc7583` | en cours au moment de la coupure du jeton GitHub | **`success`** | les 2 nouveaux gardiens du lot 1.5 tournent en CI ; tests unitaires api 117 + worker 5 verts |
+| `8cc7583` | **terminé** (`20:37:03 → 21:07:03`, 30 min), `rc=1` — **H1 seul** | **`success`** | batterie complète : preuves émises `G1=26; G1b=24; G1c=38; G1d=44; G2=113; G3=33; G4=17; G5=18`, `H2a=21; …; H2l=14`, `F4` (7 tests Flutter/Drift réels), `F2` (59 tests Flutter) ; échecs : **2 × H1**, tous deux `quay.io/minio/minio` (dev + staging) — **aucune autre suite** ; `quality` vert avec les 2 gardiens du lot 1.5 et 117+5 tests unitaires |
+| `f442176` | documentation seule (aucun code) | — | verdicts consignés ici même |
 
 Détail des annotations de `6584c52` (job `database`) : deux `Registry pull failed … unauthorized`
 (staging puis dev), la `version` obsolète de compose (avertissement), et `Process completed with
@@ -233,11 +234,15 @@ for (const name of ['postgres', 'minio']) process.stdout.write(await pullRegistr
 ```
 
 Autrement dit, l'`unauthorized` observé ne concerne **ni un dépôt privé ni des
-credentials GHCR manquants** : ce sont `postgres:18-alpine` (Docker Hub) et
-`quay.io/minio/minio` (Quay) qui refusent le tirage **anonyme** depuis le runner —
-ce qui oriente le diagnostic vers le runner lui-même (authentification/miroir
-configurés sur le démon, ou blocage réseau/rate-limit de ces registres) plutôt que
-vers le dépôt.
+credentials GHCR manquants** : il porte sur des images d'infrastructure publiques,
+ce qui oriente le diagnostic vers le runner plutôt que vers le dépôt.
+
+**Le diagnostic s'est affiné avec l'instrumentation du lot 1.6** (run `8cc7583`,
+annotations du job `database`) : `postgres` est essayé **en premier** dans la
+boucle et **passe** — donc Docker Hub fonctionne — tandis que
+`quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493…` échoue **deux
+fois** (staging puis dev). Le blocage est donc **précisément Quay.io**, pas un
+« registre » en général : c'est une information actionnable pour l'exploitant.
 
 **Instrumentation ajoutée (lot 1.6)** : l'erreur **nomme désormais l'image**
 (`Registry pull failed for quay.io/minio/minio: … unauthorized …`) — l'annotation
@@ -246,6 +251,18 @@ pour l'ops. Vérifié par test : `tests/tenant-isolation/registry-pull.test.mjs`
 (« the failing image is named in the error »), exécuté en CI. Le comportement de
 fond est inchangé : réessais uniquement sur timeout réseau, échec définitif
 immédiat sinon, **aucun repli « vert de complaisance »**.
+
+**Remédiations d'exploitation (lot 1.7)** — deux chemins, aucun ne fabrique un vert :
+
+| Voie | Geste | Effet | Épinglage |
+|---|---|---|---|
+| **A — miroir** (sans secret) | définir `MINIO_IMAGE` (env du job, du runner ou du VPS) | le compose et `test-staging-stack.mjs` tirent l'image **configurée** | le défaut du dépôt reste **épinglé par digest** (`sha256:14cea493…`) et identique dans les trois environnements ; c'est l'exploitant qui choisit sa référence de miroir |
+| **B — identifiants** | fournir les secrets de dépôt `QUAY_USERNAME` / `QUAY_PASSWORD` | le job `database` se connecte à Quay (`docker login`, mot de passe par **stdin**) puis tire normalement | inchangé |
+
+Sans A **ni** B, H1 reste rouge : c'est voulu. Les deux voies sont verrouillées par
+des tests (`production-compose-contract` : surcharge présente, défaut immuable,
+même digest partout ; `registry-pull` : étape conditionnelle, `--password-stdin`,
+aucun mot de passe littéral).
 
 ### Correctif — 24/09
 
