@@ -235,7 +235,7 @@ explicite au lieu d'un échec silencieux sur le téléphone.
    pendant ce lot (preuve en §3.2, bloc « Défaut découvert »). L'asset est créé, aucun objet
    n'existe, la lecture rend 404 `MEDIA_CONTENT_MISSING`. Correctif = côté client (mettre les
    octets en file locale puis `POST /media/upload` à la reconnexion) : même blocage outillage.
-   **Décision serveur non prise** : faire transiter du base64 dans `POST /sync/push` suppose de
+   **Décision serveur à trancher : dossier D6** (§6). Faire transiter du base64 dans `POST /sync/push` suppose de
    relever la limite de corps JSON (100 ko par défaut Express) pour cette seule route —
    dimensionnement à trancher, non improvisé ici.
 3. **Clips vidéo** — `POST /video/clips/presign-upload` est désormais **fail-closed** en production
@@ -1016,6 +1016,40 @@ pas la relecture.
 juge pas la qualité du Dart. Il garantit seulement qu'aucun écran ne peut être livré sur un chemin mort
 sans que quelqu'un s'en aperçoive.
 
+### L2D — Photos hors ligne : la limitation devient mesurée, et le contournement verrouillé (2026-09-25)
+
+**Constat (déjà documenté, désormais exécutable)** : la commande `add_photo` de `POST /sync/push`
+crée un `media_assets` **sans octets** (lecture → `404 MEDIA_CONTENT_MISSING`), et **aucune UI**
+n'enfile de photo (`enqueueOfflinePhoto` n'est appelé que par ses tests). Le plan listait ce défaut
+« côté client à corriger » ; il manquait la garantie qu'il ne soit pas **contourné** (une UI câblée
+avant le canal d'octets produirait une fonctionnalité qui « marche » puis rend des 404 en lecture).
+
+**Livré** :
+- `tests/tenant-isolation/media-client-wiring.test.mjs` — 2 contrôles de plus (**5 au total**) :
+  1. `registerFromSync` **n'écrit toujours aucun octet** (extraction contrôlée de la fonction, avec
+     assertion de repère : si l'extraction échoue, le test échoue — pas de verrou qui dort) ;
+     le jour où les octets transitent, la CI exige de mettre à jour la limite documentée **et** le
+     dossier D6 ;
+  2. `enqueueOfflinePhoto` **n'est appelé par aucune UI** (le fichier qui *définit* la méthode est
+     exclu, comme les tests) ;
+- **dossier de décision D6** au §6 (options a/b/c, recommandation (a) via L3, contrainte du plafond
+  JSON de `sync/push` écrite) ;
+- `docs/VERIFICATION_ANALYSE_2026-09-24.md` : la ligne « défaut confirmé » renvoie désormais au
+  dossier D6 et au verrou.
+
+**Preuves exécutées** : 5/5 (extractions contrôlées). Mutations (rouges, restaurations `diff -q`
+vérifiées) :
+```
+D — octets écrits dans la voie hors-ligne (`storage.put(...)` ajouté)   rc=1  « limitation levée — retirer ce verrou, mettre à jour la doc et D6 »
+E — une UI appelle enqueueOfflinePhoto                                  rc=1  « enqueueOfflinePhoto est appelé par : apps/staff-mobile/lib/main.dart »
+restaurations (diff -q media.service.ts, main.dart)                     identiques ✓ → 5/5
+```
+
+**Note de méthode** : le premier jet du contrôle 5 échouait sur le fichier **définisseur** de la
+méthode (il la nomme forcément) — corrigé en distinguant définition et appel, comme pour la classe du
+contrôle 3. Deux fois dans la même journée, c'est la mutation/correction qui a réglé un motif trop
+large : c'est le comportement attendu du « prouver, pas relire ».
+
 ## 6. Décisions en attente (propriétaire explicite)
 
 | # | Décision | Propriétaire | Bloque | État |
@@ -1024,7 +1058,8 @@ sans que quelqu'un s'en aperçoive.
 | D2 | Rétention `notification_queue`/`messages` : purger ou justifier | DPO | Lot 4 | dossier ci-dessous |
 | D3 | `compress_media` : implémenter ou retirer | produit | Lot 6 | dossier ci-dessous |
 | D4 | `parent-mobile` : offline-first complet maintenant, ou refresh + états d'erreur seuls | produit | portée du Lot 3 | dossier ci-dessous |
-| D5 | Clips vidéo : quel plafond de taille et quelle voie (API ou S3 direct) | produit + ops | usage réel de la vidéosurveillance en prod | dossier ci-dessous |
+| D5 | Clips vidéo : quel plafond de taille et quelle voie (API ou S3 direct) | produit + ops | usage réel de la vidéosurveillance en prod | ✅ **tranchée : (c)** (lots L6.4) |
+| D6 | Photos **hors ligne** : quel canal d'octets (base64 dans `sync/push`, file locale client + `POST /media/upload`, ou retrait de la voie tant qu'aucune UI ne capture) | produit + tech | câblage de la capture photo staff/parent | dossier ci-dessous |
 
 ### D2 — Rétention de `notification_queue` et `messages` *(DPO)* — ✅ **TRANCHÉE : (a) purger**
 
@@ -1140,6 +1175,48 @@ la décision D1 = **A** (contenu servi par l'API, pas de sous-domaine public) re
 
 **Recommandation** : **(a)** si la vidéosurveillance est au programme du pilote ; sinon **(c)**, pour
 ne pas laisser croire que la fonction est opérationnelle.
+
+### D6 — Photos hors ligne : par où passent les OCTETS ? *(produit + tech)*
+
+**Faits mesurés (2026-09-25, lot L2D)** :
+- la commande `add_photo` de `POST /sync/push` **accepte** l'opération et crée une ligne
+  `media_assets` (`media.service.ts`, `registerFromSync`) **sans écrire aucun octet** dans le
+  stockage ; la lecture du contenu rend ensuite `404 MEDIA_CONTENT_MISSING` (défaut constaté **par
+  exécution** pendant le lot 2B, consigné dans `docs/VERIFICATION_ANALYSE_2026-09-24.md`) ;
+- **aucune UI ne capture ni n'enfile de photo** : pas d'`image_picker` ni de caméra dans
+  `staff-mobile/lib`, aucun téléversement dans admin-web ; `enqueueOfflinePhoto` n'est appelé que
+  par ses propres tests ⇒ la voie est **latente**, comme le presign d'écriture (lot L2C) ;
+- côté client, les octets sont, en théorie, disponibles localement (`bytes` passés à
+  `enqueueOfflinePhoto`) mais le client **ne les envoie pas** au serveur : il ne pousse que
+  `storage_key`/`mime_type`/`checksum` (l'upload direct par presign, mort en production, était censé
+  le faire à la reconnexion — voir L2C) ;
+- contrainte serveur connue : le corps JSON de `POST /sync/push` est plafonné par Express
+  (`100 ko` par défaut) — faire transiter une photo en base64 dans cette route **exige** un
+  dimensionnement dédié (plafond, limite de lot d'opérations, mémoire du worker d'écriture).
+
+**Options** :
+- **(a) File locale côté client + `POST /media/upload` à la reconnexion** — les octets ne passent
+  jamais dans le JSON de synchronisation : la route média existe déjà (lot 2B), le plafond 8 Mio et
+  le consentement sont déjà vérifiés côté serveur ; le travail est **client** (stockage local du
+  fichier, reprise, purge après succès) et donc **L3** (SDK Flutter requis, bloqué ici).
+  *Effort M, risque faible, aucun changement serveur.*
+- **(b) Base64 dans `POST /sync/push`** — un seul canal pour tout l'hors-ligne, mais il faut relever
+  la limite de corps **de cette seule route**, borner la taille par opération et par lot, et
+  accepter que la photo voyage dans la file de synchronisation (journalisation, reprises). *Effort M,
+  surface serveur nouvelle à tester (limites, rejets, idempotence).*
+- **(c) Retirer la voie hors-ligne du périmètre tant qu'aucune UI ne capture** — supprimer (ou
+  refuser explicitement) `add_photo` côté serveur et client, et documenter « pas de photo hors
+  ligne en V1 » ; la photo en ligne passe par `POST /media/upload`. *Effort XS, honnête, réversible ;
+  c'est ce qui existe de fait aujourd'hui (aucune UI), mais le code laisse croire l'inverse.*
+
+**Recommandation** : **(a)** quand le travail client est ouvert (L3) — c'est le canal qui réutilise
+tout l'existant (route média, plafond, consentements, audit) sans élargir la surface du serveur ;
+**(b)** seulement si le produit veut une seule file de synchronisation et l'assume (tests de limites
+obligatoires) ; **(c)** est l'option « zéro mensonge » si la capture photo n'est pas au programme du
+pilote. **En attendant la décision**, deux verrous empêchent le contournement :
+`media-client-wiring.test.mjs` refuse qu'une UI câble `enqueueOfflinePhoto` (voie qui produit un
+asset sans octets) et refuse que les octets se mettent à transiter dans `registerFromSync` sans que
+cette limite documentée soit mise à jour.
 
 ## 7. Définition de « fait » (par lot)
 

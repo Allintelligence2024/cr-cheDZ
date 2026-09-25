@@ -147,7 +147,9 @@ correctement l'erreur, alors que `photos_page.dart:33` et `consents_page.dart:30
   `POST /media/upload` n'a **pas** pu être livré ici (aucun SDK Flutter → non compilé) ;
   (2) **défaut confirmé par exécution** : la photo **hors ligne** (`add_photo`) crée un asset
   **sans jamais transférer les octets** — `LECTURE DU CONTENU 404 MEDIA_CONTENT_MISSING`
-  (journal au plan §3.2) ; (3) `POST /video/clips/presign-upload` est *fail-closed* en production
+  (journal au plan §3.2) ; le **canal d'octets à choisir est le dossier de décision D6** (plan §6),
+  et deux verrous empêchent de câbler une UI hors-ligne ou de faire transiter les octets sans mettre
+  la limite à jour (`media-client-wiring.test.mjs`, journal L2D) ; (3) `POST /video/clips/presign-upload` est *fail-closed* en production
   mais le téléversement de clips **par l'API** n'est pas livré (fichiers volumineux : dimensionnement
   dédié).
   **Nuance mesurée le 25/09 (lot L2C)** : la dette (1) est **latente, pas active** — aucun écran

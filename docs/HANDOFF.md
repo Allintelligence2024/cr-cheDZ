@@ -389,8 +389,17 @@ d'`image_picker`/caméra dans `staff-mobile/lib`, aucun téléversement dans adm
 n'est référencé que par ses propres tests). La réécriture Dart appartient au lot **L3** (SDK Flutter
 requis) ; en attendant, `tests/tenant-isolation/media-client-wiring.test.mjs` (job `quality` +
 bundle du gate D) **interdit de câbler un écran sur ce chemin mort** sans rebrancher, et exige que
-chaque exception reste vraie (appel réel présent) et hors UI. Preuves : 3/3 ; **3 mutations rouges**,
+chaque exception reste vraie (appel réel présent) et hors UI. Preuves : 5/5 ; **5 mutations rouges**,
 dont une qui a révélé un motif troué (il comptait les commentaires) → durci sur les appels réels.
+
+**Et la voie hors-ligne (`add_photo`)** — qui crée un asset **sans octets** (404
+`MEDIA_CONTENT_MISSING` à la lecture, défaut mesuré pendant le lot 2B) : même traitement. Le contrat
+vérifie que le serveur n'écrit toujours aucun octet dans `registerFromSync` (extraction **contrôlée** :
+si la fonction bouge, le verrou échoue au lieu de dormir) et qu'**aucune UI n'appelle
+`enqueueOfflinePhoto`. Le canal d'octets à retenir est le **dossier D6** (plan §6) :
+(a) file locale client + `POST /media/upload` — recommandé, à faire avec L3 ; (b) base64 dans
+`sync/push` — suppose de relever le plafond de corps de cette seule route ; (c) retirer la voie tant
+qu'aucune UI ne capture.
 
 ## Mise à jour 2026-09-24 (soir) — CI : régression du lot 1 corrigée, verrou ajouté
 
