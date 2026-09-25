@@ -48,7 +48,7 @@ FAIT en dernier (session août 2026) :
   privacy_approved_dpia_exists), garde-fou setFlag (422 DPIA_REQUIRED,
   activation globale interdite VIDEO_SURVEILLANCE_GLOBAL_FORBIDDEN,
   désactivation toujours libre). Suite phase20-video-dpia-gate : 8 cas verts.
-- Phase 21 — MODULE vidéosurveillance V1 implémenté : caméras (zones
+- Phase 21 — MODULE vidéosurveillance V1 implémenté **côté consultation** : caméras (zones
   blanches DPIA, CHECK base — jamais sanitaires/change/sieste/infirmerie),
   clips DVR/NVR (presign S3 comme les photos, backend local explicite),
   download signé + flux local avec VISIONNAGE JOURNALISÉ (audit read),
@@ -260,7 +260,7 @@ les correctifs ont été réappliqués selon la spécification
 | Phase 9 | Admin web complète (API + écrans) — dashboard, présences, journal + modération, photos, facturation, fiche enfant, paramètres/tarifs, i18n AR/FR, lazy, responsive |
 | Phase 10 | Santé, conformité 19-253, vie privée 25-11, console support (API + UI) — migrations 029-032, seeds 015 |
 | Roadmap v2 | Messagerie, exports Excel, paiement SATIM, multi-rôles, WhatsApp (notif + OTP), paie, marketplace — phases 12-20 vertes |
-| Conformité vidéo | DPIA rédigée + verrou flag `video_surveillance` (046) + module V1 : caméras/clips/purge 30 j/visionnage journalisé (047-048, phase21) |
+| Conformité vidéo | DPIA rédigée + verrou flag `video_surveillance` (046, **inactif par défaut**) + module V1 : caméras/clips/purge 30 j/visionnage journalisé (047-048, phase21). **Limite écrite noir sur blanc (D5, 25/09/2026)** : l'**acquisition** des clips n'est pas câblée — aucun écran n'envoie de clip (verrou `phase21`), `POST /video/clips/presign-upload` est *fail-closed* en production (pas de sous-domaine public, D1 = A), et le plafond de taille n'est pas tranché — la fonction n'est donc pas présentée comme opérationnelle |
 | Apps | api (NestJS), worker (jobs + push + exports + PDF), admin-web (React FR/AR responsive), support-console, staff-mobile + parent-mobile (squelettes Dart) |
 | CI | `ci.yml` (7 jobs : quality, database, e2e, admin-web, support-console, security, backup-drill), `docker.yml`, `flutter.yml`, `security-audit.yml` — versionnés et exécutés ; `database` rouge H1 seul (`docs/CI-DATABASE-JOB-FINDINGS.md`) |
 | Docs | `docs/PLAN_IMPLEMENTATION.md`, `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md`, `docs/ROADMAP_V2.md`, `docs/adr/` (000→010), `docs/HANDOFF.md` (ce fichier) |

@@ -47,19 +47,21 @@ vérification).
 | **L1.5** | **5ᵉ gardien orphelin + cliquet « gardiens câblés »** | vérif. §4.3 | ~0,5 h | gardien `check-guards-wired.mjs` en CI ; `audit-seeds-pii --strict` exécuté | **FAIT (2026-09-24)** — 12 gardiens recensés, 0 orphelin, 3 mutations détectées (§5) |
 | **L1.6** | **Diagnostic H1 exploitable** : nommer l'image qui refuse le tirage | CI (`database`) | ~0,2 h | message d'erreur citant l'image + test unitaire | **FAIT (2026-09-24)** — « Registry pull failed for <image> » ; comportement inchangé (aucun repli vert) |
 | **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) |
-| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
+| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; restent hors lot : branchement du client mobile (**L3**, bloqué par le SDK Flutter), upload des clips (**D5 = c** : hors discours opérationnel, verrou ), octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré (§5, lot 3)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` ici ; à faire depuis un poste Flutter 3.47.1 |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | **FAIT (2026-09-25)** — décision **D2 = (a)** (purger) : migration 076, seuils 90 j / 365 j, suite `phase76` 15 assertions, 3 mutations détectées (§5) |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (**10 contrôles** au 25/09/2026, branche CI `quality`) + 6 documents corrigés ; prolongé par **L5.1** (vérité « workflows CI », §5) |
-| **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6.1 (sondes) FAIT**, **L6.2 (k6) FAIT**, **L6.3 (D3 `compress_media`) FAIT** : stub retiré, verrou anti-stub en CI ; critère k6 mesuré par le banc en parité (500 ops, p95 1,4 s) + gardien de discours |
+| **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6 FAIT dans son ensemble** : L6.1 (sondes API/worker), L6.2 (k6 — critère mesuré par le banc en parité 500 ops, p95 1,4 s, gardien de discours), L6.3 (D3 — stub `compress_media` retiré, verrou anti-stub), L6.4 (D5 — vidéosurveillance retirée du discours opérationnel, verrou d'acquisition) |
 
 **Ordre recommandé** : L1 (fait) → **L2** (bloque l'usage réel) → L3 (bloque les parents) → L5
 (pas de dépendance, peut glisser entre les deux) → L4 (attend une décision DPO) → L6.
 **État au 2026-09-24 (soir)** : L1 (+ L1.5, L1.6, L1.7), L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
 bloqué par l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée
-possible) ; **L4** (D2 = a, migration 076, suite `phase76`) et **D3** (stub `compress_media` retiré,
-L6.3) sont faits ; k6 est tranché (L6.2 — critère mesuré par le banc exécutable, script k6 verrouillé
-en CI mais **non exécuté** ici) ; il reste **D5** (clips vidéo), la dernière décision produit.
+possible) ; **L4** (D2 = a, migration 076, suite `phase76`), **L6.2** (k6 : critère mesuré par le banc
+exécutable, script k6 verrouillé en CI mais **non exécuté** ici), **L6.3** (D3 : stub `compress_media`
+retiré) et **L6.4** (D5 : vidéosurveillance retirée du discours opérationnel) sont faits. **Toutes les
+décisions D2–D5 sont tranchées** ; le seul lot non livré est **L3** (BLOQUÉE : SDK Flutter absent de
+l'environnement, `pub.dev` injoignable — outillage requis, aucune preuve compilable possible ici).
 
 ---
 
@@ -929,6 +931,34 @@ Rappel de portée : le commentaire de `014_jobs_and_outbox.sql:12` (qui citait `
 liste des types) **reste tel quel** — réécrire une migration déjà appliquée changerait son checksum ;
 l'état courant est décrit ici et dans le worker.
 
+### L6.4 — D5 : la vidéosurveillance n'est plus présentée comme opérationnelle (2026-09-25)
+
+**Décision appliquée** : option (c) — retirer la vidéosurveillance du discours produit tant que le
+dimensionnement de l'acquisition n'est pas fait (dossier §6 D5).
+
+**Faits mesurés (avant décision)** :
+```
+flag video_surveillance                     → seed 014 : FALSE (inactif par défaut)
+appels clients vers /video/clips/presign-upload → AUCUN (admin-web, staff-mobile, parent-mobile)
+route d'envoi en production                 → fail-closed (lot 2B, D1 = A : pas de sous-domaine public)
+écran VideoPage (admin-web)                 → liste/visionne les clips, crée des caméras — n'envoie rien
+plafonds de taille des clips                → non tranchés (8/12 Mio = dimensionnés pour des photos)
+```
+
+**Livré** : `docs/ROADMAP_V2.md` (ligne P2 requalifiée : « NON opérationnel en l'état » + l'absence
+d'acquisition écrite) ; `docs/HANDOFF.md` (description du module et ligne du tableau rectifiées —
+« côté consultation », flag inactif par défaut, acquisition non câblée) ; **verrou exécutable** dans
+`tests/tenant-isolation/phase21-video-surveillance.api.test.mjs` (cas 9) : aucun fichier client
+(`apps/*/src|lib`) ne peut appeler `clips/presign-upload` ni poster sur `/video/clips` — câbler
+l'envoi sans rouvrir D5 fait **échouer la CI** avec le fichier fautif en clair.
+
+**Preuves exécutées** : `phase21` en environnement de gate (rôles de production, PG réel, backend
+local explicite) → **9/9** (« ✓ D5 : aucun client n'envoie de clip ») ;
+**mutation** : un appel `http.post('/video/clips/presign-upload', …)` ajouté dans
+`apps/admin-web/src/pages/VideoPage.tsx` →
+`✗ D5 … — VideoPage.tsx → presign d'envoi de clip` puis
+`ÉCHEC Phase 21 vidéosurveillance : 1 assertion(s)` ; restauration `diff -q` vérifiée → 9/9.
+
 ## 6. Décisions en attente (propriétaire explicite)
 
 | # | Décision | Propriétaire | Bloque | État |
@@ -1023,7 +1053,19 @@ rédaction : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` (mesure
 **Recommandation** : **(a)** d'abord (c'est ce que le rapport d'audit qualifiait de bloquant),
 **(b)** ensuite si le terrain le demande.
 
-### D5 — Clips vidéo : plafond et voie d'envoi *(produit + ops)*
+### D5 — Clips vidéo : plafond et voie d'envoi *(produit + ops)* — ✅ **TRANCHÉE : (c), avec (a) en réserve**
+
+> **Décision du 2026-09-25 : option (c)**, appliquée au lot L6.4 (journal §5). Faits mesurés qui
+> motivent (c) : le flag `video_surveillance` est **inactif par défaut** (seed 014), **aucun écran
+> du dépôt n'envoie de clip** (l'écran `VideoPage` liste les caméras, liste/visionne les clips et
+> crée des caméras — mais n'envoie rien), et la seule route d'envoi
+> (`POST /video/clips/presign-upload`) est **fail-closed en production** depuis le lot 2B
+> (D1 = A : pas de sous-domaine public). La vidéosurveillance n'est donc plus présentée comme
+> opérationnelle (README/HANDOFF/ROADMAP qualifiés), et un **verrou** (`phase21`, cas 9) fait
+> échouer la CI si un client câble l'envoi sans que D5 ne soit rouverte.
+> **(a) reste la réserve** si la vidéosurveillance entre au programme du pilote : envoi par l'API
+> (streaming vers le stockage, plafond dédié 100–200 Mio, `client_max_body_size` et timeouts
+> associés) — coût M, à dimensionner avec les tests de limites. (b) rouvrirait D1, écartée.
 
 **Faits mesurés** : l'envoi de clips passe par un **presign S3** (`POST /video/clips/presign-upload`) ;
 la décision D1 = **A** (contenu servi par l'API, pas de sous-domaine public) rend ce presign
