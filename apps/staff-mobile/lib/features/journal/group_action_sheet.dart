@@ -60,7 +60,7 @@ class _GroupActionSheetState extends State<GroupActionSheet> {
           const Text('Action groupée — section', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _eventType,
+            initialValue: _eventType,
             decoration: const InputDecoration(labelText: 'Type'),
             items: ['meal', 'diaper', 'nap_start']
                 .map((v) => DropdownMenuItem(value: v, child: Text(v)))
@@ -69,7 +69,7 @@ class _GroupActionSheetState extends State<GroupActionSheet> {
           ),
           if (_eventType == 'meal') ...[
             DropdownButtonFormField<String>(
-              value: _mealType,
+              initialValue: _mealType,
               decoration: const InputDecoration(labelText: 'Type de repas'),
               items: ['breakfast', 'lunch', 'snack', 'bottle']
                   .map((v) => DropdownMenuItem(value: v, child: Text(v)))
@@ -77,7 +77,7 @@ class _GroupActionSheetState extends State<GroupActionSheet> {
               onChanged: (v) => setState(() => _mealType = v ?? 'lunch'),
             ),
             DropdownButtonFormField<String>(
-              value: _mealQuantity,
+              initialValue: _mealQuantity,
               decoration: const InputDecoration(labelText: 'Quantité'),
               items: ['none', 'little', 'half', 'good', 'all']
                   .map((v) => DropdownMenuItem(value: v, child: Text(v)))
@@ -87,7 +87,7 @@ class _GroupActionSheetState extends State<GroupActionSheet> {
           ],
           if (_eventType == 'diaper')
             DropdownButtonFormField<String>(
-              value: _diaperType,
+              initialValue: _diaperType,
               decoration: const InputDecoration(labelText: 'Type'),
               items: ['wet', 'dirty', 'both', 'dry']
                   .map((v) => DropdownMenuItem(value: v, child: Text(v)))

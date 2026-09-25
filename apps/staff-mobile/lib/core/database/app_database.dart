@@ -116,13 +116,13 @@ class AppDatabase extends _$AppDatabase {
 
   // Registered media metadata only: downloads/consent remain online-authorized.
   // Custom SQL avoids hand-editing generated Drift code, like sync_state.
-  Future<void> _createMediaMirror() => customStatement("""
+  Future<void> _createMediaMirror() => customStatement('''
     CREATE TABLE IF NOT EXISTS local_media (
       id TEXT PRIMARY KEY NOT NULL, organization_id TEXT NOT NULL,
       child_id TEXT, media_type TEXT NOT NULL,
       created_at TEXT NOT NULL
     )
-  """);
+  ''');
 
   @override
   MigrationStrategy get migration => MigrationStrategy(

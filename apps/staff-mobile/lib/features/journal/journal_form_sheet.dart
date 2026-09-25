@@ -88,7 +88,7 @@ class _JournalFormSheetState extends State<JournalFormSheet> {
             const SizedBox(height: 16),
             if (widget.eventType == 'meal') ...[
               DropdownButtonFormField<String>(
-                value: _mealType,
+                initialValue: _mealType,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: ['breakfast', 'lunch', 'snack', 'bottle']
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))
@@ -96,7 +96,7 @@ class _JournalFormSheetState extends State<JournalFormSheet> {
                 onChanged: (v) => setState(() => _mealType = v ?? 'lunch'),
               ),
               DropdownButtonFormField<String>(
-                value: _mealQuantity,
+                initialValue: _mealQuantity,
                 decoration: const InputDecoration(labelText: 'Quantité'),
                 items: ['none', 'little', 'half', 'good', 'all']
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))
@@ -106,7 +106,7 @@ class _JournalFormSheetState extends State<JournalFormSheet> {
             ],
             if (widget.eventType == 'diaper')
               DropdownButtonFormField<String>(
-                value: _diaperType,
+                initialValue: _diaperType,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: ['wet', 'dirty', 'both', 'dry']
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))
@@ -115,7 +115,7 @@ class _JournalFormSheetState extends State<JournalFormSheet> {
               ),
             if (widget.eventType == 'nap_end')
               DropdownButtonFormField<String>(
-                value: _napQuality,
+                initialValue: _napQuality,
                 decoration: const InputDecoration(labelText: 'Qualité'),
                 items: ['good', 'agitated', 'refused']
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))
@@ -135,7 +135,7 @@ class _JournalFormSheetState extends State<JournalFormSheet> {
               ),
             if (widget.eventType == 'incident')
               DropdownButtonFormField<String>(
-                value: _severity,
+                initialValue: _severity,
                 decoration: const InputDecoration(labelText: 'Sévérité'),
                 items: ['minor', 'moderate', 'serious']
                     .map((v) => DropdownMenuItem(value: v, child: Text(v)))

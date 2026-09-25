@@ -59,7 +59,13 @@ if [ "$rc" -ne 0 ]; then
     matches=$(grep -av '^[[:space:]]*$' "$log" | tail -6 || true)
     publish "sortie non reconnue — fin du journal ${log}" "$matches"
   else
-    publish "$matches"
+    # Le RÉSUMÉ d'abord (`N issues found`, `N tests passed`), puis les lignes
+    # détaillées : le plafond d'annotations (8) coupait la fin du journal, donc
+    # le total — mesuré le 2026-09-25 sur le staff-mobile, où 8 lints publiés
+    # cachaient le nombre réel d'issues.
+    summary=$(printf '%s\n' "$matches" | grep -aiE 'issues? found|tests? passed|version solving failed' || true)
+    rest=$(printf '%s\n' "$matches" | grep -aivE 'issues? found|tests? passed' || true)
+    publish "$summary" "$rest"
   fi
 fi
 
