@@ -894,6 +894,12 @@ C — garde d'idempotence retirée (body <> marqueur)               rc=1  ['6. i
 restaurations (diff -q avec la sauvegarde)                       identiques ✓ → suite 15/15 verte
 ```
 
+**Gate D complet rejoué localement le 25/09/2026** (72 entrées SUITES + le garde anti-bypass,
+rôles de production `creche_app`/`creche_migrator`, PG 18.4 réel) : **rc=0, « 73/73 suites vertes »**
+(1385 s), avec `PASS phase76-messaging-retention.pg.test.mjs` — les notices H2a–H2l/G1–G5 ont été
+ré-émises à l'identique. Le précédent rejeu (24/09, avant 076) affichait 72/72 : le passage à 73 est
+la conséquence directe de l'ajout de la suite, pas d'un changement de périmètre.
+
 **Outillage re-validé après la migration** : `migrate --status` (076 appliquée, checksums),
 `schema-check` (RLS complète, dérive nulle), `check-rls-usage` (52 accès bruts conformes ;
 la fonction SECURITY DEFINER est déclarée — le marqueur textuel, lui, **n'est pas** SECURITY
