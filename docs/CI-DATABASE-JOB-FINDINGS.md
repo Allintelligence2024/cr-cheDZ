@@ -229,6 +229,7 @@ exit code 1` — **aucune autre suite en échec**.
 |---|---|---|---|
 | `9a33e37` (verdict gate D, docs) | **terminé** `14:54:53 → 15:22:52` (28 min), `rc=1` — **H1 seul** | `success` | étape « Registre Quay (facultatif — H1) » = **`skipped`** (aucun secret de dépôt) ; les échecs sont **exactement** `H1 staging failure` + `H1 dev failure` et leur trace d'appel — **aucune annotation « Suite en échec »** |
 | `3f88481` (lot L6.4 / D5) | **terminé** `14:57:08 → 15:27:01` (30 min), `rc=1` — **H1 seul** | `success` | même signature : `H1 staging failure`, `H1 staging 1`, `H1 dev failure` (+ « exit code 1 ») — rien d'autre |
+| `ff23058` (lot L2E : garde de payload + `phase77`) — 3 workflows | `ci` : **terminé** `16:11:29 → 16:41:07` (29,5 min), `rc=1` — **H1 seul** ; `flutter` : `success` ; `docker` : `success` | `quality` `success`, `admin-web` `success`, `e2e` `success`, `support-console` `success`, `security` `success`, `backup-drill` `success` | step 14 désormais **« 73 suites — isolation, phase3 → phase77 »** (libellé du commit) ; annotations **failure** = 2 tirages `quay.io/minio/minio@sha256:14cea49…` refusés + `Process completed with exit code 1.` + 1 avertissement Compose « version obsolete » — **aucune annotation « Suite en échec »** ⇒ `phase77` (dernière entrée de la batterie) est passée **en CI, rôles de production** |
 | `beb3f27` (lot L2D) — 3 workflows | `ci` : **terminé**, `rc=1` — **H1 seul** ; `flutter` : `success` ; `docker` : `success` | `quality` `success`, `support-console` `success`, `e2e` `success`, `admin-web` `success`, `backup-drill` `success`, `security` `success` | `ci` : step 14 « Suites d'isolation (garde RLS anti-bypass + 72 suites — isolation, phase3 → phase76) » = `failure`, mais annotations **failure** = `H1 staging failure`, `H1 dev failure`, `Process completed with exit code 1.` et **deux** « Registry pull failed for `quay.io/minio/minio@sha256:14cea49…` » — **aucune annotation « Suite en échec »** |
 
 **Comment on sait que la batterie entière — `phase76` compris — est passée en CI** (chaîne
@@ -252,7 +253,9 @@ explicite, pour ne pas conclure d'un log illisible) :
 
 Conclusion : **H1 reste le seul rouge, par conception** (tirage anonyme de `quay.io/minio/minio`
 refusé depuis le runner), et `phase76-messaging-retention.pg.test.mjs` — la suite du lot L4 — a
-été exécutée **et passée** en CI, en mode rôles de production.
+été exécutée **et passée** en CI, en mode rôles de production. Idem pour
+`phase77-sync-payload-guard.api.test.mjs` (lot L2E) au relevé du `ff23058`, dernière entrée du
+runner : le garde de payload est donc prouvé **localement (gate D, 74/74)** *et* **en CI**.
 
 ### H1 — ce que le code dit exactement (mesuré le 24/09, soir)
 
