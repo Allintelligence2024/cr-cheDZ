@@ -50,7 +50,7 @@ vérification).
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré (§5, lot 3)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` ici ; à faire depuis un poste Flutter 3.47.1 |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
-| **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (9 contrôles, branche CI `quality`) + 6 documents corrigés |
+| **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (**10 contrôles** au 25/09/2026, branche CI `quality`) + 6 documents corrigés ; prolongé par **L5.1** (vérité « workflows CI », §5) |
 | **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6.1 (sondes) FAIT**, **L6.2 (k6) FAIT** : critère mesuré par le banc en parité k6 (500 ops, p95 1,4 s) + gardien de discours ; reste **D3** (`compress_media`, décision produit) |
 
 **Ordre recommandé** : L1 (fait) → **L2** (bloque l'usage réel) → L3 (bloque les parents) → L5
@@ -787,6 +787,43 @@ restaurations (diff -q avec les sauvegardes)           identiques ✓
 Une cinquième mutation a été **écartée comme invalide** : supprimer le gardien lui-même ne peut pas
 être détecté par le gardien (auto-référence) — c'est le rôle de `check-guards-wired.mjs`, qui exige
 que tout script `verify-*` de `scripts/` soit appelé par un workflow.
+
+### L5.1 — vérité documentaire : « workflows CI poussés » (2026-09-25)
+
+**Constat (mesuré)** : trois affirmations périmées survivaient dans le document d'état courant
+`docs/HANDOFF.md` — les workflows y étaient décrits comme « prêts, en attente de poussée », avec la
+restriction de permission de la GitHub App (l'épisode est raconté, daté, dans `docs/CI-RESTORE.md`),
+y compris dans la ligne du tableau récapitulatif. Or `git ls-files .github/workflows` renvoie
+**4 fichiers** (`ci.yml`, `docker.yml`, `flutter.yml`, `security-audit.yml`) et les runs du 25/09
+montrent `quality`, `docker`, `flutter`, `security`, `e2e`, `admin-web`, `support-console`,
+`backup-drill` **verts** (seul `database` est rouge, sur H1 documenté). Un lecteur du HANDOFF
+pouvait donc croire que la CI n'existait pas. `ci-templates/README.md` portait la même consigne
+obsolète (`git mv ci-templates/workflows/… .github/workflows/`) alors que le dossier ne contient
+plus aucun workflow.
+
+**Correctif** : les trois passages du HANDOFF disent l'état réel (+ renvoi vers
+`docs/CI-DATABASE-JOB-FINDINGS.md` pour H1) ; `ci-templates/README.md` devient une note
+explicitement **historique** (« la restriction est levée depuis ») ; et le **10ᵉ contrôle** du
+contrat de vérité verrouille la règle : les quatre workflows existent et ne sont pas vides, **aucun**
+`.yml`/`.yaml` ne dort dans `ci-templates/`, et aucun document de référence ne revendique l'état
+ancien ailleurs que dans un récit explicitement historique (`ci-templates/README.md` entre dans
+`REFERENCE_DOCS`).
+
+**Preuves exécutées** : `node --test tests/tenant-isolation/claims-contract.test.mjs` → **10/10**
+(le contrôle est **passé rouge** dès sa première exécution, avant correction : 3 mentions du HANDOFF).
+Mutations exécutées sur le nouveau contrôle, restaurations `diff -q`/`diff -rq` vérifiées :
+
+```
+T — état d'époque réintroduit dans HANDOFF (CI « hors dépôt »)   rc=1  ['docs/HANDOFF.md:266 → | CI | Workflows …']
+U — un workflow redéposé dans ci-templates/workflows/            rc=1  ['des workflows dorment encore hors de .github/workflows/ : ci-templates/workflows/ci.yml']
+V — un workflow supprimé de .github/workflows/                   rc=1  ['workflow absent du disque : .github/workflows/flutter.yml']
+restaurations (diff -q HANDOFF, diff -rq .github/workflows)      identiques ✓
+```
+
+**Périmètre assumé** : les documents datés (`docs/CI-RESTORE.md`, `docs/PROMPT_FIX_AUDIT.md`,
+`PLAN_*`, `docs/pilot/BILAN-PILOTE.md`) gardent leur récit d'époque — le contrôle tolère
+explicitement les tournures historiques (« avait été bloqué », « levée depuis ») : réécrire ces
+documents serait falsifier l'histoire, pas la rétablir.
 
 ## 6. Décisions en attente (propriétaire explicite)
 

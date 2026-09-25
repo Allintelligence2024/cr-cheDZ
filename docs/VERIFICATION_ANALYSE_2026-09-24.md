@@ -350,7 +350,8 @@ push « fiable » comme faites — le code ne le prétend pas, le rapport le lai
 
 Les quatre affirmations fausses de l'audit (F1 ordonnanceur externe, F2 healthcheck généralisé,
 F3 absence de refus, F5 URLs injoignables — cette dernière traitée au lot 2) ne peuvent plus
-revenir en silence : `tests/tenant-isolation/claims-contract.test.mjs` (8 contrôles, exécuté dans
+revenir en silence : `tests/tenant-isolation/claims-contract.test.mjs` (8 contrôles à la livraison du lot 5,
+**10 au 25/09/2026**, exécuté dans
 le job CI `quality`, aucune base requise) confronte les affirmations au **disque** et refuse les
 phrases bannies non corrigées. Les compteurs revendiqués ici (migrations, suites, fichiers, ADR,
 runbooks, routes, chemins OpenAPI) sont recalculés à chaque exécution ; les documents périmés

@@ -139,16 +139,24 @@ FAIT en dernier (session août 2026) :
   affaiblissement, 41 assertions inchangées) ; helpers.mjs : GRANT conditionnel
   de payments_expire_pending (pour la mutation M3) ; ci.yml inchangé : le
   build de @creche/prod-config est enchaîné comme PREBUILD des builds
-  api/worker (la GitHub App n'a pas la permission workflows — docs/CI-RESTORE.md).
+  api/worker. (Historique : cette modification avait été bloquée par la permission
+  `workflows` de la GitHub App — la restriction est levée depuis, les 4 workflows sont
+  versionnés et exécutés en CI ; voir « État CI » ci-dessous.)
 
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
 - PILOTE TERRAIN : 5 crèches réelles × 2 semaines, stores, DNS/TLS, device
   farm, FCM/APNs/SMS/WhatsApp réels, exercice de restauration, bilan go/no-go
   (docs/pilot/ — baseline pré-pilote dans docs/pilot/BILAN-PILOTE.md).
   C'est de l'HUMAIN + du TERRAIN : rien de codable ne manque.
-- Workflows CI (.github/workflows/ci.yml + docker.yml) : prêts, NON poussés
-  (permission `workflows` de la GitHub App manquante — voir docs/CI-RESTORE.md ;
-  sondes du 2026-08-02 : toujours refusé).
+- Workflows CI : **poussés et exécutés** — `ci.yml`, `docker.yml`, `flutter.yml`,
+  `security-audit.yml` sont versionnés sous `.github/workflows/` et tournent à chaque
+  push (le document `docs/CI-RESTORE.md` décrit l'épisode historique du blocage
+  « permission `workflows` », désormais levé). **État CI au 25/09/2026** : `quality`,
+  `docker`, `flutter`, `security`, `e2e`, `admin-web`, `support-console`,
+  `backup-drill` verts ; job `database` **rouge sur un seul point, documenté et
+  voulu** — H1, le tirage anonyme de `quay.io/minio/minio` depuis le runner
+  (`docs/CI-DATABASE-JOB-FINDINGS.md`, remédiations « miroir `MINIO_IMAGE` » ou
+  secrets `QUAY_USERNAME`/`QUAY_PASSWORD`). Aucun autre échec.
 - e2e Playwright (spec écrit, navigateur absent).
 - k6 (script `tests/load/sync.k6.js` prêt, binaire absent) : **non exécuté** ; son critère
   (p95 sync push < 2 s pour 500 ops) est mesuré par le banc `npm run test:capacity` en
@@ -254,7 +262,7 @@ les correctifs ont été réappliqués selon la spécification
 | Roadmap v2 | Messagerie, exports Excel, paiement SATIM, multi-rôles, WhatsApp (notif + OTP), paie, marketplace — phases 12-20 vertes |
 | Conformité vidéo | DPIA rédigée + verrou flag `video_surveillance` (046) + module V1 : caméras/clips/purge 30 j/visionnage journalisé (047-048, phase21) |
 | Apps | api (NestJS), worker (jobs + push + exports + PDF), admin-web (React FR/AR responsive), support-console, staff-mobile + parent-mobile (squelettes Dart) |
-| CI | Workflows locaux non poussés (permission `workflows`) — `docs/CI-RESTORE.md` |
+| CI | `ci.yml` (7 jobs : quality, database, e2e, admin-web, support-console, security, backup-drill), `docker.yml`, `flutter.yml`, `security-audit.yml` — versionnés et exécutés ; `database` rouge H1 seul (`docs/CI-DATABASE-JOB-FINDINGS.md`) |
 | Docs | `docs/PLAN_IMPLEMENTATION.md`, `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md`, `docs/ROADMAP_V2.md`, `docs/adr/` (000→010), `docs/HANDOFF.md` (ce fichier) |
 
 ## Commandes utiles
@@ -409,7 +417,8 @@ L'audit du 2026-09-24 avait relevé quatre documents « flatteurs » (capacités
 présent, compteurs périmés) alors que toutes les suites passaient au vert : le code était sain, la
 documentation mentait, rien ne pouvait le signaler. C'est désormais l'inverse.
 
-**Contrat** : `tests/tenant-isolation/claims-contract.test.mjs` (8 contrôles, **aucune base, aucun
+**Contrat** : `tests/tenant-isolation/claims-contract.test.mjs` (**10 contrôles au 25/09/2026**,
+**aucune base, aucun
 Docker** → exécuté dans le job CI `quality`). Il recalcule la réalité et la confronte aux
 documents :
 - aucune occurrence de l'ordonnanceur externe dans le code/config, et chaque mention
@@ -421,6 +430,9 @@ documents :
   peut revendiquer plus, ni citer un décompte périmé (`grep -c healthcheck … # n`) ;
 - compteurs recalculés à chaque exécution (migrations, entrées du runner, suites `phaseNN`,
   fichiers du dossier d'isolation, ADR, runbooks, routes HTTP via l'inventaire, chemins OpenAPI) ;
+- workflows CI : les quatre workflows existent sous `.github/workflows/` et rien n'attend dans
+  `ci-templates/` ; le récit d'époque (« en attente hors du dépôt, restriction de permission »)
+  est banni hors tournure explicitement historique (ajout du 25/09/2026) ;
 - phrases bannies (les affirmations fausses de l'audit + `presignGet(`) : interdites sauf corrigées
   sur la même ligne.
 

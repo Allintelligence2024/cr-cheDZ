@@ -8,7 +8,7 @@
  * alors que TOUTES les suites passaient au vert. Aucun test de code ne pouvait
  * attraper cela : le code était sain, la documentation mentait.
  *
- * Ce contrat verrouille quatre choses :
+ * Ce contrat verrouille cinq choses :
  *  1. « Quartz » — aucune implémentation dans le dépôt, et aucune mention de
  *     documentation qui ne soit pas une mise en garde (jamais une revendication) ;
  *  2. healthcheck Docker — la réalité mesurée (postgres partout ; api et worker
@@ -19,7 +19,11 @@
  *  3. compteurs revendiqués (migrations, entrées d'isolation, suites, fichiers du
  *     dossier d'isolation, ADR, runbooks, routes HTTP, chemins OpenAPI) —
  *     confrontés au DISQUE à chaque exécution ;
- *  4. phrases bannies : les deux affirmations fausses nommées par l'audit ne
+ *  4. workflows CI (ajout du 25/09/2026) : les quatre workflows sont versionnés
+ *     sous `.github/workflows/`, plus rien n'attend dans `ci-templates/`, et
+ *     aucun document de référence ne peut les présenter comme « non poussés »
+ *     (épisode historique de la permission `workflows`) ;
+ *  5. phrases bannies : les deux affirmations fausses nommées par l'audit ne
  *     peuvent réapparaître que corrigées sur la même ligne.
  *
  * Conventions assumées (et pourquoi) :
@@ -141,6 +145,7 @@ const REFERENCE_DOCS = [
   'docs/ANALYSE_PILIERS_MANQUANTS.md',
   'docs/CI-DATABASE-JOB-FINDINGS.md',
   'docs/PLAN_REMEDIATION_FINAL.md',
+  'ci-templates/README.md',
 ].map((f) => join(REPO, f));
 
 // ── 1. « Quartz » : aucune implémentation, aucune revendication ─────────────
@@ -339,7 +344,39 @@ test('compteurs — routes HTTP et chemins OpenAPI', () => {
   assert.ok(UNGUARDED > 0, `routes sans @Roles ni @Public mesurées : ${UNGUARDED}`);
 });
 
-// ── 4. Phrases bannies : les affirmations fausses de l'audit ────────────────
+// ── 5. Workflows CI : versionnés, et aucun document de référence ne dit le contraire ─
+//
+// Épisode historique : la GitHub App de poussée n'avait pas la permission
+// `workflows` — les workflows vivaient dans `ci-templates/` et la doc disait
+// « NON poussés ». La restriction est levée depuis : les 4 workflows sont sous
+// `.github/workflows/` et tournent à chaque push. Ce contrôle mesure la réalité
+// et interdit le retour de l'état périmé dans les documents de référence.
+test('workflows CI : versionnés sur disque + revendication « non poussés » bannie', () => {
+  const WORKFLOWS = ['ci.yml', 'docker.yml', 'flutter.yml', 'security-audit.yml'];
+  for (const wf of WORKFLOWS) {
+    const abs = join(REPO, '.github', 'workflows', wf);
+    assert.ok(existsSync(abs), `workflow absent du disque : .github/workflows/${wf}`);
+    assert.ok(read(abs).trim().length > 0, `workflow vide : .github/workflows/${wf}`);
+  }
+
+  // Le répertoire de transit de l'époque ne doit plus contenir de workflow en attente.
+  const pending = walk(join(REPO, 'ci-templates'), (f) => f.endsWith('.yml') || f.endsWith('.yaml'));
+  assert.deepEqual(
+    pending.map(rel), [],
+    `des workflows dorment encore hors de .github/workflows/ : ${pending.map(rel).join(', ')}`,
+  );
+
+  // Aucun document de référence ne peut présenter les workflows comme non poussés.
+  const stale = /non poussé|pas poussé|locaux uniquement|permission\s+`?workflows`?|n'a pas la permission workflows/i;
+  const historic = /historique|désormais levé|levée|était|avai(ent|t) été|bloqu|épisode/i;
+  const bad = offenders(REFERENCE_DOCS, stale, [historic]);
+  assert.deepEqual(
+    bad, [],
+    `revendication périmée sur les workflows CI (la CI tourne : ci/docker/flutter/security-audit) :\n  ${bad.join('\n  ')}`,
+  );
+});
+
+// ── 6. Phrases bannies : les affirmations fausses de l'audit ────────────────
 test('les affirmations fausses de l’audit ne peuvent revenir que corrigées sur la même ligne', () => {
   const banned = [
     { pattern: /HEALTHCHECK\s+présent\s+sur\s+les\s+services/i, why: 'F2 — un seul healthcheck, sur postgres' },
