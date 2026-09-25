@@ -40,7 +40,7 @@ class Device {
 void main() {
   // No widget binding / mock HTTP transport: these tests require actual sockets.
   HttpOverrides.global = null;
-  final path = const String.fromEnvironment('F4_CONFIG');
+  const path = String.fromEnvironment('F4_CONFIG');
   if (path.isEmpty) throw StateError('F4_CONFIG required; no skip/fake API fallback');
   final config = jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
   final dir = Directory.systemTemp.createTempSync('f4-drift-');
