@@ -114,8 +114,8 @@ npm run db:reset                        # migrate --reset && migrate && seed
    application role ») sont **par conception** : en mode normal, `appUrl()`
    renvoie `creche_app_test` alors que la garde `DATABASE_ROLE_UNSAFE` exige
    exactement `creche_app` sous `NODE_ENV=production`. Ces checks ne passent
-   qu'en mode 2. (Compteur historique : la batterie compte désormais **72
-   entrées** — 70 `phaseNN` + `schema-check` + `rls-behavior-check`.)
+   qu'en mode 2. (Compteur historique : la batterie compte désormais **73
+   entrées** — 71 `phaseNN` + `schema-check` + `rls-behavior-check`.)
    **Le mode 1 ne suffit pas à qualifier un lot** : il ne joue ni phase26 ni les
    rôles de production, et c'est précisément là que le 24/09 une régression a
    échappé (voir `docs/CI-DATABASE-JOB-FINDINGS.md` § 24/09/2026).

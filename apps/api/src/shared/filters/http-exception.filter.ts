@@ -9,6 +9,27 @@ import {
 import type { Request, Response } from 'express';
 import { AppError } from '../errors';
 
+/**
+ * Erreurs d'infrastructure HTTP portées par un `status`/`statusCode` 4xx **sans**
+ * être des `HttpException` : le cas réel est celui du body-parser d'express
+ * (`PayloadTooLargeError`, `type: 'entity.too.large'`, status 413) déclenché
+ * quand un client envoie un corps trop volumineux — un envoi de photo dans la
+ * file de synchronisation, par exemple.
+ *
+ * Sans ce cas, le filtre les traitait en « erreur interne » : le client recevait
+ * **500 INTERNAL_ERROR** et croyait à une panne (donc réessayait), alors que le
+ * remède est de réduire l'envoi ; et l'exploitation recevait une fausse alerte
+ * d'erreur serveur. La borne 4xx évite d'attraper n'importe quel objet portant
+ * un `statusCode`.
+ */
+function clientHttpStatus(exception: unknown): number | null {
+  const e = exception as { status?: unknown; statusCode?: unknown } | null;
+  const status = typeof e?.status === 'number'
+    ? e.status
+    : typeof e?.statusCode === 'number' ? e.statusCode : null;
+  return status !== null && status >= 400 && status < 500 ? status : null;
+}
+
 interface ErrorBody {
   statusCode: number;
   code: string;
@@ -64,6 +85,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
       body.message_fr = this.frFromStatus(status);
       body.message_ar = this.arFromStatus(status);
       if (Array.isArray(message)) body.details = message;
+    } else if (clientHttpStatus(exception) !== null) {
+      // Corps trop volumineux (413) et autres refus d'infrastructure HTTP :
+      // ce ne sont PAS des pannes serveur — ni à journaliser comme telles, ni à
+      // présenter au client comme « réessayez », alors que le remède est de
+      // réduire l'envoi (les octets passent par POST /api/v1/media/upload).
+      const status = clientHttpStatus(exception) as number;
+      body.statusCode = status;
+      body.code = this.codeFromStatus(status);
+      body.message_fr = this.frFromStatus(status);
+      body.message_ar = this.arFromStatus(status);
     } else {
       this.logger.error(
         `[${request.correlationId}] ${request.method} ${request.url}`,

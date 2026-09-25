@@ -362,7 +362,7 @@ la lecture parent sous consentement).
   C'est le garde qui remplace l'échec silencieux sur le téléphone par une erreur explicite. Il
   couvre aussi `POST /video/clips/presign-upload` (message adapté par appelant).
 - Preuves : `tests/tenant-isolation/phase67-media-upload.api.test.mjs` (31 vérifications, ajoutée
-  au runner → **72 entrées**) ; tests unitaires `apps/api/src/modules/media/storage.service.spec.ts`
+  au runner → **73 entrées**) ; tests unitaires `apps/api/src/modules/media/storage.service.spec.ts`
   et `dto/media.dto.spec.ts` (15 cas, dont la normalisation multipart de `children_in_photo` —
   sans elle `all_consents_checked` resterait faux et la photo ne serait jamais publiée).
 
@@ -371,11 +371,14 @@ la lecture parent sous consentement).
    (`presign → putSigned → register`). À basculer sur `POST /media/upload` en multipart avec le
    même jeton. **Non livré** : aucun SDK Flutter ici → aucun `flutter test` ne pourrait le
    prouver ; à faire avec le lot 3 (même blocage que le lockfile `parent-mobile`).
-2. **Photo hors ligne** (`add_photo`) : le client envoie `bytes` (base64) mais le serveur ne lit
-   que `storage_key`/`mime_type` → asset créé, **aucun octet écrit**, lecture 404
+2. **Photo hors ligne** (`add_photo`) : le client n'envoie pas d'octets et le serveur ne lit que
+   `storage_key`/`mime_type` → asset créé, **aucun octet écrit**, lecture 404
    `MEDIA_CONTENT_MISSING` (preuve exécutée, plan §3.2). Correctif côté client (file locale →
-   upload API) ; faire passer les octets dans `POST /sync/push` suppose de relever la limite de
-   corps JSON de cette route — décision non prise.
+   upload API, lot **L3**). Faire passer les octets en base64 dans `POST /sync/push` est **refusé
+   par le serveur** depuis le lot **L2E** (2026-09-25) : le payload y était stocké verbatim en JSONB
+   (sans plafond, hors pipeline média) → garde de forme `refuseNonStorablePayload` (payload > 16 Ko,
+   chaîne ≥ 4096 caractères strictement base64 — renommages compris — rejetés, refus non persisté),
+   avec au passage un vrai défaut corrigé : un corps de ~300 Ko rendait 500 au lieu de 413.
 3. **Clips vidéo** : presign *fail-closed* en production, mais téléversement **par l'API** non
    livré (fichiers volumineux : dimensionnement dédié).
 
@@ -400,6 +403,35 @@ si la fonction bouge, le verrou échoue au lieu de dormir) et qu'**aucune UI n'a
 (a) file locale client + `POST /media/upload` — recommandé, à faire avec L3 ; (b) base64 dans
 `sync/push` — suppose de relever le plafond de corps de cette seule route ; (c) retirer la voie tant
 qu'aucune UI ne capture.
+
+
+### Complément 2026-09-25 — lot L2E : `POST /sync/push` n'est pas un canal de fichiers
+
+Le constat 33 de l'audit (« photos offline en base64 ») était présenté comme un défaut **client**
+(hors d'atteinte de l'UI). La mesure serveur dit autre chose : `POST /sync/push` **stocke le payload
+verbatim** dans `sync_operations.payload` (JSONB, **sans plafond**), le DTO accepte un `payload`
+générique, et `add_photo` ne consomme jamais de champ d'octets — un client qui enverrait la photo en
+base64 la ferait donc **persister dans le journal de synchronisation**, hors du pipeline média
+(consentement, plafond, `media_access_logs`), tout en produisant un asset sans octets.
+
+Livré : garde de **forme** `refuseNonStorablePayload` (exporté, appelé **avant toute connexion** à la
+base) — payload sérialisé > 16 Ko → `PAYLOAD_TOO_LARGE_FOR_SYNC` ; toute chaîne ≥ 4096 caractères
+strictement base64, **récursivement** → `PAYLOAD_BINARY_NOT_ALLOWED` (message nommant
+`POST /api/v1/media/upload`) ; payload non sérialisable → `PAYLOAD_NOT_SERIALIZABLE`. Le refus n'est
+**pas persisté** : ce qu'on refuse de stocker n'est pas stocké, même en « rejected » → rejeu
+déterministe. Preuves : `phase77-sync-payload-guard.api.test.mjs` (**17/17**, PG 18 réel + HTTP ;
+ajoutée au runner → **73 entrées**, libellé CI `phase3 → phase77`) ; `http-exception.filter.spec.ts`
+(4/4) ; `claims-contract` 10/10 (compteurs réactualisés : 71 suites `phaseNN`, 88 fichiers).
+4 mutations rouges (garde de forme retiré → 8 échecs ; plafond retiré → 1 ; refus persisté → 7 ;
+filtre reverté → 2), restaurations `diff -q` ✓.
+
+**Défaut réel découvert au passage** : un corps de ~300 Ko rendait **500 « erreur interne »** au lieu
+de 413 — l'erreur du body-parser d'Express (`PayloadTooLargeError`) n'est pas une `HttpException` et
+tombait dans la branche générique du filtre global. `http-exception.filter.ts` gagne
+`clientHttpStatus()` + une branche 413 bilingue : un client qui envoie trop gros doit réduire son
+envoi, pas croire à une panne. **Conséquence D6** : l'option (b) (« base64 dans `sync/push` ») est
+**fermée côté serveur** ; restent (a) file locale + `POST /media/upload` (recommandée, avec L3) et
+(c) retrait de la voie.
 
 ## Mise à jour 2026-09-24 (soir) — CI : régression du lot 1 corrigée, verrou ajouté
 
@@ -468,8 +500,8 @@ n'est pas verrouillée, une mesure datée n'est pas une propriété.
 qualifiée, phrase fausse canonique réintroduite, compteur de suites périmé, décompte de
 healthchecks périmé, sonde renommée sur disque) → mutation : 6 rouges ; restaurations → 9/9 vert
 (journal au plan §5).
-Mesure du jour : 198 routes / 50 sans `@Roles`, 76 migrations, 72 entrées, 70 suites `phaseNN`,
-87 fichiers d'isolation, 14 ADR, 32 runbooks.
+Mesure du jour : 198 routes / 50 sans `@Roles`, 76 migrations, 73 entrées, 71 suites `phaseNN`,
+88 fichiers d'isolation, 14 ADR, 32 runbooks.
 
 ---
 
@@ -532,7 +564,7 @@ DPO le 2026-09-25 : **purger avec des seuils dédiés**.
   marqueur et la pièce jointe est détachée — la ligne, l'auteur et la date restent, le fil ne se
   troue pas).
 - suite `phase76-messaging-retention.pg.test.mjs` : **15 assertions** exécutées par le rôle
-  applicatif (le chemin exact du worker) sur PG 18 réel, ajoutée au runner (72 entrées).
+  applicatif (le chemin exact du worker) sur PG 18 réel, ajoutée au runner (73 entrées depuis `phase77`).
 - **hors périmètre assumé** : `notification_inbox` (voie de lecture durable) et les fichiers
   joints (`media_assets`) ne sont pas purgés — deux décisions séparées si le DPO veut leur durée.
 

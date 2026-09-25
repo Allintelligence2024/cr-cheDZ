@@ -103,6 +103,10 @@ SUITES=(
   # anti-régression du presign d'upload.
   phase67-media-upload.api.test.mjs
   phase76-messaging-retention.pg.test.mjs
+  # L2E (audit constat 33, D6) : les OCTETS ne passent pas par la file de
+  # synchronisation — payload stocké verbatim, handler add_photo qui ne le
+  # consomme pas ; refus de FORME (taille + blob base64), non persisté.
+  phase77-sync-payload-guard.api.test.mjs
 )
 
 FILTER="${1:-}"

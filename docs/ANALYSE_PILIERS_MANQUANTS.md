@@ -45,7 +45,7 @@ pipeline export/paie commencent à garantir.
 
 | Pilier | État | Preuve |
 |---|---|---|
-| Multi-tenancy RLS + rôles prod NOBYPASSRLS | ✅ SOLIDE | **72 entrées** d'isolation (Gate D : 70 `phaseNN` + `schema-check` + `rls-behavior-check`), `scripts/test-production-roles.mjs` |
+| Multi-tenancy RLS + rôles prod NOBYPASSRLS | ✅ SOLIDE | **73 entrées** d'isolation (Gate D : 71 `phaseNN` + `schema-check` + `rls-behavior-check`), `scripts/test-production-roles.mjs` |
 | Auth : JWT rotation, TOTP MFA, OTP SMS | ✅ | `identity/`, SMS OTP **Twilio réel** (`shared/sms/sms.service.ts`) |
 | Journal, photos/vidéos, messagerie, espace parent | ✅ | modules `journal`, `media`, `video`, `messaging`, `parents` |
 | Facturation, PDF, encaissements, paie | ✅ | `billing/`, `payroll/`, webhook HMAC vérifié |

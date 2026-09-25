@@ -149,7 +149,11 @@ correctement l'erreur, alors que `photos_page.dart:33` et `consents_page.dart:30
   **sans jamais transférer les octets** — `LECTURE DU CONTENU 404 MEDIA_CONTENT_MISSING`
   (journal au plan §3.2) ; le **canal d'octets à choisir est le dossier de décision D6** (plan §6),
   et deux verrous empêchent de câbler une UI hors-ligne ou de faire transiter les octets sans mettre
-  la limite à jour (`media-client-wiring.test.mjs`, journal L2D) ; (3) `POST /video/clips/presign-upload` est *fail-closed* en production
+  la limite à jour (`media-client-wiring.test.mjs`, journal L2D). **Mesuré le 25/09 (lot L2E)** :
+  cette voie n'était pas seulement « sans octets » — un payload base64 était **stocké verbatim**
+  dans `sync_operations.payload` (JSONB sans plafond), hors pipeline média ; c'est désormais
+  **refusé par le serveur** (garde de forme + 413 explicite plutôt qu'un 500, 17 vérifications
+  `phase77`) ; (3) `POST /video/clips/presign-upload` est *fail-closed* en production
   mais le téléversement de clips **par l'API** n'est pas livré (fichiers volumineux : dimensionnement
   dédié).
   **Nuance mesurée le 25/09 (lot L2C)** : la dette (1) est **latente, pas active** — aucun écran
@@ -233,7 +237,7 @@ Légende : ✅ confirmé · 🟡 partiel/nuancé · ❌ faux · ➕ question ouv
 | # | Affirmation | Statut | Preuve / correction |
 |---|---|---|---|
 | 32 | Staff mobile : séquences atomiques, device fingerprint, PUT signé direct + SHA-256, lockfile imposé | ✅ | `sync_engine.dart`, `app_database.dart`, `media_uploader.dart:100-118` ; CI : `flutter pub get --enforce-lockfile` + `cmp pubspec.lock` (`scripts/check-staff-sync.mjs`) |
-| 33 | Staff mobile : photos offline en base64 **en clair** dans SQLite | 🟡 | Le code existe (`media_uploader.dart:137` `base64Encode(bytes)`), **mais aucun chemin UI ne l'atteint** : pas de dépendance `image_picker`/`camera`, aucune page photo ; `uploadPhoto`/`enqueueOfflinePhoto` ne sont appelés que par `test/media_uploader_phase4_test.dart`. Risque **latent** — à traiter **avant** de câbler l'UI |
+| 33 | Staff mobile : photos offline en base64 **en clair** dans SQLite | 🟡 | Le code existe (`media_uploader.dart:137` `base64Encode(bytes)`), **mais aucun chemin UI ne l'atteint** : pas de dépendance `image_picker`/`camera`, aucune page photo ; `uploadPhoto`/`enqueueOfflinePhoto` ne sont appelés que par `test/media_uploader_phase4_test.dart`. Risque **latent** — volet **serveur fermé le 25/09** (lot **L2E**) : `sync/push` **persistait le payload verbatim** (JSONB sans plafond) ; il refuse désormais tout payload > 16 Ko, toute chaîne ≥ 4096 caractères strictement base64 (renommages compris) et ne persiste pas le refus — 17 vérifications `phase77` + 4 tests du filtre (le 300 Ko rendait 500 au lieu de 413 : corrigé). Reste **côté client** : canal d'octets = décision **D6** (option (b) fermée), à traiter **avant** de câbler l'UI (verrous L2C/L2D) |
 | 34 | Staff mobile : aucune permission caméra/stockage | ✅ | `AndroidManifest.xml` : `INTERNET` seul ; garde `scripts/check-android-manifest.mjs` (exécuté ici : 2 apps conformes, 4 avertissements `POST_NOTIFICATIONS`/`ACCESS_NETWORK_STATE`) — mais **non câblé en CI** (voir §4.3) |
 | 35 | Parent mobile : aucun offline-first, aucun test | ✅ | 1 120 lignes Dart, **pas de `test/`**, aucun cache ni file locale |
 | 36 | Parent mobile : refresh token inexistant | ✅ **aggravé** | voir §4.2 : `JWT_ACCESS_EXPIRES_IN=15m` (`apps/api/src/modules/identity/identity.module.ts:25`) et **zéro** appel de refresh dans `lib/` |
@@ -264,7 +268,7 @@ Légende : ✅ confirmé · 🟡 partiel/nuancé · ❌ faux · ➕ question ouv
 | 51 | Preuves par mutation sur les chemins critiques | ✅ | `scripts/mutation-proof.sh`, `mutation-phase23-proof.sh`, `mutation-phase24-proof.sh` |
 | 52 | 4 workflows CI, pas de CD automatique | ✅ | `ci`, `docker`, `flutter`, `security-audit` ; aucun job de déploiement |
 | 53 | « Tests de charge k6 » | 🟡 | **1 seul** fichier k6 (`tests/load/sync.k6.js`), et il **n'est jamais exécuté** (k6 absent) — `capacity-bench.mjs` le documente lui-même ; la charge réelle est un banc Node (`capacity-bench.mjs`, `mvp-bench.mjs`) |
-| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **70** suites `phaseNN`, **87** fichiers dans `tests/tenant-isolation/`, **72** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66`/`phase67` (lots 2A/2B) |
+| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **71** suites `phaseNN`, **88** fichiers dans `tests/tenant-isolation/`, **73** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66`/`phase67` (lots 2A/2B) |
 | 55 | Densité de test (non chiffrée par le rapport) | ✅ | `tests/**/*.mjs` = **17 123 lignes** vs **16 926** lignes de code API : la suite de tests est **plus grosse que l'API qu'elle teste** |
 | 56 | « 15+ ADR » | 🟡 | **14** (ADR-000 → ADR-013) |
 | 57 | « 45+ runbooks » | 🟡 | **32** fichiers `*RUNBOOK*.md` (56 `.md` au total dans `docs/`) |
@@ -344,7 +348,7 @@ Restent **4 scripts réellement orphelins** — présents, documentés, jamais e
 **Correctif court** (≈ 1 h) : ajouter ces 4 appels au job `quality` (aucune base requise, `npm ci`
 fournit `typescript`).
 Bonus : le nom de l'étape `ci.yml:69` (« phase3 → phase24 (auto) ») est **périmé** — le runner va
-jusqu'à `phase67` (71 entrées, libellé corrigé au lot 1 puis étendu aux lots 2A/2B).
+jusqu'à `phase67` puis, depuis, `phase68`→`phase77` (libellé corrigé au lot 1 puis étendu à chaque lot ; **73** entrées au 2026-09-25).
 
 ### 4.4 🟠 Le worker est plus mince que présenté — et le dit honnêtement
 977 lignes de TypeScript, **7 handlers** (`apps/worker/src/main.ts:290-306`) dont **1 stub explicite**
@@ -488,7 +492,7 @@ grep -rc "@Public()" apps/api/src/modules/*/*.controller.ts | grep -v ':0'
 
 # 6. suites d'isolation
 ls tests/tenant-isolation/phase*.test.mjs | wc -l                                   # 67
-sed -n '/^SUITES=(/,/^)/p' scripts/run-isolation-suites.sh | grep -c test.mjs        # 69 (+ schema-check + rls-behavior-check = 71 entrées)
+sed -n '/^SUITES=(/,/^)/p' scripts/run-isolation-suites.sh | grep -c test.mjs        # 71 (+ schema-check + rls-behavior-check = 73 entrées)
 ```
 
 **Fichiers/lignes cités** : voir la colonne « Preuve » du §3 ; toutes les références ont été

@@ -11,6 +11,78 @@ import type { SyncOperationDto, SyncPushResult } from './dto/sync.dto';
 const MAX_PULL_BATCH = 500;
 const DEVICE_TIME_TOLERANCE_MS = 5 * 60 * 1000; // ±5 min
 
+/**
+ * Les OCTETS ne passent pas par la file de synchronisation (décision D6 du plan
+ * de réparation ; audit 2026-09-24, constat 33 : « photos offline en base64 en
+ * clair »).
+ *
+ * Pourquoi un refus explicite ici — et pas un simple « champ ignoré » :
+ *  - `sync_operations.payload` est stockée **verbatim** en JSONB : un client qui
+ *    met une photo en base64 dans le payload la ferait **persister côté serveur**,
+ *    hors du pipeline média (consentements, `is_visible_to_parents`, journal des
+ *    accès) et hors de toute purge dédiée — une donnée d'enfant non voulue dans
+ *    l'historique de synchronisation ;
+ *  - le handler `add_photo` ne consomme PAS ce champ : l'accepter donnerait un
+ *    « accepted » trompeur (l'asset existerait sans octets, lecture 404) ;
+ *  - le chemin correct existe : `POST /api/v1/media/upload` (lot 2B) — l'API
+ *    écrit les octets après consentement et plafond.
+ *
+ * Le contrôle porte sur la FORME, jamais sur un nom de champ : un champ renommé
+ * (`photo_data`, `content`, …) ne doit pas contourner la règle. Deux règles :
+ *  1. payload sérialisé ≤ `MAX_SYNC_PAYLOAD_BYTES` ;
+ *  2. aucune valeur textuelle de ≥ `BASE64_BLOB_MIN_CHARS` caractères qui soit
+ *     strictement du base64 (alphabet + padding, sans espace) — c'est-à-dire un
+ *     transport d'octets, pas une note de texte.
+ *
+ * Le refus est **volontairement non persisté** : ce qu'on refuse de stocker, on
+ * ne le stocke pas — même en « rejected ». Un nouvel envoi du même
+ * `event_id` reçoit la même réponse, sans effet de bord (idempotent par nature).
+ */
+const MAX_SYNC_PAYLOAD_BYTES = 16 * 1024;
+const BASE64_BLOB_MIN_CHARS = 4096;
+
+export function refuseNonStorablePayload(op: { payload: Record<string, unknown> }):
+  { status: 'rejected'; reason: string; message: string } | null {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(op.payload ?? {});
+  } catch {
+    return {
+      status: 'rejected',
+      reason: 'PAYLOAD_NOT_SERIALIZABLE',
+      message: 'Payload de synchronisation non sérialisable',
+    };
+  }
+  const base64ish = (value: string): boolean =>
+    value.length >= BASE64_BLOB_MIN_CHARS && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
+
+  const carriesBase64 = (value: unknown): boolean => {
+    if (typeof value === 'string') return base64ish(value);
+    if (Array.isArray(value)) return value.some(carriesBase64);
+    if (value && typeof value === 'object') {
+      return Object.values(value as Record<string, unknown>).some(carriesBase64);
+    }
+    return false;
+  };
+
+  if (serialized.length > MAX_SYNC_PAYLOAD_BYTES) {
+    return {
+      status: 'rejected',
+      reason: 'PAYLOAD_TOO_LARGE_FOR_SYNC',
+      message: `Payload de synchronisation trop volumineux (max ${MAX_SYNC_PAYLOAD_BYTES} octets) : `
+        + 'les fichiers passent par POST /api/v1/media/upload',
+    };
+  }
+  if (carriesBase64(op.payload)) {
+    return {
+      status: 'rejected',
+      reason: 'PAYLOAD_BINARY_NOT_ALLOWED',
+      message: 'Les octets ne passent pas par la file de synchronisation : utiliser POST /api/v1/media/upload',
+    };
+  }
+  return null;
+}
+
 interface CommandOutcome {
   status: 'accepted' | 'rejected' | 'conflict';
   reason?: string;
@@ -74,6 +146,11 @@ export class SyncService {
     deviceId: string,
     tenantId: string,
   ): Promise<CommandOutcome> {
+    // Refus AVANT toute connexion et tout INSERT : ce qu'on refuse de stocker
+    // ne doit pas atteindre `sync_operations.payload` (voir le garde ci-dessus).
+    const refusal = refuseNonStorablePayload(op);
+    if (refusal) return refusal;
+
     return this.tenantContext.withTenantConnection(async (client): Promise<CommandOutcome> => {
       if (!this.isKnownCommand(op.command)) {
         return { status: 'rejected', reason: 'UNKNOWN_COMMAND', message: `Commande ${op.command} inconnue` };

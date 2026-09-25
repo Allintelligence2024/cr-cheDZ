@@ -47,7 +47,7 @@ vérification).
 | **L1.5** | **5ᵉ gardien orphelin + cliquet « gardiens câblés »** | vérif. §4.3 | ~0,5 h | gardien `check-guards-wired.mjs` en CI ; `audit-seeds-pii --strict` exécuté | **FAIT (2026-09-24)** — 12 gardiens recensés, 0 orphelin, 3 mutations détectées (§5) |
 | **L1.6** | **Diagnostic H1 exploitable** : nommer l'image qui refuse le tirage | CI (`database`) | ~0,2 h | message d'erreur citant l'image + test unitaire | **FAIT (2026-09-24)** — « Registry pull failed for <image> » ; comportement inchangé (aucun repli vert) |
 | **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) |
-| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; restent hors lot : branchement du client mobile (**L3**, bloqué par le SDK Flutter), upload des clips (**D5 = c** : hors discours opérationnel, verrou ), octets hors-ligne (voir §3.2) ; volet client verrouillé par **L2C** (`media-client-wiring`) |
+| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; restent hors lot : branchement du client mobile (**L3**, bloqué par le SDK Flutter), upload des clips (**D5 = c** : hors discours opérationnel, verrou ), octets hors-ligne (voir §3.2 ; **L2E** refuse désormais tout blob base64 dans `sync/push`) ; volet client verrouillé par **L2C** (`media-client-wiring`) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré deux fois (§5, lot 3 : 24/09 puis 25/09 15:07 UTC)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` (`000`) ; à faire depuis un poste Flutter 3.47.1 — portée déjà cadrée (D4 = correctif court) |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | **FAIT (2026-09-25)** — décision **D2 = (a)** (purger) : migration 076, seuils 90 j / 365 j, suite `phase76` 15 assertions, 3 mutations détectées (§5) |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (**10 contrôles** au 25/09/2026, branche CI `quality`) + 6 documents corrigés ; prolongé par **L5.1** (vérité « workflows CI », §5) |
@@ -59,9 +59,12 @@ vérification).
 bloqué par l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée
 possible) ; **L4** (D2 = a, migration 076, suite `phase76`), **L6.2** (k6 : critère mesuré par le banc
 exécutable, script k6 verrouillé en CI mais **non exécuté** ici), **L6.3** (D3 : stub `compress_media`
-retiré) et **L6.4** (D5 : vidéosurveillance retirée du discours opérationnel) sont faits. **Toutes les
-décisions D2–D5 sont tranchées** ; le seul lot non livré est **L3** (BLOQUÉE : SDK Flutter absent de
-l'environnement, `pub.dev` injoignable — outillage requis, aucune preuve compilable possible ici).
+retiré), **L6.4** (D5 : vidéosurveillance retirée du discours opérationnel), **L2C** (volet client de
+F5 verrouillé), **L2D** (photo hors ligne mesurée) et **L2E** (`sync/push` n'est pas un canal de
+fichiers : garde de payload + 413 explicite) sont faits. **Toutes les décisions D2–D5 sont
+tranchées** ; **D6** reste ouverte (option (b) fermée par L2E ; restent (a) via L3 et (c)) ; le seul
+lot non livré est **L3** (BLOQUÉE : SDK Flutter absent de l'environnement, `pub.dev` injoignable —
+outillage requis, aucune preuve compilable possible ici).
 
 ---
 
@@ -235,9 +238,12 @@ explicite au lieu d'un échec silencieux sur le téléphone.
    pendant ce lot (preuve en §3.2, bloc « Défaut découvert »). L'asset est créé, aucun objet
    n'existe, la lecture rend 404 `MEDIA_CONTENT_MISSING`. Correctif = côté client (mettre les
    octets en file locale puis `POST /media/upload` à la reconnexion) : même blocage outillage.
-   **Décision serveur à trancher : dossier D6** (§6). Faire transiter du base64 dans `POST /sync/push` suppose de
-   relever la limite de corps JSON (100 ko par défaut Express) pour cette seule route —
-   dimensionnement à trancher, non improvisé ici.
+   **Décision serveur à trancher : dossier D6** (§6). Faire transiter du base64 dans `POST /sync/push` est
+   désormais **refusé par le serveur** (lot L2E, journal §5) : tout payload d'opération de plus de
+   16 Ko, ou contenant une chaîne de ≥ 4096 caractères strictement base64 — quel que soit le nom du
+   champ —, est rejeté (`PAYLOAD_TOO_LARGE_FOR_SYNC` / `PAYLOAD_BINARY_NOT_ALLOWED`, message nommant
+   `POST /api/v1/media/upload`). L'option (b) de D6 n'est donc plus un simple dimensionnement à
+   trancher : elle exigerait de **relever explicitement** ce garde.
 3. **Clips vidéo** — `POST /video/clips/presign-upload` est désormais **fail-closed** en production
    (même garde 503, message nommant la dépendance) au lieu de rendre une URL `minio:9000` morte.
    Le **téléversement de clips par l'API n'est pas livré** : fichiers vidéo (dizaines/centaines de
@@ -1050,6 +1056,68 @@ méthode (il la nomme forcément) — corrigé en distinguant définition et app
 contrôle 3. Deux fois dans la même journée, c'est la mutation/correction qui a réglé un motif trop
 large : c'est le comportement attendu du « prouver, pas relire ».
 
+### L2E — Le payload de synchronisation n'est pas un canal de fichiers (2026-09-25)
+
+**Constat 33 (audit) requalifié par la mesure.** L'audit décrivait « photos offline en base64 en
+clair dans SQLite » comme un défaut **client** (constat 33, 🟡 car hors d'atteinte de l'UI). En
+ouvrant le serveur, la mesure dit autre chose que « la photo est inerte » : `POST /sync/push`
+**store le payload verbatim** (`sync.service.ts:127` → colonne `sync_operations.payload` JSONB,
+**sans plafond de taille**), le DTO accepte un `payload` générique, et le handler `add_photo` ne
+consomme **jamais** un champ d'octets. Autrement dit : un client qui enverrait la photo en base64
+la ferait **persister dans le journal de synchronisation**, hors du pipeline média (pas de
+vérification de consentement, pas de plafond, pas de `media_access_logs`) tout en produisant un
+asset **sans octets** (lecture 404). Ce n'était donc pas « inerte » : c'était un canal de stockage
+non gouverné.
+
+**Livré** :
+- `apps/api/src/modules/sync/sync.service.ts` — garde de **forme** `refuseNonStorablePayload(op)`,
+  exporté (testable), appelé **en tête de `processOperation`, avant toute connexion** à la base :
+  1. payload sérialisé > `MAX_SYNC_PAYLOAD_BYTES` (16 Ko) → `PAYLOAD_TOO_LARGE_FOR_SYNC` ;
+  2. toute chaîne de ≥ `BASE64_BLOB_MIN_CHARS` (4096) caractères **strictement** base64
+     (alphabet + padding, sans espace), **récursivement** dans objets/tableaux → 
+     `PAYLOAD_BINARY_NOT_ALLOWED`, message nommant `POST /api/v1/media/upload` ;
+  3. payload non sérialisable → `PAYLOAD_NOT_SERIALIZABLE`.
+  Le contrôle ne dépend d'**aucun nom de champ** : `photo_data`, `content`, `image_base64` sont
+  refusés comme `bytes` (trois renommages testés). Le refus est **non persisté** — ce qu'on refuse
+  de stocker n'est pas stocké, pas même en « rejected » — donc rejouer le même `event_id` rend la
+  même réponse, sans effet de bord.
+- `apps/api/src/shared/filters/http-exception.filter.ts` — **défaut réel découvert par la suite** :
+  un corps de ~300 Ko rendait **500 « erreur interne »** au lieu de 413 (l'erreur du body-parser
+  d'Express, `PayloadTooLargeError`, n'est pas une `HttpException` et tombait dans la branche
+  générique du filtre). Ajout de `clientHttpStatus()` (statut 4xx/5xx hors `HttpException`) et d'une
+  branche dédiée **avant** le `else` : désormais **413 `PAYLOAD_TOO_LARGE`** avec messages FR/AR.
+  Un client qui envoie trop gros doit réduire son envoi, pas croire à une panne et réessayer.
+- `apps/api/src/shared/filters/http-exception.filter.spec.ts` — 4 tests unitaires (sans base) qui
+  verrouillent le contrat de sortie du filtre : `AppError`, code métier en message, **413 pour
+  `entity.too.large`** (et non 500), erreur inconnue → 500 journalisée sans fuite de détail.
+- `tests/tenant-isolation/phase77-sync-payload-guard.api.test.mjs` — 17 vérifications / 9 cas sur
+  PostgreSQL réel **et par HTTP** : `add_photo` légitime (sans octets) toujours accepté ; `bytes`
+  base64 rejeté (message nommant la bonne route) ; **rien de persisté** (aucune ligne
+  `sync_operations`, aucun `media_assets` fantôme) ; 3 renommages ; note légitime de 3200 caractères
+  acceptée (le garde ne casse pas l'usage normal) ; payload de 20 Ko rejeté ; envoi de ~300 Ko →
+  **413** (et non 500) avec message FR/AR ; `log_temperature` normal accepté ; rejeu déterministe.
+
+**Preuves exécutées** : `phase77` **17/17** (9 cas, PostgreSQL 18 réel) ; `http-exception.filter.spec.ts`
+**4/4** ; `claims-contract` **10/10** (compteurs : 71 suites `phaseNN`, 88 fichiers, **73 entrées**).
+Mutations (rouges, restaurations `diff -q` vérifiées) :
+```
+F — garde de forme retiré (le base64 repasse)              rc=1  8 échecs (cas 2, 4×3, 6bis, 7bis, 9)
+G — plafond de taille retiré                               rc=1  1 échec  (cas 6)
+H — le refus est PERSISTÉ (on stocke ce qu'on refuse)      rc=1  7 échecs (cas 3/3bis/6bis/7bis/9)
+I — filtre : le 413 redevient 500                          rc=1  2 échecs (cas 7 + message bilingue)
+restaurations (diff -q sync.service.ts, http-exception.filter.ts)   identiques ✓ → 17/17
+```
+
+**Périmètre assumé / limites** :
+- le garde est une règle de **forme**, pas un quota métier : une chaîne de 4097 caractères
+  « base64-valide » est refusée même si c'était une note, et une note de 3200 caractères passe
+  (testé) ; le seuil est **documenté et testé**, pas implicite ;
+- il **ne remplace pas** le canal d'octets : il ferme seulement l'option (b) de **D6** côté serveur
+  (base64 dans `sync/push`). La recommandation (a) — file locale client + `POST /media/upload` à la
+  reconnexion — reste ouverte et relève de **L3** ;
+- le client `staff-mobile` n'est **pas** modifié (aucun SDK Flutter ici) ; il n'envoie d'ailleurs
+  aucun octet aujourd'hui (L2C/L2D).
+
 ## 6. Décisions en attente (propriétaire explicite)
 
 | # | Décision | Propriétaire | Bloque | État |
@@ -1059,7 +1127,7 @@ large : c'est le comportement attendu du « prouver, pas relire ».
 | D3 | `compress_media` : implémenter ou retirer | produit | Lot 6 | dossier ci-dessous |
 | D4 | `parent-mobile` : offline-first complet maintenant, ou refresh + états d'erreur seuls | produit | portée du Lot 3 | dossier ci-dessous |
 | D5 | Clips vidéo : quel plafond de taille et quelle voie (API ou S3 direct) | produit + ops | usage réel de la vidéosurveillance en prod | ✅ **tranchée : (c)** (lots L6.4) |
-| D6 | Photos **hors ligne** : quel canal d'octets (base64 dans `sync/push`, file locale client + `POST /media/upload`, ou retrait de la voie tant qu'aucune UI ne capture) | produit + tech | câblage de la capture photo staff/parent | dossier ci-dessous |
+| D6 | Photos **hors ligne** : quel canal d'octets (base64 dans `sync/push`, file locale client + `POST /media/upload`, ou retrait de la voie tant qu'aucune UI ne capture) | produit + tech | câblage de la capture photo staff/parent | dossier ci-dessous — **option (b) fermée par L2E** ; reste (a) via L3 ou (c) |
 
 ### D2 — Rétention de `notification_queue` et `messages` *(DPO)* — ✅ **TRANCHÉE : (a) purger**
 
@@ -1200,20 +1268,25 @@ ne pas laisser croire que la fonction est opérationnelle.
   le consentement sont déjà vérifiés côté serveur ; le travail est **client** (stockage local du
   fichier, reprise, purge après succès) et donc **L3** (SDK Flutter requis, bloqué ici).
   *Effort M, risque faible, aucun changement serveur.*
-- **(b) Base64 dans `POST /sync/push`** — un seul canal pour tout l'hors-ligne, mais il faut relever
-  la limite de corps **de cette seule route**, borner la taille par opération et par lot, et
-  accepter que la photo voyage dans la file de synchronisation (journalisation, reprises). *Effort M,
-  surface serveur nouvelle à tester (limites, rejets, idempotence).*
+- **(b) Base64 dans `POST /sync/push`** — ~~un seul canal pour tout l'hors-ligne~~ **FERMÉE par le
+  lot L2E (2026-09-25)** : le serveur refuse désormais tout payload d'opération > 16 Ko et toute
+  chaîne ≥ 4096 caractères strictement base64 (`PAYLOAD_TOO_LARGE_FOR_SYNC` /
+  `PAYLOAD_BINARY_NOT_ALLOWED`, message nommant `POST /api/v1/media/upload`), car un tel payload
+  était **stocké verbatim** dans `sync_operations.payload` (JSONB sans plafond), hors du pipeline
+  média (ni consentement, ni plafond, ni `media_access_logs`). Rouvrir cette option supposerait de
+  lever explicitement ce garde et de dimensionner corps JSON, lot et mémoire : le lot L2E a montré
+  au passage qu'un corps de ~300 Ko rendait **500** au lieu de 413 (corrigé) — la surface n'est pas
+  marginale. *Effort M+ ; non recommandée.*
 - **(c) Retirer la voie hors-ligne du périmètre tant qu'aucune UI ne capture** — supprimer (ou
   refuser explicitement) `add_photo` côté serveur et client, et documenter « pas de photo hors
   ligne en V1 » ; la photo en ligne passe par `POST /media/upload`. *Effort XS, honnête, réversible ;
   c'est ce qui existe de fait aujourd'hui (aucune UI), mais le code laisse croire l'inverse.*
 
-**Recommandation** : **(a)** quand le travail client est ouvert (L3) — c'est le canal qui réutilise
-tout l'existant (route média, plafond, consentements, audit) sans élargir la surface du serveur ;
-**(b)** seulement si le produit veut une seule file de synchronisation et l'assume (tests de limites
-obligatoires) ; **(c)** est l'option « zéro mensonge » si la capture photo n'est pas au programme du
-pilote. **En attendant la décision**, deux verrous empêchent le contournement :
+**Recommandation (mise à jour après L2E)** : **(a)** quand le travail client est ouvert (L3) —
+c'est le canal qui réutilise tout l'existant (route média, plafond, consentements, audit) sans
+élargir la surface du serveur ; **(c)** est l'option « zéro mensonge » si la capture photo n'est pas
+au programme du pilote ; **(b)** est **fermée par le garde L2E** (il faudrait le relever
+explicitement, décision qui n'a aucune raison d'être prise par défaut). **En attendant la décision**, deux verrous empêchent le contournement :
 `media-client-wiring.test.mjs` refuse qu'une UI câble `enqueueOfflinePhoto` (voie qui produit un
 asset sans octets) et refuse que les octets se mettent à transiter dans `registerFromSync` sans que
 cette limite documentée soit mise à jour.
