@@ -189,13 +189,13 @@ class ParentApiClient {
   /// `Image.network(url)` seul — les octets sont récupérés ici, déjà soumis
   /// aux contrôles serveur (filiation + consentement photo courant).
   Future<Uint8List> photoContent(String childId, String mediaId) async {
+    // Jeton lu AVANT la fermeture : un `await` dans une lambda non-async ne
+    // compile pas (erreur attrapée par la CI : `parent-mobile — tests`).
+    final headers = await _authHeaders();
     final res = await _guard(
       () => _dio.get<List<int>>(
         '/parent/children/$childId/media/$mediaId/content',
-        options: Options(
-          headers: await _authHeaders(),
-          responseType: ResponseType.bytes,
-        ),
+        options: Options(headers: headers, responseType: ResponseType.bytes),
       ),
     );
     return Uint8List.fromList(res.data ?? const <int>[]);
