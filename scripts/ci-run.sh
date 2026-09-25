@@ -33,18 +33,34 @@ set +e
 rc=$?
 set -e
 
-if [ "$rc" -ne 0 ]; then
+publish() {
   # Au maximum 8 annotations : au-delà, GitHub agrège/tronque, et la sortie
   # complète reste dans le fichier de log (archivé en artefact du job). Le
   # `|| true` évite qu'un `head` qui ferme le tube ne transforme ce diagnostic
   # en code de sortie parasite (SIGPIPE) — c'est `rc` qui fait foi.
   {
-    grep -aE '\[E\]|Expected:|Actual:|Which:|error •|Error:|FAILURE|What went wrong|Exception' "$log" \
-      | head -8 \
-      | while IFS= read -r line; do
-          echo "::error title=${title}::${line:0:400}"
-        done
+    printf '%s\n' "$@" | head -8 | while IFS= read -r line; do
+      [ -n "$line" ] && echo "::error title=${title}::${line:0:400}"
+    done
   } || true
+}
+
+if [ "$rc" -ne 0 ]; then
+  # 1) les lignes qui NOMMENT l'échec (erreurs d'analyzer, échecs de test,
+  #    messages de pub, exceptions de build). Le motif est large à dessein :
+  #    la 1re version ne cherchait que `error •`/`Error:` et laissait un step
+  #    ROUGE sans aucune annotation quand l'échec venait d'un lint (`info •`)
+  #    ou de la résolution de dépendances — un rouge muet ne vaut pas mieux
+  #    qu'un vert faux (vécu le 2026-09-25, run 36194782638).
+  matches=$(grep -aE 'error •|warning •|info •|issues? found|\[E\]|Expected:|Actual:|Which:|Error:|error:|Exception|FAILURE|What went wrong|Failed to|Because .* depends|version solving failed' "$log" || true)
+  # 2) sinon, repli : la fin du log, pour qu'un échec soit TOUJOURS lisible
+  #    dans les annotations (les artefacts ne sont pas toujours accessibles).
+  if [ -z "$matches" ]; then
+    matches=$(grep -av '^[[:space:]]*$' "$log" | tail -6 || true)
+    publish "sortie non reconnue — fin du journal ${log}" "$matches"
+  else
+    publish "$matches"
+  fi
 fi
 
 # Le code de sortie de la commande, jamais celui du tube.

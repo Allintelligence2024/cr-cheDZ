@@ -139,6 +139,13 @@ test('aucun échec de test Flutter n’est masqué par un tube', () => {
   assert.match(runner, /rc=\$\?/, 'le code de sortie doit être capturé');
   assert.match(runner, /exit "\$rc"/, 'le code capturé doit être rendu au job');
   assert.match(runner, /::error title=/, 'les échecs doivent être publiés en annotations (lisibles sans artefact)');
+  // Un rouge MUET ne vaut pas mieux qu'un vert faux : vécu le 2026-09-25
+  // (run 36194782638, step `parent-mobile — pub get + analyze` en échec sans
+  // aucune annotation, le motif ne couvrant que `error •`). Le script doit
+  // capter aussi lints (`info •`/`warning •`) et échecs de résolution, et
+  // publier un REPLI si rien ne correspond.
+  assert.match(runner, /info •/, 'les lints doivent être captés (ils font échouer `flutter analyze`)');
+  assert.match(runner, /sortie non reconnue/, 'un échec sans motif connu doit tout de même être publié');
 
   // Tout `| tee` d'un workflow doit être protégé : soit il passe par le script,
   // soit le step pose `set -o pipefail`. Jamais un tube nu.
