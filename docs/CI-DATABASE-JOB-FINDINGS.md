@@ -264,6 +264,16 @@ des tests (`production-compose-contract` : surcharge présente, défaut immuable
 même digest partout ; `registry-pull` : étape conditionnelle, `--password-stdin`,
 aucun mot de passe littéral).
 
+**Vérification en CI du lot 1.7 (25/09, run `36140324519`, commit `7945c85`)** :
+l'étape « Registre Quay (facultatif — H1) » est **`skipped`** — la condition
+`if: env.QUAY_USERNAME != ''` se comporte comme prévu quand les secrets sont
+absents, sans casser le job. Le reste du job est vert jusqu'à l'étape 14 (build
+inclus) ; les 5 annotations d'échec sont **exactement** les deux tirages Quay
+(`H1 staging failure`, `H1 dev failure`) plus leur trace d'appel, sha épinglé
+inchangé (`sha256:14cea493…`). Autrement dit la remédiation n'a introduit aucune
+régression et **H1 reste le seul rouge**, ce qui est l'état voulu tant qu'aucune
+des deux voies n'est activée.
+
 ### Correctif — 24/09
 
 - `tests/tenant-isolation/helpers.mjs` : nouvelle constante partagée
@@ -307,6 +317,28 @@ sur 72). Les suites `phase27` (14/0), `phase28` (23/0), `phase47` (38/0) et
 `phase49` (48/0) sont vertes en mode rôles de production. Le défaut a été
 corrigé puis rejoué seul (`phase22` : 44 assertions ✓), avant le gate complet de
 contrôle.
+
+## Anomalie `quality` du 25/09 — `f442176`, tranchée comme instabilité
+
+Le run `36139870972` (commit `f442176`, deux fichiers de documentation
+uniquement) a un `quality` **rouge** sur le seul step « Tests unitaires api +
+worker (jest --coverage, seuils) ». Le même step est **vert** sur `8cc7583` et
+sur `7945c85`, qui contiennent exactement le même code de test.
+
+Vérifications :
+
+- `gh api .../actions/jobs/108086777476/logs` → `EOF` (même limitation de
+  stockage que le reste du dépôt) ; la seule annotation est « Process completed
+  with exit code 1. » — pas de message d'assertion.
+- Relance ciblée impossible : `gh run rerun 36139870972 --failed` →
+  `cannot be rerun; its workflow file may be broken`.
+- Rejeu local de la condition exacte du job (`dist/` **supprimé**, puis
+  `npm run test:unit`) : **3 itérations sur 3 vertes**, `117+5` tests,
+  `16+1` suites.
+
+Conclusion : instabilité du job, pas une régression. `f442176` est de toute
+façon remplacé par `7945c85` (même contenu + lot 1.7), dont `quality` est vert.
+Aucun cliquet n'a été baissé pour ce rouge.
 
 ## Lire les échecs CI sur ce dépôt
 

@@ -712,6 +712,13 @@ O — MinIO revenu en dur (surcharge perdue)      rc=1  ['… doit être image: 
 restaurations (diff -q avec la sauvegarde)      36/36 verts
 ```
 
+**Vérifié en CI** (run `36140324519`, commit `7945c85`, 25/09) : étape « Registre Quay
+(facultatif — H1) » = **`skipped`** (secrets absents, job intact), job vert jusqu'à l'étape 14
+(build inclus), échec final limité aux **deux** tirages Quay (dev + staging) — signature H1
+inchangée, aucun régression introduite. Deuxième run du jour (`36139870972`, `f442176`) : même
+signature H1 ; son `quality` rouge est une **instabilité** (rejeu local `dist/` supprimé : 3/3 vert,
+117+5 tests) — voir `docs/CI-DATABASE-JOB-FINDINGS.md`, section « Anomalie `quality` du 25/09 ».
+
 ## 6. Décisions en attente (propriétaire explicite)
 
 | # | Décision | Propriétaire | Bloque | État |
