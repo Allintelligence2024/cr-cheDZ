@@ -78,15 +78,22 @@ jobs:
       - name: parent-mobile — pub get + analyze
         working-directory: apps/parent-mobile
         run: |
-          flutter pub get -v | tee parent-pub-get.log
-          flutter analyze -v | tee parent-analyze.log
+          bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" parent-pub-get.log "parent-mobile pub get" flutter pub get -v
+          bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" parent-analyze.log "parent-mobile analyze" flutter analyze -v
       # L3 (audit 2026-09-24, item C2) : le refresh de session et les états
       # d'erreur sont prouvés par des tests RÉELLEMENT exécutés (l'analyse seule
       # ne prouve aucune exécution). Le contrat statique correspondant est joué
       # par le job `quality` ; ici, c'est l'exécution.
+      #
+      # FAUX VERT CORRIGÉ (2026-09-25, run 36189792213) : `flutter test | tee`
+      # renvoyait le code de `tee` (0) — un test en échec laissait le job vert,
+      # avec pour seule trace un `::error::4 tests passed, 1 failed.` sans
+      # fichier ni test nommé. Toute commande passe désormais par
+      # `scripts/ci-run.sh`, qui conserve le code de sortie (pipefail + `exit`)
+      # et publie les lignes d'échec en annotations lisibles.
       - name: parent-mobile — tests
         working-directory: apps/parent-mobile
-        run: flutter test | tee parent-test.log
+        run: bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" parent-test.log "parent-mobile tests" flutter test
       - name: Upload parent-mobile logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -100,13 +107,13 @@ jobs:
       - name: staff-mobile — pub get + analyze
         working-directory: apps/staff-mobile
         run: |
-          flutter pub get -v | tee staff-pub-get.log
-          flutter analyze -v | tee staff-analyze.log
+          bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" staff-pub-get.log "staff-mobile pub get" flutter pub get -v
+          bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" staff-analyze.log "staff-mobile analyze" flutter analyze -v
       # Lot G : les tests existent (widget login + sync F2/F3B + projections) —
       # ils sont réellement exécutés, pas seulement analysés.
       - name: staff-mobile — tests
         working-directory: apps/staff-mobile
-        run: flutter test | tee staff-test.log
+        run: bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" staff-test.log "staff-mobile tests" flutter test
       # ── P1-2 : compilation réelle des APK ──────────────────────────────────
       - uses: actions/setup-java@v4
         with:

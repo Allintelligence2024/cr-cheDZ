@@ -1224,7 +1224,7 @@ l'erreur vient du compilateur qui construit le binaire livré.
 - `flutter.yml` — étape **`parent-mobile — tests`** (`flutter test`, journal publié en artefact) et
   étape **lockfile** : résolution **contrainte** (`--enforce-lockfile`) dès que `pubspec.lock` est
   versionné, sinon la résolution réelle du run est **publiée** (annotations) pour être committée.
-- Verrou statique `tests/tenant-isolation/parent-session-contract.test.mjs` (**7/7**, job `quality`
+- Verrou statique `tests/tenant-isolation/parent-session-contract.test.mjs` (**8/8** — la 8e règle interdit le faux vert du tube ; job `quality`
   + bundle du gate D) : un seul point d'entrée de refresh dans `lib/`, single-flight (et refus
   explicite du drapeau booléen), rejeu borné, purge + retour connexion, états d'erreur par écran,
   tests **réellement lancés** par la CI (verdict en attente), contrôle du lockfile.
@@ -1233,6 +1233,31 @@ l'erreur vient du compilateur qui construit le binaire livré.
 **tronquée** (3072 octets décodés, coupés en plein milieu) : une annotation GitHub est plafonnée à
 **4096 caractères**, et un lockfile tronqué ne résout plus rien. La publication est donc découpée en
 morceaux numérotés (`1/N`…), réassemblables — l'échec a été vu par la mesure, pas supposé.
+
+**Verdict relevé (jeton GitHub rétabli)** : run `flutter` `36189792213` sur `e5ee4ac` = **success**
+(les 12 tests s'exécutent, l'APK se construit) et `docker` = success ; le run `ci` `36189792263` était
+rouge pour une seule raison, documentaire : le step « Contrat de vérité documentaire » exigeait le
+compteur de fichiers d'isolation à jour (88 → **89**, ce même contrat ayant gagné une suite) —
+corrigé, donc re-vert attendu.
+
+**Faux vert corrigé (25/09, nuit)** — le vert du job `flutter` ne valait pas ce qu'il affichait : une
+annotation isolée trahissait `::error::4 tests passed, 1 failed.` alors que **les 17 steps étaient
+verts**. Cause mesurée : `flutter test | tee parent-test.log` — **le tube renvoie le code de sortie de
+`tee` (0)**, donc un test réellement en échec ne rougissait rien (deux suites `staff-mobile` de 5 tests
+étaient candidates, sans autre indice : ni fichier, ni ligne, ni test nommé). Corrigé par
+`scripts/ci-run.sh` : `set -o pipefail` + capture de `rc` + `exit "$rc"` + publication des lignes
+d'échec en annotations (≤ 8 par étape — une annotation GitHub est plafonnée à 4096 caractères, mesuré,
+et au-delà GitHub agrège). Les 4 étapes de test/analyse des deux apps y passent ; les `| tee`
+restants (lockfile, builds APK) étaient déjà sous `set -o pipefail`. Verrou : **8e règle** de
+`parent-session-contract` — « aucun échec masqué par un tube », éprouvée par 3 mutations (`exit` avalé
+⇒ rouge ; directive `pipefail` retirée ⇒ rouge ; tube nu réintroduit ⇒ rouge). La première version de
+l'assertion matchait la *mention* de `set -o pipefail` dans le commentaire d'en-tête du script et
+laissait donc passer la suppression de la directive : elle est désormais ancrée sur la ligne de code.
+
+**Lockfile parent committé** : la résolution publiée par la CI (6 morceaux réassemblés — 519 lignes,
+67 paquets, `dio` 5.11.1, `flutter_secure_storage` 9.2.4, `intl` 0.20.3, `flutter_lints` 4.0.0, Dart
+`>=3.11.0 <4.0.0`) est versionnée : le step dédié passe à `flutter pub get --enforce-lockfile` au run
+suivant, une dérive de dépendance fera donc échouer le job au lieu de changer le binaire en silence.
 
 **En attente (dit tel quel)** : le **verdict final** du run `flutter` sur `e5ee4ac` (le jeton GitHub
 de l'environnement a été invalidé pendant l'attente — même panne que le 24/09 à la même heure) et le

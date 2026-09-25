@@ -24,7 +24,12 @@
  *   4. un refresh refusé **purge** la session et prévient l'app (retour à la
  *      connexion), au lieu de laisser les jetons morts sur le téléphone ;
  *   5. les tests d'exécution existent ET sont joués par la CI (`flutter test`
- *      dans `apps/parent-mobile`) — un test que personne n'exécute ne prouve rien.
+ *      dans `apps/parent-mobile`) — un test que personne n'exécute ne prouve rien ;
+ *   6. **aucun échec n'est masqué par un tube** : `flutter test | tee log`
+ *      renvoyait le code de `tee` (0) et un test en échec laissait le job vert
+ *      (mesuré en CI le 2026-09-25, run 36189792213). Les commandes passent par
+ *      `scripts/ci-run.sh`, qui garde le code de sortie ET publie l'échec —
+ *      « vert » doit vouloir dire « vert ».
  *
  * Usage : node --test tests/tenant-isolation/parent-session-contract.test.mjs
  * (aucune base, aucun Docker, aucun SDK Flutter : exécutable dans `quality`).
@@ -120,6 +125,40 @@ test('les tests d’exécution existent et sont joués par la CI', () => {
   const parentBlock = workflow.slice(workflow.indexOf('parent-mobile — pub get + analyze'));
   assert.match(parentBlock, /working-directory: apps\/parent-mobile/,
     'les commandes parent doivent tourner dans apps/parent-mobile');
+});
+
+test('aucun échec de test Flutter n’est masqué par un tube', () => {
+  // Fait mesuré en CI le 2026-09-25 (run 36189792213, job `flutter`) :
+  // `flutter test | tee parent-test.log` renvoie le code de sortie de `tee`
+  // (0). Un test réellement en échec laissait le job VERT — la seule trace
+  // étant un `::error::4 tests passed, 1 failed.` du reporter Dart, sans
+  // fichier, sans ligne, sans test nommé. Le job `flutter` ne pouvait donc pas
+  // être pris pour un verdict d'exécution tant que ce tube existait.
+  const runner = read(join(REPO, 'scripts', 'ci-run.sh'));
+  assert.match(runner, /^set -o pipefail$/m, 'le tube doit propager l’échec (directive réelle, pas une mention en commentaire)');
+  assert.match(runner, /rc=\$\?/, 'le code de sortie doit être capturé');
+  assert.match(runner, /exit "\$rc"/, 'le code capturé doit être rendu au job');
+  assert.match(runner, /::error title=/, 'les échecs doivent être publiés en annotations (lisibles sans artefact)');
+
+  // Tout `| tee` d'un workflow doit être protégé : soit il passe par le script,
+  // soit le step pose `set -o pipefail`. Jamais un tube nu.
+  const steps = workflow.split(/\n {6}- /).slice(1);
+  const withTee = steps.filter((step) => /\| tee/.test(step));
+  assert.ok(withTee.length >= 4, `étapes journalisées attendues : ${withTee.length}`);
+  for (const step of withTee) {
+    const name = (step.match(/name: ([^\n]+)/) || [, '?'])[1];
+    assert.ok(/ci-run\.sh/.test(step) || /set -o pipefail/.test(step),
+      `« ${name} » redirige sa sortie avec un tube sans protéger le code de sortie`);
+  }
+
+  // Les étapes de test des DEUX apps passent par le script : un test en échec
+  // rend le job rouge, et l'échec est nommé dans les annotations.
+  for (const app of ['parent', 'staff']) {
+    const step = workflow.match(new RegExp(`name: ${app}-mobile — tests[\\s\\S]*?(?=\\n {6}- |\\n {6}#)`));
+    assert.ok(step, `étape ${app}-mobile — tests absente de flutter.yml`);
+    assert.match(step[0], /ci-run\.sh/, `${app}-mobile — tests doit passer par scripts/ci-run.sh`);
+    assert.match(step[0], /flutter test/, `${app}-mobile — tests doit lancer flutter test`);
+  }
 });
 
 test('la résolution des dépendances parent est contrôlée, jamais implicite', () => {

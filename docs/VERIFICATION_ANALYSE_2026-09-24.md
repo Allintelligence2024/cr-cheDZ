@@ -431,6 +431,20 @@ bloqué** (avec sa cause mesurée). Rien n'est « en cours » : ce tableau est l
 | **6 — `pubspec.lock` absent pour parent-mobile** | 🟡 **mécanisme livré, committé à faire** | `flutter.yml` publie la résolution **réelle** du run (SDK 3.47.1) pour qu'elle soit committée — un lock écrit à la main resterait faux ; dès qu'il est versionné, la résolution passe en `--enforce-lockfile`. Un lockfile **tronqué** a été reçu au premier essai : une annotation est plafonnée à **4096 caractères** (mesuré) → publication en morceaux numérotés. Commit de la résolution en attente de l'accès GitHub (jeton invalidé en cours de lot, même panne que le 24/09 à la même heure) |
 | **❌ 12 / ❌ 25 / ❌ 37 / ❌ 43** (F3, F1, F4, F2) | ✅ F3, F1, F2 **fermés** ; F4 = items 1/2 **livrés (L3)** | F1 : **0** occurrence de « Quartz » dans le code/config (`apps`, `packages`, `infrastructure`) et phrases bannies verrouillées par `claims-contract` ; F2 : composes **résolus** → `prod`/`staging` sondent `api` **et** `worker` (`postgres` partout, `dev` = postgres seul, volontaire) ; F3 : voir item 4 ; F4 : voir items 1/2 |
 
+**Mise à jour du 25/09/2026 (nuit) — un « vert » qui ne prouvait rien.** En relevant le verdict du
+run `flutter` (jeton GitHub rétabli), une annotation isolée est apparue dans un job **vert** :
+`::error::4 tests passed, 1 failed.` — les 17 steps étaient verts. Cause : `flutter test | tee
+parent-test.log` ; le tube renvoie le code de sortie de `tee` (0), donc **un test réellement en
+échec ne rougissait rien**. Deux suites `staff-mobile` de 5 tests étaient candidates, sans autre
+indice (ni fichier, ni ligne, ni test nommé) — l'artefact de logs est alors le seul recours, et il
+n'est pas téléchargeable depuis cet environnement. Correction : `scripts/ci-run.sh` (pipefail,
+capture et restitution du code de sortie, publication des échecs en annotations), appelé par les
+4 étapes de test/analyse des deux apps ; verrou statique = 8e règle de `parent-session-contract`
+(3 mutations ; la première assertion était trop faible — elle matchait la mention de `set -o
+pipefail` dans un commentaire d'en-tête — et est désormais ancrée sur la directive réelle).
+Conséquence méthodologique : un job vert ne vaut que si le chemin qui va du test à son code de
+sortie ne peut pas être avalé ; le dépôt n'a plus de `| tee` non protégé.
+
 **Mise à jour du 25/09/2026 (soir) — les items « parent-mobile » sont livrés.** Le raisonnement de la
 clôture tenait sur une prémisse devenue fausse : « aucun code Dart ne peut être prouvé ici ». Le job
 `flutter` de la CI **a** le SDK épinglé (3.47.1) et **compile** réellement les deux applications
