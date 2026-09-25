@@ -102,6 +102,23 @@ test('un refresh refusé purge la session et ramène à la connexion', () => {
   assert.match(main, /_authenticated = false/, "l'état authentifié doit retomber");
 });
 
+test('aucune requête authentifiée ne part sans jeton (« Bearer null »)', () => {
+  // Défaut mesuré par le job `flutter` le 2026-09-25 (test « pas de refresh
+  // token du tout ») : `'Bearer ${await _store.readAccessToken()}'` rendait
+  // littéralement `Bearer null` quand le stockage était vide et la requête
+  // partait quand même — la future complétait avec `[]` au lieu de jeter
+  // `ParentSessionExpired`. Le correctif : lire le jeton, refuser d'émettre
+  // sans lui.
+  const client = read(join(LIB, 'core', 'api_client.dart'));
+  assert.doesNotMatch(client, /Bearer \$\{await _store\.readAccessToken\(\)\}/,
+    'interpolation directe du jeton : « Bearer null » possible');
+  const headers = client.match(/Future<Map<String, String>> _authHeaders\(\)[\s\S]*?\n  \}/);
+  assert.ok(headers, '_authHeaders introuvable');
+  assert.match(headers[0], /token == null \|\| token\.isEmpty/, 'l’absence de jeton doit être testée');
+  assert.match(headers[0], /readRefreshToken|_refreshSession\(\)/, 'un refresh token présent ⇒ refresh (pas de requête anonyme)');
+  assert.match(headers[0], /ParentSessionExpired/, 'aucun refresh token ⇒ session expirée, sans appel réseau');
+});
+
 test('les écrans distinguent session expirée, hors-ligne et panne serveur', () => {
   const errorState = read(join(LIB, 'core', 'error_state.dart'));
   assert.match(errorState, /error is ParentSessionExpired/, 'cas session expirée traité');

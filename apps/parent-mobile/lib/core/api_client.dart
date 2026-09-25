@@ -235,8 +235,22 @@ class ParentApiClient {
     }
 
     try {
+      // Le rejeu ne part que si le refresh a bien écrit un jeton : sans cette
+      // garde, la requête rejouée portait `Bearer null` et le serveur rendait
+      // un 401 définitif au lieu de la session expirée typée.
+      final renewed = await _store.readAccessToken();
+      if (renewed == null || renewed.isEmpty) {
+        await _expireSession();
+        handler.reject(
+          DioException(
+            requestOptions: request,
+            error: const ParentSessionExpired(),
+          ),
+        );
+        return;
+      }
       final options = request
-        ..headers['authorization'] = 'Bearer ${await _store.readAccessToken()}'
+        ..headers['authorization'] = 'Bearer $renewed'
         ..extra[_retriedKey] = true;
       final response = await _dio.fetch<dynamic>(options);
       handler.resolve(response);
@@ -288,9 +302,26 @@ class ParentApiClient {
     _onSessionExpired?.call();
   }
 
-  Future<Map<String, String>> _authHeaders() async => {
-        'authorization': 'Bearer ${await _store.readAccessToken()}',
-      };
+  /// Aucune requête authentifiée ne part sans jeton : avant ce correctif,
+  /// l'interpolation directe du jeton dans l'en-tête produisait littéralement
+  /// `Bearer null` quand le stockage était vide, et la requête partait quand
+  /// même — le serveur répondait 200 sur un chemin tolérant (cas mesuré par le
+  /// test « pas de refresh token du tout », 2026-09-25 : la future complétait
+  /// avec `[]` au lieu de jeter). Si un refresh token existe, on tente le
+  /// refresh (single-flight) ; sinon `_performRefresh` purge la session et
+  /// jette `ParentSessionExpired` — sans aucun appel réseau.
+  Future<Map<String, String>> _authHeaders() async {
+    var token = await _store.readAccessToken();
+    if (token == null || token.isEmpty) {
+      await _refreshSession();
+      token = await _store.readAccessToken();
+      if (token == null || token.isEmpty) {
+        await _expireSession();
+        throw const ParentSessionExpired();
+      }
+    }
+    return {'authorization': 'Bearer $token'};
+  }
 
   Future<Response<dynamic>> _authedGet(String path) async {
     return _dio.get<dynamic>(path, options: Options(headers: await _authHeaders()));
