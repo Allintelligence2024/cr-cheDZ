@@ -223,6 +223,31 @@ Détail des annotations de `6584c52` (job `database`) : deux `Registry pull fail
 (staging puis dev), la `version` obsolète de compose (avertissement), et `Process completed with
 exit code 1` — **aucune autre suite en échec**.
 
+### Verdicts observés le 25/09 (lots L4, L6.3, L6.4)
+
+| Commit | Job `database` | Job `quality` | Lecture |
+|---|---|---|---|
+| `9a33e37` (verdict gate D, docs) | **terminé** `14:54:53 → 15:22:52` (28 min), `rc=1` — **H1 seul** | `success` | étape « Registre Quay (facultatif — H1) » = **`skipped`** (aucun secret de dépôt) ; les échecs sont **exactement** `H1 staging failure` + `H1 dev failure` et leur trace d'appel — **aucune annotation « Suite en échec »** |
+| `3f88481` (lot L6.4 / D5) | **terminé** `14:57:08 → 15:27:01` (30 min), `rc=1` — **H1 seul** | `success` | même signature : `H1 staging failure`, `H1 staging 1`, `H1 dev failure` (+ « exit code 1 ») — rien d'autre |
+
+**Comment on sait que la batterie entière — `phase76` compris — est passée en CI** (chaîne
+explicite, pour ne pas conclure d'un log illisible) :
+
+1. le step rouge est `bash scripts/run-isolation-suites.sh` ; en environnement GitHub Actions, ce
+   runner **délègue au gate D** (`scripts/run-isolation-suites.sh:19-23` : `GITHUB_ACTIONS=true` →
+   `node scripts/test-production-roles.mjs`) ;
+2. dans le gate, l'échec H1 est **mémorisé** (`stackFailed`) et le `process.exit(1)` n'a lieu
+   qu'à la **dernière ligne** (`test-production-roles.mjs:261`), après la batterie de 72 suites
+   (`ligne 174`) — donc la batterie tourne même quand H1 échoue ;
+3. le runner émet **une annotation par suite fautive** (`::error title=Suite en échec::<suite>`,
+   `run-isolation-suites.sh:153`) — et les check-runs des deux commits n'en portent **aucune** ;
+4. la durée observée (28–30 min) correspond au trajet complet (builds H1 + 72 suites), pas à un
+   arrêt précoce.
+
+Conclusion : **H1 reste le seul rouge, par conception** (tirage anonyme de `quay.io/minio/minio`
+refusé depuis le runner), et `phase76-messaging-retention.pg.test.mjs` — la suite du lot L4 — a
+été exécutée **et passée** en CI, en mode rôles de production.
+
 ### H1 — ce que le code dit exactement (mesuré le 24/09, soir)
 
 `scripts/test-staging-stack.mjs:66-68` : la stack de staging **construit** ses images
