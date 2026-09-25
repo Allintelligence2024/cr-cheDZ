@@ -403,6 +403,27 @@ mutation), 4 gardiens orphelins câblés en CI, `Content-Security-Policy` étape
 | 1 | `parent-mobile` : session de 15 min sans refresh → app inutilisable, spinners infinis | `identity.module.ts:25`, `api_client.dart` (aucun refresh) | ~1 j |
 | 2 | `parent-mobile` : zéro test, zéro gestion d'erreur sur 2 écrans | pas de `test/` ; `photos_page.dart:33`, `consents_page.dart:30` | ~1 j |
 
+### Clôture des items ci-dessus — état mesuré au 2026-09-25
+
+Chaque item de cette section est soit **fermé avec sa preuve exécutée**, soit **explicitement
+bloqué** (avec sa cause mesurée). Rien n'est « en cours » : ce tableau est le verdict.
+
+| Item (ligne d'origine) | Statut | Preuve exécutée le 25/09/2026 |
+|---|---|---|
+| **0 — F5** aucune URL signée joignable (lecture **et** écriture) | ✅ **fermé (lots 2A + 2B)** | `phase66-content-same-origin` (35 assertions) : le média est servi same-origin par l'API ; `phase67-media-upload` (37) : l'upload passe par `POST /media/upload`, le presign d'écriture est *fail-closed* en production ; presign de lecture **supprimé** du code |
+| **1 — parent-mobile** : session 15 min sans refresh → app inutilisable | ⛔ **BLOQUÉ (L3)** | cause mesurée : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` (**000**, re-mesuré le 25/09 à 15:07 UTC) ; `apps/parent-mobile/lib/core/network/api_client.dart` ne porte aucun intercepteur de refresh — le correctif (single-flight + purge/OTP) exige d'**exécuter** `flutter analyze`/`flutter test`, impossible ici |
+| **2 — parent-mobile** : zéro test, zéro gestion d'erreur | ⛔ **BLOQUÉ (L3)** | `apps/parent-mobile/test/` **absent** du disque ; `flutter.yml` teste **staff-mobile** (`flutter test`, ligne 71-72) et ne fait que `pub get` + `analyze` pour parent — brancher `flutter test` sur un dossier vide ferait échouer la CI sans rien qualifier (pas de faux vert produit ici) |
+| **3 — 4 gardiens orphelins + nom d'étape périmé** | ✅ **fermé (lot 1, verrouillé lot 1.5)** | `check-guards-wired` : **12 gardiens recensés, 0 orphelin** ; les 4 noms apparaissent dans `ci.yml` (`check-env-example`, `inventory-route-guards`, `check-android-manifest`, `verify-load-tests`) ; noms d'étapes corrigés (75→76 migrations, 71→72 suites depuis L4) |
+| **4 — `RATE_LIMIT_DISABLED` non refusé en production** | ✅ **fermé (lot 1)** | `packages/prod-config/src/index.ts:110` refuse `true`/`1` en production ; `production-config.spec.ts` → **11 tests verts** (exécuté ci-dessus) |
+| **5 — aucune `Content-Security-Policy`** | ✅ **fermé (lot 1)** | `tests/tenant-isolation/edge-headers-contract.test.mjs` lit la config nginx et verrouille la CSP (`default-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`) |
+| **6 — `pubspec.lock` absent pour parent-mobile** | ⛔ **BLOQUÉ (L3)** | `git ls-files apps/parent-mobile/pubspec.lock` → **0** (non versionné) ; un lock écrit à la main serait faux : il doit être **généré** par `flutter pub get` sur un poste avec Flutter 3.47.1 |
+| **❌ 12 / ❌ 25 / ❌ 37 / ❌ 43** (F3, F1, F4, F2) | ✅ F3, F1, F2 **fermés** ; F4 = items 1/2 ⛔ | F1 : **0** occurrence de « Quartz » dans le code/config (`apps`, `packages`, `infrastructure`) et phrases bannies verrouillées par `claims-contract` ; F2 : composes **résolus** → `prod`/`staging` sondent `api` **et** `worker` (`postgres` partout, `dev` = postgres seul, volontaire) ; F3 : voir item 4 ; F4 : voir items 1/2 |
+
+**Ce que la clôture ne dit pas** : les items ⛔ ne sont pas « partiellement faits » — aucun code Dart
+n'a été écrit (il serait incompilable ici, donc invérifiable). Le correctif complet de L3 (portée
+cadrée par la décision **D4 = correctif court**) est prêt à être exécuté sur un poste qui dispose du
+SDK : voir `docs/PLAN_REPARATION_2026-09-24.md` §2 (L3) et §6 (D4).
+
 ### 🟠 Avant pilote (correctifs courts, fort rendement)
 | # | Problème | Preuve | Effort |
 |---|---|---|---|
