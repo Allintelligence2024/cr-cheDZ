@@ -286,17 +286,46 @@ pour l'ops. Vérifié par test : `tests/tenant-isolation/registry-pull.test.mjs`
 fond est inchangé : réessais uniquement sur timeout réseau, échec définitif
 immédiat sinon, **aucun repli « vert de complaisance »**.
 
+**CAUSE RACINE IDENTIFIÉE ET TRAITÉE (25/09/2026, lot H1)** — le blocage n'était ni
+le runner ni un réglage du dépôt : **MinIO a retiré ses images des deux registres
+publics**. Mesures concordantes : l'API Docker Hub rend `404` pour `minio/minio`
+(dépôt supprimé le 12/09/2026, le manifeste anonyme rendant `401`), et Quay.io a
+coupé l'accès anonyme le 24/09/2026 à ~12:55 UTC (`unauthorized: access to the
+requested resource is not authorized`, alors que d'autres dépôts publics du même
+registre répondent `200`). Aucun identifiant ne répare un dépôt disparu : le
+chemin « secrets Quay » ne pouvait donc pas suffire.
+
+Conséquence traitée dans le dépôt : **le défaut n'est plus un tirage**. L'image
+MinIO est désormais **construite localement** depuis le binaire publié de la
+release épinglée, dont la somme SHA-256 est vérifiée par le builder lui-même
+(`ADD --checksum`, pas une confiance dans le réseau) — `infrastructure/docker/minio.Dockerfile`
++ `scripts/build-minio-image.mjs`, avec provenance des sommes (assets GitHub de la
+release `RELEASE.2025-09-07T16-13-09Z`, relevés par API) écrite dans le fichier.
+Trois propriétés sont verrouillées par `production-compose-contract` : même image
+par défaut dans les trois environnements, **aucune référence à un registre mort**,
+**aucun `build:` sous le service minio** (sinon `docker compose up` avec
+`MINIO_IMAGE=<miroir>` reconstruirait en local et retaggerait le miroir : la
+surcharge deviendrait un mensonge). `MINIO_IMAGE` reste opérant pour un miroir
+d'exploitation, et la connexion Quay facultative est conservée pour ce cas.
+
+Les deux voies ci-dessous restent donc valides comme **surcharges**, mais elles ne
+sont plus nécessaires au vert : H1 ne dépend plus d'un registre tiers.
+
 **Remédiations d'exploitation (lot 1.7)** — deux chemins, aucun ne fabrique un vert :
 
 | Voie | Geste | Effet | Épinglage |
 |---|---|---|---|
-| **A — miroir** (sans secret) | définir `MINIO_IMAGE` (env du job, du runner ou du VPS) | le compose et `test-staging-stack.mjs` tirent l'image **configurée** | le défaut du dépôt reste **épinglé par digest** (`sha256:14cea493…`) et identique dans les trois environnements ; c'est l'exploitant qui choisit sa référence de miroir |
-| **B — identifiants** | fournir les secrets de dépôt `QUAY_USERNAME` / `QUAY_PASSWORD` | le job `database` se connecte à Quay (`docker login`, mot de passe par **stdin**) puis tire normalement | inchangé |
+| **A — miroir** (sans secret) | définir `MINIO_IMAGE` (env du job, du runner ou du VPS) | le compose et `test-staging-stack.mjs` tirent l'image **configurée** (aucun build local : pas de `build:` sous minio) | le défaut du dépôt est l'image **construite depuis la release épinglée** (`creche-minio:RELEASE.2025-09-07T16-13-09Z`, somme vérifiée par le builder), identique dans les trois environnements |
+| **B — identifiants** | fournir les secrets de dépôt `QUAY_USERNAME` / `QUAY_PASSWORD` | le job `database` se connecte à Quay (`docker login`, mot de passe par **stdin**) puis tire normalement | inchangé — utile seulement si le miroir choisi est hébergé sur Quay (le dépôt `minio/minio` de Quay, lui, n'est plus tirale anonymement) |
 
-Sans A **ni** B, H1 reste rouge : c'est voulu. Les deux voies sont verrouillées par
-des tests (`production-compose-contract` : surcharge présente, défaut immuable,
-même digest partout ; `registry-pull` : étape conditionnelle, `--password-stdin`,
-aucun mot de passe littéral).
+Sans A **ni** B, H1 **ne reste plus rouge** (25/09/2026) : le défaut construit
+l'image localement depuis la release officielle vérifiée par somme. Les trois
+chemins sont verrouillés par des tests (`production-compose-contract` : surcharge
+présente, image par défaut identique dans les trois environnements, aucune
+référence à un registre mort, aucun `build:` sous minio, pins du Dockerfile et
+cohérence Dockerfile ↔ script de construction ; `registry-pull` : étape
+conditionnelle, `--password-stdin`, aucun mot de passe littéral, miroir tiré sur
+la config résolue).
 
 **Vérification en CI du lot 1.7 (25/09, run `36140324519`, commit `7945c85`)** :
 l'étape « Registre Quay (facultatif — H1) » est **`skipped`** — la condition

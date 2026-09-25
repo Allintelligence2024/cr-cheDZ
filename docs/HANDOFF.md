@@ -153,10 +153,14 @@ RESTE À FAIRE (non fait, à ne pas déclarer fini) :
   push (le document `docs/CI-RESTORE.md` décrit l'épisode historique du blocage
   « permission `workflows` », désormais levé). **État CI au 25/09/2026** : `quality`,
   `docker`, `flutter`, `security`, `e2e`, `admin-web`, `support-console`,
-  `backup-drill` verts ; job `database` **rouge sur un seul point, documenté et
-  voulu** — H1, le tirage anonyme de `quay.io/minio/minio` depuis le runner
-  (`docs/CI-DATABASE-JOB-FINDINGS.md`, remédiations « miroir `MINIO_IMAGE` » ou
-  secrets `QUAY_USERNAME`/`QUAY_PASSWORD`). Aucun autre échec.
+  `backup-drill` verts. **H1 traité à la racine le 25/09/2026** : le job `database`
+  était rouge **uniquement** parce que MinIO a retiré ses images des deux registres
+  publics (Docker Hub le 12/09, accès anonyme Quay coupé le 24/09 — mesuré). Le
+  défaut n'est plus un tirage : l'image est **construite** depuis le binaire de la
+  release épinglée, somme SHA-256 vérifiée par le builder
+  (`infrastructure/docker/minio.Dockerfile`, `scripts/build-minio-image.mjs`),
+  `MINIO_IMAGE` restant la surcharge miroir d'exploitation
+  (`docs/CI-DATABASE-JOB-FINDINGS.md`, § H1 ; `docs/RUNBOOK.md`).
 - e2e Playwright (spec écrit, navigateur absent).
 - k6 (script `tests/load/sync.k6.js` prêt, binaire absent) : **non exécuté** ; son critère
   (p95 sync push < 2 s pour 500 ops) est mesuré par le banc `npm run test:capacity` en
@@ -262,7 +266,7 @@ les correctifs ont été réappliqués selon la spécification
 | Roadmap v2 | Messagerie, exports Excel, paiement SATIM, multi-rôles, WhatsApp (notif + OTP), paie, marketplace — phases 12-20 vertes |
 | Conformité vidéo | DPIA rédigée + verrou flag `video_surveillance` (046, **inactif par défaut**) + module V1 : caméras/clips/purge 30 j/visionnage journalisé (047-048, phase21). **Limite écrite noir sur blanc (D5, 25/09/2026)** : l'**acquisition** des clips n'est pas câblée — aucun écran n'envoie de clip (verrou `phase21`), `POST /video/clips/presign-upload` est *fail-closed* en production (pas de sous-domaine public, D1 = A), et le plafond de taille n'est pas tranché — la fonction n'est donc pas présentée comme opérationnelle |
 | Apps | api (NestJS), worker (jobs + push + exports + PDF), admin-web (React FR/AR responsive), support-console, staff-mobile + parent-mobile (squelettes Dart) |
-| CI | `ci.yml` (7 jobs : quality, database, e2e, admin-web, support-console, security, backup-drill), `docker.yml`, `flutter.yml`, `security-audit.yml` — versionnés et exécutés ; `database` rouge H1 seul (`docs/CI-DATABASE-JOB-FINDINGS.md`) |
+| CI | `ci.yml` (7 jobs : quality, database, e2e, admin-web, support-console, security, backup-drill), `docker.yml`, `flutter.yml`, `security-audit.yml` — versionnés et exécutés ; `database` était rouge **H1 seul** (MinIO retiré des registres publics) — **corrigé à la racine le 25/09/2026** par la construction locale de l'image depuis la release officielle vérifiée par somme (`docs/CI-DATABASE-JOB-FINDINGS.md`, § H1) |
 | Docs | `docs/PLAN_IMPLEMENTATION.md`, `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md`, `docs/ROADMAP_V2.md`, `docs/adr/` (000→010), `docs/HANDOFF.md` (ce fichier) |
 
 ## Commandes utiles
@@ -449,8 +453,11 @@ signalés sur `HEAD` avant correctif, 0 après). Suites corrigées : `phase22`,
 `phase26`, `phase27`, `phase28`, `phase49`.
 
 **État CI au 2026-09-24** — le job `database` est rouge, pour deux causes :
-1. **H1 (préexistant, environnemental, non corrigé)** : le runner ne peut plus
-   tirer `postgres:18-alpine` ni `quay.io/minio/minio` (`unauthorized`). Le gate
+1. **H1 (préexistant, environnemental)** : le runner ne peut plus
+   tirer `postgres:18-alpine` ni `quay.io/minio/minio` (`unauthorized`) — *(correctif
+   du 25/09/2026 : cause = MinIO retiré des registres publics ; le défaut est
+   désormais une image construite localement depuis la release officielle vérifiée
+   par somme, cf. § H1 des findings CI).* Le gate
    se terminait la veille (`52e6ef3`) : rien de code n'a changé de ce côté.
 2. **Régression du lot 1 (corrigée ici)** : `Gate D interrompu :: … phase26 …`
    → le gate s'arrêtait **avant la batterie**, qui n'a donc pas tourné en CI sur

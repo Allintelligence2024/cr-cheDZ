@@ -1,6 +1,8 @@
 # Development only: synthetic data, local ports, never a production deployment.
 # Run from the repository root:
-# docker compose -p creche-dev-v3 -f infrastructure/docker/docker-compose.dev.yml up --build
+#   node scripts/build-minio-image.mjs          # MinIO (H1 : plus d'image publique à tirer)
+#   docker compose -p creche-dev-v3 -f infrastructure/docker/docker-compose.dev.yml up --build
+# (`MINIO_IMAGE=<miroir>` remplace la construction locale — voir le service minio.)
 # (R1 : -p creche-dev-v3 — un volume formatté PG16 n'est pas lisible par PG18)
 # DEV_* settings deliberately do not inherit production DATABASE_URL/secrets.
 x-api-image: &api-image
@@ -31,10 +33,15 @@ services:
       retries: 10
 
   minio:
-    # H1 (tirage d'image) : surchargeable par `MINIO_IMAGE` — un runner ou un VPS
-    # sans accès à Quay pointe ici son miroir SANS toucher au dépôt ; la valeur par
-    # défaut reste ÉPINGLÉE PAR DIGEST (un tag seul redeviendrait mutable).
-    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e}
+    # H1 (25/09/2026) : MinIO a retiré ses images des registres publics (Docker Hub
+    # le 12/09, Quay.io le 24/09 — `unauthorized` mesuré depuis le runner) : plus
+    # aucun tirage anonyme n'est possible. L'image par défaut est donc CONSTRUITE
+    # localement depuis le binaire officiel de la release épinglée, somme SHA-256
+    # vérifiée par le builder (`node scripts/build-minio-image.mjs`). `MINIO_IMAGE`
+    # reste la surcharge d'exploitation : un miroir interne se substitue sans
+    # modifier le dépôt (et sans reconstruction locale — aucun `build:` ici, pour
+    # qu'un miroir ne soit jamais silencieusement remplacé par un build).
+    image: ${MINIO_IMAGE:-creche-minio:RELEASE.2025-09-07T16-13-09Z}
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${DEV_MINIO_ROOT_USER:-minio_dev}

@@ -46,7 +46,7 @@ vérification).
 | **L1** | **Gardiens orphelins + garde de config + CSP edge** | vérif. §4.3, F2, F3 | ~2 h | 4 gardiens en CI ; test unitaire prod-config ; test de contrat en-têtes | **FAIT** + régression CI du 24/09 corrigée et verrouillée (§3, L1.4) |
 | **L1.5** | **5ᵉ gardien orphelin + cliquet « gardiens câblés »** | vérif. §4.3 | ~0,5 h | gardien `check-guards-wired.mjs` en CI ; `audit-seeds-pii --strict` exécuté | **FAIT (2026-09-24)** — 12 gardiens recensés, 0 orphelin, 3 mutations détectées (§5) |
 | **L1.6** | **Diagnostic H1 exploitable** : nommer l'image qui refuse le tirage | CI (`database`) | ~0,2 h | message d'erreur citant l'image + test unitaire | **FAIT (2026-09-24)** — « Registry pull failed for <image> » ; comportement inchangé (aucun repli vert) |
-| **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) |
+| **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) ; **dépassé le 25/09/2026 (lot H1)** : la cause racine est amont (MinIO retiré des deux registres publics) ⇒ le défaut est désormais une image **construite** depuis la release officielle, somme vérifiée par le builder ; les deux voies ci-dessus restent des surcharges (journal §5, lot H1) |
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; restent hors lot : branchement du client mobile (**L3**, bloqué par le SDK Flutter), upload des clips (**D5 = c** : hors discours opérationnel, verrou ), octets hors-ligne (voir §3.2 ; **L2E** refuse désormais tout blob base64 dans `sync/push`) ; volet client verrouillé par **L2C** (`media-client-wiring`) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré trois fois (§5, lot 3 : 24/09, 25/09 15:07 UTC, 25/09 16:42 UTC)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` (`000`) ; à faire depuis un poste Flutter 3.47.1 — portée déjà cadrée (D4 = correctif court) |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | **FAIT (2026-09-25)** — décision **D2 = (a)** (purger) : migration 076, seuils 90 j / 365 j, suite `phase76` 15 assertions, 3 mutations détectées (§5) |
@@ -1130,6 +1130,54 @@ sous les seuils).
   reconnexion — reste ouverte et relève de **L3** ;
 - le client `staff-mobile` n'est **pas** modifié (aucun SDK Flutter ici) ; il n'envoie d'ailleurs
   aucun octet aujourd'hui (L2C/L2D).
+
+### H1 — MinIO n'est plus distribuable : l'image est reconstruite, pas tirée (2026-09-25)
+
+**Ce qui était présenté comme « environnemental » était une panne amont, datable.** Le diagnostic
+s'arrêtait à « le runner n'obtient plus le tirage anonyme de Quay ». La mesure du 25/09 établit la
+cause : **MinIO a retiré ses images des deux registres publics** — dépôt Docker Hub `minio/minio`
+supprimé le **12/09/2026** (API Hub `404`, manifeste anonyme `401`), accès anonyme **Quay.io** coupé
+le **24/09/2026** à ~12:55 UTC (`unauthorized: access to the requested resource is not authorized`,
+alors que d'autres dépôts publics du même registre répondent `200`). Conséquences : H1 était le
+**seul** job rouge, mais surtout **un déploiement neuf échouait** sur le tirage de l'object store —
+et les « remédiations » livrées au lot L1.7 (secrets Quay, miroir) ne pouvaient pas réparer un dépôt
+disparu : fournir des identifiants sur un registre qui ne sert plus l'image ne mène nulle part.
+
+**Livré — le défaut n'est plus un tirage** :
+- `infrastructure/docker/minio.Dockerfile` : image construite depuis le **binaire officiel** de la
+  release épinglée, publié sur GitHub, dont la **somme SHA-256 est vérifiée par le builder**
+  (`ADD --checksum=sha256:${MINIO_SHA256}`) — la vérification a été confirmée dans le code de
+  BuildKit (`AddCommand.Expand` étend `Checksum`) plutôt que supposée. Provenance écrite dans le
+  fichier : asset, taille et digest relevés par API pour la release `RELEASE.2025-09-07T16-13-09Z`
+  (`amd64` : 110 989 496 o, `7c5bd851…f855f` ; `arm64` : 105 251 000 o, `5c83cd2c…6f03d`), tag
+  annoté → commit `01ce918d…`. Une architecture non prévue **échoue avant le téléchargement** avec
+  un message explicite (jamais un binaire silencieusement différent).
+- `scripts/build-minio-image.mjs` : construction locale **arch-aware**, qui **lit** la release et la
+  somme `amd64` dans le Dockerfile (source de vérité unique) au lieu de les recopier.
+- Les trois composes : `image: ${MINIO_IMAGE:-creche-minio:RELEASE.2025-09-07T16-13-09Z}` — plus
+  aucune référence à un registre public mort, et **aucun `build:` sous `minio`** : sinon
+  `docker compose up` avec `MINIO_IMAGE=<miroir>` reconstruirait l'image locale et **retaggerait le
+  miroir** avec des octets venus du dépôt (la surcharge deviendrait un mensonge).
+- `scripts/test-staging-stack.mjs` : `postgres` est tiré (Docker Hub fonctionne), `minio` est
+  **construit** sauf si `MINIO_IMAGE` fournit un miroir — la stack de qualification ne dépend plus
+  d'aucun registre pour l'object store.
+- Verrous : `production-compose-contract` (image par défaut identique dans les trois environnements ;
+  aucune référence `quay.io/minio`/`minio/minio:` ; pas de `build:` sous minio ; pins du Dockerfile ;
+  cohérence Dockerfile ↔ script) et `registry-pull` (le miroir est tiré sur la config résolue, étape
+  Quay conditionnelle conservée, `--password-stdin`, aucun mot de passe littéral).
+
+**Preuves exécutées** : `production-compose-contract` 18/18, `registry-pull` 11/11,
+`dev-compose-contract` (inclus) — 36 contrôles verts sur les trois fichiers ; `check-guards-wired`
+12/12 ; `ci.yml` relu par js-yaml. La construction de l'image elle-même est prouvée **par la CI** :
+H1 construit l'image puis démarre la stack (API + worker + MinIO) et vérifie la santé par HTTP — un
+build cassé, une somme fausse ou un miroir injoignable font **échouer** le job, jamais un vert.
+
+**Hors périmètre / limites** : le conteneur tourne en `root`, comme l'image amont d'origine (un
+`USER minio` casserait une mise à jour sur un volume déjà créé par un déploiement antérieur) — le
+durcissement en uid 1000 est possible avec un volume neuf, à décider côté ops (écrit dans le
+Dockerfile). Le binaire reste **AGPL-3.0** : c'est celui de la release officielle, non modifié — si
+le produit ne veut plus embarquer MinIO du tout, c'est une décision produit (alternative S3
+managée), pas un correctif.
 
 ## 6. Décisions en attente (propriétaire explicite)
 

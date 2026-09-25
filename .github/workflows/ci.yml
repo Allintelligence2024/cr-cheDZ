@@ -47,13 +47,15 @@ jobs:
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
-      # H1 (24/09/2026) : `unauthorized` sur `quay.io/minio/minio` — l'image est
-      # tirée par `scripts/test-staging-stack.mjs`. Deux remédiations possibles,
-      # documentées dans docs/CI-DATABASE-JOB-FINDINGS.md (§ H1) :
-      #   1. ici : fournir QUAY_USERNAME/QUAY_PASSWORD (secrets de dépôt) ;
-      #   2. sans secret : pointer un miroir via `MINIO_IMAGE` (variables d'env du
-      #      job ou du runner) — la valeur par défaut reste épinglée par digest.
-      # Aucune des deux ne fabrique un vert : sans l'une ni l'autre, H1 reste rouge.
+      # H1 (24-25/09/2026) : `unauthorized` sur `quay.io/minio/minio`, puis MinIO
+      # retiré des deux registres publics (Docker Hub 12/09, Quay 24/09). Le défaut
+      # n'est donc PLUS un tirage : la stack CONSTRUIT l'image depuis la release
+      # officielle, somme SHA-256 vérifiée par le builder
+      # (`infrastructure/docker/minio.Dockerfile`). Cette connexion reste utile
+      # pour le chemin d'exploitation : `MINIO_IMAGE` peut pointer un miroir hébergé
+      # sur Quay, auquel cas les secrets de dépôt le rendent tirable.
+      # Aucun de ces chemins ne fabrique un vert : une somme différente, une
+      # architecture non prévue ou un miroir injoignable font échouer H1.
       - name: Registre Quay (facultatif — H1)
         if: env.QUAY_USERNAME != ''
         run: echo "$QUAY_PASSWORD" | docker login quay.io --username "$QUAY_USERNAME" --password-stdin

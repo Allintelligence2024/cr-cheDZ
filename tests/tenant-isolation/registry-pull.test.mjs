@@ -60,12 +60,17 @@ test('persistent network failure stays red after three attempts', async () => {
 });
 
 /**
- * H1 (24/09/2026) : le runner ne tire pas `quay.io/minio/minio` anonymement
- * (« unauthorized ») alors que `postgres:18-alpine` (Docker Hub) passe — la
- * boucle essaie postgres EN PREMIER. Deux remédiations d'exploitation sont
- * câblées et doivent le rester, sans jamais fabriquer un vert :
- *   1. identifiants facultatifs (secrets de dépôt) → connexion Quay dans le job ;
- *   2. sans secret : `MINIO_IMAGE` pointe un miroir (défaut épinglé par digest).
+ * H1 (24/09 puis 25/09/2026) : le runner ne peut plus tirer l'image MinIO
+ * anonymement d'un registre public — `quay.io/minio/minio` rend `unauthorized`
+ * (`postgres:18-alpine`, sur Docker Hub, passe : la boucle essaie postgres EN
+ * PREMIER). Cause mesurée le 25/09 : MinIO a retiré ses images de Docker Hub
+ * (12/09) PUIS coupé l'accès anonyme sur Quay (24/09). Trois chemins sont câblés
+ * et doivent le rester, aucun ne fabriquant un vert :
+ *   1. défaut : l'image est reconstruite depuis la release officielle, somme
+ *      SHA-256 vérifiée par le builder (`infrastructure/docker/minio.Dockerfile`) ;
+ *   2. miroir d'exploitation : `MINIO_IMAGE` remplace cette image, sans build local ;
+ *   3. identifiants facultatifs (secrets de dépôt) → connexion Quay dans le job,
+ *      conservée pour un miroir hébergé sur Quay.
  */
 test('H1 remediation: opt-in Quay login in CI (skipped without secrets)', () => {
   const workflow = readFileSync(join(repo, '.github', 'workflows', 'ci.yml'), 'utf8');
@@ -81,17 +86,19 @@ test('H1 remediation: opt-in Quay login in CI (skipped without secrets)', () => 
   assert.doesNotMatch(login[1], /--password[= ][^\s"$]/, 'mot de passe littéral interdit');
 });
 
-test('H1 remediation: MINIO_IMAGE override exists with a digest-pinned default', () => {
+test('H1 remediation: MINIO_IMAGE override exists over a locally built default', () => {
   for (const stage of ['prod', 'staging', 'dev']) {
     const compose = readFileSync(join(repo, 'infrastructure', 'docker', `docker-compose.${stage}.yml`), 'utf8');
     assert.match(
       compose,
-      /image: \$\{MINIO_IMAGE:-quay\.io\/minio\/minio:RELEASE\.[^}]*@sha256:[0-9a-f]{64}\}/,
-      `${stage} : MinIO doit rester surchargeable avec un défaut épinglé par digest`,
+      /image: \$\{MINIO_IMAGE:-creche-minio:RELEASE\.[0-9TZ-]+\}/,
+      `${stage} : MinIO doit rester surchargeable (miroir) sur un défaut construit localement`,
     );
+    // Le défaut ne doit PAS être un registre public : c'est ce qui rendait H1 rouge.
+    assert.doesNotMatch(compose, /quay\.io\/minio|(^|[\s\/])minio\/minio:/m, `${stage} : image MinIO d'un registre retiré`);
   }
-  // Le tirage utilise la config RÉSOLUE par compose : sans cela, la surcharge
-  // serait décorative (le script tirerait une image codée en dur).
+  // Le tirage du miroir utilise la config RÉSOLUE par compose : sans cela, la
+  // surcharge serait décorative (le script tirerait une image codée en dur).
   const stack = readFileSync(join(repo, 'scripts', 'test-staging-stack.mjs'), 'utf8');
-  assert.match(stack, /pullRegistryImage\(config\.services\[name\]\.image/);
+  assert.match(stack, /pullRegistryImage\(minioImage, \{ env \}\)/);
 });
