@@ -473,6 +473,24 @@ nouveau gardien fictif sans appelant → rouge ; PII réelle injectée dans un s
 (« domaine gmail.com non reconnu comme synthétique »). Restaurations : vertes.
 
 
+
+---
+
+## Mise à jour 2026-09-25 — lot L6.3 : le stub `compress_media` disparaît (décision D3 = a)
+
+Le worker portait un handler qui ne pouvait qu'échouer (`NOT_IMPLEMENTED: compression média`) et
+qu'**aucun chemin de code ne mettait en file** : une dette silencieuse annoncée comme intégration.
+Décision produit : **le retirer**.
+
+- `apps/worker/src/main.ts` : handler supprimé ; une ligne héritée portant ce type échoue
+  explicitement (`Type de job inconnu: compress_media`), jamais avec un faux succès ;
+- `phase27` : le cas « échec handler ⇒ `failed` à la limite » s'appuie sur un type inconnu (la
+  propriété testée ne dépend plus d'un stub) et un **verrou** refuse la réintroduction d'un handler
+  `NOT_IMPLEMENTED` permanent — prouvé par mutation (15/15 → 14/1 stub réintroduit → 15/15 restauré) ;
+- si la compression devient un besoin : **côté clients** avant envoi, les plafonds serveur
+  (8 Mio API / 12 Mio nginx) restant la garantie. La liste citée dans le commentaire de la
+  migration 014 n'est pas modifiée (checksum d'une migration appliquée).
+
 ---
 
 ## Mise à jour 2026-09-25 — lot L4 : la rétention de la messagerie existe (décision DPO D2 = a)

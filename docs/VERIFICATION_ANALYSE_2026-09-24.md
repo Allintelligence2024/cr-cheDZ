@@ -342,7 +342,10 @@ jusqu'à `phase67` (71 entrées, libellé corrigé au lot 1 puis étendu aux lot
 977 lignes de TypeScript, **7 handlers** (`apps/worker/src/main.ts:290-306`) dont **1 stub explicite**
 qui échoue bruyamment (`compress_media` → `NOT_IMPLEMENTED: compression média`) et 1 handler
 **volontairement supprimé** (`send_parent_notification`, remplacé par le drain de
-`notification_queue`). Conclusion pratique : ne pas annoncer la compression média ni une livraison
+`notification_queue`). *(Résolu le 2026-09-25, lot L6.3 / décision D3 : le stub `compress_media`
+est **retiré** — il ne pouvait qu'échouer et aucun chemin ne le mettait en file ; un job portant ce
+type échoue désormais comme tout type inconnu, et un verrou de la suite `phase27` refuse la
+réintroduction d'un handler « NOT_IMPLEMENTED » permanent.)* Conclusion pratique : ne pas annoncer la compression média ni une livraison
 push « fiable » comme faites — le code ne le prétend pas, le rapport le laissait croire
 (« QuartzJobs », « files d'attente »).
 
@@ -409,7 +412,8 @@ mutation), 4 gardiens orphelins câblés en CI, `Content-Security-Policy` étape
 | 6 | `pubspec.lock` absent pour `parent-mobile` (deps non figées, à l'inverse de `staff-mobile`) | CI parent : `flutter pub get` sans `--enforce-lockfile` | ~15 min |
 
 ### 🟡 Dette assumée, à documenter plutôt qu'à taire
-- Worker : `compress_media` en stub ; push « sent » = traité, **pas** livré (l'inbox reste la voie fiable).
+- Worker : `compress_media` **retiré** le 25/09 (L6.3/D3 — un stub permanent annonçait une intégration
+  inexistante) ; push « sent » = traité, **pas** livré (l'inbox reste la voie fiable).
 - Photos staff : chemin `base64` **inerte** (aucune UI) — le sécuriser **avant** de le câbler.
 - Charge : 1 fichier k6 **non exécuté** ; la vraie mesure est le banc Node.
 - Rétention : journaux et clips vidéo outillés ; **file de notifications et contenu des

@@ -4,10 +4,15 @@
 import assert from 'node:assert/strict';
 import { test, before, beforeEach, afterEach, after } from 'node:test';
 import { spawn, execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { appUrl, ensureAppRole, PRODUCTION_SPAWN_ENV } from './helpers.mjs';
+
+const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 assert.ok(new URL(process.env.DATABASE_URL).pathname.endsWith('_test'), 'Base jetable *_test requise');
 const admin = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -254,14 +259,28 @@ test('E1 : timeout nul/négatif refusé et fonctions non exécutables par PUBLIC
 });
 
 test('E1 : échec handler → failed à la limite, jamais faux succès', async () => {
+  // D3 : le cas s'appuie sur un TYPE INCONNU (plus de stub `compress_media` à
+  // invoquer). La propriété testée est « un handler qui échoue ne produit jamais
+  // un faux succès » — elle vaut pour toute erreur, y compris « Type de job
+  // inconnu » ; c'est aussi le sort des lignes héritées d'un handler retiré.
   const id = await job('pending', 0, 1);
-  await admin.query("UPDATE background_jobs SET job_type='compress_media' WHERE id=$1", [id]);
+  await admin.query("UPDATE background_jobs SET job_type='compress_media_legacy' WHERE id=$1", [id]);
   const state = worker();
   await waitFor(async () => (await row(id)).status === 'failed', 'échec explicite du handler');
   assert.equal((await row(id)).attempts, 1);
-  assert.match((await row(id)).failure_reason, /NOT_IMPLEMENTED/);
+  assert.match((await row(id)).failure_reason, /Type de job inconnu: compress_media_legacy/);
   assert.equal((await row(id)).lease_token, null);
   await terminate(state, 'SIGTERM');
+});
+
+test('D3 : aucun handler de job n\'est un stub « NOT_IMPLEMENTED » permanent', async () => {
+  // Un stub permanent (qui ne peut qu'échouer et que rien ne met en file) est
+  // une dette silencieuse : il annonce une intégration inexistante. Le retrait
+  // de `compress_media` (décision D3, 2026-09-25) est verrouillé ici : le jour
+  // où quelqu'un réintroduit un tel stub, il doit le payer explicitement.
+  const source = readFileSync(join(repo, 'apps/worker/src/main.ts'), 'utf8');
+  const offenders = [...source.matchAll(/^\s*\w+:.*NOT_IMPLEMENTED.*$/gm)].map((m) => m[0].trim());
+  assert.deepEqual(offenders, [], `handler(s) stub permanent : ${offenders.join(' | ')}`);
 });
 
 

@@ -51,15 +51,15 @@ vérification).
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré (§5, lot 3)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` ici ; à faire depuis un poste Flutter 3.47.1 |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | **FAIT (2026-09-25)** — décision **D2 = (a)** (purger) : migration 076, seuils 90 j / 365 j, suite `phase76` 15 assertions, 3 mutations détectées (§5) |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (**10 contrôles** au 25/09/2026, branche CI `quality`) + 6 documents corrigés ; prolongé par **L5.1** (vérité « workflows CI », §5) |
-| **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6.1 (sondes) FAIT**, **L6.2 (k6) FAIT** : critère mesuré par le banc en parité k6 (500 ops, p95 1,4 s) + gardien de discours ; reste **D3** (`compress_media`, décision produit) |
+| **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6.1 (sondes) FAIT**, **L6.2 (k6) FAIT**, **L6.3 (D3 `compress_media`) FAIT** : stub retiré, verrou anti-stub en CI ; critère k6 mesuré par le banc en parité (500 ops, p95 1,4 s) + gardien de discours |
 
 **Ordre recommandé** : L1 (fait) → **L2** (bloque l'usage réel) → L3 (bloque les parents) → L5
 (pas de dépendance, peut glisser entre les deux) → L4 (attend une décision DPO) → L6.
 **État au 2026-09-24 (soir)** : L1 (+ L1.5, L1.6, L1.7), L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
 bloqué par l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée
-possible) ; **L4 est FAIT** (décision DPO **D2 = a**, migration 076, suite `phase76`) ; il reste **D3**
-(`compress_media`) et **D5** (clips vidéo), deux décisions produit : k6 est tranché (L6.2 — critère
-mesuré par le banc exécutable, script k6 verrouillé en CI mais **non exécuté** ici).
+possible) ; **L4** (D2 = a, migration 076, suite `phase76`) et **D3** (stub `compress_media` retiré,
+L6.3) sont faits ; k6 est tranché (L6.2 — critère mesuré par le banc exécutable, script k6 verrouillé
+en CI mais **non exécuté** ici) ; il reste **D5** (clips vidéo), la dernière décision produit.
 
 ---
 
@@ -431,7 +431,10 @@ voulue — mettre à jour le document, jamais le contrat.
   motif est écrit dans `docker-compose.dev.yml`, et le contrat de vérité mesure fichier par fichier.
   Preuves : §5 « L6.1 » ;
 - `compress_media` : stub qui échoue explicitement (`main.ts:305`) — **décider** : implémenter
-  (sharp/worker) ou retirer du handler (un stub permanent est une dette silencieuse) ;
+  (sharp/worker) ou retirer du handler (un stub permanent est une dette silencieuse).
+  **Tranché (D3 = a, lot L6.3, 25/09)** : **retiré** — aucun chemin de code ne le mettait en file,
+  l'envoi média est plafonné à 8/12 Mio et aucune bibliothèque de traitement d'image n'existe dans
+  le dépôt ; un éventuel besoin de compression se traitera côté clients avant envoi (§5 « L6.3 ») ;
 - `tests/load/sync.k6.js` : **jamais exécuté** (k6 absent) — soit l'exécuter sur une cible
   prod-like et publier les résultats, soit le retirer du discours « tests de charge ».
   **Tranché (L6.2, 25/09)** : k6 n'est pas installable ici (binaire absent, `dl.k6.io` et les
@@ -898,6 +901,28 @@ DEFINER et ne doit pas figurer dans cette liste), `claims-contract` (**rouge ava
 jour des compteurs : « ci.yml revendique 075, la réalité est 76 » — le contrat de vérité fait
 exactement son travail), typecheck, build worker.
 
+### L6.3 — D3 : le stub `compress_media` est retiré, et un verrou interdit la réapparition (2026-09-25)
+
+**Décision appliquée** : option (a) — retirer (dossier §6 D3).
+
+**Livré** :
+- `apps/worker/src/main.ts` : la ligne `compress_media: async () => { throw new Error('NOT_IMPLEMENTED…') }`
+  est **supprimée** (avec son commentaire), remplacée par un commentaire qui dit la décision et ce qui
+  se passe pour une ligne héritée : `Type de job inconnu: compress_media`, jamais un faux succès ;
+- `tests/tenant-isolation/phase27-worker-lifecycle.test.mjs` : le cas « échec handler ⇒ `failed` à la
+  limite » s'appuie désormais sur un **type inconnu** (`compress_media_legacy`) et asserte le message
+  exact — la propriété testée (jamais de faux succès) ne dépend plus d'un stub, et couvre du même coup
+  le sort des lignes d'un handler retiré ; **nouveau verrou** : aucun handler du worker ne peut être un
+  stub `NOT_IMPLEMENTED` permanent (scan de `apps/worker/src/main.ts`, motif par ligne de handler).
+
+**Preuves exécutées** : `phase27` en environnement de gate (rôles de production, `creche_app`) →
+**15/15** (14 avant l'ajout du verrou) ; mutation : le stub réintroduit dans la source → `not ok 13 …
+handler(s) stub permanent : compress_media: async () => { throw new Error('NOT_IMPLEMENTED…') }`,
+`# pass 14 / # fail 1` ; restauration `diff -q` vérifiée → 15/15.
+Rappel de portée : le commentaire de `014_jobs_and_outbox.sql:12` (qui citait `compress_media` dans la
+liste des types) **reste tel quel** — réécrire une migration déjà appliquée changerait son checksum ;
+l'état courant est décrit ici et dans le worker.
+
 ## 6. Décisions en attente (propriétaire explicite)
 
 | # | Décision | Propriétaire | Bloque | État |
@@ -943,7 +968,16 @@ exactement son travail), typecheck, build worker.
 qui prouve qu'une notification en cours de retry ou un message non lu du mois n'est **pas** purgé.
 Si le DPO préfère (b), le registre doit citer la durée exacte — sinon la dette reste ouverte.
 
-### D3 — `compress_media` : implémenter ou retirer *(produit)*
+### D3 — `compress_media` : implémenter ou retirer *(produit)* — ✅ **TRANCHÉE : (a) retirer**
+
+> **Décision du 2026-09-25 : option (a)**, appliquée au lot L6.3 (journal §5). Le handler stub est
+> **supprimé** du worker ; un job portant `compress_media` échoue désormais comme tout type inconnu
+> (`Type de job inconnu: …`, jamais un faux succès) ; la suite `phase27` refuse la réintroduction
+> d'un handler `NOT_IMPLEMENTED` permanent, et un cas y prouve que « échec du handler ⇒ `failed` à
+> la limite » sans dépendre d'un stub. **(c) reste la voie si la compression devient un besoin** :
+> côté clients avant envoi, les plafonds serveur 8/12 Mio restant la garantie. (b) n'est pas justifié:
+> aucune bibliothèque de traitement d'image dans le dépôt, et le gain de stockage n'a jamais été
+> mesuré — l'introduire serait une dépendance native et une surface d'attaque sans besoin.
 
 **Faits mesurés** : `apps/worker/src/main.ts:306` — `compress_media` **échoue explicitement**
 (`NOT_IMPLEMENTED: compression média`), aucun chemin de code ne le met en file ; les envois média

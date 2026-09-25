@@ -318,9 +318,14 @@ const JOB_HANDLERS: JobHandlers = {
   // l'inbox reste la voie fiable. Les lignes héritées échouent explicitement
   // (« Type de job inconnu »), jamais avec un faux succès.
   export_report: (_p, _o, job) => exportReport(job),
-  // Intégration non configurée dans cette session (stub explicite, jamais de
-  // faux statut : le job échoue avec un message clair si invoqué).
-  compress_media: async () => { throw new Error('NOT_IMPLEMENTED: compression média'); },
+  // D3 (décision produit, 2026-09-25) : « compress_media » a été RETIRÉ du
+  // handler. C'était un stub permanent qui ne pouvait qu'échouer
+  // (NOT_IMPLEMENTED) et qu'aucun chemin de code ne mettait en file : une dette
+  // silencieuse annoncée comme intégration. Une ligne héritée portant ce
+  // job_type échoue désormais explicitement (« Type de job inconnu »), jamais
+  // avec un faux succès. La compression, si elle devient un besoin, se fera
+  // côté clients AVANT envoi (les plafonds serveur 8/12 Mio restent la
+  // garantie) — voir plan de réparation §6 D3.
 };
 
 // ── Push FCM HTTP v1 / APNs ─────────────────────────────────────────────────
