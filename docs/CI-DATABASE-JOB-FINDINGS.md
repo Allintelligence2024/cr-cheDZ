@@ -229,6 +229,7 @@ exit code 1` — **aucune autre suite en échec**.
 |---|---|---|---|
 | `9a33e37` (verdict gate D, docs) | **terminé** `14:54:53 → 15:22:52` (28 min), `rc=1` — **H1 seul** | `success` | étape « Registre Quay (facultatif — H1) » = **`skipped`** (aucun secret de dépôt) ; les échecs sont **exactement** `H1 staging failure` + `H1 dev failure` et leur trace d'appel — **aucune annotation « Suite en échec »** |
 | `3f88481` (lot L6.4 / D5) | **terminé** `14:57:08 → 15:27:01` (30 min), `rc=1` — **H1 seul** | `success` | même signature : `H1 staging failure`, `H1 staging 1`, `H1 dev failure` (+ « exit code 1 ») — rien d'autre |
+| `5266fff` (lot H1 : MinIO reconstruit depuis la release officielle) — 3 workflows | **`ci` : `success`** (32 min) — `database` **VERT** ; `flutter` : `success` ; `docker` : `success` | `quality` `success`, `admin-web` `success`, `e2e` `success`, `support-console` `success`, `security` `success`, `backup-drill` `success` | step 4 « Registre Quay (facultatif — H1) » = **`skipped`** (aucun secret) et le job passe quand même : la voie par défaut ne dépend d'aucun registre. step 14 « 73 suites — isolation, phase3 → phase77 » = **`success`**. Annotations du check-run : **aucun échec**, uniquement des *notices* — dont « Delivered staging compose: … actual API HTTP health and worker claim/finish verified » et « Delivered dev compose: … » ⇒ l'image MinIO **construite localement** (somme SHA-256 vérifiée par le builder) a servi les deux stacks |
 | `ff23058` (lot L2E : garde de payload + `phase77`) — 3 workflows | `ci` : **terminé** `16:11:29 → 16:41:07` (29,5 min), `rc=1` — **H1 seul** ; `flutter` : `success` ; `docker` : `success` | `quality` `success`, `admin-web` `success`, `e2e` `success`, `support-console` `success`, `security` `success`, `backup-drill` `success` | step 14 désormais **« 73 suites — isolation, phase3 → phase77 »** (libellé du commit) ; annotations **failure** = 2 tirages `quay.io/minio/minio@sha256:14cea49…` refusés + `Process completed with exit code 1.` + 1 avertissement Compose « version obsolete » — **aucune annotation « Suite en échec »** ⇒ `phase77` (dernière entrée de la batterie) est passée **en CI, rôles de production** |
 | `beb3f27` (lot L2D) — 3 workflows | `ci` : **terminé**, `rc=1` — **H1 seul** ; `flutter` : `success` ; `docker` : `success` | `quality` `success`, `support-console` `success`, `e2e` `success`, `admin-web` `success`, `backup-drill` `success`, `security` `success` | `ci` : step 14 « Suites d'isolation (garde RLS anti-bypass + 72 suites — isolation, phase3 → phase76) » = `failure`, mais annotations **failure** = `H1 staging failure`, `H1 dev failure`, `Process completed with exit code 1.` et **deux** « Registry pull failed for `quay.io/minio/minio@sha256:14cea49…` » — **aucune annotation « Suite en échec »** |
 
@@ -251,11 +252,15 @@ explicite, pour ne pas conclure d'un log illisible) :
    encore l'ancien libellé (« 72 suites — phase3 → phase76 ») : le commit suivant (`ff23058`, lot
    L2E) renomme le step en « 73 suites — phase3 → phase77 ».
 
-Conclusion : **H1 reste le seul rouge, par conception** (tirage anonyme de `quay.io/minio/minio`
-refusé depuis le runner), et `phase76-messaging-retention.pg.test.mjs` — la suite du lot L4 — a
-été exécutée **et passée** en CI, en mode rôles de production. Idem pour
-`phase77-sync-payload-guard.api.test.mjs` (lot L2E) au relevé du `ff23058`, dernière entrée du
-runner : le garde de payload est donc prouvé **localement (gate D, 74/74)** *et* **en CI**.
+Conclusion (avant correctif) : **H1 restait le seul rouge**, tirage anonyme de
+`quay.io/minio/minio` refusé depuis le runner — et `phase76-messaging-retention.pg.test.mjs` (lot L4)
+puis `phase77-sync-payload-guard.api.test.mjs` (lot L2E, dernière entrée du runner) ont été
+exécutées **et passées** en CI, en mode rôles de production. **Correctif du 25/09/2026** : la cause
+était amont (images MinIO retirées des deux registres publics) ; l'image par défaut est désormais
+**construite** depuis la release officielle, somme vérifiée par le builder. **Verdict de clôture :
+`5266fff` → job `database` VERT (32 min), sans aucun secret de registre** — le dépôt n'a plus de job
+rouge, et le gate D (73 suites d'isolation rejouées avec les rôles de production) prouve en même
+temps que la batterie complète passe.
 
 ### H1 — ce que le code dit exactement (mesuré le 24/09, soir)
 

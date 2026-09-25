@@ -160,7 +160,9 @@ RESTE À FAIRE (non fait, à ne pas déclarer fini) :
   release épinglée, somme SHA-256 vérifiée par le builder
   (`infrastructure/docker/minio.Dockerfile`, `scripts/build-minio-image.mjs`),
   `MINIO_IMAGE` restant la surcharge miroir d'exploitation
-  (`docs/CI-DATABASE-JOB-FINDINGS.md`, § H1 ; `docs/RUNBOOK.md`).
+  (`docs/CI-DATABASE-JOB-FINDINGS.md`, § H1 ; `docs/RUNBOOK.md`). **Verdict en CI : job
+  `database` VERT sur `5266fff` (32 min, `ci`/`flutter`/`docker` verts, aucun secret de
+  registre) — le dépôt n'a plus aucun job rouge.**
 - e2e Playwright (spec écrit, navigateur absent).
 - k6 (script `tests/load/sync.k6.js` prêt, binaire absent) : **non exécuté** ; son critère
   (p95 sync push < 2 s pour 500 ops) est mesuré par le banc `npm run test:capacity` en
@@ -266,7 +268,7 @@ les correctifs ont été réappliqués selon la spécification
 | Roadmap v2 | Messagerie, exports Excel, paiement SATIM, multi-rôles, WhatsApp (notif + OTP), paie, marketplace — phases 12-20 vertes |
 | Conformité vidéo | DPIA rédigée + verrou flag `video_surveillance` (046, **inactif par défaut**) + module V1 : caméras/clips/purge 30 j/visionnage journalisé (047-048, phase21). **Limite écrite noir sur blanc (D5, 25/09/2026)** : l'**acquisition** des clips n'est pas câblée — aucun écran n'envoie de clip (verrou `phase21`), `POST /video/clips/presign-upload` est *fail-closed* en production (pas de sous-domaine public, D1 = A), et le plafond de taille n'est pas tranché — la fonction n'est donc pas présentée comme opérationnelle |
 | Apps | api (NestJS), worker (jobs + push + exports + PDF), admin-web (React FR/AR responsive), support-console, staff-mobile + parent-mobile (squelettes Dart) |
-| CI | `ci.yml` (7 jobs : quality, database, e2e, admin-web, support-console, security, backup-drill), `docker.yml`, `flutter.yml`, `security-audit.yml` — versionnés et exécutés ; `database` était rouge **H1 seul** (MinIO retiré des registres publics) — **corrigé à la racine le 25/09/2026** par la construction locale de l'image depuis la release officielle vérifiée par somme (`docs/CI-DATABASE-JOB-FINDINGS.md`, § H1) |
+| CI | `ci.yml` (7 jobs : quality, database, e2e, admin-web, support-console, security, backup-drill), `docker.yml`, `flutter.yml`, `security-audit.yml` — versionnés et exécutés ; **tous verts au 25/09/2026** (`5266fff`) — `database` était rouge **H1 seul** (MinIO retiré des registres publics), corrigé à la racine par la construction locale de l'image depuis la release officielle vérifiée par somme (`docs/CI-DATABASE-JOB-FINDINGS.md`, § H1) |
 | Docs | `docs/PLAN_IMPLEMENTATION.md`, `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md`, `docs/ROADMAP_V2.md`, `docs/adr/` (000→010), `docs/HANDOFF.md` (ce fichier) |
 
 ## Commandes utiles

@@ -46,7 +46,7 @@ vérification).
 | **L1** | **Gardiens orphelins + garde de config + CSP edge** | vérif. §4.3, F2, F3 | ~2 h | 4 gardiens en CI ; test unitaire prod-config ; test de contrat en-têtes | **FAIT** + régression CI du 24/09 corrigée et verrouillée (§3, L1.4) |
 | **L1.5** | **5ᵉ gardien orphelin + cliquet « gardiens câblés »** | vérif. §4.3 | ~0,5 h | gardien `check-guards-wired.mjs` en CI ; `audit-seeds-pii --strict` exécuté | **FAIT (2026-09-24)** — 12 gardiens recensés, 0 orphelin, 3 mutations détectées (§5) |
 | **L1.6** | **Diagnostic H1 exploitable** : nommer l'image qui refuse le tirage | CI (`database`) | ~0,2 h | message d'erreur citant l'image + test unitaire | **FAIT (2026-09-24)** — « Registry pull failed for <image> » ; comportement inchangé (aucun repli vert) |
-| **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) ; **dépassé le 25/09/2026 (lot H1)** : la cause racine est amont (MinIO retiré des deux registres publics) ⇒ le défaut est désormais une image **construite** depuis la release officielle, somme vérifiée par le builder ; les deux voies ci-dessus restent des surcharges (journal §5, lot H1) |
+| **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) ; **dépassé le 25/09/2026 (lot H1)** : la cause racine est amont (MinIO retiré des deux registres publics) ⇒ le défaut est désormais une image **construite** depuis la release officielle, somme vérifiée par le builder ; les deux voies ci-dessus restent des surcharges (journal §5, lot H1) — **vérifié en CI : job `database` vert sur `5266fff`** |
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; restent hors lot : branchement du client mobile (**L3**, bloqué par le SDK Flutter), upload des clips (**D5 = c** : hors discours opérationnel, verrou ), octets hors-ligne (voir §3.2 ; **L2E** refuse désormais tout blob base64 dans `sync/push`) ; volet client verrouillé par **L2C** (`media-client-wiring`) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré trois fois (§5, lot 3 : 24/09, 25/09 15:07 UTC, 25/09 16:42 UTC)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` (`000`) ; à faire depuis un poste Flutter 3.47.1 — portée déjà cadrée (D4 = correctif court) |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | **FAIT (2026-09-25)** — décision **D2 = (a)** (purger) : migration 076, seuils 90 j / 365 j, suite `phase76` 15 assertions, 3 mutations détectées (§5) |
@@ -1168,9 +1168,14 @@ disparu : fournir des identifiants sur un registre qui ne sert plus l'image ne m
 
 **Preuves exécutées** : `production-compose-contract` 18/18, `registry-pull` 11/11,
 `dev-compose-contract` (inclus) — 36 contrôles verts sur les trois fichiers ; `check-guards-wired`
-12/12 ; `ci.yml` relu par js-yaml. La construction de l'image elle-même est prouvée **par la CI** :
-H1 construit l'image puis démarre la stack (API + worker + MinIO) et vérifie la santé par HTTP — un
-build cassé, une somme fausse ou un miroir injoignable font **échouer** le job, jamais un vert.
+12/12 ; `ci.yml` relu par js-yaml. **Preuve par la CI (décisive)** : run `36184866284` sur `5266fff`
+— job `database` **VERT en 32 min**, step « Registre Quay » **`skipped`** (aucun secret), annotations
+réduites à des *notices*, dont « Delivered staging compose: … actual API HTTP health and worker
+claim/finish verified » et « Delivered dev compose: … » : l'image construite localement a servi les
+deux stacks, dans les mêmes conditions qu'un déploiement. **H1 n'est donc plus le rouge de la CI —
+le dépôt n'a plus aucun job rouge.** 5 mutations rouges au passage (M1 compose revenu à l'image
+morte ⇒ 3 tests ; M2 `build:` ajouté sous minio ; M3 somme amd64 altérée ; M4 somme arm64 divergente ;
+M5 image codée en dur dans la stack).
 
 **Hors périmètre / limites** : le conteneur tourne en `root`, comme l'image amont d'origine (un
 `USER minio` casserait une mise à jour sur un volume déjà créé par un déploiement antérieur) — le
