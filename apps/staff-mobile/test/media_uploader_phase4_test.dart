@@ -1,14 +1,13 @@
-// Rapport 5 analyses — Phase 4 (F2, F6, F7) : upload média.
-import 'dart:convert';
+// Rapport 5 analyses — Phase 4 (F2, F7) : upload média.
+// F6 (clé de stockage hors ligne) a été retirée le 2026-09-25 avec la décision D6
+// (option c) : la photo hors ligne n'existe pas en V1, il n'y a donc plus de clé à
+// fabriquer ni de commande à enfiler.
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:staff_mobile/core/database/app_database.dart';
 import 'package:staff_mobile/core/media/media_uploader.dart';
 import 'package:staff_mobile/core/network/api_client.dart';
-import 'package:staff_mobile/core/sync/sync_scope.dart';
 
 const org = '11111111-1111-4111-8111-111111111111';
 const user = '22222222-2222-4222-8222-222222222222';
@@ -23,14 +22,6 @@ class RecordingApi extends ApiClient {
       return <String, dynamic>{'upload_url': 'https://s3.local/signed', 'storage_key': '$org/photo/1-p.jpg'} as T;
     }
     return <String, dynamic>{'id': 'asset-1', ...(body as Map<String, dynamic>)} as T;
-  }
-}
-
-class RecordingEngine {
-  final enqueued = <Map<String, dynamic>>[];
-  Future<String> enqueue({required String command, required String entityType, required Map<String, dynamic> payload}) async {
-    enqueued.add({'command': command, 'entityType': entityType, 'payload': payload});
-    return 'op-1';
   }
 }
 
@@ -64,26 +55,6 @@ void main() {
     });
   });
 
-  group('F6 — clé offline dans le périmètre du tenant', () {
-    test('offlineStorageKey commence par <org>/', () {
-      final key = MediaUploader.offlineStorageKey(org, now: DateTime.fromMillisecondsSinceEpoch(1700000000000));
-      expect(key, '$org/photo/offline-1700000000000.jpg');
-      expect(key.startsWith('$org/'), isTrue); // garde serveur STORAGE_KEY_TENANT_MISMATCH
-    });
-    test('enqueueOfflinePhoto utilise l\'organisation de la base locale + SHA-256', () async {
-      final db = AppDatabase.testing(SyncScope(org, user), NativeDatabase.memory());
-      addTearDown(db.close);
-      final engine = RecordingEngine();
-      final id = await MediaUploader(RecordingApi()).enqueueOfflinePhoto(db, engine, childId: child, bytes: bytes);
-      expect(id, 'op-1');
-      final p = engine.enqueued.single['payload'] as Map<String, dynamic>;
-      expect(engine.enqueued.single['command'], 'add_photo');
-      expect((p['storage_key'] as String).startsWith('$org/'), isTrue);
-      expect(p['storage_key'], isNot(startsWith('offline/')));
-      expect(p['checksum'], 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
-      expect(base64Decode(p['bytes'] as String), bytes);
-    });
-  });
 
   group('F7 — PUT signé : délais + 1 retry', () {
     MediaUploader build(ScriptedAdapter adapter, RecordingApi api) {

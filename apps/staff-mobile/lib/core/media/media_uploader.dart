@@ -1,9 +1,6 @@
-import 'dart:convert';
-
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:dio/dio.dart';
 
-import '../database/app_database.dart';
 import '../network/api_client.dart';
 
 /// Upload de photos (Phase 6) :
@@ -36,12 +33,6 @@ class MediaUploader {
   /// SHA-256 hexadécimal (64 caractères minuscules) des octets.
   static String sha256Hex(List<int> bytes) => crypto.sha256.convert(bytes).toString();
 
-  /// Clé de stockage d'une photo prise hors ligne : même forme que les clés
-  /// serveur (`<org>/<media_type>/<nom>`), le préfixe tenant étant OBLIGATOIRE.
-  static String offlineStorageKey(String organizationId, {DateTime? now}) {
-    final ms = (now ?? DateTime.now()).millisecondsSinceEpoch;
-    return '$organizationId/photo/offline-$ms.jpg';
-  }
 
   /// Une erreur d'upload mérite-t-elle un nouvel essai ? Uniquement les
   /// défaillances réseau/transport ; une réponse du serveur (4xx/5xx) est
@@ -117,29 +108,5 @@ class MediaUploader {
       'exif_stripped': true,
     });
     return reg;
-  }
-
-  /// Photo prise hors ligne : enregistre via la file de sync (add_photo),
-  /// l'upload direct est fait à la reconnexion par l'uploader. La clé est
-  /// dans le périmètre de l'organisation de la base locale (F6).
-  Future<String> enqueueOfflinePhoto(
-    AppDatabase db,
-    dynamic syncEngine, {
-    required String childId,
-    required List<int> bytes,
-    String? checksum,
-  }) async {
-    final payload = {
-      'child_id': childId,
-      'storage_key': offlineStorageKey(db.scope.organizationId),
-      'mime_type': 'image/jpeg',
-      'checksum': checksum ?? sha256Hex(bytes),
-      'bytes': base64Encode(bytes), // stocké localement pour l'upload différé
-    };
-    return syncEngine.enqueue(
-      command: 'add_photo',
-      entityType: 'media',
-      payload: payload,
-    );
   }
 }

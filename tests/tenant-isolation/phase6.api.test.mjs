@@ -11,7 +11,8 @@
  *     (422), consentement OK → visible, download journalisé (chemin same-origin
  *     + octets réellement servis — LOT 2), cross-tenant 404,
  *     rôles (éducatrice ne publie pas), consentement révoqué → 422
- *  4. Sync : add_photo → media créé non visible ; log_incident → notification
+ *  4. Sync : `add_photo` → **REFUSÉE** explicitement (décision D6, option c :
+ *     pas de photo hors ligne en V1, aucune trace créée) ; log_incident → notification
  *  5. Notifications : check_in → notification_queue + inbox (gardien can_receive_push)
  *  6. Worker : processNextJob (job done) + drainNotificationQueue (sent)
  *  7. Stress : 60 opérations offline mixtes → agrégats exacts
@@ -313,8 +314,8 @@ async function main() {
     check('Consentement révoqué → 422 (publication refusée)',
       revokedPublish.status === 422 && revokedPublish.body.code === 'CONSENT_REQUIRED');
 
-    // ── 4. Sync : add_photo + log_incident ──────────────────────────────────
-    console.log('\n4) Sync — photos et incidents offline');
+    // ── 4. Sync : add_photo REFUSÉE (D6 option c) + log_incident ─────────
+    console.log('\n4) Sync — photo hors ligne refusée, incidents offline');
     const photoSync = await api('POST', '/sync/push', tokenA, {
       device_id: device.body.device_id,
       operations: [{
@@ -327,14 +328,18 @@ async function main() {
         occurred_at_device: new Date().toISOString(),
       }],
     });
-    check('add_photo sync → accepted', photoSync.status === 200 && photoSync.body.accepted.length === 1,
-      JSON.stringify(photoSync.body));
+    check('add_photo hors ligne → rejetée OFFLINE_PHOTO_UNSUPPORTED (D6 option c)',
+      photoSync.status === 200 && photoSync.body.rejected?.length === 1
+        && photoSync.body.rejected[0].reason === 'OFFLINE_PHOTO_UNSUPPORTED',
+      JSON.stringify(photoSync.body).slice(0, 200));
+    check('le refus nomme la route photo correcte (POST /api/v1/media/upload)',
+      String(photoSync.body.rejected?.[0]?.message ?? '').includes('/media/upload'));
     const offlineMedia = await admin.query(
-      `SELECT is_visible_to_parents FROM media_assets WHERE storage_key = $1`,
+      `SELECT COUNT(*)::int AS n FROM media_assets WHERE storage_key = $1`,
       [`${A.org}/photo/offline-1.jpg`],
     );
-    check('Photo offline enregistrée, non visible', offlineMedia.rows.length === 1
-      && offlineMedia.rows[0].is_visible_to_parents === false);
+    check('aucun media_assets fantôme (la voie hors ligne n’écrit rien)',
+      offlineMedia.rows[0].n === 0, `lignes=${offlineMedia.rows[0].n}`);
 
     const incidentSync = await api('POST', '/sync/push', tokenA, {
       device_id: device.body.device_id,

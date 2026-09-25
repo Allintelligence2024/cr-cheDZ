@@ -18,8 +18,10 @@
  *
  * Ce que la suite prouve (API réelle + PostgreSQL réel + rôle applicatif)
  * ----------------------------------------------------------------------
- *   1. `add_photo` SANS octets → **accepted** (aucune régression du chemin
- *      légitime : clé de stockage + métadonnées) ;
+ *   1. `add_photo` SANS octets → **rejected** `OFFLINE_PHOTO_UNSUPPORTED` :
+ *      depuis la décision D6 (option c), la photo hors ligne est retirée — la
+ *      commande ne crée plus d'asset sans octets (un test vérifie qu'aucun
+ *      `media_assets` n'apparaît) ;
  *   2. `add_photo` avec des octets base64 (champ `bytes`, comme le client) →
  *      **rejected** `PAYLOAD_BINARY_NOT_ALLOWED`, message nommant la route
  *      correcte (`POST /api/v1/media/upload`) ;
@@ -145,9 +147,13 @@ async function main() {
       checksum: 'abc123',
     });
     const pushLegit = await api('POST', '/sync/push', token, { device_id: deviceId, operations: [legit] });
-    check('1. add_photo SANS octets → accepted (chemin légitime intact)',
-      pushLegit.status === 200 && pushLegit.body.accepted?.length === 1,
-      JSON.stringify(pushLegit.body).slice(0, 200));
+    check('1. add_photo SANS octets → rejected OFFLINE_PHOTO_UNSUPPORTED (D6 option c)',
+      pushLegit.status === 200 && pushLegit.body.rejected?.length === 1
+        && pushLegit.body.rejected[0].reason === 'OFFLINE_PHOTO_UNSUPPORTED',
+      JSON.stringify(pushLegit.body).slice(0, 220));
+    check('1bis. aucune ligne media_assets créée par la voie hors ligne',
+      (await rowCount(`SELECT count(*)::int AS n FROM media_assets WHERE storage_key = $1`,
+        [`${orgId}/photo/offline-1.jpg`])) === 0);
 
     // ── 2. Octets base64 (le champ du client) → rejected, route nommée
     const withBytes = operation('add_photo', 'media', {

@@ -475,6 +475,22 @@ premier envoi est arrivé tronqué, 3072 octets, donc inexploitable).
 `flutter` — le jeton GitHub de l'environnement a été invalidé pendant le lot (même panne que le
 24/09 à la même heure d'horloge), donc la CI a tourné mais son verdict n'a pas pu être lu.
 
+## Complément 2026-09-25 (nuit) — D6 : la photo hors ligne est retirée, pas laissée en suspens
+
+`POST /sync/push` refusait d'échouer franchement sur `add_photo` : la commande créait une ligne
+`media_assets` **sans octets** (lecture ⇒ `404 MEDIA_CONTENT_MISSING`) et le client croyait avoir
+envoyé une photo. Décision D6 = **option (c)**, exécutée : la commande est refusée explicitement
+(`OFFLINE_PHOTO_UNSUPPORTED`, message nommant `POST /api/v1/media/upload`), le chemin d'écriture sans
+octets (`applyAddPhoto` + `MediaService.registerFromSync`) est supprimé, et côté client
+`MediaUploader.enqueueOfflinePhoto` / `offlineStorageKey` disparaissent — il n'y a donc plus de clé
+`photo/offline-*` ni de commande à enfiler nulle part. L'option (b) (base64 dans la file de
+synchronisation) reste fermée par le garde L2E ; l'option (a) (file locale + `POST /media/upload`)
+redeviendra le chemin le jour où une UI de capture existera — c'est écrit au plan §6.
+
+Preuves : `phase6` (refus + **aucun** `media_assets` fantôme), `phase25` (refus identique même avec
+une clé d'une autre organisation), `phase77` (9 cas, garde de payload toujours actif), contrat
+`media-client-wiring` réécrit (5/5, 3 mutations rouges), build API + worker verts.
+
 ## Mise à jour 2026-09-24 (soir) — CI : régression du lot 1 corrigée, verrou ajouté
 
 **Contrat à respecter par toute nouvelle suite** : un processus `NODE_ENV=production`

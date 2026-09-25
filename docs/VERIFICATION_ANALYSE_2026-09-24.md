@@ -448,6 +448,18 @@ d'analyse n'était **jamais** bloquante avant ce durcissement. Un troisième dé
 le durcissement lui-même : `publish $matches` non quoté découpait le diagnostic en mots — vu par
 exécution, corrigé, et le repli est désormais verrouillé par le contrat.
 
+**Mise à jour du 25/09/2026 (nuit, suite) — D6 tranchée : la photo hors ligne n'existe pas en V1.**
+Le défaut constaté par exécution pendant les lots 2B/L2D (un asset créé **sans octets**, lecture
+`404 MEDIA_CONTENT_MISSING`, `storage_key` qui laissait croire le contraire) n'est plus une
+« limitation documentée » mais une **impossibilité** : `add_photo` est refusée explicitement
+(`OFFLINE_PHOTO_UNSUPPORTED`, message nommant `POST /api/v1/media/upload`), le chemin d'écriture sans
+octets est supprimé côté serveur, et `enqueueOfflinePhoto`/`offlineStorageKey` sont retirés du client
+(plus aucun code ne fabrique de clé `photo/offline-*`). La photo en ligne passe par la route média
+(octets par l'API, plafond 8 Mo, consentement, journal des accès). Preuves exécutées : `phase6`,
+`phase25`, `phase77` vertes sur PostgreSQL réel avec le rôle applicatif ; `media-client-wiring` 5/5
+avec 3 mutations rouges. Le choix (c) plutôt que (a) est argumenté au plan §6 (aucune UI ne capture —
+écrire la file locale aurait été du code jamais exercé) ; il est réversible.
+
 **Mise à jour du 25/09/2026 (nuit) — un « vert » qui ne prouvait rien.** En relevant le verdict du
 run `flutter` (jeton GitHub rétabli), une annotation isolée est apparue dans un job **vert** :
 `::error::4 tests passed, 1 failed.` — les 17 steps étaient verts. Cause : `flutter test | tee

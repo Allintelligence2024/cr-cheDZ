@@ -496,60 +496,6 @@ export class MediaService {
     });
   }
 
-  // ── Sync : commande add_photo (offline) ──────────────────────────────────
-
-  /** Enregistre une photo poussée par le mobile (jamais visible sans consentement). */
-  async registerFromSync(
-    client: PoolClient,
-    tenantId: string,
-    input: {
-      childId: string;
-      userId: string;
-      deviceId?: string | null;
-      syncEventId?: string | null;
-      storageKey: string;
-      mimeType: string;
-      takenAt?: string;
-      checksum?: string;
-      childrenInPhoto?: string[];
-    },
-  ): Promise<Record<string, unknown>> {
-    // C3 (audit 2026-09) : même garde que register() — la voie sync (offline)
-    // ne doit pas pouvoir écrire hors du périmètre du tenant.
-    assertStorageKeyInTenant(input.storageKey, tenantId);
-    if (input.childrenInPhoto?.length) {
-      for (const cid of input.childrenInPhoto) {
-        await this.childOfTenant(client, cid);
-      }
-    }
-    const res = await client.query(
-      `INSERT INTO media_assets
-         (organization_id, child_id, uploaded_by, media_type, storage_key,
-          mime_type, taken_at, checksum, children_in_photo,
-          all_consents_checked, is_visible_to_parents, exif_stripped)
-       VALUES ($1,$2,$3,'photo',$4,$5,$6,$7,$8::uuid[],
-               $9, false, true)
-       RETURNING id`,
-      [
-        tenantId, input.childId, input.userId, input.storageKey, input.mimeType,
-        input.takenAt ?? null, input.checksum ?? null, input.childrenInPhoto ?? null,
-        input.childrenInPhoto != null && input.childrenInPhoto.length > 0,
-      ],
-    );
-    const media = res.rows[0];
-    await client.query(
-      `INSERT INTO sync_changelog
-         (organization_id, aggregate_type, aggregate_id, event_type, payload, origin_device_id)
-       VALUES ($1, 'media', $2, 'media_registered', $3, $4)`,
-      [
-        tenantId, media.id,
-        JSON.stringify({ media_id: media.id, child_id: input.childId, media_type: 'photo' }),
-        input.deviceId ?? null,
-      ],
-    );
-    return media;
-  }
-
   private async childOfTenant(client: PoolClient, childId: string): Promise<void> {
     const res = await client.query(
       `SELECT id FROM children WHERE id = $1 AND deleted_at IS NULL`,

@@ -62,7 +62,9 @@ exécutable, script k6 verrouillé en CI mais **non exécuté** ici), **L6.3** (
 retiré), **L6.4** (D5 : vidéosurveillance retirée du discours opérationnel), **L2C** (volet client de
 F5 verrouillé), **L2D** (photo hors ligne mesurée) et **L2E** (`sync/push` n'est pas un canal de
 fichiers : garde de payload + 413 explicite) sont faits. **Toutes les décisions D2–D5 sont
-tranchées** ; **D6** reste ouverte (option (b) fermée par L2E ; restent (a) via L3 et (c)) ; **L3 est
+tranchées** ; **D6 est TRANCHÉE le 2026-09-25 — option (c)** : la photo hors ligne n'existe pas
+en V1, `add_photo` est refusée explicitement et le chemin d'écriture sans octets est retiré
+(preuves : `phase6`, `phase25`, `phase77` vertes ; verrou `media-client-wiring`) ; **L3 est
 livrée** (code + tests **lancés** par le job `flutter` de la CI, sans SDK dans l'environnement ; verdict final en attente — §5) ;
 il reste à committer la résolution `pubspec.lock` publiée par la CI et à relever le verdict final.
 
@@ -1295,7 +1297,7 @@ relevée puis corrigée) et les tests ont été exécutés — le correctif `pho
 | D3 | `compress_media` : implémenter ou retirer | produit | Lot 6 | dossier ci-dessous |
 | D4 | `parent-mobile` : offline-first complet maintenant, ou refresh + états d'erreur seuls | produit | portée du Lot 3 | dossier ci-dessous |
 | D5 | Clips vidéo : quel plafond de taille et quelle voie (API ou S3 direct) | produit + ops | usage réel de la vidéosurveillance en prod | ✅ **tranchée : (c)** (lots L6.4) |
-| D6 | Photos **hors ligne** : quel canal d'octets (base64 dans `sync/push`, file locale client + `POST /media/upload`, ou retrait de la voie tant qu'aucune UI ne capture) | produit + tech | câblage de la capture photo staff/parent | dossier ci-dessous — **option (b) fermée par L2E** ; reste (a) via L3 ou (c) |
+| D6 | Photos **hors ligne** : quel canal d'octets (base64 dans `sync/push`, file locale client + `POST /media/upload`, ou retrait de la voie tant qu'aucune UI ne capture) | produit + tech | **TRANCHÉE (2026-09-25) = option (c)** — voie retirée : `add_photo` refusée (`OFFLINE_PHOTO_UNSUPPORTED`), `registerFromSync`/`applyAddPhoto` supprimés, `enqueueOfflinePhoto`/`offlineStorageKey` retirés du client ; l'option (b) reste fermée par L2E ; réversible (une UI de capture ⇒ option (a)) |
 
 ### D2 — Rétention de `notification_queue` et `messages` *(DPO)* — ✅ **TRANCHÉE : (a) purger**
 
@@ -1413,6 +1415,22 @@ la décision D1 = **A** (contenu servi par l'API, pas de sous-domaine public) re
 ne pas laisser croire que la fonction est opérationnelle.
 
 ### D6 — Photos hors ligne : par où passent les OCTETS ? *(produit + tech)*
+
+> **DÉCISION — 2026-09-25, option (c), exécutée.** La voie hors ligne est **retirée**, pas laissée
+> latente : `POST /sync/push` refuse `add_photo` avec `OFFLINE_PHOTO_UNSUPPORTED` et un message qui
+> nomme `POST /api/v1/media/upload` ; le chemin d'écriture sans octets (`applyAddPhoto` +
+> `MediaService.registerFromSync`) est **supprimé** ; côté client, `MediaUploader.enqueueOfflinePhoto`
+> et `offlineStorageKey` sont retirés (plus aucun code Dart ne fabrique de clé `photo/offline-*` ni
+> n'enfile `add_photo`). *Pourquoi (c) et pas (a) :* l'option (a) suppose un appelant — or le fait
+> mesuré (lots L2C/L2D) est qu'**aucune UI ne capture ni n'enfile de photo** (ni caméra, ni
+> `image_picker`, ni téléversement dans admin-web). Écrire la file locale maintenant aurait produit du
+> code jamais exercé, exactement ce que ce dépôt refuse (« un test que personne n'exécute ne prouve
+> rien »). *Pourquoi pas (b) :* fermée par le garde L2E (16 Ko, `PAYLOAD_BINARY_NOT_ALLOWED`).
+> **Preuves exécutées** : `phase6` (refus + aucun `media_assets` fantôme), `phase25` (refus identique
+> avec une clé d'une autre organisation), `phase77` (9 cas : le refus est distinct du garde de
+> payload, qui reste actif), contrats `media-client-wiring` (3 mutations rouges) et
+> `parent-session-contract` ; build API/worker vert. *Réversibilité* : le jour où une UI de capture
+> arrive, (a) redevient le chemin — il faudra alors rouvrir le dossier et livrer les octets.
 
 **Faits mesurés (2026-09-25, lot L2D)** :
 - la commande `add_photo` de `POST /sync/push` **accepte** l'opération et crée une ligne
