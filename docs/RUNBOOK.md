@@ -72,7 +72,16 @@ programmer mensuellement).
   échéance ANPDP +5 jours automatique ; notifier via `POST /privacy/violations/:id/anpdp-notify`
   (SMTP configuré requis).
 - Demandes de droits : export JSON via `POST /privacy/requests/:id/export`.
-- Rétention : job `retention_purge` (5 ans) — `RETENTION_DAYS` (défaut 1825).
+- Rétention : job `retention_purge`, en deux volets depuis le 25/09/2026 (L4/D2) :
+  journaux (5 ans — `RETENTION_DAYS`, défaut 1825), puis messagerie —
+  `NOTIFICATION_RETENTION_DAYS` (défaut 90 j) pour la file de notifications
+  **terminées** (`pending`/`processing` ne sont jamais purgés : un retry en cours
+  survit) et `MESSAGES_RETENTION_DAYS` (défaut 365 j) pour le **contenu** des
+  messages (la ligne et le fil restent, le corps devient le marqueur
+  `retention_expired_body_marker()`). RLS : la purge passe par la fonction
+  `retention_purge_messaging` (SECURITY DEFINER, rôle de migration BYPASSRLS) —
+  le rôle applicatif ne peut pas écrire dans ces tables sans contexte tenant.
+  `notification_inbox` n'est **pas** purgée (voie de lecture durable).
 - Vidéosurveillance (DPIA 25-11) : planifier le job quotidien
   `video_clips_purge` (INSERT INTO background_jobs …, comme retention_purge)
   sur chaque org ayant le flag actif — purge stockage + lignes à 30 jours,

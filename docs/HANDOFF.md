@@ -362,7 +362,7 @@ la lecture parent sous consentement).
   C'est le garde qui remplace l'échec silencieux sur le téléphone par une erreur explicite. Il
   couvre aussi `POST /video/clips/presign-upload` (message adapté par appelant).
 - Preuves : `tests/tenant-isolation/phase67-media-upload.api.test.mjs` (31 vérifications, ajoutée
-  au runner → **71 entrées**) ; tests unitaires `apps/api/src/modules/media/storage.service.spec.ts`
+  au runner → **72 entrées**) ; tests unitaires `apps/api/src/modules/media/storage.service.spec.ts`
   et `dto/media.dto.spec.ts` (15 cas, dont la normalisation multipart de `children_in_photo` —
   sans elle `all_consents_checked` resterait faux et la photo ne serait jamais publiée).
 
@@ -446,8 +446,8 @@ n'est pas verrouillée, une mesure datée n'est pas une propriété.
 qualifiée, phrase fausse canonique réintroduite, compteur de suites périmé, décompte de
 healthchecks périmé, sonde renommée sur disque) → mutation : 6 rouges ; restaurations → 9/9 vert
 (journal au plan §5).
-Mesure du jour : 198 routes / 50 sans `@Roles`, 75 migrations, 71 entrées, 69 suites `phaseNN`,
-85 fichiers d'isolation, 14 ADR, 32 runbooks.
+Mesure du jour : 198 routes / 50 sans `@Roles`, 76 migrations, 72 entrées, 70 suites `phaseNN`,
+86 fichiers d'isolation, 14 ADR, 32 runbooks.
 
 ---
 
@@ -471,6 +471,35 @@ Désormais :
 Preuve par mutation : étape CI du gardien PII retirée → rouge (« 1 gardien que rien n'appelle ») ;
 nouveau gardien fictif sans appelant → rouge ; PII réelle injectée dans un seed → `--strict` rouge
 (« domaine gmail.com non reconnu comme synthétique »). Restaurations : vertes.
+
+
+---
+
+## Mise à jour 2026-09-25 — lot L4 : la rétention de la messagerie existe (décision DPO D2 = a)
+
+L'audit laissait la question ouverte et le plan en attente d'une décision : `notification_queue`
+et `messages` **croissaient sans borne** (seuls les journaux étaient purgés, 5 ans). Décision du
+DPO le 2026-09-25 : **purger avec des seuils dédiés**.
+
+- migration **076** : `retention_purge_messaging(cutoff_notifs, cutoff_messages)` — SECURITY
+  DEFINER (le worker tourne NOBYPASSRLS sans contexte tenant), purge par lots de 5000, plus deux
+  index de purge ; `retention_expired_body_marker()` est le **marqueur partagé** du contenu expiré
+  (volontairement sans nombre de jours : le seuil est configurable).
+- job worker `retention_purge` : journaux (5 ans) **puis** messagerie —
+  `NOTIFICATION_RETENTION_DAYS` (défaut **90 j**, lignes `sent`/`failed` uniquement : une
+  notification en cours de retry ou en cours de traitement **survit**, quel que soit son âge) et
+  `MESSAGES_RETENTION_DAYS` (défaut **365 j**, expiration du **contenu** : le corps devient le
+  marqueur et la pièce jointe est détachée — la ligne, l'auteur et la date restent, le fil ne se
+  troue pas).
+- suite `phase76-messaging-retention.pg.test.mjs` : **15 assertions** exécutées par le rôle
+  applicatif (le chemin exact du worker) sur PG 18 réel, ajoutée au runner (72 entrées).
+- **hors périmètre assumé** : `notification_inbox` (voie de lecture durable) et les fichiers
+  joints (`media_assets`) ne sont pas purgés — deux décisions séparées si le DPO veut leur durée.
+
+Preuves : suite 15/15, **3 mutations rouges** (liste blanche de statut retirée, suppression de la
+ligne au lieu de l'expiration du contenu, garde d'idempotence retirée), restaurations vérifiées ;
+compteurs du contrat de vérité mis à jour **parce qu'il est passé rouge** (« ci.yml revendique
+075, la réalité est 76 ») ; journal complet au plan de réparation §5 « L4 ».
 
 ---
 

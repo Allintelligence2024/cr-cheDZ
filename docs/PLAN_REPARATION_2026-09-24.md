@@ -49,7 +49,7 @@ vérification).
 | **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) |
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; reste : branchement du client mobile, upload des clips, octets hors-ligne (voir §3.2) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré (§5, lot 3)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` ici ; à faire depuis un poste Flutter 3.47.1 |
-| **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
+| **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | **FAIT (2026-09-25)** — décision **D2 = (a)** (purger) : migration 076, seuils 90 j / 365 j, suite `phase76` 15 assertions, 3 mutations détectées (§5) |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (**10 contrôles** au 25/09/2026, branche CI `quality`) + 6 documents corrigés ; prolongé par **L5.1** (vérité « workflows CI », §5) |
 | **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6.1 (sondes) FAIT**, **L6.2 (k6) FAIT** : critère mesuré par le banc en parité k6 (500 ops, p95 1,4 s) + gardien de discours ; reste **D3** (`compress_media`, décision produit) |
 
@@ -57,8 +57,9 @@ vérification).
 (pas de dépendance, peut glisser entre les deux) → L4 (attend une décision DPO) → L6.
 **État au 2026-09-24 (soir)** : L1 (+ L1.5, L1.6, L1.7), L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
 bloqué par l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée
-possible) ; L4 attend la décision DPO ; il ne reste de L6 que D3 (`compress_media`), qui attend une décision produit : k6 est tranché
-(L6.2 — critère mesuré par le banc exécutable, script k6 verrouillé en CI mais **non exécuté** ici).
+possible) ; **L4 est FAIT** (décision DPO **D2 = a**, migration 076, suite `phase76`) ; il reste **D3**
+(`compress_media`) et **D5** (clips vidéo), deux décisions produit : k6 est tranché (L6.2 — critère
+mesuré par le banc exécutable, script k6 verrouillé en CI mais **non exécuté** ici).
 
 ---
 
@@ -825,6 +826,78 @@ restaurations (diff -q HANDOFF, diff -rq .github/workflows)      identiques ✓
 explicitement les tournures historiques (« avait été bloqué », « levée depuis ») : réécrire ces
 documents serait falsifier l'histoire, pas la rétablir.
 
+### L4 — Rétention de la messagerie (décision D2 = a, 2026-09-25)
+
+**Décision appliquée** : purger, avec des seuils dédiés (option (a) du dossier §6).
+
+**Livré** :
+- `infrastructure/database/migrations/076_messaging_retention.sql` — fonction
+  `retention_purge_messaging(p_notification_cutoff, p_messages_cutoff)`
+  (SECURITY DEFINER, propriétaire = rôle de migration BYPASSRLS : le worker tourne
+  NOBYPASSRLS sans contexte tenant, patron 034/042/047) + deux index de purge
+  (`notification_queue(status terminal, created_at)`, `messages(sent_at)` — les index
+  existants ne servaient pas ces sélections) + `retention_expired_body_marker()`
+  (marqueur textuel partagé, **sans nombre de jours** : le seuil est configurable, un
+  marqueur qui citerait « 365 » mentirait dès qu'on le change).
+- `apps/worker/src/main.ts` — le job `retention_purge` enchaîne désormais les journaux
+  puis la messagerie (`NOTIFICATION_RETENTION_DAYS` défaut 90, `MESSAGES_RETENTION_DAYS`
+  défaut 365) et journalise les deux comptes.
+- `tests/tenant-isolation/phase76-messaging-retention.pg.test.mjs` — 15 assertions sur
+  PG 18 réel, exécutées **par le rôle applicatif** (le chemin exact du worker) ;
+  ajoutée au runner (72 entrées).
+- Docs alignées : `.env.prod.example` (les deux seuils), `docs/RUNBOOK.md` (exploitation,
+  y compris ce qui n'est **pas** purgé), `docs/VERIFICATION_ANALYSE_2026-09-24.md`
+  (la dette est fermée), `docs/HANDOFF.md`, compteurs du contrat de vérité (76 migrations,
+  72 entrées, 70 suites `phaseNN`, 86 fichiers).
+
+**Règles verrouillées par la suite** (nommées comme les assertions) :
+
+```
+✓ 1. file : 3 lignes TERMINÉES purgées (2 orgA + 1 orgB, 120/400/900 j)
+✓ 5. messages : 2 contenus expirés (1 orgA + 1 orgB, 500 j)
+✓ 2. notification `pending` de 900 j NON purgée (retry en cours)
+✓ 3. notification `processing` de 900 j NON purgée (traitement en cours)
+✓ 1bis. notification `sent` de 2 j NON purgée (sous le seuil)
+✓ 7. purge GLOBALE : la ligne terminale d'une AUTRE organisation (900 j) est purgée aussi
+✓ 1ter. les deux lignes terminales sont bien absentes
+✓ 5bis. message ancien : corps remplacé par le marqueur partagé
+✓ 5ter. message ancien : la LIGNE et ses métadonnées restent (fil non troué)
+✓ 4. message récent (3 j) : contenu intact
+✓ 7bis. purge GLOBALE : le contenu ancien d'une AUTRE organisation est expiré aussi
+✓ 8. notification_inbox (voie durable) intacte
+✓ 6. idempotent : second passage = 0 notification, 0 message
+✓ 9. hors contexte tenant, le rôle applicatif n'écrit pas dans `messages`
+✓ 10. une `pending` devenue `sent` (et ancienne) est purgée au passage suivant
+```
+
+**Deux constats de conception tirés des premiers échecs de la suite** (gardés parce qu'ils
+sont instructifs) :
+1. la purge est **globale** (toutes organisations) — c'est une obligation du responsable de
+   traitement, pas un réglage par client, exactement comme la purge des journaux (034). Le
+   premier jet du test postulait l'inverse (« un tenant voisin ne doit pas être touché ») :
+   c'est le **test** qui était faux, pas la fonction ; le cas est désormais assertion
+   positive de la règle globale.
+2. **hors périmètre assumé**, écrit noir sur blanc : `notification_inbox` (la voie de lecture
+   durable décidée au lot 2B/D2) et les fichiers joints (`media_assets` + objet de stockage)
+   ne sont pas purgés par ce seuil — deux décisions séparées si le DPO veut leur donner une
+   durée.
+
+**Mutations exécutées** (3, toutes rouges, restaurations `diff -q` vérifiées) :
+
+```
+A — liste blanche de statut retirée (pending/processing purgés)  rc=1  ['2. … NON purgée', '3. … NON purgée']
+B — messages : ligne SUPPRIMÉE au lieu du contenu expiré          rc=1  ['5bis. … marqueur', '5ter. … LIGNE … restent']
+C — garde d'idempotence retirée (body <> marqueur)               rc=1  ['6. idempotent : second passage …']
+restaurations (diff -q avec la sauvegarde)                       identiques ✓ → suite 15/15 verte
+```
+
+**Outillage re-validé après la migration** : `migrate --status` (076 appliquée, checksums),
+`schema-check` (RLS complète, dérive nulle), `check-rls-usage` (52 accès bruts conformes ;
+la fonction SECURITY DEFINER est déclarée — le marqueur textuel, lui, **n'est pas** SECURITY
+DEFINER et ne doit pas figurer dans cette liste), `claims-contract` (**rouge avant** la mise à
+jour des compteurs : « ci.yml revendique 075, la réalité est 76 » — le contrat de vérité fait
+exactement son travail), typecheck, build worker.
+
 ## 6. Décisions en attente (propriétaire explicite)
 
 | # | Décision | Propriétaire | Bloque | État |
@@ -835,7 +908,14 @@ documents serait falsifier l'histoire, pas la rétablir.
 | D4 | `parent-mobile` : offline-first complet maintenant, ou refresh + états d'erreur seuls | produit | portée du Lot 3 | dossier ci-dessous |
 | D5 | Clips vidéo : quel plafond de taille et quelle voie (API ou S3 direct) | produit + ops | usage réel de la vidéosurveillance en prod | dossier ci-dessous |
 
-### D2 — Rétention de `notification_queue` et `messages` *(DPO)*
+### D2 — Rétention de `notification_queue` et `messages` *(DPO)* — ✅ **TRANCHÉE : (a) purger**
+
+> **Décision du 2026-09-25 : option (a)**, appliquée au lot L4 (migration 076, suite
+> `phase76`, journal §5). Seuils livrés : `NOTIFICATION_RETENTION_DAYS=90` (file de
+> notifications **terminées** uniquement — `pending`/`processing` jamais purgés) et
+> `MESSAGES_RETENTION_DAYS=365` (expiration du **contenu** des messages ; la ligne et le
+> fil restent). **Hors périmètre assumé** : `notification_inbox` (voie durable) et les
+> fichiers joints (`media_assets`) — deux décisions séparées si le DPO souhaite des durées.
 
 **Faits mesurés (2026-09-24)** :
 - `notification_queue` (migration 009) garde `title_fr/ar`, `body_fr/ar`, `data` JSONB, `status`,

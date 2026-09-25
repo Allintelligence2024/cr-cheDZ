@@ -59,6 +59,9 @@ const FROZEN_SECURITY_DEFINER_FUNCTIONS = new Set([
   'support_list_flags', 'support_set_flag', 'support_pilot_summary',
   // 034 rétention
   'retention_purge_logs',
+  // 076 rétention messagerie (L4/D2) — le marqueur textuel n'est PAS SECURITY
+  // DEFINER (fonction pure, lecture seule) : seule la purge est listée ici.
+  'retention_purge_messaging',
   // 040 multi-rôles
   'auth_user_roles',
   // 042 drain notifications

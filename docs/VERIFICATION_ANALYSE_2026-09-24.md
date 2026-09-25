@@ -256,7 +256,7 @@ Légende : ✅ confirmé · 🟡 partiel/nuancé · ❌ faux · ➕ question ouv
 | 51 | Preuves par mutation sur les chemins critiques | ✅ | `scripts/mutation-proof.sh`, `mutation-phase23-proof.sh`, `mutation-phase24-proof.sh` |
 | 52 | 4 workflows CI, pas de CD automatique | ✅ | `ci`, `docker`, `flutter`, `security-audit` ; aucun job de déploiement |
 | 53 | « Tests de charge k6 » | 🟡 | **1 seul** fichier k6 (`tests/load/sync.k6.js`), et il **n'est jamais exécuté** (k6 absent) — `capacity-bench.mjs` le documente lui-même ; la charge réelle est un banc Node (`capacity-bench.mjs`, `mvp-bench.mjs`) |
-| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **69** suites `phaseNN`, **85** fichiers dans `tests/tenant-isolation/`, **71** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66`/`phase67` (lots 2A/2B) |
+| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **70** suites `phaseNN`, **86** fichiers dans `tests/tenant-isolation/`, **72** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66`/`phase67` (lots 2A/2B) |
 | 55 | Densité de test (non chiffrée par le rapport) | ✅ | `tests/**/*.mjs` = **17 123 lignes** vs **16 926** lignes de code API : la suite de tests est **plus grosse que l'API qu'elle teste** |
 | 56 | « 15+ ADR » | 🟡 | **14** (ADR-000 → ADR-013) |
 | 57 | « 45+ runbooks » | 🟡 | **32** fichiers `*RUNBOOK*.md` (56 `.md` au total dans `docs/`) |
@@ -412,8 +412,11 @@ mutation), 4 gardiens orphelins câblés en CI, `Content-Security-Policy` étape
 - Worker : `compress_media` en stub ; push « sent » = traité, **pas** livré (l'inbox reste la voie fiable).
 - Photos staff : chemin `base64` **inerte** (aucune UI) — le sécuriser **avant** de le câbler.
 - Charge : 1 fichier k6 **non exécuté** ; la vraie mesure est le banc Node.
-- Rétention : journaux et clips vidéo outillés, **file de notifications et messages non purgés**
-  (§4.7) — à trancher avec le DPO.
+- Rétention : journaux et clips vidéo outillés ; **file de notifications et contenu des
+  messages purgés depuis le 25/09/2026** (L4, décision DPO D2 = option a — migration 076,
+  `NOTIFICATION_RETENTION_DAYS`/`MESSAGES_RETENTION_DAYS`, suite `phase76`). Reste **hors
+  périmètre** : `notification_inbox` et les fichiers joints (`media_assets`) — décisions
+  séparées du DPO.
 - OpenAPI : 13 chemins écrits à la main sur 198 routes — assumé et testé comme tel.
 - 14 ADR / 32 runbooks / 701 fichiers (mesure `git ls-files` au 2026-09-24) : corriger les chiffres du rapport.
 

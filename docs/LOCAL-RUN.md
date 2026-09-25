@@ -18,7 +18,7 @@ le seed pilote et les suites de tests hôte.
 ```bash
 # 1. Stack complète :
 #    postgres 18 → minio → bootstrap-roles (creche_migrator / creche_app)
-#    → migrate (75 migrations + seeds + schema-check) → api + worker + admin-web
+#    → migrate (76 migrations + seeds + schema-check) → api + worker + admin-web
 #    -p creche-dev-v3 = PROJET NEUF : un volume formatté PostgreSQL 16 n'est
 #    PAS lisible par PG18 (BACKUP-RUNBOOK « Upgrade PostgreSQL 16 → 18 »).
 docker compose -p creche-dev-v3 -f infrastructure/docker/docker-compose.dev.yml up --build
@@ -68,7 +68,7 @@ npm ci                                  # Node ≥ 20 (engines du manifeste raci
 node run_pg.mjs &                       # PG 18.4 — port 54329, base creche_test
 export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 
-node scripts/migrate.mjs                # 75 migrations (checksums SHA-256, ADR-007)
+node scripts/migrate.mjs                # 76 migrations (checksums SHA-256, ADR-007)
 node scripts/seed.mjs                   # rôles/permissions système — AUCUNE donnée d'org
 node tests/tenant-isolation/schema-check.mjs
 node tests/tenant-isolation/rls-behavior-check.mjs    # GATE RLS (rôle NOBYPASSRLS)
@@ -98,7 +98,7 @@ npm run db:reset                        # migrate --reset && migrate && seed
 ## Checklist d'acceptation G-local (porte Phase 1)
 
 - [ ] `git log` ≥ 2 commits (baseline remédiation)
-- [ ] PG18 : 75 migrations + `db:check-schema` + `db:check-rls` verts sur base neuve
+- [ ] PG18 : 76 migrations + `db:check-schema` + `db:check-rls` verts sur base neuve
 - [ ] `up --build` : tous les services up (bootstrap-roles, migrate, api, worker, admin-web, minio)
 - [ ] seeds + 5 crèches pilotes ; login **directrice pilot-01** sur `:4000`
 - [ ] Smoke : 1 pointage arrivée/départ, 1 entrée journal, 1 photo (MinIO), 1 export PDF (worker)
@@ -114,8 +114,8 @@ npm run db:reset                        # migrate --reset && migrate && seed
    application role ») sont **par conception** : en mode normal, `appUrl()`
    renvoie `creche_app_test` alors que la garde `DATABASE_ROLE_UNSAFE` exige
    exactement `creche_app` sous `NODE_ENV=production`. Ces checks ne passent
-   qu'en mode 2. (Compteur historique : la batterie compte désormais **71
-   entrées** — 69 `phaseNN` + `schema-check` + `rls-behavior-check`.)
+   qu'en mode 2. (Compteur historique : la batterie compte désormais **72
+   entrées** — 70 `phaseNN` + `schema-check` + `rls-behavior-check`.)
    **Le mode 1 ne suffit pas à qualifier un lot** : il ne joue ni phase26 ni les
    rôles de production, et c'est précisément là que le 24/09 une régression a
    échappé (voir `docs/CI-DATABASE-JOB-FINDINGS.md` § 24/09/2026).
@@ -149,7 +149,7 @@ npm run db:reset                        # migrate --reset && migrate && seed
 
 ## État de validation (2026-09-21, sandbox sans Docker)
 
-- **Voie B : VALIDÉE** — PG 18.4 embarqué : 75/75 migrations, seeds,
+- **Voie B : VALIDÉE** — PG 18.4 embarqué : 76/76 migrations, seeds,
   `schema-check` ✓, `rls-behavior-check` (GATE) ✓, build api+worker ✓,
   smoke API `{"status":"ok"}` sur `/api/v1/health`, **Gate D 65/65 vert**
   (rôles de production, see § modes ci-dessus).

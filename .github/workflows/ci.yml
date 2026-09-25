@@ -68,7 +68,8 @@ jobs:
       - name: admin-web — matrice d'accès UI par rôle (F3)
         run: npm run test:unit --workspace @creche/admin-web
       # Nom corrigé (lot 1) : 75 migrations sur disque (001 → 075), pas 063.
-      - name: Migrations (reset + status 001→075)
+      # Complété au lot L4 : 076 ajoutée → 76 migrations (001 → 076).
+      - name: Migrations (reset + status 001→076)
         run: |
           node scripts/migrate.mjs --reset
           node scripts/migrate.mjs
@@ -88,12 +89,12 @@ jobs:
           npm run build --workspace @creche/api
           npm run build --workspace @creche/worker
       # Nom corrigé (plan de réparation 2026-09-24, lot 1) : l'étape rejouait
-      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase67 (71 entrées
+      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase76 (72 entrées
       # dans SUITES, plus le garde anti-bypass RLS en tête).
       # (nom entre guillemets : un « : » non échappé dans une valeur YAML la
       # transformerait en mapping imbriqué — le workflow deviendrait invalide
       # et la CI s'arrêterait de tourner sans que le diff le montre)
-      - name: "Suites d'isolation (garde RLS anti-bypass + 71 suites — isolation, phase3 → phase67)"
+      - name: "Suites d'isolation (garde RLS anti-bypass + 72 suites — isolation, phase3 → phase76)"
         run: bash scripts/run-isolation-suites.sh
 
   backup-drill:

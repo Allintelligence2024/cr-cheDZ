@@ -102,6 +102,7 @@ SUITES=(
   # le serveur, intégrité/signature binaire, plafonds, consentement, verrou
   # anti-régression du presign d'upload.
   phase67-media-upload.api.test.mjs
+  phase76-messaging-retention.pg.test.mjs
 )
 
 FILTER="${1:-}"
