@@ -209,6 +209,19 @@ avec `PRODUCTION_ROLE_TESTS` non défini, et `RATE_LIMIT_DISABLED` n'entre en je
 que dans les spawns de production) et **rouge en CI** pour une variable
 d'environnement du job. C'est exactement le cas ici.
 
+### Verdicts observés le 24/09 au soir (branche du plan de réparation)
+
+| Commit | Job `database` | Job `quality` | Lecture |
+|---|---|---|---|
+| `94507aa` | `in_progress` (franchi phase26) | — | la régression du lot 1 est traitée |
+| `9fd826a` | **terminé**, `rc=1` — **H1 seul** | `success` | plus aucun arrêt anticipé : toutes les suites tournent, les preuves G1–G5/H2a–H2l sont émises, seul H1 rougit |
+| `6584c52` (lot 6.1) | terminé `20:01:22 → 20:30:59`, **rc=1 — H1 seul** | **échec** : « Tests unitaires api + worker » | la CI attrape ce que le local ne voyait pas (`quality` ne construit pas l'API) → corrigé en `8cc7583` |
+| `8cc7583` | en cours au moment de la coupure du jeton GitHub | **`success`** | les 2 nouveaux gardiens du lot 1.5 tournent en CI ; tests unitaires api 117 + worker 5 verts |
+
+Détail des annotations de `6584c52` (job `database`) : deux `Registry pull failed … unauthorized`
+(staging puis dev), la `version` obsolète de compose (avertissement), et `Process completed with
+exit code 1` — **aucune autre suite en échec**.
+
 ### H1 — ce que le code dit exactement (mesuré le 24/09, soir)
 
 `scripts/test-staging-stack.mjs:66-68` : la stack de staging **construit** ses images
