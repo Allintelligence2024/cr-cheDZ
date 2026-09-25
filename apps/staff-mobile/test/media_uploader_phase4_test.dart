@@ -2,6 +2,7 @@
 // F6 (clé de stockage hors ligne) a été retirée le 2026-09-25 avec la décision D6
 // (option c) : la photo hors ligne n'existe pas en V1, il n'y a donc plus de clé à
 // fabriquer ni de commande à enfiler.
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
