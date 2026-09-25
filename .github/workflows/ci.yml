@@ -213,6 +213,13 @@ jobs:
       # refuse les phrases bannies non corrigées. Aucune base, aucun Docker.
       - name: Contrat de vérité documentaire (affirmations vs disque)
         run: node --test tests/tenant-isolation/claims-contract.test.mjs
+      # L2C (F5, volet client) : le presign d'écriture est MORT en production
+      # depuis le lot 2B (UPLOAD_VIA_API_REQUIRED). Ce contrat interdit de
+      # câbler un écran sur l'ancien chemin sans rebrancher, et exige que
+      # chaque exception reste vraie ET inatteignable depuis l'UI. Aucune
+      # base, aucun build.
+      - name: Contrat média client (presign d'écriture mort)
+        run: node --test tests/tenant-isolation/media-client-wiring.test.mjs
       # Design system : contraste WCAG AA des deux thèmes + parité des
       # couleurs Sérénité entre theme.css (web) et serenite_theme.dart
       # (les 2 apps Flutter, qui ne peuvent pas importer le CSS).

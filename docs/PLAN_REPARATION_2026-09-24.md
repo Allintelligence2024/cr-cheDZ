@@ -47,7 +47,7 @@ vérification).
 | **L1.5** | **5ᵉ gardien orphelin + cliquet « gardiens câblés »** | vérif. §4.3 | ~0,5 h | gardien `check-guards-wired.mjs` en CI ; `audit-seeds-pii --strict` exécuté | **FAIT (2026-09-24)** — 12 gardiens recensés, 0 orphelin, 3 mutations détectées (§5) |
 | **L1.6** | **Diagnostic H1 exploitable** : nommer l'image qui refuse le tirage | CI (`database`) | ~0,2 h | message d'erreur citant l'image + test unitaire | **FAIT (2026-09-24)** — « Registry pull failed for <image> » ; comportement inchangé (aucun repli vert) |
 | **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) |
-| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; restent hors lot : branchement du client mobile (**L3**, bloqué par le SDK Flutter), upload des clips (**D5 = c** : hors discours opérationnel, verrou ), octets hors-ligne (voir §3.2) |
+| **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; restent hors lot : branchement du client mobile (**L3**, bloqué par le SDK Flutter), upload des clips (**D5 = c** : hors discours opérationnel, verrou ), octets hors-ligne (voir §3.2) ; volet client verrouillé par **L2C** (`media-client-wiring`) |
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré deux fois (§5, lot 3 : 24/09 puis 25/09 15:07 UTC)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` (`000`) ; à faire depuis un poste Flutter 3.47.1 — portée déjà cadrée (D4 = correctif court) |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | **FAIT (2026-09-25)** — décision **D2 = (a)** (purger) : migration 076, seuils 90 j / 365 j, suite `phase76` 15 assertions, 3 mutations détectées (§5) |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (**10 contrôles** au 25/09/2026, branche CI `quality`) + 6 documents corrigés ; prolongé par **L5.1** (vérité « workflows CI », §5) |
@@ -963,6 +963,58 @@ local explicite) → **9/9** (« ✓ D5 : aucun client n'envoie de clip ») ;
 `apps/admin-web/src/pages/VideoPage.tsx` →
 `✗ D5 … — VideoPage.tsx → presign d'envoi de clip` puis
 `ÉCHEC Phase 21 vidéosurveillance : 1 assertion(s)` ; restauration `diff -q` vérifiée → 9/9.
+
+### L2C — F5, volet client : verrouiller le presign d'écriture mort (2026-09-25)
+
+**Mesure (avant tout code)** : le remplacement serveur existe (lot 2B : `POST /api/v1/media/upload`,
+presign d'écriture *fail-closed* en production, `UPLOAD_VIA_API_REQUIRED`) mais **le client n'a pas été
+rebranché** : `apps/staff-mobile/lib/core/media/media_uploader.dart` appelle toujours
+`POST /media/presign-upload`. Recherche exhaustive des appelants :
+
+```
+presign d'écriture appelé par         → ce seul fichier Dart
+POST /media/upload appelé par          → AUCUN client (admin-web, staff-mobile, parent-mobile)
+MediaUploader référencé par            → ses seuls tests (apps/staff-mobile/test/media_uploader_phase4_test.dart)
+UI de capture photo dans staff-mobile  → AUCUNE (pas d'image_picker, pas de caméra dans lib/)
+téléversement média dans admin-web     → AUCUN (MediaPage : lecture seule)
+```
+
+⇒ la dette est **latente, pas un incident** : rien à l'écran ne peut passer par ce chemin. La
+réécrire ici produirait du Dart jamais compilé (ni SDK Flutter ni `pub.dev`, mesuré deux fois — lot L3),
+donc invérifiable — ce que la règle « aucune capacité sans preuve exécutée » interdit.
+
+**Livré — un verrou à la place d'un code non prouvable** :
+`tests/tenant-isolation/media-client-wiring.test.mjs` (3 contrôles, aucune base, aucun build) :
+1. la **cible du rebranchement existe** (`@Post('upload')` dans `media.controller.ts`) et la garde
+   *fail-closed* du presign est toujours là (`UPLOAD_VIA_API_REQUIRED` dans `storage.service.ts`) —
+   si le presign redevient utilisable en production, le verrou le dit ;
+2. **aucun fichier client** n'**appelle** le presign mort hors exceptions justifiées (motif d'**appel
+   réel**, pas de mention : voir la leçon plus bas) ;
+3. chaque exception doit rester **vraie** (le fichier appelle encore le presign — sinon l'entrée est
+   périmée et doit disparaître) et **inoffensive** (`MediaUploader` n'est référencé par aucun autre
+   fichier client hors tests) ⇒ **le jour où un écran le câble, la CI échoue** avec le fichier fautif
+   et la route à utiliser.
+
+Câblé dans `quality` (nouvelle étape) et dans le bundle statique du gate D.
+
+**Preuves exécutées** : 3/3 sur l'état actuel. Mutations (toutes rouges, restaurations vérifiées) :
+
+```
+A — l'UI câble MediaUploader (main.dart)              rc=1  « MediaUploader est désormais CÂBLÉ dans l'interface : apps/staff-mobile/lib/main.dart … Rebrancher sur POST /api/v1/media/upload AVANT de livrer cet écran »
+B — appel mort retiré, commentaire d'en-tête laissé   rc=1  « n'appelle PLUS le presign mort : l'exception est périmée — retirer l'entrée JUSTIFIED »
+C — appel mort ajouté dans admin-web                  rc=1  « appel(s) client au presign d'écriture MORT en production … MediaPage.tsx »
+restaurations (diff -q)                                identiques ✓ → 3/3
+```
+
+**Leçon conservée (le premier jet était troué)** : la mutation B était d'abord **verte** — le motif
+comptait les *mentions* du chemin, et le commentaire d'en-tête du fichier le satisfaisait alors que
+l'appel avait changé. Un verrou qui se satisfait d'un commentaire ne verrouille rien : le motif porte
+désormais sur un **appel** (`.post(`/`.put<…>(` vers le chemin). C'est la mutation qui a trouvé ça,
+pas la relecture.
+
+**Ce que L2C ne fait pas** : il ne rebranche pas le client (lot **L3**, avec le SDK Flutter) et ne
+juge pas la qualité du Dart. Il garantit seulement qu'aucun écran ne peut être livré sur un chemin mort
+sans que quelqu'un s'en aperçoive.
 
 ## 6. Décisions en attente (propriétaire explicite)
 

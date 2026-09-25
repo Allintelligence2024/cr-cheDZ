@@ -118,7 +118,7 @@ function runCapture(command, args, { timeout = STEP_TIMEOUT_MS } = {}) {
     process.exit(result.status || 1);
   }
 }
-run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs', 'tests/tenant-isolation/openapi-contract.test.mjs', 'tests/tenant-isolation/client-leak-guard.test.mjs', 'tests/tenant-isolation/on-conflict-targets.test.mjs', 'tests/tenant-isolation/edge-headers-contract.test.mjs']);
+run(process.execPath, ['--test', 'tests/tenant-isolation/ci-notice-budget.test.mjs', 'tests/tenant-isolation/registry-pull.test.mjs', 'tests/tenant-isolation/dev-compose-contract.test.mjs', 'tests/tenant-isolation/dev-proxy.test.mjs', 'tests/tenant-isolation/openapi-contract.test.mjs', 'tests/tenant-isolation/client-leak-guard.test.mjs', 'tests/tenant-isolation/on-conflict-targets.test.mjs', 'tests/tenant-isolation/edge-headers-contract.test.mjs', 'tests/tenant-isolation/media-client-wiring.test.mjs']);
 // Fast production-layout reproduction before the slower Docker/Flutter gates.
 run(process.execPath, ['scripts/check-api-runtime.mjs']);
 // H1 is independent: collect its failure but still run the sync regressions.

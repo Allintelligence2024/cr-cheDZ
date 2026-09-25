@@ -379,6 +379,19 @@ la lecture parent sous consentement).
 3. **Clips vidéo** : presign *fail-closed* en production, mais téléversement **par l'API** non
    livré (fichiers volumineux : dimensionnement dédié).
 
+
+### Complément 2026-09-25 — lot L2C : le volet client de F5 est verrouillé (pas rebranché)
+
+Le lot 2B a livré le remplacement serveur (`POST /api/v1/media/upload`) et rendu le presign
+d'écriture *fail-closed* en production. Le **client**, lui, appelle encore l'ancien chemin
+(`apps/staff-mobile/lib/core/media/media_uploader.dart`) — mais **aucune UI ne l'utilise** (pas
+d'`image_picker`/caméra dans `staff-mobile/lib`, aucun téléversement dans admin-web ; le fichier
+n'est référencé que par ses propres tests). La réécriture Dart appartient au lot **L3** (SDK Flutter
+requis) ; en attendant, `tests/tenant-isolation/media-client-wiring.test.mjs` (job `quality` +
+bundle du gate D) **interdit de câbler un écran sur ce chemin mort** sans rebrancher, et exige que
+chaque exception reste vraie (appel réel présent) et hors UI. Preuves : 3/3 ; **3 mutations rouges**,
+dont une qui a révélé un motif troué (il comptait les commentaires) → durci sur les appels réels.
+
 ## Mise à jour 2026-09-24 (soir) — CI : régression du lot 1 corrigée, verrou ajouté
 
 **Contrat à respecter par toute nouvelle suite** : un processus `NODE_ENV=production`
@@ -447,7 +460,7 @@ qualifiée, phrase fausse canonique réintroduite, compteur de suites périmé, 
 healthchecks périmé, sonde renommée sur disque) → mutation : 6 rouges ; restaurations → 9/9 vert
 (journal au plan §5).
 Mesure du jour : 198 routes / 50 sans `@Roles`, 76 migrations, 72 entrées, 70 suites `phaseNN`,
-86 fichiers d'isolation, 14 ADR, 32 runbooks.
+87 fichiers d'isolation, 14 ADR, 32 runbooks.
 
 ---
 

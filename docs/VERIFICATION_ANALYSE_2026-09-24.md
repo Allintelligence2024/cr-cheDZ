@@ -150,6 +150,12 @@ correctement l'erreur, alors que `photos_page.dart:33` et `consents_page.dart:30
   (journal au plan §3.2) ; (3) `POST /video/clips/presign-upload` est *fail-closed* en production
   mais le téléversement de clips **par l'API** n'est pas livré (fichiers volumineux : dimensionnement
   dédié).
+  **Nuance mesurée le 25/09 (lot L2C)** : la dette (1) est **latente, pas active** — aucun écran
+  n'instancie `MediaUploader` (aucune UI de capture dans `staff-mobile/lib`, aucun téléversement dans
+  admin-web), et le presign des clips n'est appelé par aucun client (verrou D5, `phase21` cas 9).
+  Elle est désormais **verrouillée** : `tests/tenant-isolation/media-client-wiring.test.mjs`
+  interdit de câbler un écran sur le presign mort sans rebrancher, et exige que chaque exception
+  reste vraie (appel réel présent) ET inatteignable depuis l'UI.
 - **Hors périmètre** : `children.photo_url` (colonne jamais écrite par l'API — si elle venait à
   recevoir une URL signée, elle serait inexploitable : y stocker une **clé**, pas une URL).
 
@@ -256,7 +262,7 @@ Légende : ✅ confirmé · 🟡 partiel/nuancé · ❌ faux · ➕ question ouv
 | 51 | Preuves par mutation sur les chemins critiques | ✅ | `scripts/mutation-proof.sh`, `mutation-phase23-proof.sh`, `mutation-phase24-proof.sh` |
 | 52 | 4 workflows CI, pas de CD automatique | ✅ | `ci`, `docker`, `flutter`, `security-audit` ; aucun job de déploiement |
 | 53 | « Tests de charge k6 » | 🟡 | **1 seul** fichier k6 (`tests/load/sync.k6.js`), et il **n'est jamais exécuté** (k6 absent) — `capacity-bench.mjs` le documente lui-même ; la charge réelle est un banc Node (`capacity-bench.mjs`, `mvp-bench.mjs`) |
-| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **70** suites `phaseNN`, **86** fichiers dans `tests/tenant-isolation/`, **72** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66`/`phase67` (lots 2A/2B) |
+| 54 | 65+ tests d'isolation (phase 3 → 65+) | ✅ | **70** suites `phaseNN`, **87** fichiers dans `tests/tenant-isolation/`, **72** entrées dans `scripts/run-isolation-suites.sh` (rejouées en CI avec rôles de prod) — +`phase66`/`phase67` (lots 2A/2B) |
 | 55 | Densité de test (non chiffrée par le rapport) | ✅ | `tests/**/*.mjs` = **17 123 lignes** vs **16 926** lignes de code API : la suite de tests est **plus grosse que l'API qu'elle teste** |
 | 56 | « 15+ ADR » | 🟡 | **14** (ADR-000 → ADR-013) |
 | 57 | « 45+ runbooks » | 🟡 | **32** fichiers `*RUNBOOK*.md` (56 `.md` au total dans `docs/`) |
