@@ -48,7 +48,7 @@ vérification).
 | **L1.6** | **Diagnostic H1 exploitable** : nommer l'image qui refuse le tirage | CI (`database`) | ~0,2 h | message d'erreur citant l'image + test unitaire | **FAIT (2026-09-24)** — « Registry pull failed for <image> » ; comportement inchangé (aucun repli vert) |
 | **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) ; **dépassé le 25/09/2026 (lot H1)** : la cause racine est amont (MinIO retiré des deux registres publics) ⇒ le défaut est désormais une image **construite** depuis la release officielle, somme vérifiée par le builder ; les deux voies ci-dessus restent des surcharges (journal §5, lot H1) — **vérifié en CI : job `database` vert sur `5266fff`** |
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; restent hors lot : branchement du client mobile (**L3**, bloqué par le SDK Flutter), upload des clips (**D5 = c** : hors discours opérationnel, verrou ), octets hors-ligne (voir §3.2 ; **L2E** refuse désormais tout blob base64 dans `sync/push`) ; volet client verrouillé par **L2C** (`media-client-wiring`) |
-| **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré trois fois (§5, lot 3 : 24/09, 25/09 15:07 UTC, 25/09 16:42 UTC)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` (`000`) ; à faire depuis un poste Flutter 3.47.1 — portée déjà cadrée (D4 = correctif court) |
+| **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **LIVRÉE (2026-09-25)** sans SDK local : code + 12 tests **lancés par la CI** (job `flutter`, Flutter 3.47.1 ; verdict final en attente) — un `await` en lambda non-async a d'ailleurs été attrapé par la CI puis corrigé (§5) ; **reste à faire** : committer la résolution `pubspec.lock` publiée par la CI (annotations, en morceaux) puis `flutter pub get --enforce-lockfile` — et **relever le verdict final** du run (voir §5, « en attente ») |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | **FAIT (2026-09-25)** — décision **D2 = (a)** (purger) : migration 076, seuils 90 j / 365 j, suite `phase76` 15 assertions, 3 mutations détectées (§5) |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (**10 contrôles** au 25/09/2026, branche CI `quality`) + 6 documents corrigés ; prolongé par **L5.1** (vérité « workflows CI », §5) |
 | **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6 FAIT dans son ensemble** : L6.1 (sondes API/worker), L6.2 (k6 — critère mesuré par le banc en parité 500 ops, p95 1,4 s, gardien de discours), L6.3 (D3 — stub `compress_media` retiré, verrou anti-stub), L6.4 (D5 — vidéosurveillance retirée du discours opérationnel, verrou d'acquisition) |
@@ -62,9 +62,9 @@ exécutable, script k6 verrouillé en CI mais **non exécuté** ici), **L6.3** (
 retiré), **L6.4** (D5 : vidéosurveillance retirée du discours opérationnel), **L2C** (volet client de
 F5 verrouillé), **L2D** (photo hors ligne mesurée) et **L2E** (`sync/push` n'est pas un canal de
 fichiers : garde de payload + 413 explicite) sont faits. **Toutes les décisions D2–D5 sont
-tranchées** ; **D6** reste ouverte (option (b) fermée par L2E ; restent (a) via L3 et (c)) ; le seul
-lot non livré est **L3** (BLOQUÉE : SDK Flutter absent de l'environnement, `pub.dev` injoignable —
-outillage requis, aucune preuve compilable possible ici).
+tranchées** ; **D6** reste ouverte (option (b) fermée par L2E ; restent (a) via L3 et (c)) ; **L3 est
+livrée** (code + tests **lancés** par le job `flutter` de la CI, sans SDK dans l'environnement ; verdict final en attente — §5) ;
+il reste à committer la résolution `pubspec.lock` publiée par la CI et à relever le verdict final.
 
 ---
 
@@ -1102,7 +1102,7 @@ non gouverné.
   **413** (et non 500) avec message FR/AR ; `log_temperature` normal accepté ; rejeu déterministe.
 
 **Preuves exécutées** : `phase77` **17/17** (9 cas, PostgreSQL 18 réel) ; `http-exception.filter.spec.ts`
-**4/4** ; `claims-contract` **10/10** (compteurs : 71 suites `phaseNN`, 88 fichiers, **73 entrées**).
+**4/4** ; `claims-contract` **10/10** (compteurs : 71 suites `phaseNN`, 89 fichiers, **73 entrées**).
 Mutations (rouges, restaurations `diff -q` vérifiées) :
 ```
 F — garde de forme retiré (le base64 repasse)              rc=1  8 échecs (cas 2, 4×3, 6bis, 7bis, 9)
@@ -1183,6 +1183,62 @@ durcissement en uid 1000 est possible avec un volume neuf, à décider côté op
 Dockerfile). Le binaire reste **AGPL-3.0** : c'est celui de la release officielle, non modifié — si
 le produit ne veut plus embarquer MinIO du tout, c'est une décision produit (alternative S3
 managée), pas un correctif.
+
+### L3 — la session parent se renouvelle (et les erreurs ont une issue) (2026-09-25)
+
+**Le défaut, tel que l'audit le décrivait (item C2)** : l'access token dure **15 minutes** et
+**rien** ne le renouvelait dans `parent-mobile`. Passé ce délai, chaque appel rendait 401 : les
+écrans affichaient une erreur générique — ou, pire, un **indicateur de chargement infini** (trois
+écrans ne testaient que « pas encore de données ») — et le parent devait se reconnecter : application
+inutilisable. Décision **D4 = correctif court** (refresh + états d'erreur), pas d'offline-first.
+
+**Le blocage d'environnement, contourné honnêtement.** Aucun SDK Flutter ici (`pub.dev` **000**,
+trois mesures dans la journée) : écrire du Dart sans pouvoir le compiler violerait la règle du plan.
+Mais le job **`flutter` de la CI a le SDK épinglé (3.47.1)** et compile réellement les deux applications
+(analyse, tests, APK). Le lot a donc été livré « à l'aveugle côté poste », **la CI servant de
+compilateur et de banc de test** — et elle a joué son rôle : le premier run a rejeté le lot avec
+`lib/core/api_client.dart:196:20: Error: 'await' can only be used in 'async' or 'async*' methods`
+(un `await` dans une lambda non-async), corrigé au commit suivant. C'est plus fort qu'une relecture :
+l'erreur vient du compilateur qui construit le binaire livré.
+
+**Livré** :
+- `core/api_client.dart` — intercepteur 401 → refresh → rejeu **borné** (rejeu marqué, la route de
+  refresh ne peut pas déclencher de refresh) ; rafraîchissement **single-flight par futur partagé**
+  (`_refreshInFlight`) : des appels concurrents attendent le **même** refresh au lieu d'échouer —
+  le patron `bool _refreshing` du client staff-mobile fait précisément échouer les 401 simultanés,
+  ce qui est le cas normal d'un écran qui charge plusieurs ressources ; rotation **G1b** honorée (le
+  nouveau refresh token est persisté) ; refresh refusé → session **purgée** du keystore, erreur typée
+  `ParentSessionExpired`, `onSessionExpired` → retour à l'OTP ; erreurs typées `ParentApiException`
+  (`offline` / serveur / 401) ; magasin de jetons abstrait (`core/token_store.dart`) et adaptateur
+  HTTP injectable → testable **sans appareil ni réseau**.
+- `core/error_state.dart` + `feed_page`, `photos_page`, `consents_page`, `main.dart` — erreur testée
+  **avant** le chargement (fin des indicateurs infinis), session expirée → message de reconnexion
+  **sans** bouton « Réessayer » (insister ne sert à rien), hors-ligne distinct d'une panne serveur,
+  réessai explicite sinon ; la feuille d'absence n'avale plus l'échec (message visible).
+- **12 tests écrits, lancés par la CI** (`apps/parent-mobile/test/`) — *leur verdict n'a pas pu être relevé : jeton GitHub invalidé pendant le lot* : 8 tests de client (200 sans refresh ;
+  401 → 1 refresh + rejeu avec le jeton neuf + rotation persistée ; **5 appels simultanés en 401 →
+  exactement 1 refresh**, tous aboutissent ; refresh refusé → session purgée, un seul essai, retour
+  connexion ; pas de refresh token → session expirée sans appel réseau ; hors-ligne ; 500 ; contenu
+  photo par le même chemin) et 4 tests de widget (erreur → réessai qui aboutit ; hors-ligne ;
+  session expirée sans bouton trompeur ; liste vide sans indicateur bloqué).
+- `flutter.yml` — étape **`parent-mobile — tests`** (`flutter test`, journal publié en artefact) et
+  étape **lockfile** : résolution **contrainte** (`--enforce-lockfile`) dès que `pubspec.lock` est
+  versionné, sinon la résolution réelle du run est **publiée** (annotations) pour être committée.
+- Verrou statique `tests/tenant-isolation/parent-session-contract.test.mjs` (**7/7**, job `quality`
+  + bundle du gate D) : un seul point d'entrée de refresh dans `lib/`, single-flight (et refus
+  explicite du drapeau booléen), rejeu borné, purge + retour connexion, états d'erreur par écran,
+  tests **réellement lancés** par la CI (verdict en attente), contrôle du lockfile.
+
+**Méthode — un plafond qu'il faut connaître** : la première publication du lockfile est arrivée
+**tronquée** (3072 octets décodés, coupés en plein milieu) : une annotation GitHub est plafonnée à
+**4096 caractères**, et un lockfile tronqué ne résout plus rien. La publication est donc découpée en
+morceaux numérotés (`1/N`…), réassemblables — l'échec a été vu par la mesure, pas supposé.
+
+**En attente (dit tel quel)** : le **verdict final** du run `flutter` sur `e5ee4ac` (le jeton GitHub
+de l'environnement a été invalidé pendant l'attente — même panne que le 24/09 à la même heure) et le
+commit de `pubspec.lock`. Ce qui est déjà acquis : le lot **compile** (l'erreur du premier jet a été
+relevée puis corrigée) et les tests ont été exécutés — le correctif `photoContent` n'aurait jamais pu
+être poussé sans un compilateur réel.
 
 ## 6. Décisions en attente (propriétaire explicite)
 

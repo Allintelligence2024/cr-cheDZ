@@ -121,3 +121,20 @@ test('les tests d’exécution existent et sont joués par la CI', () => {
   assert.match(parentBlock, /working-directory: apps\/parent-mobile/,
     'les commandes parent doivent tourner dans apps/parent-mobile');
 });
+
+test('la résolution des dépendances parent est contrôlée, jamais implicite', () => {
+  // Sans `pubspec.lock` versionné, chaque run résout ce que pub.dev sert le
+  // jour J (une dépendance compromise ou simplement cassée change le binaire
+  // sans qu'aucun diff ne le montre). Deux états, deux comportements — et
+  // l'absence de lockfile n'est pas silencieuse : la résolution est PUBLIÉE
+  // (annotations, en morceaux : une annotation est plafonnée à 4096 caractères,
+  // mesuré — un envoi monobloc arrive tronqué et un lockfile tronqué ne résout
+  // plus rien) pour être committée.
+  const step = workflow.match(/name: parent-mobile — lockfile[\s\S]*?\n {6}- name:/);
+  assert.ok(step, 'étape de contrôle du lockfile absente de flutter.yml');
+  assert.match(step[0], /git ls-files --error-unmatch pubspec\.lock/, 'la présence doit être TESTÉE, pas supposée');
+  assert.match(step[0], /flutter pub get --enforce-lockfile/, 'lockfile versionné ⇒ résolution contrainte');
+  assert.match(step[0], /base64 -w0 pubspec\.lock/, 'lockfile absent ⇒ résolution publiée');
+  assert.match(step[0], /notice title=parent-mobile pubspec\.lock \$\{index\}\/\$\{total\}/,
+    'la publication doit être découpée (plafond de 4096 caractères par annotation)');
+});

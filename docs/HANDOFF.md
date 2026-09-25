@@ -427,7 +427,7 @@ strictement base64, **récursivement** → `PAYLOAD_BINARY_NOT_ALLOWED` (message
 **pas persisté** : ce qu'on refuse de stocker n'est pas stocké, même en « rejected » → rejeu
 déterministe. Preuves : `phase77-sync-payload-guard.api.test.mjs` (**17/17**, PG 18 réel + HTTP ;
 ajoutée au runner → **73 entrées**, libellé CI `phase3 → phase77`) ; `http-exception.filter.spec.ts`
-(4/4) ; `claims-contract` 10/10 (compteurs réactualisés : 71 suites `phaseNN`, 88 fichiers).
+(4/4) ; `claims-contract` 10/10 (compteurs réactualisés : 71 suites `phaseNN`, 89 fichiers).
 4 mutations rouges (garde de forme retiré → 8 échecs ; plafond retiré → 1 ; refus persisté → 7 ;
 filtre reverté → 2), restaurations `diff -q` ✓. **Gate D complet rejoué localement (25/09)** :
 rc=0, **74/74 suites vertes** (batterie 1467 s, rôles de production), `phase77` **22 assertions ✓**,
@@ -440,6 +440,40 @@ tombait dans la branche générique du filtre global. `http-exception.filter.ts`
 envoi, pas croire à une panne. **Conséquence D6** : l'option (b) (« base64 dans `sync/push` ») est
 **fermée côté serveur** ; restent (a) file locale + `POST /media/upload` (recommandée, avec L3) et
 (c) retrait de la voie.
+
+
+### Complément 2026-09-25 — lot L3 : la session parent se renouvelle (et les erreurs ont une issue)
+
+**Défaut (audit 2026-09-24, item C2)** : l'access token dure **15 minutes** et rien ne le renouvelait
+dans `parent-mobile` (le fichier est `lib/core/api_client.dart` — la clôture d'audit citait
+`lib/core/network/…`, chemin qui n'existe pas). Passé ce délai, chaque appel rendait 401 : les écrans
+affichaient une erreur générique ou, pour trois d'entre eux, un **indicateur de chargement infini**.
+Décision **D4 = correctif court** : refresh + états d'erreur, pas d'offline-first.
+
+**Comment le lot a pu être prouvé sans SDK local** : il n'y a toujours ni Flutter ni `pub.dev` dans
+l'environnement (`000`, mesuré 3 fois le 25/09). Mais le job `flutter` de la CI a le SDK **3.47.1**
+épinglé et compile réellement les applications : il a donc servi de compilateur et de banc de test —
+et il a attrapé au premier run une erreur de compilation réelle
+(`'await' can only be used in 'async' or 'async*' methods`, dans `photoContent`), corrigée au commit
+suivant. C'est plus fort qu'une relecture : le verdict vient du compilateur qui produit le binaire.
+
+**Livré** : intercepteur 401 → refresh → rejeu borné ; rafraîchissement **single-flight par futur
+partagé** (`_refreshInFlight`) — les 401 simultanés attendent le MÊME refresh, là où le drapeau
+booléen du client staff-mobile les fait échouer ; rotation G1b persistée ; refresh refusé → session
+**purgée** + `ParentSessionExpired` + retour à l'OTP (`main.dart`) ; erreurs typées
+(`offline`/serveur/401) et état d'erreur homogène (`core/error_state.dart`) sur le fil, les photos,
+les consentements et la liste d'enfants ; feuille d'absence qui n'avale plus l'échec ;
+`apps/parent-mobile/test/` (12 tests) lancés par la CI (verdict final en attente, voir plus bas) ; verrou statique
+`parent-session-contract` (7/7, `quality` + gate D).
+
+**Lockfile** : `flutter.yml` contraint la résolution (`--enforce-lockfile`) dès que `pubspec.lock`
+est versionné, et sinon **publie** la résolution réelle du run pour qu'elle soit committée — en
+morceaux numérotés, parce qu'une annotation GitHub est plafonnée à **4096 caractères** (mesuré : le
+premier envoi est arrivé tronqué, 3072 octets, donc inexploitable).
+
+**En attente (dit tel quel)** : commit de `pubspec.lock` + relevé du **verdict final** du job
+`flutter` — le jeton GitHub de l'environnement a été invalidé pendant le lot (même panne que le
+24/09 à la même heure d'horloge), donc la CI a tourné mais son verdict n'a pas pu être lu.
 
 ## Mise à jour 2026-09-24 (soir) — CI : régression du lot 1 corrigée, verrou ajouté
 
@@ -512,7 +546,7 @@ qualifiée, phrase fausse canonique réintroduite, compteur de suites périmé, 
 healthchecks périmé, sonde renommée sur disque) → mutation : 6 rouges ; restaurations → 9/9 vert
 (journal au plan §5).
 Mesure du jour : 198 routes / 50 sans `@Roles`, 76 migrations, 73 entrées, 71 suites `phaseNN`,
-88 fichiers d'isolation, 14 ADR, 32 runbooks.
+89 fichiers d'isolation, 14 ADR, 32 runbooks.
 
 ---
 
