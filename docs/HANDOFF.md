@@ -423,7 +423,9 @@ déterministe. Preuves : `phase77-sync-payload-guard.api.test.mjs` (**17/17**, P
 ajoutée au runner → **73 entrées**, libellé CI `phase3 → phase77`) ; `http-exception.filter.spec.ts`
 (4/4) ; `claims-contract` 10/10 (compteurs réactualisés : 71 suites `phaseNN`, 88 fichiers).
 4 mutations rouges (garde de forme retiré → 8 échecs ; plafond retiré → 1 ; refus persisté → 7 ;
-filtre reverté → 2), restaurations `diff -q` ✓.
+filtre reverté → 2), restaurations `diff -q` ✓. **Gate D complet rejoué localement (25/09)** :
+rc=0, **74/74 suites vertes** (batterie 1467 s, rôles de production), `phase77` **22 assertions ✓**,
+et aucune suite antérieure cassée par le garde de forme.
 
 **Défaut réel découvert au passage** : un corps de ~300 Ko rendait **500 « erreur interne »** au lieu
 de 413 — l'erreur du body-parser d'Express (`PayloadTooLargeError`) n'est pas une `HttpException` et

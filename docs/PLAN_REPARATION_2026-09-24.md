@@ -910,7 +910,7 @@ restaurations (diff -q avec la sauvegarde)                       identiques ✓ 
 **Gate D complet rejoué localement le 25/09/2026** (72 entrées SUITES + le garde anti-bypass,
 rôles de production `creche_app`/`creche_migrator`, PG 18.4 réel) : **rc=0, « 73/73 suites vertes »**
 (1385 s), avec `PASS phase76-messaging-retention.pg.test.mjs` — les notices H2a–H2l/G1–G5 ont été
-ré-émises à l'identique. Le précédent rejeu (24/09, avant 076) affichait 72/72 : le passage à 73 est
+ré-émises à l'identique. *(Rejeu suivant, après `phase77` : 74/74, journal L2E.)* Le précédent rejeu (24/09, avant 076) affichait 72/72 : le passage à 73 est
 la conséquence directe de l'ajout de la suite, pas d'un changement de périmètre.
 
 **Outillage re-validé après la migration** : `migrate --status` (076 appliquée, checksums),
@@ -1107,6 +1107,15 @@ H — le refus est PERSISTÉ (on stocke ce qu'on refuse)      rc=1  7 échecs (c
 I — filtre : le 413 redevient 500                          rc=1  2 échecs (cas 7 + message bilingue)
 restaurations (diff -q sync.service.ts, http-exception.filter.ts)   identiques ✓ → 17/17
 ```
+
+**Gate D complet rejoué localement le 25/09/2026 après le lot** (73 entrées SUITES + le garde
+anti-bypass, rôles de production `creche_app`/`creche_migrator`, PG 18.4 réel) : **rc=0,
+« 74/74 suites vertes »** (batterie 1467 s), avec `PASS phase77-sync-payload-guard.api.test.mjs
+22 assertions ✓` et `PASS phase76-messaging-retention.pg.test.mjs 21 assertions ✓`. Le rejeu
+précédent (même journée, avant `phase77`) affichait 73/73 : le passage à 74 est la conséquence
+directe de l'ajout de la suite, pas d'un changement de périmètre. Le garde de forme **ne casse
+aucune suite existante** (le payload de synchronisation de tous les scénarios antérieurs reste
+sous les seuils).
 
 **Périmètre assumé / limites** :
 - le garde est une règle de **forme**, pas un quota métier : une chaîne de 4097 caractères

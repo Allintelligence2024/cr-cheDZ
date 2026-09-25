@@ -229,6 +229,7 @@ exit code 1` — **aucune autre suite en échec**.
 |---|---|---|---|
 | `9a33e37` (verdict gate D, docs) | **terminé** `14:54:53 → 15:22:52` (28 min), `rc=1` — **H1 seul** | `success` | étape « Registre Quay (facultatif — H1) » = **`skipped`** (aucun secret de dépôt) ; les échecs sont **exactement** `H1 staging failure` + `H1 dev failure` et leur trace d'appel — **aucune annotation « Suite en échec »** |
 | `3f88481` (lot L6.4 / D5) | **terminé** `14:57:08 → 15:27:01` (30 min), `rc=1` — **H1 seul** | `success` | même signature : `H1 staging failure`, `H1 staging 1`, `H1 dev failure` (+ « exit code 1 ») — rien d'autre |
+| `beb3f27` (lot L2D) — 3 workflows | `ci` : **terminé**, `rc=1` — **H1 seul** ; `flutter` : `success` ; `docker` : `success` | `quality` `success`, `support-console` `success`, `e2e` `success`, `admin-web` `success`, `backup-drill` `success`, `security` `success` | `ci` : step 14 « Suites d'isolation (garde RLS anti-bypass + 72 suites — isolation, phase3 → phase76) » = `failure`, mais annotations **failure** = `H1 staging failure`, `H1 dev failure`, `Process completed with exit code 1.` et **deux** « Registry pull failed for `quay.io/minio/minio@sha256:14cea49…` » — **aucune annotation « Suite en échec »** |
 
 **Comment on sait que la batterie entière — `phase76` compris — est passée en CI** (chaîne
 explicite, pour ne pas conclure d'un log illisible) :
@@ -242,7 +243,12 @@ explicite, pour ne pas conclure d'un log illisible) :
 3. le runner émet **une annotation par suite fautive** (`::error title=Suite en échec::<suite>`,
    `run-isolation-suites.sh:153`) — et les check-runs des deux commits n'en portent **aucune** ;
 4. la durée observée (28–30 min) correspond au trajet complet (builds H1 + 72 suites), pas à un
-   arrêt précoce.
+   arrêt précoce ;
+5. relevé du 25/09 16:15 sur `beb3f27` (`36155006147`) : les annotations `failure` du check-run du
+   job `database` sont **exactement** les deux lignes H1, leurs deux tirages Quay refusés et le
+   `exit code 1` — le décompte d'annotations ne contient **pas** le mot « Suite ». Le step porte
+   encore l'ancien libellé (« 72 suites — phase3 → phase76 ») : le commit suivant (`ff23058`, lot
+   L2E) renomme le step en « 73 suites — phase3 → phase77 ».
 
 Conclusion : **H1 reste le seul rouge, par conception** (tirage anonyme de `quay.io/minio/minio`
 refusé depuis le runner), et `phase76-messaging-retention.pg.test.mjs` — la suite du lot L4 — a
