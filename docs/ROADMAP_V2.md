@@ -28,7 +28,7 @@
 | P1 | **Grafana + alertes** | Dashboard API/worker/DB ; alertes erreur rate > 1 %, jobs bloqués, disque |
 | P1 | **Archivage rétention** (S3 glacier) | Complément de la purge (audit > 5 ans archivé, pas seulement supprimé) |
 | P2 | **Backups chiffrés programmés** | Cron `scripts/backup.sh` + copie hors-site ; exercice de restauration mensuel |
-| P2 | **Load tests k6 en CI** | `tests/load/sync.k6.js` prêt ; gate p95 < 2 s |
+| P2 | **Load tests k6 en CI** | `tests/load/sync.k6.js` prêt ; gate p95 < 2 s — **non exécuté** aujourd'hui : le critère est déjà mesuré par `npm run test:capacity` en parité (500 ops, §5 du plan de réparation) ; reste à le rejouer sur une cible prod-like avec k6 |
 
 ## Mobile
 

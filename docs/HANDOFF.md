@@ -149,7 +149,12 @@ RESTE À FAIRE (non fait, à ne pas déclarer fini) :
 - Workflows CI (.github/workflows/ci.yml + docker.yml) : prêts, NON poussés
   (permission `workflows` de la GitHub App manquante — voir docs/CI-RESTORE.md ;
   sondes du 2026-08-02 : toujours refusé).
-- e2e Playwright (spec écrit, navigateur absent) ; k6 (script prêt, binaire absent).
+- e2e Playwright (spec écrit, navigateur absent).
+- k6 (script `tests/load/sync.k6.js` prêt, binaire absent) : **non exécuté** ; son critère
+  (p95 sync push < 2 s pour 500 ops) est mesuré par le banc `npm run test:capacity` en
+  parité (50 pushes × 10 ops = 500 ops : p95 1,4 s, 500/500 écritures persistées,
+  25/09/2026) ; le gardien `scripts/verify-load-tests.mjs` (CI, job `quality`) vérifie la
+  structure du script, son seuil et le fait que la doc ne le présente pas comme exécuté.
 - Notification ANPDP SMTP : implémentée, chemin 503 testé, pas testée de bout
   en bout (pas de SMTP).
 - parent-mobile / staff-mobile Flutter : SDK absent → Dart écrit, jamais compilé.

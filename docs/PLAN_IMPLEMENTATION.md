@@ -513,7 +513,7 @@ Légende estimation : **PD** = jours-personne nets (à majorer de +25–35 % : r
 **✅ Tâches**
 1. Observabilité — **✅ partiel** : `/metrics` Prometheus (compteurs HTTP, histogramme, jobs/notifications/factures en file, uptime — aucun PII), healthcheck public ; logs JSON/correlation id ✅ (nginx existant) ; Grafana/alertes ⏳ (infra).
 2. Sentry — ⏳ non configuré (DSN requis).
-3. Performance — **✅ index Phase 11** (migration 033 : guardians(user_id), fil du jour, inbox, contrats, caisse, allocations, incidents) ; **load test k6** ⏳ script écrit (`tests/load/sync.k6.js`), non exécuté (k6 absent).
+3. Performance — **✅ index Phase 11** (migration 033 : guardians(user_id), fil du jour, inbox, contrats, caisse, allocations, incidents) ; **load test k6** ⏳ script écrit (`tests/load/sync.k6.js`), non exécuté (k6 absent) ; le **test de charge exécuté** est `npm run test:capacity` (`capacity-bench.mjs`, Node + PG réels), dont la variante en parité k6 (500 ops en 50 pushes × 10) a été mesurée le 25/09/2026 : p95 sync push **1 406 ms**, 0 erreur, 500/500 événements persistés, tous budgets tenus.
 4. Sécurité — **✅ partiel** : `npm audit` durci (@nestjs/config 4, nodemailer 9, overrides) + résidus documentés `SECURITY.md` (migration NestJS 11 planifiée) ; workflows CodeQL/Semgrep ⏳ (permission workflows) ; test de révocation d'appareil ✅ (S2) ; URLs signées ✅ (revue).
 5. Backups — **✅ script** `scripts/backup.sh` (pg_dump + gzip + GPG AES256, rétention 7 j) ; cron + **exercice de restauration staging < 30 min** ⏳ (infra).
 6. Runbook ops — **✅** `docs/RUNBOOK.md` (déploiement, rollback, restauration, incidents, expand/contract).
@@ -521,7 +521,7 @@ Légende estimation : **PD** = jours-personne nets (à majorer de +25–35 % : r
 
 **🧪 Critères d'acceptation**
 - [x] /metrics Prometheus public sans PII (testé phase11) ; rétention 5 ans testée ; healthcheck public
-- [ ] k6 : p95 sync push < 2 s pour 500 ops (script écrit, non exécuté)
+- [x] Charge : p95 sync push < 2 s pour 500 ops — **mesuré par le banc en parité k6** (50 pushes × 10 ops : p95 1 406 ms, 25/09/2026) ; le script `sync.k6.js` lui-même reste non exécuté (binaire k6 absent) et doit être rejoué sur une cible prod-like
 - [ ] Restauration complète en staging < 30 min (procédure documentée, exercice à programmer)
 - [ ] 0 vulnérabilité critique au scan (résidus moderate/high documentés — NestJS 11 planifié)
 - [ ] Staging prouvé sans données réelles (script d'anonymisation prêt, contrôle CI ⏳)

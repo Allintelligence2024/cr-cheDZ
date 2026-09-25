@@ -1,7 +1,19 @@
 /**
- * Load test k6 — Phase 11 (à exécuter avec k6, absent de la sandbox).
+ * Load test k6 — Phase 11.
+ *
+ * STATUT (2026-09-25) : **NON EXÉCUTÉ dans les preuves de ce dépôt** — aucun
+ * binaire k6 n'est disponible dans l'environnement d'exécution, et les
+ * distributions (`dl.k6.io`, assets GitHub) sont injoignables de là où le
+ * dépôt est vérifié. Ce fichier reste l'artefact d'exploitation à lancer
+ * depuis un poste (ou une cible VPS) qui dispose de k6 :
  *
  *   k6 run tests/load/sync.k6.js
+ *
+ * La mesure EXÉCUTABLE de référence est le banc Node, sans k6 :
+ *
+ *   # parité exacte avec ce scénario : 50 pushes × 10 ops = 500 ops
+ *   DATABASE_URL=postgres://…/creche_test ORGS=10 DEVICES=5 OPS=10 BURST_ROUNDS=0 \
+ *     node tests/load/capacity-bench.mjs
  *
  * Scénario : 50 itérations d'un lot de 10 opérations de synchronisation
  * offline en parallèle (500 ops sync push) + logins + lecture du fil du jour.

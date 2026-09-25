@@ -116,6 +116,54 @@ const loadDoc = readFileSync(join(repo, 'tests/load/capacity-bench.mjs'), 'utf8'
 const hasBudgetComment = /Budgets.*cliquet/.test(loadDoc);
 ok('bench : commentaire « cliquet anti-régression » présent', hasBudgetComment);
 
+// ── 5. k6 : discours « tests de charge » honnête (2026-09-25) ────────────
+//
+// Le plan de réparation laissait deux issues : exécuter `sync.k6.js` sur une
+// cible prod-like et publier les résultats, **ou** le retirer du discours
+// « tests de charge ». Ici, k6 n'est pas installable (binaire absent,
+// distributions injoignables) : l'issue retenue est de (a) mesurer le critère
+// avec le banc exécutable, (b) dire explicitement que le script k6, lui, n'est
+// pas exécuté. Ces contrôles empêchent la doc de se « regonfler » ensuite.
+const k6Header = k6.slice(0, Math.max(0, k6.indexOf('import http')));
+ok('k6 : en-tête déclarant « NON EXÉCUTÉ » (statut honnête)',
+   /NON EXÉCUTÉ/.test(k6Header),
+   k6Header.length ? 'en-tête analysé' : 'en-tête introuvable');
+
+// Promesse produit à ne pas relâcher : p95 < 2 s (issue du plan Phase 11).
+ok('k6 : seuil p95 ≤ 2000 ms (promesse non relâchée)',
+   Number.isFinite(k6Int) && k6Int <= 2000,
+   `p95<${k6Int}ms`);
+
+// La parité k6 → banc doit être documentée avec la commande rejouable.
+const repPlan = readFileSync(join(repo, 'docs/PLAN_REPARATION_2026-09-24.md'), 'utf8');
+const parityCmd = /ORGS=10\s+DEVICES=5\s+OPS=10\s+BURST_ROUNDS=0/.test(repPlan);
+ok('docs : commande de parité k6 (50 pushes × 10 ops = 500 ops) documentée',
+   parityCmd,
+   parityCmd ? 'PLAN_REPARATION §5' : 'commande absente — preuve non rejouable');
+
+// Aucun document « vivant » ne doit présenter k6 comme exécuté. Les rapports
+// historiques (PHASE4-MANUAL, PLAN_EXECUTION_*, PLAN_IMPL…) ne sont pas
+// scannés : ils datent leurs propres constats. La liste ci-dessous est celle
+// des documents qui décrivent l'état COURANT.
+const LIVE_DOCS = ['README.md', 'docs/HANDOFF.md', 'docs/ROADMAP_V2.md',
+  'docs/ANALYSE_PILIERS_MANQUANTS.md', 'docs/PLAN_REPARATION_2026-09-24.md'];
+const HONEST = /non exécut|jamais exécut|pas été exécut|binaire absent|sans k6|capacity-bench|test:capacity|parité|BLOQUÉE|k6 absent|injoignable|impossible/i;
+// Contrôle au paragraphe (et non à la ligne) : un constat d'honnêteté peut
+// légitimement tenir sur la phrase suivante dans de la prose markdown.
+const offenders = [];
+for (const rel of LIVE_DOCS) {
+  const blocks = readFileSync(join(repo, rel), 'utf8').split(/\n[ \t]*\n/);
+  let line = 1;
+  for (const block of blocks) {
+    const isHeading = block.split('\n').every((l) => /^#{1,6} /.test(l.trim()) || l.trim() === '');
+    if (!isHeading && /\bk6\b/.test(block) && !HONEST.test(block)) offenders.push(`${rel}:${line}`);
+    line += block.split('\n').length + 1;
+  }
+}
+ok('docs vivants : chaque mention de k6 dit qu\'il n\'est pas exécuté (ou renvoie au banc)',
+   offenders.length === 0,
+   offenders.length ? offenders.join(', ') : `${LIVE_DOCS.length} documents contrôlés`);
+
 // ── Rapport ─────────────────────────────────────────────────────────────
 const passed = checks.filter((c) => c.pass).length;
 const failed = checks.filter((c) => !c.pass);
@@ -144,5 +192,7 @@ console.log('\n✓ Sanity checks load tests : OK.');
 console.log('  Note : ce script valide la STRUCTURE des tests de charge.');
 console.log('  Pour exécuter les tests réels :');
 console.log('    - capacity-bench.mjs : DATABASE_URL=postgres://… node tests/load/capacity-bench.mjs');
-console.log('    - sync.k6.js : k6 run tests/load/sync.k6.js (sur VPS prod-like, pas en sandbox)');
+console.log('      (parité k6 — 500 ops en 50 pushes × 10 : ORGS=10 DEVICES=5 OPS=10 BURST_ROUNDS=0)');
+console.log('    - sync.k6.js : NON EXÉCUTÉ ici (binaire k6 absent) — k6 run tests/load/sync.k6.js');
+console.log('      depuis un poste ou une cible VPS qui dispose de k6');
 process.exit(0);

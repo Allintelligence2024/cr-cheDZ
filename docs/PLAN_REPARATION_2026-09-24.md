@@ -51,13 +51,14 @@ vérification).
 | **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **BLOQUÉE — outillage, mesuré (§5, lot 3)** : ni SDK Flutter ni accès `pub.dev`/`storage.googleapis.com` ici ; à faire depuis un poste Flutter 3.47.1 |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | décision requise |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (9 contrôles, branche CI `quality`) + 6 documents corrigés |
-| **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6.1 (sondes API + worker) FAIT** ; restent D3 (`compress_media`) et k6 |
+| **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6.1 (sondes) FAIT**, **L6.2 (k6) FAIT** : critère mesuré par le banc en parité k6 (500 ops, p95 1,4 s) + gardien de discours ; reste **D3** (`compress_media`, décision produit) |
 
 **Ordre recommandé** : L1 (fait) → **L2** (bloque l'usage réel) → L3 (bloque les parents) → L5
 (pas de dépendance, peut glisser entre les deux) → L4 (attend une décision DPO) → L6.
 **État au 2026-09-24 (soir)** : L1 (+ L1.5, L1.6, L1.7), L2A, L2B, **L5** et **L6.1** sont faits et prouvés ; L3 reste
 bloqué par l'absence de SDK Flutter dans l'environnement d'exécution (aucune preuve compilée
-possible) ; L4 attend la décision DPO ; il ne reste de L6 que D3 (`compress_media`) et k6.
+possible) ; L4 attend la décision DPO ; il ne reste de L6 que D3 (`compress_media`), qui attend une décision produit : k6 est tranché
+(L6.2 — critère mesuré par le banc exécutable, script k6 verrouillé en CI mais **non exécuté** ici).
 
 ---
 
@@ -432,6 +433,13 @@ voulue — mettre à jour le document, jamais le contrat.
   (sharp/worker) ou retirer du handler (un stub permanent est une dette silencieuse) ;
 - `tests/load/sync.k6.js` : **jamais exécuté** (k6 absent) — soit l'exécuter sur une cible
   prod-like et publier les résultats, soit le retirer du discours « tests de charge ».
+  **Tranché (L6.2, 25/09)** : k6 n'est pas installable ici (binaire absent, `dl.k6.io` et les
+  assets GitHub injoignables, ni Docker ni Go) ⇒ le **critère** est désormais mesuré par le banc
+  exécutable en **parité exacte** avec le scénario k6 (50 pushes × 10 ops = 500 ops : p95
+  **1 406 ms** < 2 000 ms, 0 erreur, 500/500 écritures persistées), et la doc ne présente plus k6
+  comme un test exécuté. Le script reste l'artefact ops à lancer sur une cible qui a k6 ;
+  `scripts/verify-load-tests.mjs` (job `quality`) verrouille son seuil p95 ≤ 2 s et le fait que
+  les documents vivants disent qu'il n'est pas exécuté. Preuves : §5 « L6.2 ».
 
 ---
 
@@ -718,6 +726,67 @@ restaurations (diff -q avec la sauvegarde)      36/36 verts
 inchangée, aucun régression introduite. Deuxième run du jour (`36139870972`, `f442176`) : même
 signature H1 ; son `quality` rouge est une **instabilité** (rejeu local `dist/` supprimé : 3/3 vert,
 117+5 tests) — voir `docs/CI-DATABASE-JOB-FINDINGS.md`, section « Anomalie `quality` du 25/09 ».
+
+### L6.2 — k6 : mesurer le critère avec le banc exécutable, aligner le discours (2026-09-25)
+
+**Diagnostic (mesuré)** : `which k6` → absent ; `dl.k6.io` → **000** (injoignable) ; l'asset de
+release GitHub répond **302** vers `objects.githubusercontent.com`, lui aussi injoignable (000) ;
+ni `docker` ni `go` dans l'environnement. Installer k6 ici est donc **impossible** — même
+constat que le SDK Flutter (L3). Aucun paquet npm ne fournit le binaire (`k6@0.0.0` = paquet
+factice d'autocomplétion).
+
+**Issue retenue** (le plan en laissait deux : exécuter sur une cible prod-like **ou** retirer du
+discours) : le **critère** est mesuré par le banc exécutable, en **parité exacte** avec le
+scénario k6, et la documentation cesse de présenter k6 comme un test exécuté.
+
+**Mesure de parité (réelle, 2 vCPU, PG 18.4 local, API compilée en processus)** :
+
+```bash
+# 50 pushes concurrents × 10 ops = 500 ops — la forme exacte du scénario k6
+DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test \
+  ORGS=10 DEVICES=5 OPS=10 BURST_ROUNDS=0 node tests/load/capacity-bench.mjs
+# → 290 requêtes en 4,9 s — 5xx: 0, réponses inattendues: 0
+#   ✓ login      n=20  p95 1909 ms (budget 3000)
+#   ✓ checkin    n=150 p95   95 ms (budget 250)
+#   ✓ sync_push  n=50  p95 1406 ms (budget 3000 ; critère k6 : < 2000)   ← verdict
+#   ✓ feed       n=10  p95   78 ms (budget 1500)
+#   ✓ dashboard  n=10  p95   90 ms (budget 1500)
+#   ✓ événements de journal persistés : 500 / 500 — ✓ Capacité (10 structures simultanées)
+```
+
+Variante « taille de lot » (10 ops par requête, un tour de rafale) : `ORGS=12 DEVICES=2 OPS=10
+BURST_ROUNDS=1` → 480 ops en 48 requêtes, p95 sync_push **1807 ms**, 480/480 écritures, 0 erreur
+(budgets tenus). Sensibilité mesurée avec des lots de 21 ops (`OPS=21 BURST_ROUNDS=3` → 2 016
+écritures) : p95 sync_push 2 909 ms (budget 3 000 ✓) mais p95 dashboard 1 545 ms **> budget
+1 500** ⇒ le cliquet `dashboard` est serré sur 2 vCPU ; cette exécution n'est pas retenue comme
+verdict (elle change deux variables à la fois) et est consignée comme sensibilité.
+
+**Ce qui reste à faire (dépend d'un poste/cible, pas du code)** : rejouer `k6 run
+tests/load/sync.k6.js` (toujours **non exécuté** ici) sur une cible prod-like (S4 de `docs/PLAN_REMEDIATION_FINAL.md`). Le
+script n'est pas retiré : il est l'artefact ops de cette exécution-là.
+
+**Verrou ajouté** (`scripts/verify-load-tests.mjs`, déjà câblé dans le job `quality`) — 4
+contrôles de plus, 18 au total : en-tête du script déclarant **« NON EXÉCUTÉ »** ; seuil
+`p(95) ≤ 2000 ms` non relâchable ; **commande de parité documentée** ; et « aucun document vivant
+(README, HANDOFF, ROADMAP_V2, ANALYSE_PILIERS_MANQUANTS, ce plan) ne présente k6 comme exécuté »
+(contrôle par **paragraphe**, pas par ligne : un constat d'honnêteté peut tenir sur la phrase
+suivante).
+
+**Preuve que le verrou mord** : il est **passé rouge avant** la mise à jour des documents
+(2 contrôles en échec : commande de parité absente + 4 mentions sans marqueur), puis vert (18/18)
+après. Mutations exécutées sur le verrou, restaurations `diff -q` vérifiées :
+
+```
+P  — en-tête k6 : marqueur « NON EXÉCUTÉ » retiré      rc=1  ['k6 : en-tête déclarant « NON EXÉCUTÉ »']
+P' — seuil k6 relâché (p(95)<3000)                     rc=1  ['k6 : seuil p95 ≤ 2000 ms (promesse non relâchée) — p95<3000ms']
+Q  — README affirme que k6 tourne en CI                rc=1  ['docs vivants … — README.md:40']
+R  — commande de parité retirée de ce plan             rc=1  ['docs : commande de parité k6 … documentée']
+restaurations (diff -q avec les sauvegardes)           identiques ✓
+```
+
+Une cinquième mutation a été **écartée comme invalide** : supprimer le gardien lui-même ne peut pas
+être détecté par le gardien (auto-référence) — c'est le rôle de `check-guards-wired.mjs`, qui exige
+que tout script `verify-*` de `scripts/` soit appelé par un workflow.
 
 ## 6. Décisions en attente (propriétaire explicite)
 
