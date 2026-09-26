@@ -544,6 +544,13 @@ le chemin frère `journal` a été relu et **valide** bien (`childOfTenant`, `ro
 l'enfant, jamais du client). Un balayage systématique des autres modules demande sa propre décision et
 ses propres bancs — il est donc **ouvert, nommé ici**, et non maquillé en « rien à signaler ».
 
+**Verdict CI du lot L2H** — `ci` `36238450157` (`dc55624`, correctif + banc + verrou) : **7/7 jobs
+verts**, `database` inclus (le gate D rejoue `phase67` avec ses trois nouvelles assertions) ;
+`flutter` **succès**. `docker` de ce SHA a été **annulé** non par un échec mais par la concurrence du
+workflow (`docker.yml` : `cancel-in-progress: true`), le push documentaire suivant ayant pris sa place
+— le `docker` `36238470882` de la tête `18f2705` est **succès**. `ci` `36238470721` (`18f2705`) :
+**7/7 verts**. Relevé, pas supposé.
+
 **Verdict CI du lot (`79077a8`) — TOUT VERT.** `ci` `36234555506` **7/7 jobs** (`database` inclus),
 `flutter` `36234555547` **succès**, `docker` `36234555526` **succès**. Le gate D rejoue `phase67` sur
 PostgreSQL réel : la nouvelle assertion (« la colonne doit valoir `false` ») y passe, donc le correctif

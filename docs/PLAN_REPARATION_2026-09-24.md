@@ -1200,6 +1200,13 @@ le chemin frère `journal` a été relu et **valide** bien (`childOfTenant`, `ro
 l'enfant, jamais du client). Un balayage systématique des autres modules demande sa propre décision et
 ses propres bancs — il est donc **ouvert, nommé ici**, et non maquillé en « rien à signaler ».
 
+**Verdict CI du lot L2H** — `ci` `36238450157` (`dc55624`, correctif + banc + verrou) : **7/7 jobs
+verts**, `database` inclus (le gate D rejoue `phase67` avec ses trois nouvelles assertions) ;
+`flutter` **succès**. `docker` de ce SHA a été **annulé** non par un échec mais par la concurrence du
+workflow (`docker.yml` : `cancel-in-progress: true`), le push documentaire suivant ayant pris sa place
+— le `docker` `36238470882` de la tête `18f2705` est **succès**. `ci` `36238470721` (`18f2705`) :
+**7/7 verts**. Relevé, pas supposé.
+
 ### L2D — Photos hors ligne : la limitation devient mesurée, et le contournement verrouillé (2026-09-25)
 
 **Constat (déjà documenté, désormais exécutable)** : la commande `add_photo` de `POST /sync/push`
