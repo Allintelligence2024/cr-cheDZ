@@ -1257,7 +1257,20 @@ restaurée → 3/3 et « Phase 58 validée ». Les suites qui font des pointages
 `phase35`, `phase36`, `phase58`, `phase7`, `phase9`, `phase13`, `phase16`) sont couvertes par le gate D,
 qui a été rejoué en entier après le correctif.
 
-**Ce que L2I ne fait pas** : il ne vérifie pas que le `site_id` fourni est *cohérent* avec l'enfant
+**Ce que L2I ne fait pas**
+
+**Rejeu L2I du 26/09 (mesure locale, après le correctif)** : gate D **exit 0** — « 74/74 suites
+vertes » (1 431 s), `phase58` et sa section 10 comprises, plus les contrôles E1–E6. C'est la preuve
+exécutée côté base : la garde refuse le site hors périmètre sans casser un seul parcours qui pointe
+(HTTP **et** sync). Le compte reste 74 : ce lot **étend** `phase58`, il n'ajoute pas de suite — donc
+aucun compteur de `claims-contract` ne bouge.
+
+**Verdict CI du lot L2I (`f925d37`) — TOUT VERT.** `ci` `36253026096` **7/7 jobs** (`admin-web`,
+`backup-drill`, `support-console`, `database`, `e2e`, `security`, `quality`), `flutter` **succès**,
+`docker` **succès** ; annotations `F2 Flutter passed` (59 tests), `F4 Flutter API passed` (7 tests),
+`G security`, `H2 confidentiality`, `H1 dev`, `H1 staging`. Côté base, le job `database` rejoue la
+batterie complète : le refus du site hors périmètre y tient sur PostgreSQL réel, à côté des parcours
+légitimes qui pointent (HTTP et sync) — le gate D local avait déjà rendu **exit 0 / 74 suites**. : il ne vérifie pas que le `site_id` fourni est *cohérent* avec l'enfant
 (un enfant du site 1 peut être pointé « au site 2 » de la même organisation — cas légitime : accueil
 dans un autre bâtiment). Il garantit seulement que le site appartient au **même tenant**.
 
