@@ -1134,7 +1134,13 @@ réel, le jour où il existera, pourra se déclarer et sera recopié. Le chemin 
   `✗ colonne=true (défaut attendu : false)` et le verrou tombe à **6/7** ; restauration → **7/7** et
   « Phase 67 validée ».
 
-**Ce que L2G ne fait pas** : il n'implémente **pas** le retrait EXIF (ni côté client, ni côté serveur).
+**Ce que L2G ne fait pas**
+
+**Verdict CI du lot (`79077a8`) — TOUT VERT.** `ci` `36234555506` **7/7 jobs** (`database` inclus),
+`flutter` `36234555547` **succès**, `docker` `36234555526` **succès**. Le gate D rejoue `phase67` sur
+PostgreSQL réel : la nouvelle assertion (« la colonne doit valoir `false` ») y passe, donc le correctif
+est prouvé par la CI et pas seulement en local. Annotations du run : `F2 Flutter passed` (59 tests),
+`F4 Flutter API passed` (7 tests), `G security`, `H2 confidentiality`, `H1 dev`, `H1 staging`. : il n'implémente **pas** le retrait EXIF (ni côté client, ni côté serveur).
 La différence avec avant est que plus aucun acteur n'affirme l'avoir fait.
 
 Session de preuve locale : `npm ci` (929 paquets), builds `api` + `worker`, PostgreSQL 18.4 embarqué

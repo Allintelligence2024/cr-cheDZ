@@ -499,6 +499,12 @@ par `phase67` après un upload nominal (elle doit valoir `false`) et un verrou s
 `colonne=true` et verrou 6/7. Le retrait EXIF lui-même reste non implémenté — mais plus personne ne
 l'affirme.
 
+**Verdict CI du lot (`79077a8`) — TOUT VERT.** `ci` `36234555506` **7/7 jobs** (`database` inclus),
+`flutter` `36234555547` **succès**, `docker` `36234555526` **succès**. Le gate D rejoue `phase67` sur
+PostgreSQL réel : la nouvelle assertion (« la colonne doit valoir `false` ») y passe, donc le correctif
+est prouvé par la CI et pas seulement en local. Annotations du run : `F2 Flutter passed` (59 tests),
+`F4 Flutter API passed` (7 tests), `G security`, `H2 confidentiality`, `H1 dev`, `H1 staging`.
+
 **Verdict du correctif (`e1d12e9`) — run complet VERT.** `ci` `36220107367` : **7/7 jobs**
 (`database` inclus, ~31 min) ; `flutter` (APK) `36220107343` **succès** ; `docker` `36220107439`
 **succès**. Annotations de preuve : **`F2 Flutter passed` — 59 tests Flutter réels et l'analyse, avec
