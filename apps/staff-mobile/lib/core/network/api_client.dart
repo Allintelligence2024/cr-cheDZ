@@ -62,6 +62,27 @@ class ApiClient {
     return res.data!;
   }
 
+  /// Envoi **multipart** (upload média, lot L2F) : le corps est un `FormData`,
+  /// donc dio pose lui-même l'en-tête `multipart/form-data; boundary=…` et
+  /// streame les parties — le `content-type: application/json` des options de
+  /// base est écrasé pour cette requête (vérifié dans la source de dio,
+  /// `_transformData`), jamais envoyé tel quel.
+  ///
+  /// `options` permet de borner les délais de l'envoi (une photo de plusieurs
+  /// Mo sur réseau mobile n'a pas les mêmes bornes qu'un appel JSON).
+  ///
+  /// Le serveur écrit les octets (`POST /api/v1/media/upload`) : le client ne
+  /// parle plus jamais à MinIO.
+  Future<T> upload<T>(String path, FormData form, {Options? options}) async {
+    final res = await _dio.post<T>(
+      path,
+      data: form,
+      options: options,
+      cancelToken: _cancel,
+    );
+    return res.data!;
+  }
+
   Future<T> patch<T>(String path, [Object? body]) async {
     final res = await _dio.patch<T>(path, data: body, cancelToken: _cancel);
     return res.data!;

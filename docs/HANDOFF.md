@@ -475,6 +475,25 @@ premier envoi est arrivé tronqué, 3072 octets, donc inexploitable).
 `flutter` — le jeton GitHub de l'environnement a été invalidé pendant le lot (même panne que le
 24/09 à la même heure d'horloge), donc la CI a tourné mais son verdict n'a pas pu être lu.
 
+## Complément 2026-09-26 — L2F : l'uploader média est rebranché sur l'API
+
+Dernier chemin mort identifié par l'audit (F5, volet client) : `MediaUploader` parlait encore au
+presign d'écriture, **mort en production** depuis le lot 2B (le stockage n'a pas de sous-domaine
+public, décision D1 = A). Il envoie désormais les octets à `POST /api/v1/media/upload` (multipart) :
+
+- partie `file` avec **type MIME explicite** (sans lui, la partie serait `application/octet-stream` et
+  l'API refuserait : elle vérifie `file.mimetype` **et** la signature binaire) ;
+- `child_id` + `checksum` — le SHA-256 est **vérifié par le serveur** avant toute écriture ;
+- le client ne fabrique plus de clé de stockage (le serveur la compose) et n'affirme plus
+  `exif_stripped: true` alors que le retrait EXIF n'est pas fait : c'était un mensonge de données ;
+- F7 conservé : reprise **unique** sur panne de transport, jamais sur une réponse serveur, délais
+  bornés, corps reconstruit à chaque tentative (`FormData` finalisé non rejouable).
+
+Preuves : `media-client-wiring` **6/6** avec liste d'exceptions **vide** et 3 mutations rouges
+(retour au presign, type MIME retiré, `exif_stripped` rajouté) ; le Dart (6 tests du groupe L2F) est
+exécuté par le job `flutter`. Hors périmètre, dit tel quel : aucun écran de capture n'existe encore,
+et le retrait EXIF côté client reste une dette.
+
 ## Complément 2026-09-25 (nuit) — D6 : la photo hors ligne est retirée, pas laissée en suspens
 
 `POST /sync/push` refusait d'échouer franchement sur `add_photo` : la commande créait une ligne

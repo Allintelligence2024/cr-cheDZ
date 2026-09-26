@@ -159,9 +159,13 @@ correctement l'erreur, alors que `photos_page.dart:33` et `consents_page.dart:30
   **Nuance mesurée le 25/09 (lot L2C)** : la dette (1) est **latente, pas active** — aucun écran
   n'instancie `MediaUploader` (aucune UI de capture dans `staff-mobile/lib`, aucun téléversement dans
   admin-web), et le presign des clips n'est appelé par aucun client (verrou D5, `phase21` cas 9).
-  Elle est désormais **verrouillée** : `tests/tenant-isolation/media-client-wiring.test.mjs`
-  interdit de câbler un écran sur le presign mort sans rebrancher, et exige que chaque exception
-  reste vraie (appel réel présent) ET inatteignable depuis l'UI.
+  **Fermée le 26/09 (lot L2F)** : l'uploader envoie les octets à `POST /api/v1/media/upload`
+  (multipart, type MIME sur la partie, `child_id`, `checksum`), ne fabrique plus de clé de stockage,
+  ne signe plus rien et n'affirme plus retirer l'EXIF (il ne le fait pas). Le verrou
+  `media-client-wiring` passe à **6 contrôles** : liste d'exceptions **vide**, route d'upload exigée,
+  et balayages sur le **code sans commentaires** (un motif cité n'est pas un appel).
+  Ce qui reste hors périmètre, dit tel quel : **aucun écran de capture** n'existe encore (décision
+  produit) et le **retrait EXIF côté client** reste une dette explicite.
 - **Hors périmètre** : `children.photo_url` (colonne jamais écrite par l'API — si elle venait à
   recevoir une URL signée, elle serait inexploitable : y stocker une **clé**, pas une URL).
 
@@ -472,6 +476,15 @@ octets est supprimé côté serveur, et `enqueueOfflinePhoto`/`offlineStorageKey
 `phase25`, `phase77` vertes sur PostgreSQL réel avec le rôle applicatif ; `media-client-wiring` 5/5
 avec 3 mutations rouges. Le choix (c) plutôt que (a) est argumenté au plan §6 (aucune UI ne capture —
 écrire la file locale aurait été du code jamais exercé) ; il est réversible.
+
+**Mise à jour du 26/09/2026 — L2F : le dernier chemin mort du client média est fermé.** L'uploader
+`staff-mobile` appelait encore le presign d'écriture, mort en production depuis le lot 2B : il envoie
+désormais les octets à `POST /api/v1/media/upload` (multipart), avec le type MIME sur la partie
+fichier, `child_id` et le `checksum` que le serveur vérifie. Le client ne fabrique plus de clé de
+stockage, ne signe plus rien, et n'affirme plus `exif_stripped: true` sans le faire. Le verrou
+`media-client-wiring` n'admet plus **aucune** exception (6 contrôles, 3 mutations rouges) ; le Dart
+est jugé par le job `flutter`. Restent explicitement hors périmètre : l'écran de capture (décision
+produit) et le retrait EXIF côté client.
 
 **Mise à jour du 25/09/2026 (nuit) — un « vert » qui ne prouvait rien.** En relevant le verdict du
 run `flutter` (jeton GitHub rétabli), une annotation isolée est apparue dans un job **vert** :

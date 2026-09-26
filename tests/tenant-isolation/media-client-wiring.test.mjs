@@ -12,17 +12,22 @@
  * (`UPLOAD_VIA_API_REQUIRED`) et livré le remplacement :
  * `POST /api/v1/media/upload` (octets écrits par le serveur).
  *
- * Le CLIENT, lui, n'a pas été rebranché : `apps/staff-mobile/lib/core/media/
- * media_uploader.dart` appelle toujours `POST /media/presign-upload`. Ce fichier
- * est **inatteignable depuis l'interface** — aucun écran ne l'instancie, aucune
- * UI de capture photo n'existe (`image_picker`/caméra absents du `lib/`), et
- * admin-web n'offre aucun téléversement. La dette est donc **latente**, pas un
- * incident de production : c'est exactement ce que documente
- * `docs/VERIFICATION_ANALYSE_2026-09-24.md` (§ lot 2, « reste ouvert »).
+ * Le CLIENT est rebranché depuis le lot L2F (2026-09-26) :
+ * `apps/staff-mobile/lib/core/media/media_uploader.dart` envoie les octets à
+ * `POST /api/v1/media/upload` (multipart). Il n'y a donc plus AUCUN appelant du
+ * presign d'écriture — la liste d'exceptions ci-dessous est vide, et ce fichier
+ * échoue si la voie morte réapparaît (le Dart lui-même, ses reprises et sa
+ * forme multipart sont prouvés par le job `flutter` : 6 tests du groupe L2F).
  *
- * Pourquoi un verrou plutôt qu'une réécriture
- * -------------------------------------------
- * Réécrire ce Dart ici produirait du code **jamais compilé ni testé** (ni SDK
+ * Reste hors de ce contrat : **aucune UI ne capture de photo** (ni `image_picker`
+ * ni caméra dans le `lib/`, aucun téléversement dans admin-web). L'uploader est
+ * donc prêt mais pas encore câblé à un écran — c'est une décision produit, pas
+ * une dette technique cachée.
+ *
+ * Historique du verrou (avant L2F)
+ * --------------------------------
+ * Quand il n'y avait ni SDK Flutter ni `pub.dev` dans cet environnement, réécrire ce Dart aurait
+ * produit du code **jamais compilé ni testé** (ni SDK
  * Flutter ni `pub.dev` dans cet environnement : HTTP 000, mesuré deux fois —
  * lot L3). Le dépôt a une règle pour ça : aucune capacité annoncée sans preuve
  * exécutée. On verrouille donc le fait mesuré, et on rend le chemin de sortie
@@ -93,13 +98,11 @@ const REPLACEMENT_ROUTE = /@Post\('upload'\)/;
  * Toute nouvelle entrée exige une justification écrite — et donc une décision
  * explicite, jamais un glissement silencieux.
  */
-const JUSTIFIED = new Map([
-  ['apps/staff-mobile/lib/core/media/media_uploader.dart', {
-    why: "chemin d'écriture historique jamais rebranché (lot 2B côté serveur, lot L3 côté client) ; "
-      + 'inatteignable depuis l’UI aujourd’hui — à réécrire vers POST /media/upload AVANT de le câbler',
-    requireDeadCall: true,
-  }],
-]);
+// LOT L2F (2026-09-26) : la liste d'exceptions est VIDE. `MediaUploader` a été
+// rebranché sur `POST /api/v1/media/upload` (multipart, octets écrits par le
+// serveur) — il n'y a donc plus aucun appelant, justifié ou non, du presign
+// d'écriture mort en production. Toute réapparition est un échec du contrat.
+const JUSTIFIED = new Map();
 
 const walk = (dir, acc = []) => {
   for (const entry of readdirSync(dir)) {
@@ -109,6 +112,21 @@ const walk = (dir, acc = []) => {
   }
   return acc;
 };
+
+/**
+ * Code sans commentaires.
+ *
+ * Leçon mesurée deux fois dans ce dépôt : un motif CITÉ dans un commentaire
+ * n'est pas un appel. `'Bearer ${await …}'` dans un commentaire explicatif faisait
+ * échouer un verrou (contrat de session parent), et cette route morte comme
+ * `exif_stripped` apparaissent dans les commentaires qui expliquent *pourquoi*
+ * elles ne sont plus utilisées. Les verrous ci-dessous portent donc sur le code.
+ */
+const codeOf = (file) => read(file)
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .split('\n')
+  .filter((line) => !/^\s*\/\//.test(line))
+  .join('\n');
 
 const clientFiles = CLIENT_DIRS.flatMap((d) => walk(join(REPO, d)));
 
@@ -124,8 +142,11 @@ test('F5 client — le remplacement serveur existe (cible du rebranchement)', ()
 });
 
 test('F5 client — aucun client n’appelle le presign d’écriture hors exceptions justifiées', () => {
-  const callers = clientFiles.filter((f) => DEAD_WRITE_PRESIGN_CALL.test(readFileSync(join(REPO, f), 'utf8')));
+  const callers = clientFiles.filter((f) => DEAD_WRITE_PRESIGN_CALL.test(codeOf(f)));
   const unexpected = callers.filter((f) => !JUSTIFIED.has(f));
+  assert.equal(JUSTIFIED.size, 0,
+    'la liste d’exceptions doit rester VIDE (L2F) : tout appelant du presign mort est un échec, '
+    + 'sans dérogation');
   assert.deepEqual(unexpected, [],
     `appel(s) client au presign d’écriture MORT en production (${DEAD_WRITE_PRESIGN}) :\n  `
     + `${unexpected.join('\n  ')}\n`
@@ -133,11 +154,36 @@ test('F5 client — aucun client n’appelle le presign d’écriture hors excep
     + 'est inatteignable depuis l’UI — l’ajouter à JUSTIFIED avec sa raison.');
 });
 
+test('L2F — l’uploader appelle la route d’upload par l’API, jamais le presign', () => {
+  // Le rebranchement lui-même est prouvé en Dart (job `flutter` : 6 tests du
+  // groupe L2F, dont « panne de transport puis succès → 2 tentatives » et
+  // « réponse 4xx → un seul essai »). Ici on verrouille ce qu'un futur commit
+  // pourrait défaire sans qu'aucun test Dart ne s'en aperçoive : la route
+  // appelée, et la forme multipart attendue par le serveur.
+  const uploader = codeOf('apps/staff-mobile/lib/core/media/media_uploader.dart');
+  assert.match(uploader, /'\/media\/upload'/,
+    'l’uploader doit appeler POST /media/upload (route d’écriture par l’API, lot 2B)');
+  assert.doesNotMatch(uploader, DEAD_WRITE_PRESIGN,
+    'le presign d’écriture est revenu dans l’uploader — il est mort en production');
+  assert.match(uploader, /MultipartFile\.fromBytes\(/,
+    'le fichier doit être envoyé comme partie multipart (champ `file`)');
+  assert.match(uploader, /contentType: DioMediaType\.parse\(mimeType\)/,
+    'le type MIME doit être posé sur la partie : le serveur lit file.mimetype, '
+    + 'sans quoi l’API refuse (MEDIA_MIME_NOT_ALLOWED)');
+  assert.match(uploader, /'child_id': childId/, 'child_id doit accompagner le fichier');
+  assert.match(uploader, /'checksum': checksum/,
+    'le SHA-256 doit être annoncé (le serveur le VÉRIFIE : MEDIA_CHECKSUM_MISMATCH)');
+  assert.doesNotMatch(uploader, /exif_stripped/,
+    'le client ne retire pas les métadonnées EXIF : il ne doit pas l’affirmer');
+  // Le rebranchement côté client n'a de sens que si la cible serveur existe
+  // toujours : c'est le premier test de ce fichier, on ne le duplique pas.
+});
+
 test('F5 client — chaque exception reste vraie et inatteignable depuis l’interface', () => {
   for (const [file, { why, requireDeadCall }] of JUSTIFIED) {
     const abs = join(REPO, file);
     assert.ok(existsSync(abs), `exception déclarée mais fichier absent : ${file} (raison : ${why})`);
-    const source = read(file);
+    const source = codeOf(file);
     if (requireDeadCall) {
       assert.match(source, DEAD_WRITE_PRESIGN_CALL,
         `${file} n’appelle PLUS le presign mort : l’exception est périmée — `
@@ -186,7 +232,7 @@ test('D6 option (c) — la voie hors-ligne n’existe plus (aucun asset sans oct
 test('D6 option (c) — plus aucun code client n’enfile de photo hors ligne', () => {
   const offenders = [];
   for (const f of clientFiles) {
-    const body = read(f);
+    const body = codeOf(f);
     if (/enqueueOfflinePhoto/.test(body)) offenders.push(`${f} (enqueueOfflinePhoto)`);
     if (/\badd_photo\b/.test(body)) offenders.push(`${f} (commande add_photo)`);
   }

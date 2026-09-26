@@ -1024,9 +1024,47 @@ l'appel avait changé. Un verrou qui se satisfait d'un commentaire ne verrouille
 désormais sur un **appel** (`.post(`/`.put<…>(` vers le chemin). C'est la mutation qui a trouvé ça,
 pas la relecture.
 
-**Ce que L2C ne fait pas** : il ne rebranche pas le client (lot **L3**, avec le SDK Flutter) et ne
-juge pas la qualité du Dart. Il garantit seulement qu'aucun écran ne peut être livré sur un chemin mort
-sans que quelqu'un s'en aperçoive.
+**Ce que L2C ne fait pas** : il ne rebranche pas le client — c'est le lot **L2F** (2026-09-26,
+ci-dessous), qui a envoyé l'uploader sur `POST /api/v1/media/upload` et vidé la liste d'exceptions ;
+il ne juge pas non plus la qualité du Dart. Il garantit seulement qu'aucun écran ne peut être livré
+sur un chemin mort sans que quelqu'un s'en aperçoive.
+
+### L2F — F5, volet client : l'uploader est rebranché sur l'API (2026-09-26)
+
+**Ce qui restait ouvert après L2C** : le serveur servait et recevait les médias par l'API, mais
+`media_uploader.dart` appelait encore le presign d'écriture — mort en production
+(`UPLOAD_VIA_API_REQUIRED`, décision D1 = A). L'uploader n'était atteignable par aucun écran, donc la
+dette était latente ; elle n'en restait pas moins un chemin qui n'aurait pas fonctionné le jour où un
+écran l'aurait câblé.
+
+**Livré** :
+- `MediaUploader` envoie les octets à `POST /api/v1/media/upload` (multipart) : partie `file`
+  (`MultipartFile.fromBytes` avec le **type MIME explicite** — sans lui la partie serait
+  `application/octet-stream` et l'API refuserait, `MEDIA_MIME_NOT_ALLOWED`), `child_id`, `checksum` ;
+- le client **ne fabrique plus** de clé de stockage (le serveur la compose), ne signe plus rien, et
+  n'affirme plus `exif_stripped: true` alors que le retrait EXIF n'est pas implémenté — c'était un
+  mensonge de données, désormais retiré (dette écrite noir sur blanc) ;
+- F7 conservé et rendu testable : **reprise unique sur panne de transport**, jamais sur une réponse
+  serveur, délais d'envoi bornés (60 s), et **corps reconstruit à chaque tentative** (un `FormData`
+  finalisé n'est pas rejouable) ;
+- `ApiClient.upload<T>()` : envoi multipart. Point vérifié dans la source de dio (`_transformData`) :
+  pour un `FormData`, dio **écrase** le `content-type: application/json` des options de base par
+  `multipart/form-data; boundary=…` et streame les parties — le drapeau JSON du client ne peut donc
+  pas corrompre le corps ;
+- côté verrou, `media-client-wiring` passe à **6 contrôles** : la liste d'exceptions du presign mort
+  est désormais **vide** (`assert.equal(JUSTIFIED.size, 0)`) et un contrôle dédié exige la route
+  d'upload, la partie multipart typée, `child_id`, le `checksum`, et l'**absence** d'`exif_stripped`.
+  Les balayages portent sur le **code sans commentaires** (`codeOf`) : un motif cité dans un
+  commentaire explicatif n'est pas un appel — leçon mesurée trois fois dans ce dépôt.
+
+**Preuves** : `media-client-wiring` 6/6 local avec **3 mutations rouges** (retour au presign, type MIME
+retiré, `exif_stripped` rajouté) ; le Dart lui-même (6 tests du groupe L2F, dont « panne de transport
+puis succès → 2 tentatives, corps reconstruit ») est exécuté par le job `flutter` — c'est la CI qui
+juge, comme pour L3.
+
+**Ce que L2F ne fait pas** : il n'ajoute pas d'écran de capture photo (aucun `image_picker`, aucune
+caméra) et n'implémente pas le retrait EXIF côté client. L'uploader est prêt et prouvé ; le câblage
+d'un écran reste une décision produit, et le stripping EXIF une dette explicite.
 
 ### L2D — Photos hors ligne : la limitation devient mesurée, et le contournement verrouillé (2026-09-25)
 

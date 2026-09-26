@@ -3,40 +3,46 @@ import 'package:dio/dio.dart';
 
 import '../network/api_client.dart';
 
-/// Upload de photos (Phase 6) :
-/// 1. presign : POST /media/presign-upload → URL signée S3 (le serveur signe)
-/// 2. PUT direct vers l'URL signée (jamais via l'API)
-/// 3. register : POST /media (storage_key, checksum…) — visibilité parent
-///    refusée tant que le consentement n'est pas vérifié côté serveur.
+/// Upload de photos/documents — **par l'API** (lot L2F, 2026-09-26).
 ///
-/// Rapport 5 analyses, Phase 4 :
-/// - F2 : checksum = vraie SHA-256 hex (métadonnée d'intégrité côté client ;
-///   le serveur la stocke sans la recalculer — dette documentée).
-/// - F6 : la clé offline est préfixée par l'organisation, sinon le serveur
-///   rejette l'opération (STORAGE_KEY_TENANT_MISMATCH, garde C3).
-/// - F7 : le PUT S3 a un délai maximal et un (1) nouvel essai sur erreur
-///   réseau — jamais sur une réponse 4xx (URL signée invalide/expirée).
+/// Le chemin historique (presign d'écriture → URL signée → PUT direct vers
+/// MinIO) est **mort en production** depuis le lot 2B : le
+/// stockage est lié à `127.0.0.1:9000` sans sous-domaine public (décision D1 = A)
+/// et la route répond `UPLOAD_VIA_API_REQUIRED`. Le client envoie donc les
+/// octets au serveur, qui les écrit : `POST /api/v1/media/upload` (multipart).
+///
+/// Ce que ce fichier ne fait plus, et pourquoi :
+/// - il ne signe plus rien et ne parle plus à MinIO (`putSigned` retiré) — la route
+///   de signature d'écriture n'est plus appelée par aucun fichier client ;
+/// - il ne fabrique plus de clé de stockage : le serveur la compose
+///   (`storage.storageKey(tenantId, mediaType, file.originalname)`), donc plus
+///   de préfixe tenant à deviner côté client (`STORAGE_KEY_TENANT_MISMATCH`) ;
+/// - il n'envoie plus d'octets par la file de synchronisation (décision D6,
+///   option c : la voie hors ligne est refusée par `POST /sync/push`).
+///
+/// Rapport 5 analyses, Phase 4 (inchangé) :
+/// - F2 : `checksum` = vraie SHA-256 hexadécimale des octets, **vérifiée par le
+///   serveur** (`MEDIA_CHECKSUM_MISMATCH` avant toute écriture) ;
+/// - F7 : une panne de transport est rejouée **une** fois, une réponse serveur
+///   (4xx/5xx) jamais, et les délais de l'envoi sont bornés.
 class MediaUploader {
-  MediaUploader(this._api, {Dio? uploadDio}) : _uploadDio = uploadDio ?? Dio();
+  MediaUploader(this._api);
 
   final ApiClient _api;
-  final Dio _uploadDio;
 
-  /// Délais du PUT direct (photo compressée ≤ quelques Mo sur réseau mobile).
-  static const Duration uploadConnectTimeout = Duration(seconds: 15);
-  static const Duration uploadSendTimeout = Duration(seconds: 60);
-  static const Duration uploadReceiveTimeout = Duration(seconds: 30);
-
-  /// Nombre de tentatives au total (1 essai + 1 retry).
+  /// Nombre de tentatives au total (1 essai + 1 retry) sur panne de transport.
   static const int uploadAttempts = 2;
+
+  /// Délais de l'envoi — une photo compressée peut peser plusieurs Mo sur un
+  /// réseau mobile lent ; sans borne, l'écran attend indéfiniment.
+  static const Duration uploadSendTimeout = Duration(seconds: 60);
+  static const Duration uploadReceiveTimeout = Duration(seconds: 60);
 
   /// SHA-256 hexadécimal (64 caractères minuscules) des octets.
   static String sha256Hex(List<int> bytes) => crypto.sha256.convert(bytes).toString();
 
-
-  /// Une erreur d'upload mérite-t-elle un nouvel essai ? Uniquement les
-  /// défaillances réseau/transport ; une réponse du serveur (4xx/5xx) est
-  /// définitive pour une URL signée.
+  /// Une erreur mérite-t-elle un nouvel essai ? Uniquement les défaillances de
+  /// transport ; une réponse du serveur (4xx/5xx) est définitive.
   static bool isRetryable(DioException e) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
@@ -55,30 +61,8 @@ class MediaUploader {
     }
   }
 
-  /// PUT direct vers l'URL signée avec délais + 1 retry (F7). Le flux est
-  /// recréé à chaque tentative (un `Stream` consommé n'est pas rejouable).
-  Future<void> putSigned(String uploadUrl, List<int> bytes, String mimeType) async {
-    for (var attempt = 1; ; attempt++) {
-      try {
-        await _uploadDio.put<dynamic>(
-          uploadUrl,
-          data: Stream<List<int>>.fromIterable([bytes]),
-          options: Options(
-            headers: {'content-type': mimeType, 'content-length': bytes.length},
-            connectTimeout: uploadConnectTimeout,
-            sendTimeout: uploadSendTimeout,
-            receiveTimeout: uploadReceiveTimeout,
-          ),
-        );
-        return;
-      } on DioException catch (e) {
-        if (!isRetryable(e) || attempt >= uploadAttempts) rethrow;
-      }
-    }
-  }
-
-  /// Télécharge une photo compressée (déjà réduite côté UI) vers MinIO/S3.
-  /// Retourne l'asset enregistré en base.
+  /// Envoie une photo (ou un PDF) : les octets passent par l'API, qui les écrit
+  /// dans le stockage et enregistre l'asset. Retourne l'asset créé.
   Future<Map<String, dynamic>> uploadPhoto({
     required String childId,
     required List<int> bytes,
@@ -86,27 +70,57 @@ class MediaUploader {
     String? filename,
   }) async {
     final name = filename ?? 'photo-${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final presign = await _api.post<Map<String, dynamic>>('/media/presign-upload', {
-      'filename': name,
-      'mime_type': mimeType,
-      'child_id': childId,
-    });
-    final uploadUrl = presign['upload_url'] as String;
-    final storageKey = presign['storage_key'] as String;
-
-    // Upload direct (URL signée, aucun transit par l'API).
-    await putSigned(uploadUrl, bytes, mimeType);
-
-    // Enregistrement de l'asset.
-    final reg = await _api.post<Map<String, dynamic>>('/media', {
-      'storage_key': storageKey,
-      'mime_type': mimeType,
-      'child_id': childId,
-      'original_filename': name,
-      'file_size_bytes': bytes.length,
-      'checksum': sha256Hex(bytes),
-      'exif_stripped': true,
-    });
-    return reg;
+    for (var attempt = 1; ; attempt++) {
+      try {
+        // Le `FormData` est reconstruit à CHAQUE tentative : un corps déjà
+        // finalisé par l'adaptateur ne se rejoue pas (même leçon que l'ancien
+        // PUT signé, dont le flux était recréé par essai).
+        return await _api.upload<Map<String, dynamic>>(
+          '/media/upload',
+          buildForm(
+            bytes: bytes,
+            mimeType: mimeType,
+            filename: name,
+            childId: childId,
+            checksum: sha256Hex(bytes),
+          ),
+          options: Options(
+            sendTimeout: uploadSendTimeout,
+            receiveTimeout: uploadReceiveTimeout,
+          ),
+        );
+      } on DioException catch (e) {
+        if (!isRetryable(e) || attempt >= uploadAttempts) rethrow;
+      }
+    }
   }
+
+  /// Corps multipart attendu par `POST /api/v1/media/upload` (lot 2B) :
+  /// le fichier sous le champ `file` (Lu par `FileInterceptor('file')`), plus
+  /// les champs du DTO (`child_id`, `checksum`).
+  ///
+  /// Le type MIME est posé explicitement sur la partie : le serveur lit
+  /// `file.mimetype` — sans lui, la partie serait `application/octet-stream` et
+  /// l'API refuserait (`MEDIA_MIME_NOT_ALLOWED`, vérifié par signature binaire).
+  ///
+  /// `exif_stripped` n'est **pas** envoyé : le client ne supprime pas les
+  /// métadonnées EXIF, il ne doit donc pas l'affirmer (dette documentée : le
+  /// retrait EXIF côté client reste à faire, et le serveur garde sa valeur par
+  /// défaut).
+  static FormData buildForm({
+    required List<int> bytes,
+    required String mimeType,
+    required String filename,
+    required String childId,
+    required String checksum,
+  }) =>
+      FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: DioMediaType.parse(mimeType),
+        ),
+        'child_id': childId,
+        'checksum': checksum,
+      });
 }
