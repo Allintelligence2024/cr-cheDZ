@@ -48,7 +48,7 @@ vérification).
 | **L1.6** | **Diagnostic H1 exploitable** : nommer l'image qui refuse le tirage | CI (`database`) | ~0,2 h | message d'erreur citant l'image + test unitaire | **FAIT (2026-09-24)** — « Registry pull failed for <image> » ; comportement inchangé (aucun repli vert) |
 | **L1.7** | **H1 : chemins de remédiation d'exploitation** (miroir `MINIO_IMAGE`, connexion Quay facultative) | CI (`database`) | ~0,5 h | surcharge effective + défaut épinglé + étape conditionnelle | **FAIT (2026-09-24)** — diagnostic affiné (Quay seul ; Docker Hub passe) + 4 mutations détectées (§5) ; **dépassé le 25/09/2026 (lot H1)** : la cause racine est amont (MinIO retiré des deux registres publics) ⇒ le défaut est désormais une image **construite** depuis la release officielle, somme vérifiée par le builder ; les deux voies ci-dessus restent des surcharges (journal §5, lot H1) — **vérifié en CI : job `database` vert sur `5266fff`** |
 | **L2** | **Rendre les médias réellement accessibles (F5)** | vérif. C3 | 1–2 j | test d'isolation : l'URL rendue au client est exploitable (hôte public, jamais `minio:9000`) | **FAIT — volet A (lecture, phase66) + volet B média (upload par l'API, phase67)** ; restent hors lot : branchement du client mobile (**L3**, bloqué par le SDK Flutter), upload des clips (**D5 = c** : hors discours opérationnel, verrou ), octets hors-ligne (voir §3.2 ; **L2E** refuse désormais tout blob base64 dans `sync/push`) ; volet client verrouillé par **L2C** (`media-client-wiring`) |
-| **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **LIVRÉE (2026-09-25)** sans SDK local : code + 12 tests **lancés par la CI** (job `flutter`, Flutter 3.47.1 ; verdict final en attente) — un `await` en lambda non-async a d'ailleurs été attrapé par la CI puis corrigé (§5) ; **reste à faire** : committer la résolution `pubspec.lock` publiée par la CI (annotations, en morceaux) puis `flutter pub get --enforce-lockfile` — et **relever le verdict final** du run (voir §5, « en attente ») |
+| **L3** | **`parent-mobile` : session, erreurs, tests, lockfile** | vérif. C2, F4 | ~2 j | refresh single-flight + widget tests exécutés en CI (`flutter test` parent) | **LIVRÉE (2026-09-25)** sans SDK local : code + 12 tests **lancés par la CI** (job `flutter`, Flutter 3.47.1 ; verdict final en attente) — un `await` en lambda non-async a d'ailleurs été attrapé par la CI puis corrigé (§5) ; **fait** : la résolution publiée par la CI a été réassemblée et committée, `--enforce-lockfile` est actif, et le verdict final est **vert** (`ce69bbd` ; §5) |
 | **L4** | **Rétention file de notifications/messages + mineurs (DPO)** | vérif. §4.7, ligne 60 | S/M (décision) | purge planifiée testée **ou** justification écrite au registre | **FAIT (2026-09-25)** — décision **D2 = (a)** (purger) : migration 076, seuils 90 j / 365 j, suite `phase76` 15 assertions, 3 mutations détectées (§5) |
 | **L5** | **Vérité documentaire anti-« regonflage »** | vérif. F1, §4.4 | ~0,5 j | test de contrat « affirmations » + docs corrigées | **FAIT** — contrat `claims-contract.test.mjs` (**10 contrôles** au 25/09/2026, branche CI `quality`) + 6 documents corrigés ; prolongé par **L5.1** (vérité « workflows CI », §5) |
 | **L6** (opt.) | **Worker : stub `compress_media`, k6, healthchecks** | vérif. F1/F2, §4.4 | S | décision tracée (implémenter **ou** retirer) ; healthcheck API/worker | **L6 FAIT dans son ensemble** : L6.1 (sondes API/worker), L6.2 (k6 — critère mesuré par le banc en parité 500 ops, p95 1,4 s, gardien de discours), L6.3 (D3 — stub `compress_media` retiré, verrou anti-stub), L6.4 (D5 — vidéosurveillance retirée du discours opérationnel, verrou d'acquisition) |
@@ -65,7 +65,7 @@ fichiers : garde de payload + 413 explicite) sont faits. **Toutes les décisions
 tranchées** ; **D6 est TRANCHÉE le 2026-09-25 — option (c)** : la photo hors ligne n'existe pas
 en V1, `add_photo` est refusée explicitement et le chemin d'écriture sans octets est retiré
 (preuves : `phase6`, `phase25`, `phase77` vertes ; verrou `media-client-wiring`) ; **L3 est
-livrée** (code + tests **lancés** par le job `flutter` de la CI, sans SDK dans l'environnement ; verdict final en attente — §5) ;
+livrée** (code + tests **exécutés** par le job `flutter` de la CI, sans SDK dans l'environnement ; **vert sur `ce69bbd`** — §5) ;
 il reste à committer la résolution `pubspec.lock` publiée par la CI et à relever le verdict final.
 
 ---
@@ -1229,7 +1229,7 @@ l'erreur vient du compilateur qui construit le binaire livré.
 - Verrou statique `tests/tenant-isolation/parent-session-contract.test.mjs` (**8/8** — la 8e règle interdit le faux vert du tube ; job `quality`
   + bundle du gate D) : un seul point d'entrée de refresh dans `lib/`, single-flight (et refus
   explicite du drapeau booléen), rejeu borné, purge + retour connexion, états d'erreur par écran,
-  tests **réellement lancés** par la CI (verdict en attente), contrôle du lockfile.
+  tests **réellement exécutés** par la CI (**vert** sur `ce69bbd`), contrôle du lockfile.
 
 **Méthode — un plafond qu'il faut connaître** : la première publication du lockfile est arrivée
 **tronquée** (3072 octets décodés, coupés en plein milieu) : une annotation GitHub est plafonnée à
@@ -1428,13 +1428,20 @@ statiques **80/80** ; contrat `media-client-wiring` 5/5 avec **3 mutations rouge
 réécrit, `registerFromSync` de retour, route plus nommée *dans la branche* — la 1re tentative de
 mutation avait visé le message du garde L2E, preuve que le contrat cible bien la bonne occurrence).
 
-*Verdicts CI* : job `flutter` **vert** sur `8fecc6a` (le retrait Dart compile, analyse propre, APK
-construits) et sur `265be27` ; job `database` **rouge** sur `8fecc6a` — cause nommée par le job
-lui-même : le banc F4 attendait encore 3 médias (`media metadata … offline add_photo survives`), il
-comptait la photo hors ligne comme acceptée. Corrigé en `3b7e128`. **Verdict de ce correctif non
-relevé : le jeton GitHub de l'environnement est retombé (401) pendant l'attente** — même panne que
-le 24/09 et le 25/09 dans la soirée. Rien n'est revendiqué sans verdict : ce qui est prouvé est
-prouvé localement (ci-dessus), ce qui ne l'est pas est écrit ici.
+*Verdicts CI* : job `flutter` **vert** sur `265be27`, `8fecc6a`, `3b7e128` et `ce69bbd` ; job
+`database` **rouge** sur `8fecc6a` puis `3b7e128` — chaque fois avec une cause **nommée** (le banc F4
+comptait encore la photo hors ligne comme acceptée, puis sa requête ne ramenait pas la colonne lue
+par l'assertion), corrigée dans le commit suivant.
+
+**VERDICT FINAL — `ce69bbd` : TOUT VERT** (premier run entièrement vert de cette branche). Run `ci`
+`36218031204` : **7/7 jobs** — `database`, `quality`, `security`, `e2e`, `admin-web`,
+`support-console`, `backup-drill` ; run `flutter` **success** ; run `docker` **success**. Deux
+annotations disent l'essentiel : `F4 Flutter API passed` (7 tests Flutter/Drift réels contre l'API
+HTTP + PostgreSQL : deux appareils, push/pull, replay, conflit, redémarrage, isolation) et
+`F2 Flutter passed` (**57 tests et l'analyse, avec le lockfile appliqué** — `--enforce-lockfile` est
+donc actif : une dérive de dépendance fera échouer le job au lieu de changer le binaire en silence).
+Le faux vert et les trois défauts qu'il masquait sont clos, et D6 est prouvée de bout en bout
+(client, API, base).
 
 ### D6 — Photos hors ligne : par où passent les OCTETS ? *(produit + tech)*
 

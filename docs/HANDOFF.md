@@ -463,7 +463,7 @@ booléen du client staff-mobile les fait échouer ; rotation G1b persistée ; re
 **purgée** + `ParentSessionExpired` + retour à l'OTP (`main.dart`) ; erreurs typées
 (`offline`/serveur/401) et état d'erreur homogène (`core/error_state.dart`) sur le fil, les photos,
 les consentements et la liste d'enfants ; feuille d'absence qui n'avale plus l'échec ;
-`apps/parent-mobile/test/` (12 tests) lancés par la CI (verdict final en attente, voir plus bas) ; verrou statique
+`apps/parent-mobile/test/` (12 tests) **exécutés par la CI — vert sur `ce69bbd`** ; verrou statique
 `parent-session-contract` (**8/8**, `quality` + gate D) — dont la règle « aucun échec masqué par un tube », ajoutée après le faux vert mesuré en CI le 25/09.
 
 **Lockfile** : `flutter.yml` contraint la résolution (`--enforce-lockfile`) dès que `pubspec.lock`
@@ -492,10 +492,13 @@ une clé d'une autre organisation), `phase77` (9 cas, garde de payload toujours 
 `media-client-wiring` réécrit (5/5, 3 mutations rouges), build API + worker verts.
 
 **Verdicts.** Localement : gate D **exit 0** (73 suites, rôles de production), `phase6`/`phase25`/
-`phase77` vertes, builds API + worker verts, 13 suites statiques 80/80. En CI : job `flutter` vert
-(`8fecc6a`), job `database` rouge sur ce commit pour une raison nommée — le banc F4 comptait la photo
-hors ligne comme acceptée ; corrigé en `3b7e128`, **verdict non relevé (jeton GitHub retombé, 401,
-pendant l'attente)**.
+`phase77` vertes, builds API + worker verts, 13 suites statiques 80/80. *Verdict CI final — `ce69bbd` : TOUT VERT* (premier run entièrement vert de cette branche). Run `ci`
+`36218031204` : **7/7 jobs** (`database`, `quality`, `security`, `e2e`, `admin-web`,
+`support-console`, `backup-drill`), run `flutter` **success**, run `docker` **success**. Deux
+annotations disent l'essentiel : `F4 Flutter API passed` (7 tests Flutter/Drift réels contre l'API
+HTTP + PostgreSQL) et `F2 Flutter passed` (**57 tests et l'analyse, avec le lockfile appliqué** —
+`--enforce-lockfile` actif, donc une dérive de dépendance échoue au lieu de changer le binaire en
+silence). Le faux vert et les trois défauts qu'il masquait sont clos ; D6 est prouvée de bout en bout.
 
 
 ## Mise à jour 2026-09-24 (soir) — CI : régression du lot 1 corrigée, verrou ajouté
