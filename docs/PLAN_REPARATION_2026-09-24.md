@@ -1071,6 +1071,14 @@ que l'exception, jamais le test fautif : `ci-run.sh` capte désormais `Failing t
 `…/fichier.dart: nom du test`, donc le prochain échec Dart sera **nommé** dans l'annotation au lieu de
 laisser deviner. Correctif : `e1d12e9`.
 
+**Verdict du correctif** (`e1d12e9`/`d9fbf72`) : `flutter` (APK) `36220107343` **succès** ;
+`docker` `36220107439` **succès** ; `ci` `36220107367` — `gh run watch --exit-status` a rendu **rc=0**
+(donc run vert) mais le relevé des annotations s'est interrompu net : le jeton GitHub du bac à sable est
+retombé en `401 Bad credentials` à cet instant, et **aussi bien `gh` que `git` sont devenus
+inutilisables** (les deux jetons de l'environnement refusés, helper d'identifiants vide). Rien n'est
+présumé : la ligne `ci` (compteurs F2, `F4`, job `database`) sera complétée dès que la connexion GitHub
+sera rétablie — c'est la seule pièce manquante du lot L2F.
+
 **Ce que L2F ne fait pas** : il n'ajoute pas d'écran de capture photo (aucun `image_picker`, aucune
 caméra) et n'implémente pas le retrait EXIF côté client. L'uploader est prêt et prouvé ; le câblage
 d'un écran reste une décision produit, et le stripping EXIF une dette explicite.

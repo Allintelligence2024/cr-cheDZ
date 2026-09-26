@@ -499,6 +499,14 @@ Le 1er jet (`76fd61b`) est tombé sur **un** test, côté test : son double cycl
 Script consommé séquentiellement depuis `e1d12e9`, et `ci-run.sh` publie maintenant le **nom** du test
 fautif (`Failing tests:`), pas seulement l'exception.
 
+**Verdict du correctif** (`e1d12e9`/`d9fbf72`) : `flutter` (APK) `36220107343` **succès** ;
+`docker` `36220107439` **succès** ; `ci` `36220107367` — `gh run watch --exit-status` a rendu **rc=0**
+(donc run vert) mais le relevé des annotations s'est interrompu net : le jeton GitHub du bac à sable est
+retombé en `401 Bad credentials` à cet instant, et **aussi bien `gh` que `git` sont devenus
+inutilisables** (les deux jetons de l'environnement refusés, helper d'identifiants vide). Rien n'est
+présumé : la ligne `ci` (compteurs F2, `F4`, job `database`) sera complétée dès que la connexion GitHub
+sera rétablie — c'est la seule pièce manquante du lot L2F.
+
 ## Complément 2026-09-25 (nuit) — D6 : la photo hors ligne est retirée, pas laissée en suspens
 
 `POST /sync/push` refusait d'échouer franchement sur `add_photo` : la commande créait une ligne
