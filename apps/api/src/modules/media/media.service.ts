@@ -152,7 +152,13 @@ export class MediaService {
       logEventId: dto.log_event_id,
       childrenInPhoto: dto.children_in_photo,
       takenAt: dto.taken_at,
-      exifStripped: dto.exif_stripped ?? true,
+      // Déclaration du client ≠ mesure du serveur : ici, personne ne retire
+      // les métadonnées (ni le client — L2F —, ni l'API). Défaut `true` =
+      // un mensonge de données, qui plus est un risque de confidentialité
+      // (GPS conservé dans des photos d'enfants, colonne lue par l'audit
+      // `data_*`). On enregistre ce qui est VRAI ; `false` le restera tant
+      // que rien ne dépouille l'image, et un vrai retrait pourra le dire.
+      exifStripped: dto.exif_stripped ?? false,
     });
   }
 

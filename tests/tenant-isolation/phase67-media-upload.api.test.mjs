@@ -212,6 +212,18 @@ async function main() {
       typeof key === 'string' && key.startsWith(`${A.org}/photo/`), String(key));
     ok('Le client ne peut PAS imposer sa clé (`storage_key` absent des champs acceptés)',
       up.body?.storage_key === key && !JSON.stringify(up.body).includes('children_in_photo'));
+
+    // L2G — vérité de la colonne `exif_stripped` : le client (L2F) ne l'envoie
+    // plus parce qu'il ne retire RIEN, et le serveur ne retire rien non plus.
+    // Un défaut serveur à `true` écrirait une donnée fausse en base — celle-là
+    // même que l'audit `data_*` lit pour parler de métadonnées de photos
+    // d'enfants (GPS). Ici on lit la colonne, pas l'intention.
+    const nominalRow = up.body?.id
+      ? (await admin.query('SELECT exif_stripped FROM media_assets WHERE id=$1', [up.body.id])).rows[0]
+      : null;
+    ok('`exif_stripped` reste FAUX : personne ne dépouille l’image, l’API ne doit pas l’affirmer',
+      nominalRow?.exif_stripped === false,
+      `colonne=${JSON.stringify(nominalRow?.exif_stripped)} (défaut attendu : false)`);
     const onDisk = key ? join(STORE, key) : '';
     ok('Objet réellement écrit dans le stockage', !!onDisk && existsSync(onDisk), onDisk);
     ok('Octets stockés IDENTIQUES aux octets envoyés',

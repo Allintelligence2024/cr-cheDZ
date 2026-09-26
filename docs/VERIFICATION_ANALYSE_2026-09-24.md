@@ -162,7 +162,7 @@ correctement l'erreur, alors que `photos_page.dart:33` et `consents_page.dart:30
   **Fermée le 26/09 (lot L2F)** : l'uploader envoie les octets à `POST /api/v1/media/upload`
   (multipart, type MIME sur la partie, `child_id`, `checksum`), ne fabrique plus de clé de stockage,
   ne signe plus rien et n'affirme plus retirer l'EXIF (il ne le fait pas). Le verrou
-  `media-client-wiring` passe à **6 contrôles** : liste d'exceptions **vide**, route d'upload exigée,
+  `media-client-wiring` passe à **6 contrôles** (7 depuis L2G) : liste d'exceptions **vide**, route d'upload exigée,
   et balayages sur le **code sans commentaires** (un motif cité n'est pas un appel).
   Ce qui reste hors périmètre, dit tel quel : **aucun écran de capture** n'existe encore (décision
   produit) et le **retrait EXIF côté client** reste une dette explicite.
@@ -489,6 +489,15 @@ et c'est le test qui avait tort : son double consommait son script avec un modul
 élément rejouait la panne aux deux tentatives (« panne puis succès » impossible à satisfaire). Corrigé
 en `e1d12e9`, avec un diagnostic qui **nomme** désormais le test fautif (`Failing tests:` capté par
 `ci-run.sh`) au lieu de ne publier que l'exception.
+
+**Complément du 26/09 (lot L2G) — le mensonge EXIF avait changé de camp.** En cessant d'envoyer
+`exif_stripped: true` (L2F), le client a activé un défaut du serveur qui fabriquait la même valeur
+fausse (`dto.exif_stripped ?? true`, chemin d'upload) : le défaut de la colonne en base est pourtant
+honnête (`NOT NULL DEFAULT false`). Corrigé en `?? false` ; la colonne est désormais **relue en base**
+par `phase67` après un upload nominal (elle doit valoir `false`) et un verrou statique `L2G`
+(`media-client-wiring`, 7 contrôles) interdit le retour du défaut. Preuve par mutation : `?? true` →
+`colonne=true` et verrou 6/7. Le retrait EXIF lui-même reste non implémenté — mais plus personne ne
+l'affirme.
 
 **Verdict du correctif (`e1d12e9`) — run complet VERT.** `ci` `36220107367` : **7/7 jobs**
 (`database` inclus, ~31 min) ; `flutter` (APK) `36220107343` **succès** ; `docker` `36220107439`

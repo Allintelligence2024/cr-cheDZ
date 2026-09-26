@@ -499,6 +499,21 @@ Le 1er jet (`76fd61b`) est tombé sur **un** test, côté test : son double cycl
 Script consommé séquentiellement depuis `e1d12e9`, et `ci-run.sh` publie maintenant le **nom** du test
 fautif (`Failing tests:`), pas seulement l'exception.
 
+## Complément 2026-09-26 — L2G : le serveur ne fabrique plus `exif_stripped = true`
+
+Le lot L2F a produit un effet de second ordre, attrapé à la lecture du code : le client ne déclare
+plus retirer les métadonnées EXIF (il ne le fait pas), et ce silence a **activé un défaut menteur du
+serveur** — `media.service.ts` chemin d'upload : `dto.exif_stripped ?? true`. La colonne en base
+(`NOT NULL DEFAULT false`, migration 008) était honnête ; c'est le service qui l'écrasait par une
+affirmation que personne ne pouvait soutenir (et qui touche à la géolocalisation GPS de photos
+d'enfants, lue par l'audit `data_*`).
+
+Corrigé : `?? false` — on enregistre ce qui est vrai, et un vrai retrait pourra se déclarer plus tard.
+Preuves : `phase67` **relit la colonne** après un upload multipart nominal (doit valoir `false`),
+nouveau verrou statique `L2G` dans `media-client-wiring` (7 contrôles) interdisant le retour de
+`exifStripped ?? true`, et **mutation mesurée** (`?? true` → `colonne=true`, verrou 6/7). Le retrait
+EXIF reste une dette ; il n'est plus un mensonge.
+
 **Verdict du correctif (`e1d12e9`) — run complet VERT.** `ci` `36220107367` : **7/7 jobs**
 (`database` inclus, ~31 min) ; `flutter` (APK) `36220107343` **succès** ; `docker` `36220107439`
 **succès**. Annotations de preuve : **`F2 Flutter passed` — 59 tests Flutter réels et l'analyse, avec

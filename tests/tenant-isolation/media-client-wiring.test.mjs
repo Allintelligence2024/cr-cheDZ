@@ -179,6 +179,22 @@ test('L2F — l’uploader appelle la route d’upload par l’API, jamais le pr
   // toujours : c'est le premier test de ce fichier, on ne le duplique pas.
 });
 
+test('L2G — le serveur n’affirme pas avoir retiré les métadonnées EXIF', () => {
+  // Le champ `exif_stripped` est une DÉCLARATION recopiée telle quelle par
+  // l'API ; rien, ni côté client (L2F) ni côté serveur, ne dépouille l'image.
+  // Un défaut serveur à `true` fabrique donc une donnée fausse — un risque de
+  // confidentialité (GPS conservé dans des photos d'enfants), et le mensonge
+  // avait simplement changé de camp quand le client a cessé de l'affirmer.
+  const service = codeOf('apps/api/src/modules/media/media.service.ts');
+  assert.doesNotMatch(service, /exifStripped\s*\?\?\s*true/,
+    'le service média enregistrerait `exif_stripped = true` alors que personne ne retire les '
+    + 'métadonnées : donnée fausse (GPS conservé dans des photos d’enfants), contraire au défaut '
+    + 'honnête de la colonne (`NOT NULL DEFAULT false`)');
+  assert.match(service, /exifStripped: dto\.exif_stripped \?\? false/,
+    'le chemin d’upload doit enregistrer la valeur VRAIE quand le client ne déclare rien : '
+    + 'défaut attendu `?? false` (et non un `true` fabriqué)');
+});
+
 test('F5 client — chaque exception reste vraie et inatteignable depuis l’interface', () => {
   for (const [file, { why, requireDeadCall }] of JUSTIFIED) {
     const abs = join(REPO, file);

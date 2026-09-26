@@ -1051,7 +1051,7 @@ dette était latente ; elle n'en restait pas moins un chemin qui n'aurait pas fo
   pour un `FormData`, dio **écrase** le `content-type: application/json` des options de base par
   `multipart/form-data; boundary=…` et streame les parties — le drapeau JSON du client ne peut donc
   pas corrompre le corps ;
-- côté verrou, `media-client-wiring` passe à **6 contrôles** : la liste d'exceptions du presign mort
+- côté verrou, `media-client-wiring` passe à **6 contrôles** (porté à **7** par L2G, le 26/09) : la liste d'exceptions du presign mort
   est désormais **vide** (`assert.equal(JUSTIFIED.size, 0)`) et un contrôle dédié exige la route
   d'upload, la partie multipart typée, `child_id`, le `checksum`, et l'**absence** d'`exif_stripped`.
   Les balayages portent sur le **code sans commentaires** (`codeOf`) : un motif cité dans un
@@ -1106,6 +1106,39 @@ est jugé par **son propre** verdict, y compris les commits documentaires.
 **Ce que L2F ne fait pas** : il n'ajoute pas d'écran de capture photo (aucun `image_picker`, aucune
 caméra) et n'implémente pas le retrait EXIF côté client. L'uploader est prêt et prouvé ; le câblage
 d'un écran reste une décision produit, et le stripping EXIF une dette explicite.
+
+### L2G — le mensonge EXIF change de camp, et le serveur cesse de l'affirmer (2026-09-26)
+
+**Ce que L2F a déplacé sans le dire** : en retirant `exif_stripped: true` du client (il ne retire
+rien, il ne doit donc rien affirmer), L2F a **activé un défaut caché du serveur** — chemin d'upload de
+`media.service.ts` : `exifStripped: dto.exif_stripped ?? true`. Tant que le client envoyait le champ,
+le `?? true` ne se déclenchait jamais ; le jour où il s'est tu, **c'est l'API qui a fabriqué la valeur
+fausse**. Même mensonge, nouvel auteur — d'autant plus visible que le défaut de la colonne en base est
+honnête (`exif_stripped BOOLEAN NOT NULL DEFAULT false`, migration 008) : c'était bien le service qui
+l'écrasait.
+
+**Pourquoi ça compte** : la colonne nourrit l'audit de conformité `data_*` et sert à parler du retrait
+des métadonnées des photos d'enfants (dont la géolocalisation GPS). Une valeur `true` « parce que le
+client l'a dit » — ou pire, par défaut — transforme une dette technique en déclaration fausse.
+
+**Livré** : `exifStripped: dto.exif_stripped ?? false`. On enregistre la valeur vraie ; un retrait
+réel, le jour où il existera, pourra se déclarer et sera recopié. Le chemin `register`
+(dev/legacy) recopiait déjà la déclaration telle quelle, sans la transformer.
+
+**Preuves** :
+- `tests/tenant-isolation/phase67-media-upload.api.test.mjs` : après l'upload multipart nominal, la
+  colonne est **relue en base** et doit valoir `false` — mesuré, pas supposé ;
+- nouveau verrou statique `L2G` dans `media-client-wiring` (**6 → 7 contrôles**) : un
+  `exifStripped ?? true` ne peut pas revenir sans faire rougir le contrat ;
+- **mutation exécutée** : retour à `?? true` → le banc PG affiche
+  `✗ colonne=true (défaut attendu : false)` et le verrou tombe à **6/7** ; restauration → **7/7** et
+  « Phase 67 validée ».
+
+**Ce que L2G ne fait pas** : il n'implémente **pas** le retrait EXIF (ni côté client, ni côté serveur).
+La différence avec avant est que plus aucun acteur n'affirme l'avoir fait.
+
+Session de preuve locale : `npm ci` (929 paquets), builds `api` + `worker`, PostgreSQL 18.4 embarqué
+(`run_pg.mjs`, port 54329), `phase67` vert, **121 tests unitaires API** verts, `npm run lint` exit 0.
 
 ### L2D — Photos hors ligne : la limitation devient mesurée, et le contournement verrouillé (2026-09-25)
 
