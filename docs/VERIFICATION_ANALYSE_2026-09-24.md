@@ -454,6 +454,14 @@ exécution, corrigé, et le repli est désormais verrouillé par le contrat.
 
 *Preuves d'exécution* : gate D local **exit 0** (73 suites journalisées, rôles de production),
 `phase6`/`phase25`/`phase77` vertes, builds API + worker verts, 13 suites statiques 80/80, contrat
+
+**Mesure locale à la clôture (26/09, arbre de la tête)** — les compteurs cités plus haut (13 suites
+statiques, 80/80) sont ceux du lot D6 : ils restaient vrais, mais le dépôt en compte davantage depuis.
+État mesuré aujourd'hui : **15 suites statiques hors API/PG → 83/83**, `media-client-wiring` **8/8**
+(7 avant L2H), `claims-contract` 10/10 (qui revalide ses propres compteurs : 76 migrations, 71 suites
+`phaseNN`), `parent-session-contract` 9/9, `production-compose-contract` 18/18 ; **121/121** tests
+unitaires API, `npm run lint` exit 0, et `phase67` vert sur PostgreSQL 18.4 réel (banc d'upload complet,
+`run_pg.mjs` port 54329).
 `media-client-wiring` 5/5 (3 mutations). Job CI `flutter` **vert** sur `8fecc6a` (le retrait Dart
 compile). Le job `database` de ce même commit était rouge **pour une raison nommée et corrigée** :
 le banc F4 comptait encore la photo hors ligne comme un média accepté — adapté en `3b7e128` (le

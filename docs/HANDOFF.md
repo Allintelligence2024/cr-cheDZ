@@ -614,6 +614,14 @@ une clé d'une autre organisation), `phase77` (9 cas, garde de payload toujours 
 
 **Verdicts.** Localement : gate D **exit 0** (73 suites, rôles de production), `phase6`/`phase25`/
 `phase77` vertes, builds API + worker verts, 13 suites statiques 80/80. *Verdict CI final — `ce69bbd` : TOUT VERT* (premier run entièrement vert de cette branche). Run `ci`
+
+**Mesure locale à la clôture (26/09, arbre de la tête)** — les compteurs cités plus haut (13 suites
+statiques, 80/80) sont ceux du lot D6 : ils restaient vrais, mais le dépôt en compte davantage depuis.
+État mesuré aujourd'hui : **15 suites statiques hors API/PG → 83/83**, `media-client-wiring` **8/8**
+(7 avant L2H), `claims-contract` 10/10 (qui revalide ses propres compteurs : 76 migrations, 71 suites
+`phaseNN`), `parent-session-contract` 9/9, `production-compose-contract` 18/18 ; **121/121** tests
+unitaires API, `npm run lint` exit 0, et `phase67` vert sur PostgreSQL 18.4 réel (banc d'upload complet,
+`run_pg.mjs` port 54329).
 `36218031204` : **7/7 jobs** (`database`, `quality`, `security`, `e2e`, `admin-web`,
 `support-console`, `backup-drill`), run `flutter` **success**, run `docker` **success**. Deux
 annotations disent l'essentiel : `F4 Flutter API passed` (7 tests Flutter/Drift réels contre l'API

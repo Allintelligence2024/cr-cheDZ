@@ -1611,6 +1611,14 @@ motif `OFFLINE_PHOTO_UNSUPPORTED`, et côté base `status='rejected'` avec
 grants de production)** ; `phase6` ✅ (refus + aucun `media_assets` fantôme), `phase25` ✅
 (C1/C2/C4/C3/C5), `phase77` ✅ (9 cas) ; builds `@creche/api` et `@creche/worker` verts ; 13 suites
 statiques **80/80** ; contrat `media-client-wiring` 5/5 avec **3 mutations rouges** (branche qui
+
+**Mesure locale à la clôture (26/09, arbre de la tête)** — les compteurs cités plus haut (13 suites
+statiques, 80/80) sont ceux du lot D6 : ils restaient vrais, mais le dépôt en compte davantage depuis.
+État mesuré aujourd'hui : **15 suites statiques hors API/PG → 83/83**, `media-client-wiring` **8/8**
+(7 avant L2H), `claims-contract` 10/10 (qui revalide ses propres compteurs : 76 migrations, 71 suites
+`phaseNN`), `parent-session-contract` 9/9, `production-compose-contract` 18/18 ; **121/121** tests
+unitaires API, `npm run lint` exit 0, et `phase67` vert sur PostgreSQL 18.4 réel (banc d'upload complet,
+`run_pg.mjs` port 54329).
 réécrit, `registerFromSync` de retour, route plus nommée *dans la branche* — la 1re tentative de
 mutation avait visé le message du garde L2E, preuve que le contrat cible bien la bonne occurrence).
 
