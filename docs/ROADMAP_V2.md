@@ -28,7 +28,7 @@
 | P1 | **Grafana + alertes** | Dashboard API/worker/DB ; alertes erreur rate > 1 %, jobs bloqués, disque |
 | P1 | **Archivage rétention** (S3 glacier) | Complément de la purge (audit > 5 ans archivé, pas seulement supprimé) |
 | P2 | **Backups chiffrés programmés** | Cron `scripts/backup.sh` + copie hors-site ; exercice de restauration mensuel |
-| P2 | **Load tests k6 en CI** | `tests/load/sync.k6.js` prêt ; gate p95 < 2 s |
+| P2 | **Load tests k6 en CI** | `tests/load/sync.k6.js` prêt ; gate p95 < 2 s — **non exécuté** aujourd'hui : le critère est déjà mesuré par `npm run test:capacity` en parité (500 ops, §5 du plan de réparation) ; reste à le rejouer sur une cible prod-like avec k6 |
 
 ## Mobile
 
@@ -44,5 +44,5 @@
 |---|---|---|
 | P1 | **Multi-établissements avancé** | Une organisation = plusieurs sites (déjà supporté) ; consolidation multi-org pour groupes |
 | P2 | **Module paie** | **✅ FAIT** — migration 044, API generate/lignes/finalize (phase17 8 cas) + **écran web PayrollPage** (génération mensuelle, détail, lignes, finalisation) |
-| P2 | **Vidéosurveillance** | **✅ DPIA + verrou + MODULE (phases 20-21)** — DPIA rédigée (docs/regulatory), flag exigeant DPIA approuvée par org (046), module V1 : caméras (zones limitées par la DPIA, CHECK base), clips DVR/NVR (presign S3 ou local), visionnage journalisé `read`, **purge 30 j par le worker** (stockage d'abord — jamais de fausse purge, échec S3 → job failed + réessai), écran VideoPage FR/AR ; phase21 (8 cas). PAS de live (hors périmètre documenté) ; **bug réel corrigé en route : jobs_finish enum cast (048 — chemin d'échec des jobs cassé depuis 024)** |
+| P2 | **Vidéosurveillance** | **DPIA + verrou + MODULE (phases 20-21), NON opérationnel en l'état** — DPIA rédigée (docs/regulatory), flag exigeant DPIA approuvée par org (046, **inactif par défaut**), module V1 : caméras (zones limitées par la DPIA, CHECK base), visionnage journalisé `read`, **purge 30 j par le worker** (stockage d'abord — jamais de fausse purge, échec S3 → job failed + réessai), écran VideoPage FR/AR ; phase21 (9 cas). PAS de live (hors périmètre documenté) ; **bug réel corrigé en route : jobs_finish enum cast (048 — chemin d'échec des jobs cassé depuis 024)**. **D5 (décision produit, 25/09/2026) = (c)** : l'**ACQUISITION** des clips est absente — aucun écran n'envoie de clip (verrou dans `phase21`), `POST /video/clips/presign-upload` est *fail-closed* en production depuis le lot 2B (D1 = A : pas de sous-domaine public) et le plafond de taille n'est pas tranché. Lot à dimensionner **si** la vidéosurveillance entre au programme du pilote : envoi par l'API (streaming vers le stockage, plafond dédié, timeouts nginx) — pas de voie S3 publique sans rouvrir D1 |
 | P0-sécurité | **Correctifs d'audit externe — ✅ (phase22)** : défaut majeur paiement (UPDATE via pool brute → 0 ligne silencieuse RLS : corrigé, prouvé), durcissement stockage vidéo (préfixe tenant, anti-path-traversal, backend serveur seul, CHECK migration 049), gardes fichiers API+worker, garde anti-bypass RLS globale (le P0 serait mort né), migration 050 métriques SECURITY DEFINER |

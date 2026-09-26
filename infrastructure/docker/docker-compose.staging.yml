@@ -24,7 +24,15 @@ services:
       retries: 10
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # H1 (25/09/2026) : MinIO a retiré ses images des registres publics (Docker Hub
+    # le 12/09, Quay.io le 24/09 — `unauthorized` mesuré depuis le runner) : plus
+    # aucun tirage anonyme n'est possible. L'image par défaut est donc CONSTRUITE
+    # localement depuis le binaire officiel de la release épinglée, somme SHA-256
+    # vérifiée par le builder (`node scripts/build-minio-image.mjs`). `MINIO_IMAGE`
+    # reste la surcharge d'exploitation : un miroir interne se substitue sans
+    # modifier le dépôt (et sans reconstruction locale — aucun `build:` ici, pour
+    # qu'un miroir ne soit jamais silencieusement remplacé par un build).
+    image: ${MINIO_IMAGE:-creche-minio:RELEASE.2025-09-07T16-13-09Z}
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}
@@ -71,6 +79,9 @@ services:
     image: ghcr.io/creche-saas/api:staging
     environment:
       NODE_ENV: staging
+      # F2 : le port est explicite — la sonde du conteneur interroge ce même port
+      # (`APP_PORT`), un défaut implicite rendrait la sonde fragile.
+      APP_PORT: "3000"
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL creche_app requis}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       # H2k — digests du collecteur (optionnels ; Prometheus n'est pas livré en
@@ -84,6 +95,15 @@ services:
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       S3_BUCKET: creche-media-staging
       CORS_ORIGINS: ${CORS_ORIGINS}
+    # F2 (audit 2026-09-24) : sonde réelle — l'image node:22-slim n'a ni curl ni
+    # wget, la sonde est le script Node compilé qui interroge le vrai endpoint
+    # public `/api/v1/health` du même processus (l'image `:staging` embarque dist/).
+    healthcheck:
+      test: ["CMD-SHELL", "node apps/api/dist/healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -106,6 +126,17 @@ services:
       S3_ENDPOINT: http://minio:9000
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # F2 : marqueur de vivacité (défauts explicites — le worker n'expose aucun port).
+      WORKER_LIVENESS_FILE: /tmp/creche-worker-alive
+      WORKER_LIVENESS_INTERVAL_MS: "10000"
+    # F2 (audit 2026-09-24) : marqueur absent/périmé = conteneur redémarré ; le
+    # bail du job en cours est repris par jobs_reap_stale (migration 053).
+    healthcheck:
+      test: ["CMD-SHELL", "node apps/worker/dist/healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     depends_on:
       migrate:
         condition: service_completed_successfully

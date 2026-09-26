@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { pullRegistryImage } from './registry-pull.mjs';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { resolve } from 'node:path';
 
@@ -29,6 +29,8 @@ const env = {
   JWT_SECRET: secret(), JWT_REFRESH_SECRET: secret(),
   MINIO_ROOT_USER: 'h1-synthetic', MINIO_ROOT_PASSWORD: secret(),
   CORS_ORIGINS: 'https://staging-test.invalid', WORKER_SCHEDULER_ENABLED: 'false',
+  // H1 : un MIROIR d'exploitation (chemin historique) — pas un secret, et vide par défaut.
+  MINIO_IMAGE: process.env.MINIO_IMAGE ?? '',
 };
 if (dev) {
   Object.assign(env, {
@@ -64,7 +66,19 @@ try {
   if (dev) compose(['build', 'api', 'worker', 'admin-web']);
   else for (const target of ['api', 'worker']) docker(['build', '-f', `apps/${target}/Dockerfile`, '-t', `ghcr.io/creche-saas/${target}:staging`, '.']);
   const config = JSON.parse(compose(['config', '--format', 'json'], { quiet: true }));
-  for (const name of ['postgres', 'minio']) process.stdout.write(await pullRegistryImage(config.services[name].image, { env }));
+  process.stdout.write(await pullRegistryImage(config.services.postgres.image, { env }));
+  // MinIO (H1, 25/09/2026) : plus AUCUN registre public ne sert cette image
+  // (Docker Hub retiré le 12/09, accès anonyme Quay coupé le 24/09). Sans
+  // `MINIO_IMAGE` (miroir d'exploitation), l'image est CONSTRUITE localement
+  // depuis la release officielle, somme SHA-256 vérifiée par le builder — la
+  // stack de qualification ne dépend donc d'aucun registre pour l'object store.
+  const minioImage = config.services.minio.image;
+  process.stdout.write(env.MINIO_IMAGE
+    ? await pullRegistryImage(minioImage, { env })
+    : `MinIO : construction locale de ${minioImage} (miroir non fourni)\n`);
+  if (!env.MINIO_IMAGE) {
+    execFileSync(process.execPath, ['scripts/build-minio-image.mjs', minioImage], { env, stdio: 'inherit' });
+  }
   compose(['up', '-d', '--pull', 'never', 'api', 'worker', 'minio', ...(dev ? ['admin-web'] : [])]);
   // Readiness is functional, not just a running PID or a made-up health label.
   await until(() => {

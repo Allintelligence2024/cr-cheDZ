@@ -5,6 +5,7 @@ import { Pool, PoolClient, types } from 'pg';
 import { assertApplicationDatabaseRole, assertProductionConfig, BUSINESS_TIME_ZONE, dateOnly, monthBounds, notificationAllowed, NOTIFICATION_DENIED_REASON } from '@creche/prod-config';
 import { buildXlsx, storeExport, type ExportPayload } from './exports';
 import { runWorker, type ClaimedJob, type JobHandlers } from './job-runtime';
+import { startLiveness } from './liveness';
 import { buildInvoicePdf, deleteFile, storePdf } from './pdf';
 
 // MISSION P1 (feat(config)) : garde de config au boot — en production, un
@@ -204,11 +205,28 @@ async function paymentsExpire(): Promise<void> {
   }
 }
 
-/** retention_purge : purge des journaux au-delà de RETENTION_DAYS (défaut 1825 j). */
+/** retention_purge : purge des journaux au-delà de RETENTION_DAYS (défaut 1825 j),
+ *  puis de la messagerie (L4 / décision D2, 2026-09-25) : file de notifications
+ *  TERMINÉES au-delà de NOTIFICATION_RETENTION_DAYS (défaut 90 j — l'inbox reste
+ *  la voie de lecture durable) et contenu des messages au-delà de
+ *  MESSAGES_RETENTION_DAYS (défaut 365 j). `pending`/`processing` ne sont jamais
+ *  touchés : une notification en cours de retry survit, même très ancienne. */
 async function retentionPurge(): Promise<void> {
   const days = Number(process.env.RETENTION_DAYS ?? 1825);
   const r = await pool.query(`SELECT retention_purge_logs(NOW() - ($1::int || ' days')::interval) AS purged`, [days]);
   console.log(`[worker] retention_purge : ${r.rows[0].purged} ligne(s) purgée(s) (> ${days} j)`);
+
+  const notifDays = Number(process.env.NOTIFICATION_RETENTION_DAYS ?? 90);
+  const messageDays = Number(process.env.MESSAGES_RETENTION_DAYS ?? 365);
+  const m = await pool.query(
+    `SELECT notifications_purged, messages_expired FROM retention_purge_messaging(
+       NOW() - ($1::int || ' days')::interval, NOW() - ($2::int || ' days')::interval)`,
+    [notifDays, messageDays],
+  );
+  console.log(
+    `[worker] retention_purge : messagerie — ${m.rows[0].notifications_purged} notification(s) terminée(s) purgée(s) (> ${notifDays} j), ` +
+    `${m.rows[0].messages_expired} contenu(s) de message expiré(s) (> ${messageDays} j)`,
+  );
 }
 
 /** export_report : génère le fichier Excel (présences/factures) et enregistre report_exports. */
@@ -300,9 +318,14 @@ const JOB_HANDLERS: JobHandlers = {
   // l'inbox reste la voie fiable. Les lignes héritées échouent explicitement
   // (« Type de job inconnu »), jamais avec un faux succès.
   export_report: (_p, _o, job) => exportReport(job),
-  // Intégration non configurée dans cette session (stub explicite, jamais de
-  // faux statut : le job échoue avec un message clair si invoqué).
-  compress_media: async () => { throw new Error('NOT_IMPLEMENTED: compression média'); },
+  // D3 (décision produit, 2026-09-25) : « compress_media » a été RETIRÉ du
+  // handler. C'était un stub permanent qui ne pouvait qu'échouer
+  // (NOT_IMPLEMENTED) et qu'aucun chemin de code ne mettait en file : une dette
+  // silencieuse annoncée comme intégration. Une ligne héritée portant ce
+  // job_type échoue désormais explicitement (« Type de job inconnu »), jamais
+  // avec un faux succès. La compression, si elle devient un besoin, se fera
+  // côté clients AVANT envoi (les plafonds serveur 8/12 Mio restent la
+  // garantie) — voir plan de réparation §6 D3.
 };
 
 // ── Push FCM HTTP v1 / APNs ─────────────────────────────────────────────────
@@ -480,6 +503,13 @@ async function initSentry(): Promise<void> {
 
 async function run(): Promise<void> {
   await assertApplicationDatabaseRole(pool);
+  // F2 (audit 2026-09-24) : marqueur de vivacité lu par le HEALTHCHECK Docker.
+  // Démarré APRÈS les gardes de boot (un conteneur mal configuré ne doit pas
+  // paraître sain) et arrêté sur SIGTERM/SIGINT avec le worker.
+  const stopLiveness = await startLiveness();
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.once(signal, () => void stopLiveness());
+  }
   await initSentry();
   await runWorker(pool, JOB_HANDLERS, drainNotificationQueue, (error) => {
     sentry?.captureException(error);

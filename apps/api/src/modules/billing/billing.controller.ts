@@ -5,6 +5,7 @@ import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/cu
 import { Public } from '../../shared/decorators/public.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { AppError } from '../../shared/errors';
+import { sendStorageObject } from '../../shared/storage/object-stream';
 import {
   AllocatePaymentDto, CloseCashRegisterDto, ContractIdParam, CreateContractDto,
   CreateOnlinePaymentDto, GenerateInvoiceDto, InvoiceIdParam, OpenCashRegisterDto,
@@ -79,11 +80,19 @@ export class BillingController {
   @Get('invoices/:invoiceId/pdf')
   @Roles('director', 'accountant')
   async invoicePdf(@CurrentUser() u: CurrentUserPayload, @Param() p: InvoiceIdParam, @Req() req: Request, @Res() res: Response) {
+    // LOT 2 (P0 F5) : flux same-origin — plus de redirection 302 vers une URL
+    // signée MinIO (lié à 127.0.0.1 en production, donc injoignable client).
     const result = await this.billing.invoicePdf(u.sub, p.invoiceId, req.ip);
-    if (result.kind === 'redirect') return res.redirect(HttpStatus.FOUND, result.url);
-    res.setHeader('content-type', 'application/pdf');
-    res.setHeader('content-disposition', `inline; filename="${result.invoice.invoice_number ?? 'facture'}.pdf"`);
-    res.send(result.buffer);
+    sendStorageObject(res, req, result.object, {
+      contentType: 'application/pdf',
+      filename: `${result.invoice.invoice_number ?? 'facture'}.pdf`,
+      inline: true,
+      onStreamError: {
+        code: 'PDF_NOT_READY',
+        messageFr: 'Le PDF n’est pas encore généré',
+        messageAr: 'لم يتم إنشاء ملف PDF بعد',
+      },
+    });
   }
 
   /** draft → sent : la facture devient exigible. */

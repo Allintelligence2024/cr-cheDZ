@@ -55,7 +55,15 @@ services:
     restart: unless-stopped
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # H1 (25/09/2026) : MinIO a retiré ses images des registres publics (Docker Hub
+    # le 12/09, Quay.io le 24/09 — `unauthorized` mesuré depuis le runner) : plus
+    # aucun tirage anonyme n'est possible. L'image par défaut est donc CONSTRUITE
+    # localement depuis le binaire officiel de la release épinglée, somme SHA-256
+    # vérifiée par le builder (`node scripts/build-minio-image.mjs`). `MINIO_IMAGE`
+    # reste la surcharge d'exploitation : un miroir interne se substitue sans
+    # modifier le dépôt (et sans reconstruction locale — aucun `build:` ici, pour
+    # qu'un miroir ne soit jamais silencieusement remplacé par un build).
+    image: ${MINIO_IMAGE:-creche-minio:RELEASE.2025-09-07T16-13-09Z}
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER requis}
@@ -146,6 +154,16 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # F2 (audit 2026-09-24) : sonde réelle — l'image node:22-slim ne fournit ni
+    # curl ni wget, la sonde est le script Node compilé qui interroge le vrai
+    # endpoint public `/api/v1/health` du même processus. Un API vivant mais
+    # figé est désormais REDÉMARRÉ au lieu de rester en service silencieusement.
+    healthcheck:
+      test: ["CMD-SHELL", "node apps/api/dist/healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
     deploy:
       resources:
@@ -161,6 +179,9 @@ services:
       WORKER_HEARTBEAT_MS: ${WORKER_HEARTBEAT_MS:-30000}
       WORKER_REAPER_INTERVAL_MS: ${WORKER_REAPER_INTERVAL_MS:-300000}
       WORKER_SHUTDOWN_TIMEOUT_MS: "45000"
+      # F2 — marqueur de vivacité lu par le healthcheck (défauts explicites).
+      WORKER_LIVENESS_FILE: /tmp/creche-worker-alive
+      WORKER_LIVENESS_INTERVAL_MS: "10000"
       NODE_ENV: production
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?PAYMENT_WEBHOOK_SECRET requis}
@@ -188,6 +209,17 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # F2 (audit 2026-09-24) : le worker n'expose aucun port — la sonde lit le
+    # marqueur de vivacité que le processus réécrit toutes les 10 s (E1 de
+    # WORKER_LIVENESS_INTERVAL_MS). Marqueur absent/périmé = conteneur
+    # redémarré ; le bail du job en cours est repris par jobs_reap_stale (053),
+    # donc aucun job n'est perdu.
+    healthcheck:
+      test: ["CMD-SHELL", "node apps/worker/dist/healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
     # R12 (remédiation 2026-09-21, F10) — 2 workers concurrents pour absorber
     # les pics (export PDF long, expiration paiements, purges) sans bloquer

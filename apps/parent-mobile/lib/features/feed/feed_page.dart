@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../core/api_client.dart';
+import '../../core/error_state.dart';
 
 class FeedPage extends StatefulWidget {
   const FeedPage({
@@ -24,25 +26,30 @@ class _FeedPageState extends State<FeedPage> {
     _feed = widget.api.feed(widget.childId);
   }
 
+  void _reload() {
+    setState(() {
+      _feed = widget.api.feed(widget.childId);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<dynamic>>(
       future: _feed,
       builder: (context, snapshot) {
+        // L'erreur AVANT le chargement : sinon une erreur laisse un indicateur
+        // infini (défaut mesuré — l'écran restait bloqué, sans message ni issue).
+        if (snapshot.hasError) {
+          return buildApiError(context, snapshot.error, _reload);
+        }
         if (snapshot.connectionState != ConnectionState.done) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (snapshot.hasError) {
-          return const Center(
-            child: Text('Fil indisponible / السجل غير متاح'),
-          );
-        }
-        final items = snapshot.data ?? [];
+        final items = snapshot.data ?? const <dynamic>[];
         return RefreshIndicator(
-          onRefresh: () async {
-            setState(() {
-              _feed = widget.api.feed(widget.childId);
-            });
+          onRefresh: () {
+            _reload();
+            return Future<void>.value();
           },
           child: ListView.builder(
             itemCount: items.length,

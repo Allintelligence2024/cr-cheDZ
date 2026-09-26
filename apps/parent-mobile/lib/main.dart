@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+
 import 'core/api_client.dart';
+import 'core/error_state.dart';
 import 'features/absence/absence_sheet.dart';
 import 'features/auth/otp_login_page.dart';
 import 'features/feed/feed_page.dart';
@@ -21,13 +23,25 @@ class ParentApp extends StatefulWidget {
 class _ParentAppState extends State<ParentApp> {
   // D3 : défaut = URL de production HTTPS, comme staff-mobile. Pour un
   // émulateur Android en dev : --dart-define API_URL=http://10.0.2.2:3000/api/v1
-  final _api = ParentApiClient(
+  //
+  // L3 (audit 2026-09-24, item C2) : quand le refresh échoue (refresh token
+  // expiré/révoqué — rotation G1b), la session est purgée et l'app REVIENT à la
+  // connexion OTP. Avant, elle restait sur un fil vide en 401 jusqu'à ce que le
+  // parent désinstalle l'application.
+  late final ParentApiClient _api = ParentApiClient(
     const String.fromEnvironment(
       'API_URL',
       defaultValue: 'https://api.creche.dz/api/v1',
     ),
+    onSessionExpired: _handleSessionExpired,
   );
   bool _authenticated = false;
+
+  void _handleSessionExpired() {
+    if (mounted && _authenticated) {
+      setState(() => _authenticated = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -73,11 +87,24 @@ class _ParentHomeState extends State<ParentHome> {
     _children = widget.api.children();
   }
 
+  void _reloadChildren() {
+    setState(() {
+      _children = widget.api.children();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<dynamic>>(
       future: _children,
       builder: (context, snapshot) {
+        // Erreur AVANT le chargement : sinon une erreur laissait tourner
+        // l'indicateur indéfiniment (défaut mesuré, item C2).
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: buildApiError(context, snapshot.error, _reloadChildren),
+          );
+        }
         if (!snapshot.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),

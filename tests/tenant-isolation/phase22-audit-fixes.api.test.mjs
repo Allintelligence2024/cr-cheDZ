@@ -37,7 +37,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createDpiaReviewer } from '../fixtures/dpia-reviewer.mjs';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
-import { appUrl, ensureAppRole } from './helpers.mjs';
+import { appUrl, ensureAppRole, PRODUCTION_SPAWN_ENV } from './helpers.mjs';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const failures = [];
@@ -289,6 +289,10 @@ const main = async () => {
       cwd: repo,
       env: {
         ...process.env,
+        // Le banc d'essai désactive la limitation de débit ; la garde de
+        // configuration (lot 1) refuse ce raccourci en production — on ne le
+        // propage donc JAMAIS à un boot de production.
+        ...PRODUCTION_SPAWN_ENV,
         NODE_ENV: 'production',
         STORAGE_BACKEND: 'local',
         STORAGE_LOCAL_DIR: storeDir,

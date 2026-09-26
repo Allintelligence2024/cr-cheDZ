@@ -48,7 +48,7 @@ FAIT en dernier (session août 2026) :
   privacy_approved_dpia_exists), garde-fou setFlag (422 DPIA_REQUIRED,
   activation globale interdite VIDEO_SURVEILLANCE_GLOBAL_FORBIDDEN,
   désactivation toujours libre). Suite phase20-video-dpia-gate : 8 cas verts.
-- Phase 21 — MODULE vidéosurveillance V1 implémenté : caméras (zones
+- Phase 21 — MODULE vidéosurveillance V1 implémenté **côté consultation** : caméras (zones
   blanches DPIA, CHECK base — jamais sanitaires/change/sieste/infirmerie),
   clips DVR/NVR (presign S3 comme les photos, backend local explicite),
   download signé + flux local avec VISIONNAGE JOURNALISÉ (audit read),
@@ -139,17 +139,36 @@ FAIT en dernier (session août 2026) :
   affaiblissement, 41 assertions inchangées) ; helpers.mjs : GRANT conditionnel
   de payments_expire_pending (pour la mutation M3) ; ci.yml inchangé : le
   build de @creche/prod-config est enchaîné comme PREBUILD des builds
-  api/worker (la GitHub App n'a pas la permission workflows — docs/CI-RESTORE.md).
+  api/worker. (Historique : cette modification avait été bloquée par la permission
+  `workflows` de la GitHub App — la restriction est levée depuis, les 4 workflows sont
+  versionnés et exécutés en CI ; voir « État CI » ci-dessous.)
 
 RESTE À FAIRE (non fait, à ne pas déclarer fini) :
 - PILOTE TERRAIN : 5 crèches réelles × 2 semaines, stores, DNS/TLS, device
   farm, FCM/APNs/SMS/WhatsApp réels, exercice de restauration, bilan go/no-go
   (docs/pilot/ — baseline pré-pilote dans docs/pilot/BILAN-PILOTE.md).
   C'est de l'HUMAIN + du TERRAIN : rien de codable ne manque.
-- Workflows CI (.github/workflows/ci.yml + docker.yml) : prêts, NON poussés
-  (permission `workflows` de la GitHub App manquante — voir docs/CI-RESTORE.md ;
-  sondes du 2026-08-02 : toujours refusé).
-- e2e Playwright (spec écrit, navigateur absent) ; k6 (script prêt, binaire absent).
+- Workflows CI : **poussés et exécutés** — `ci.yml`, `docker.yml`, `flutter.yml`,
+  `security-audit.yml` sont versionnés sous `.github/workflows/` et tournent à chaque
+  push (le document `docs/CI-RESTORE.md` décrit l'épisode historique du blocage
+  « permission `workflows` », désormais levé). **État CI au 25/09/2026** : `quality`,
+  `docker`, `flutter`, `security`, `e2e`, `admin-web`, `support-console`,
+  `backup-drill` verts. **H1 traité à la racine le 25/09/2026** : le job `database`
+  était rouge **uniquement** parce que MinIO a retiré ses images des deux registres
+  publics (Docker Hub le 12/09, accès anonyme Quay coupé le 24/09 — mesuré). Le
+  défaut n'est plus un tirage : l'image est **construite** depuis le binaire de la
+  release épinglée, somme SHA-256 vérifiée par le builder
+  (`infrastructure/docker/minio.Dockerfile`, `scripts/build-minio-image.mjs`),
+  `MINIO_IMAGE` restant la surcharge miroir d'exploitation
+  (`docs/CI-DATABASE-JOB-FINDINGS.md`, § H1 ; `docs/RUNBOOK.md`). **Verdict en CI : job
+  `database` VERT sur `5266fff` (32 min, `ci`/`flutter`/`docker` verts, aucun secret de
+  registre) — le dépôt n'a plus aucun job rouge.**
+- e2e Playwright (spec écrit, navigateur absent).
+- k6 (script `tests/load/sync.k6.js` prêt, binaire absent) : **non exécuté** ; son critère
+  (p95 sync push < 2 s pour 500 ops) est mesuré par le banc `npm run test:capacity` en
+  parité (50 pushes × 10 ops = 500 ops : p95 1,4 s, 500/500 écritures persistées,
+  25/09/2026) ; le gardien `scripts/verify-load-tests.mjs` (CI, job `quality`) vérifie la
+  structure du script, son seuil et le fait que la doc ne le présente pas comme exécuté.
 - Notification ANPDP SMTP : implémentée, chemin 503 testé, pas testée de bout
   en bout (pas de SMTP).
 - parent-mobile / staff-mobile Flutter : SDK absent → Dart écrit, jamais compilé.
@@ -247,9 +266,9 @@ les correctifs ont été réappliqués selon la spécification
 | Phase 9 | Admin web complète (API + écrans) — dashboard, présences, journal + modération, photos, facturation, fiche enfant, paramètres/tarifs, i18n AR/FR, lazy, responsive |
 | Phase 10 | Santé, conformité 19-253, vie privée 25-11, console support (API + UI) — migrations 029-032, seeds 015 |
 | Roadmap v2 | Messagerie, exports Excel, paiement SATIM, multi-rôles, WhatsApp (notif + OTP), paie, marketplace — phases 12-20 vertes |
-| Conformité vidéo | DPIA rédigée + verrou flag `video_surveillance` (046) + module V1 : caméras/clips/purge 30 j/visionnage journalisé (047-048, phase21) |
+| Conformité vidéo | DPIA rédigée + verrou flag `video_surveillance` (046, **inactif par défaut**) + module V1 : caméras/clips/purge 30 j/visionnage journalisé (047-048, phase21). **Limite écrite noir sur blanc (D5, 25/09/2026)** : l'**acquisition** des clips n'est pas câblée — aucun écran n'envoie de clip (verrou `phase21`), `POST /video/clips/presign-upload` est *fail-closed* en production (pas de sous-domaine public, D1 = A), et le plafond de taille n'est pas tranché — la fonction n'est donc pas présentée comme opérationnelle |
 | Apps | api (NestJS), worker (jobs + push + exports + PDF), admin-web (React FR/AR responsive), support-console, staff-mobile + parent-mobile (squelettes Dart) |
-| CI | Workflows locaux non poussés (permission `workflows`) — `docs/CI-RESTORE.md` |
+| CI | `ci.yml` (7 jobs : quality, database, e2e, admin-web, support-console, security, backup-drill), `docker.yml`, `flutter.yml`, `security-audit.yml` — versionnés et exécutés ; **tous verts au 25/09/2026** (`5266fff`) — `database` était rouge **H1 seul** (MinIO retiré des registres publics), corrigé à la racine par la construction locale de l'image depuis la release officielle vérifiée par somme (`docs/CI-DATABASE-JOB-FINDINGS.md`, § H1) |
 | Docs | `docs/PLAN_IMPLEMENTATION.md`, `docs/PLAN_EXECUTION_PROCHAINES_PHASES.md`, `docs/ROADMAP_V2.md`, `docs/adr/` (000→010), `docs/HANDOFF.md` (ce fichier) |
 
 ## Commandes utiles
@@ -316,3 +335,529 @@ npm run typecheck --workspace @creche/support-console
 # Restaurer la CI
 git add .github && git commit -m "ci: restore workflows" && git push
 ```
+
+---
+
+## Mise à jour 2026-09-24 — lot 2 du plan de réparation (lecture des contenus)
+
+Le contrat de **lecture** des fichiers a changé (P0 « F5 », décision A) : l'API ne rend plus
+d'URL signée S3/MinIO — inexploitable, MinIO étant lié à `127.0.0.1` en production. Photos,
+photos parent, exports, PDF de facture et clips sont servis **same-origin** par l'API
+(`/api/v1/…/content`) et le lien rendu est un **chemin relatif**. Les clients le consomment avec
+le JWT (`apiOpenBlob` côté web, `ParentApiClient.photoContent` côté parent) : un `<img src>`/
+`window.open` nu recevrait 401, le garde JWT n'acceptant que l'en-tête `Authorization`.
+Détails, tableau avant/après et preuves : `docs/PLAN_REPARATION_2026-09-24.md` §4 (lot 2) ;
+suite de preuve : `tests/tenant-isolation/phase66-content-same-origin.api.test.mjs`.
+
+## Mise à jour 2026-09-24 — lot 2, volet B : l'upload média passe par l'API
+
+Le contrat d'**écriture** des médias a changé lui aussi. `POST /api/v1/media/upload`
+(`multipart/form-data`, champ `file`, rôles personnel) reçoit les octets, les vérifie puis c'est
+le **serveur** qui écrit l'objet (`storage.put()`, backend local comme S3) — la clé est construite
+côté serveur (`<org>/photo|document/<horodatage>-<nom assaini>`), jamais fournie par le client.
+Enchaînement : `login → POST /media/upload (file + checksum) → GET /media/:id/download →
+GET /api/v1/media/:id/content` (octets identiques ; `phase67` le prouve de bout en bout, jusqu'à
+la lecture parent sous consentement).
+
+- Refus **avant** écriture : `MEDIA_FILE_REQUIRED`, `MEDIA_MIME_NOT_ALLOWED` (liste blanche
+  partagée avec le presign), `MEDIA_CHECKSUM_MISMATCH` (SHA-256 annoncé ≠ reçu),
+  `MEDIA_CONTENT_MISMATCH` (signature binaire ≠ type annoncé) — tous 422 bilingues.
+- Plafonds : produit **8 Mio** → 422 `MEDIA_TOO_LARGE` ; dur multer **12 Mio** → **413 JSON**
+  (jamais une page HTML) ; `client_max_body_size 12M` dans `nginx.conf` (aligné).
+- Production : `presignPut` **refuse** (503 `UPLOAD_VIA_API_REQUIRED`) sans `S3_PUBLIC_ENDPOINT`.
+  C'est le garde qui remplace l'échec silencieux sur le téléphone par une erreur explicite. Il
+  couvre aussi `POST /video/clips/presign-upload` (message adapté par appelant).
+- Preuves : `tests/tenant-isolation/phase67-media-upload.api.test.mjs` (31 vérifications, ajoutée
+  au runner → **73 entrées**) ; tests unitaires `apps/api/src/modules/media/storage.service.spec.ts`
+  et `dto/media.dto.spec.ts` (15 cas, dont la normalisation multipart de `children_in_photo` —
+  sans elle `all_consents_checked` resterait faux et la photo ne serait jamais publiée).
+
+**Reste ouvert (dit tel quel, aucun cliquet baissé)**
+1. `apps/staff-mobile/lib/core/media/media_uploader.dart` appelle **encore** le presign
+   (`presign → putSigned → register`). À basculer sur `POST /media/upload` en multipart avec le
+   même jeton. **Non livré** : aucun SDK Flutter ici → aucun `flutter test` ne pourrait le
+   prouver ; à faire avec le lot 3 (même blocage que le lockfile `parent-mobile`).
+2. **Photo hors ligne** (`add_photo`) : le client n'envoie pas d'octets et le serveur ne lit que
+   `storage_key`/`mime_type` → asset créé, **aucun octet écrit**, lecture 404
+   `MEDIA_CONTENT_MISSING` (preuve exécutée, plan §3.2). Correctif côté client (file locale →
+   upload API, lot **L3**). Faire passer les octets en base64 dans `POST /sync/push` est **refusé
+   par le serveur** depuis le lot **L2E** (2026-09-25) : le payload y était stocké verbatim en JSONB
+   (sans plafond, hors pipeline média) → garde de forme `refuseNonStorablePayload` (payload > 16 Ko,
+   chaîne ≥ 4096 caractères strictement base64 — renommages compris — rejetés, refus non persisté),
+   avec au passage un vrai défaut corrigé : un corps de ~300 Ko rendait 500 au lieu de 413.
+3. **Clips vidéo** : presign *fail-closed* en production, mais téléversement **par l'API** non
+   livré (fichiers volumineux : dimensionnement dédié).
+
+
+### Complément 2026-09-25 — lot L2C : le volet client de F5 est verrouillé (pas rebranché)
+
+Le lot 2B a livré le remplacement serveur (`POST /api/v1/media/upload`) et rendu le presign
+d'écriture *fail-closed* en production. Le **client**, lui, appelle encore l'ancien chemin
+(`apps/staff-mobile/lib/core/media/media_uploader.dart`) — mais **aucune UI ne l'utilise** (pas
+d'`image_picker`/caméra dans `staff-mobile/lib`, aucun téléversement dans admin-web ; le fichier
+n'est référencé que par ses propres tests). La réécriture Dart appartient au lot **L3** (SDK Flutter
+requis) ; en attendant, `tests/tenant-isolation/media-client-wiring.test.mjs` (job `quality` +
+bundle du gate D) **interdit de câbler un écran sur ce chemin mort** sans rebrancher, et exige que
+chaque exception reste vraie (appel réel présent) et hors UI. Preuves : 5/5 ; **5 mutations rouges**,
+dont une qui a révélé un motif troué (il comptait les commentaires) → durci sur les appels réels.
+
+**Et la voie hors-ligne (`add_photo`)** — qui crée un asset **sans octets** (404
+`MEDIA_CONTENT_MISSING` à la lecture, défaut mesuré pendant le lot 2B) : même traitement. Le contrat
+vérifie que le serveur n'écrit toujours aucun octet dans `registerFromSync` (extraction **contrôlée** :
+si la fonction bouge, le verrou échoue au lieu de dormir) et qu'**aucune UI n'appelle
+`enqueueOfflinePhoto`. Le canal d'octets à retenir est le **dossier D6** (plan §6) :
+(a) file locale client + `POST /media/upload` — recommandé, à faire avec L3 ; (b) base64 dans
+`sync/push` — suppose de relever le plafond de corps de cette seule route ; (c) retirer la voie tant
+qu'aucune UI ne capture.
+
+
+### Complément 2026-09-25 — lot L2E : `POST /sync/push` n'est pas un canal de fichiers
+
+Le constat 33 de l'audit (« photos offline en base64 ») était présenté comme un défaut **client**
+(hors d'atteinte de l'UI). La mesure serveur dit autre chose : `POST /sync/push` **stocke le payload
+verbatim** dans `sync_operations.payload` (JSONB, **sans plafond**), le DTO accepte un `payload`
+générique, et `add_photo` ne consomme jamais de champ d'octets — un client qui enverrait la photo en
+base64 la ferait donc **persister dans le journal de synchronisation**, hors du pipeline média
+(consentement, plafond, `media_access_logs`), tout en produisant un asset sans octets.
+
+Livré : garde de **forme** `refuseNonStorablePayload` (exporté, appelé **avant toute connexion** à la
+base) — payload sérialisé > 16 Ko → `PAYLOAD_TOO_LARGE_FOR_SYNC` ; toute chaîne ≥ 4096 caractères
+strictement base64, **récursivement** → `PAYLOAD_BINARY_NOT_ALLOWED` (message nommant
+`POST /api/v1/media/upload`) ; payload non sérialisable → `PAYLOAD_NOT_SERIALIZABLE`. Le refus n'est
+**pas persisté** : ce qu'on refuse de stocker n'est pas stocké, même en « rejected » → rejeu
+déterministe. Preuves : `phase77-sync-payload-guard.api.test.mjs` (**17/17**, PG 18 réel + HTTP ;
+ajoutée au runner → **73 entrées**, libellé CI `phase3 → phase77`) ; `http-exception.filter.spec.ts`
+(4/4) ; `claims-contract` 10/10 (compteurs réactualisés : 71 suites `phaseNN`, 89 fichiers).
+4 mutations rouges (garde de forme retiré → 8 échecs ; plafond retiré → 1 ; refus persisté → 7 ;
+filtre reverté → 2), restaurations `diff -q` ✓. **Gate D complet rejoué localement (25/09)** :
+rc=0, **74/74 suites vertes** (batterie 1467 s, rôles de production), `phase77` **22 assertions ✓**,
+et aucune suite antérieure cassée par le garde de forme.
+
+**Défaut réel découvert au passage** : un corps de ~300 Ko rendait **500 « erreur interne »** au lieu
+de 413 — l'erreur du body-parser d'Express (`PayloadTooLargeError`) n'est pas une `HttpException` et
+tombait dans la branche générique du filtre global. `http-exception.filter.ts` gagne
+`clientHttpStatus()` + une branche 413 bilingue : un client qui envoie trop gros doit réduire son
+envoi, pas croire à une panne. **Conséquence D6** : l'option (b) (« base64 dans `sync/push` ») est
+**fermée côté serveur** ; restent (a) file locale + `POST /media/upload` (recommandée, avec L3) et
+(c) retrait de la voie.
+
+
+### Complément 2026-09-25 — lot L3 : la session parent se renouvelle (et les erreurs ont une issue)
+
+**Défaut (audit 2026-09-24, item C2)** : l'access token dure **15 minutes** et rien ne le renouvelait
+dans `parent-mobile` (le fichier est `lib/core/api_client.dart` — la clôture d'audit citait
+`lib/core/network/…`, chemin qui n'existe pas). Passé ce délai, chaque appel rendait 401 : les écrans
+affichaient une erreur générique ou, pour trois d'entre eux, un **indicateur de chargement infini**.
+Décision **D4 = correctif court** : refresh + états d'erreur, pas d'offline-first.
+
+**Comment le lot a pu être prouvé sans SDK local** : il n'y a toujours ni Flutter ni `pub.dev` dans
+l'environnement (`000`, mesuré 3 fois le 25/09). Mais le job `flutter` de la CI a le SDK **3.47.1**
+épinglé et compile réellement les applications : il a donc servi de compilateur et de banc de test —
+et il a attrapé au premier run une erreur de compilation réelle
+(`'await' can only be used in 'async' or 'async*' methods`, dans `photoContent`), corrigée au commit
+suivant. C'est plus fort qu'une relecture : le verdict vient du compilateur qui produit le binaire.
+
+**Livré** : intercepteur 401 → refresh → rejeu borné ; rafraîchissement **single-flight par futur
+partagé** (`_refreshInFlight`) — les 401 simultanés attendent le MÊME refresh, là où le drapeau
+booléen du client staff-mobile les fait échouer ; rotation G1b persistée ; refresh refusé → session
+**purgée** + `ParentSessionExpired` + retour à l'OTP (`main.dart`) ; erreurs typées
+(`offline`/serveur/401) et état d'erreur homogène (`core/error_state.dart`) sur le fil, les photos,
+les consentements et la liste d'enfants ; feuille d'absence qui n'avale plus l'échec ;
+`apps/parent-mobile/test/` (12 tests) **exécutés par la CI — vert sur `ce69bbd`** ; verrou statique
+`parent-session-contract` (**9/9**, `quality` + gate D) — 8 règles de session parent + la règle « aucun échec masqué par un tube », ajoutée après le faux vert mesuré en CI le 25/09, et la 9e sur la résolution des dépendances (`--enforce-lockfile`).
+
+**Lockfile** : `flutter.yml` contraint la résolution (`--enforce-lockfile`) dès que `pubspec.lock`
+est versionné, et sinon **publie** la résolution réelle du run pour qu'elle soit committée — en
+morceaux numérotés, parce qu'une annotation GitHub est plafonnée à **4096 caractères** (mesuré : le
+premier envoi est arrivé tronqué, 3072 octets, donc inexploitable).
+
+**En attente (dit tel quel)** : commit de `pubspec.lock` + relevé du **verdict final** du job
+`flutter` — le jeton GitHub de l'environnement a été invalidé pendant le lot (même panne que le
+24/09 à la même heure d'horloge), donc la CI a tourné mais son verdict n'a pas pu être lu.
+
+## Complément 2026-09-26 — L2F : l'uploader média est rebranché sur l'API
+
+Dernier chemin mort identifié par l'audit (F5, volet client) : `MediaUploader` parlait encore au
+presign d'écriture, **mort en production** depuis le lot 2B (le stockage n'a pas de sous-domaine
+public, décision D1 = A). Il envoie désormais les octets à `POST /api/v1/media/upload` (multipart) :
+
+- partie `file` avec **type MIME explicite** (sans lui, la partie serait `application/octet-stream` et
+  l'API refuserait : elle vérifie `file.mimetype` **et** la signature binaire) ;
+- `child_id` + `checksum` — le SHA-256 est **vérifié par le serveur** avant toute écriture ;
+- le client ne fabrique plus de clé de stockage (le serveur la compose) et n'affirme plus
+  `exif_stripped: true` alors que le retrait EXIF n'est pas fait : c'était un mensonge de données ;
+- F7 conservé : reprise **unique** sur panne de transport, jamais sur une réponse serveur, délais
+  bornés, corps reconstruit à chaque tentative (`FormData` finalisé non rejouable).
+
+Preuves : `media-client-wiring` **6/6** avec liste d'exceptions **vide** et 3 mutations rouges
+(retour au presign, type MIME retiré, `exif_stripped` rajouté) ; le Dart (6 tests du groupe L2F) est
+exécuté par le job `flutter`. Hors périmètre, dit tel quel : aucun écran de capture n'existe encore,
+et le retrait EXIF côté client reste une dette.
+
+Le 1er jet (`76fd61b`) est tombé sur **un** test, côté test : son double cyclait un script d'un seul
+élément et rejouait donc la panne aux deux tentatives — « panne puis succès » ne pouvait pas passer.
+Script consommé séquentiellement depuis `e1d12e9`, et `ci-run.sh` publie maintenant le **nom** du test
+fautif (`Failing tests:`), pas seulement l'exception.
+
+## Complément 2026-09-26 — L2G : le serveur ne fabrique plus `exif_stripped = true`
+
+Le lot L2F a produit un effet de second ordre, attrapé à la lecture du code : le client ne déclare
+plus retirer les métadonnées EXIF (il ne le fait pas), et ce silence a **activé un défaut menteur du
+serveur** — `media.service.ts` chemin d'upload : `dto.exif_stripped ?? true`. La colonne en base
+(`NOT NULL DEFAULT false`, migration 008) était honnête ; c'est le service qui l'écrasait par une
+affirmation que personne ne pouvait soutenir (et qui touche à la géolocalisation GPS de photos
+d'enfants, lue par l'audit `data_*`).
+
+Corrigé : `?? false` — on enregistre ce qui est vrai, et un vrai retrait pourra se déclarer plus tard.
+Preuves : `phase67` **relit la colonne** après un upload multipart nominal (doit valoir `false`),
+nouveau verrou statique `L2G` dans `media-client-wiring` (7 contrôles) interdisant le retour de
+`exifStripped ?? true`, et **mutation mesurée** (`?? true` → `colonne=true`, verrou 6/7). Le retrait
+EXIF reste une dette ; il n'est plus un mensonge.
+
+## Complément 2026-09-26 — L2H : `log_event_id` est vérifié comme `child_id`
+
+Trouvé en relisant le même fichier que L2G : dans `createAsset` (média), `child_id` et
+`children_in_photo` passaient par `childOfTenant`, mais **`log_event_id` était inséré sans aucune
+vérification**. Les clés étrangères PostgreSQL **ne consultent pas le RLS** : la contrainte vérifie
+l'existence de la ligne, pas son organisation. Un média de l'organisation A pouvait donc être rattaché
+à un événement de journal de B — **mesuré** : `201` et une ligne réellement créée (sonde ajoutée au
+banc *avant* le correctif).
+
+Corrigé par une garde `logEventOfTenant` (même forme que `childOfTenant` : lecture sur la connexion du
+tenant, `404` bilingue sinon), appelée dans `createAsset` — donc sur les deux chemins d'écriture,
+`upload` (production) et `register` (dev/legacy).
+
+Preuves : `phase67` refuse le lien hors périmètre, **ne crée aucune ligne**, et accepte toujours le lien
+légitime (contrôle inverse : sans lui, une garde qui refuserait tout passerait) ; verrou statique `L2H`
+dans `media-client-wiring` (**8 contrôles**) ; mutations `→ 2 rouges` (garde retirée) puis `→ 7/8`
+(verrou), restaurations vertes. Hors périmètre, dit tel quel : la cohérence *enfant ↔ événement* quand
+les deux sont fournis (aucun chemin de lecture ne joint les deux tables aujourd'hui).
+
+**Résidu nommé, mesuré le 26/09 (lot L2H)** — la même classe existe ailleurs et n'est pas close :
+les champs `dto.*_id` (identifiants déclarés par le client) apparaissent **~120 fois** dans les
+services de l'API, répartis sur les modules `children` (22), `billing` (22), `staff` (19), `privacy`
+(14), `messaging` (9), `attendance` (9), `users` (7), `video` (6), `attestations` (6)… Un balayage
+automatique par nom de garde (`*OfTenant`, `assertStorageKeyInTenant`) désigne 13 fichiers sans
+garde apparente, mais **cette heuristique ne prouve rien** : plusieurs modules valident sous un autre
+nom, et l'inverse est possible. Le volet média est, lui, close et prouvé (`phase67` + verrou `L2H`) ;
+le chemin frère `journal` a été relu et **valide** bien (`childOfTenant`, `room_id` dérivé de
+l'enfant, jamais du client). Un balayage systématique des autres modules demande sa propre décision et
+ses propres bancs — il est donc **ouvert, nommé ici**, et non maquillé en « rien à signaler ».
+
+## Complément 2026-09-26 — L2I : `site_id` du pointage vérifié (HTTP et sync)
+
+Le balayage ouvert par L2H a cherché le motif exact (identifiant du client recopié tel quel dans un
+objet d'écriture) dans toute l'API : il ne restait qu'un endroit, `attendance.service.ts` →
+`applyCheckIn`, où `dto.site_id` était inséré **sans vérification** (le repli sur le site de l'enfant,
+lui, était sûr). `attendance_sessions.site_id` étant une clé étrangère — et une FK ne consulte pas le
+RLS —, une session de l'organisation A pouvait référencer le site de B. Mesuré : `201` + une session
+liée.
+
+Corrigé par une garde `siteOfTenant` (lecture sous RLS) appliquée **avant toute écriture**, partagée
+par les deux chemins puisque `applyCheckIn` est commun à l'API HTTP et au sync hors ligne.
+
+Preuves : `phase58` section 10 (refus hors périmètre, **aucune session créée**, contrôle inverse
+accepté) ; mutation exécutée dans les deux sens. Note de méthode utile : la sonde est en **fin** de
+suite — placée au milieu, elle décalait les compteurs de ratio du banc (7 échecs au lieu de 2, elle
+mesurait sa propre interférence). Hors périmètre, dit tel quel : la cohérence *enfant ↔ site* (un
+accueil dans un autre bâtiment de la même organisation reste légitime) n'est pas vérifiée.
+
+**Rejeu L2I du 26/09 (mesure locale, après le correctif)** : gate D **exit 0** — « 74/74 suites
+vertes » (1 431 s), `phase58` et sa section 10 comprises, plus les contrôles E1–E6. C'est la preuve
+exécutée côté base : la garde refuse le site hors périmètre sans casser un seul parcours qui pointe
+(HTTP **et** sync). Le compte reste 74 : ce lot **étend** `phase58`, il n'ajoute pas de suite — donc
+aucun compteur de `claims-contract` ne bouge.
+
+**Verdict CI du lot L2I (`f925d37`) — TOUT VERT.** `ci` `36253026096` **7/7 jobs** (`admin-web`,
+`backup-drill`, `support-console`, `database`, `e2e`, `security`, `quality`), `flutter` **succès**,
+`docker` **succès** ; annotations `F2 Flutter passed` (59 tests), `F4 Flutter API passed` (7 tests),
+`G security`, `H2 confidentiality`, `H1 dev`, `H1 staging`. Côté base, le job `database` rejoue la
+batterie complète : le refus du site hors périmètre y tient sur PostgreSQL réel, à côté des parcours
+légitimes qui pointent (HTTP et sync) — le gate D local avait déjà rendu **exit 0 / 74 suites**.
+
+**Verdict CI du lot L2H** — `ci` `36238450157` (`dc55624`, correctif + banc + verrou) : **7/7 jobs
+verts**, `database` inclus (le gate D rejoue `phase67` avec ses trois nouvelles assertions) ;
+`flutter` **succès**. `docker` de ce SHA a été **annulé** non par un échec mais par la concurrence du
+workflow (`docker.yml` : `cancel-in-progress: true`), le push documentaire suivant ayant pris sa place
+— le `docker` `36238470882` de la tête `18f2705` est **succès**. `ci` `36238470721` (`18f2705`) :
+**7/7 verts**. Relevé, pas supposé.
+
+**Clôture de la tête `c7c044a` — TOUT VERT, relevé.** `ci` `36240148764` **7/7 jobs** (`admin-web`,
+`backup-drill`, `support-console`, `database`, `e2e`, `security`, `quality`), `flutter` `36240148755`
+**succès**, `docker` `36240148768` **succès** — annotations `F2 Flutter passed` (59 tests),
+`F4 Flutter API passed` (7 tests), `G security`, `H2 confidentiality`, `H1 dev`, `H1 staging`.
+Avec ce relevé, **chaque commit de la branche a son verdict**, y compris les commits documentaires
+(L2G, L2H et leurs verdicts) : plus aucun « vert » n'est supposé par continuité.
+
+**Dernier tour de la boucle documentaire — et sa règle d'arrêt.** `8b926b0` (compteurs historiques
+distingués de la mesure courante) : `ci` `36245551678` **7/7**, `flutter` **succès**, `docker`
+**succès** — relevé. Ce commit est le **dernier dont le verdict est consigné dans un document** :
+consigner un verdict produit un commit, qui produit un run, qui produit un verdict… la boucle ne
+s'arrête que par une règle explicite. Elle s'arrête donc ici : **le verdict du dernier commit
+documentaire se lit dans l'onglet Checks de la PR #50**, qui est la source vivante — le dépôt, lui,
+consigne les verdicts des commits de **code** et l'état de la tête au moment de la clôture.
+
+**Verdict CI du lot (`79077a8`) — TOUT VERT.** `ci` `36234555506` **7/7 jobs** (`database` inclus),
+`flutter` `36234555547` **succès**, `docker` `36234555526` **succès**. Le gate D rejoue `phase67` sur
+PostgreSQL réel : la nouvelle assertion (« la colonne doit valoir `false` ») y passe, donc le correctif
+est prouvé par la CI et pas seulement en local. Annotations du run : `F2 Flutter passed` (59 tests),
+`F4 Flutter API passed` (7 tests), `G security`, `H2 confidentiality`, `H1 dev`, `H1 staging`.
+
+**Verdict du correctif (`e1d12e9`) — run complet VERT.** `ci` `36220107367` : **7/7 jobs**
+(`database` inclus, ~31 min) ; `flutter` (APK) `36220107343` **succès** ; `docker` `36220107439`
+**succès**. Annotations de preuve : **`F2 Flutter passed` — 59 tests Flutter réels et l'analyse, avec
+le lockfile appliqué** (57 au run précédent : les 2 tests nets du groupe L2F sont bien comptés) ;
+**`F4 Flutter API passed`** — 7 tests Flutter/Drift contre HTTP + PostgreSQL ; `G security`,
+`H2 confidentiality`, `H1 dev` et `H1 staging` passés. **Le lot L2F est donc clos, preuve à l'appui** :
+le test corrigé passe, et le diagnostic qui nomme le test fautif est en place pour les prochains échecs
+Dart.
+
+Le relevé initial était tombé sur une panne du jeton GitHub du bac à sable (`401`, `gh` **et** `git`
+inutilisables) puis sur un re-clone : la branche a été récupérée par la recette éprouvée (arbre
+préservé, `.git` neuf, delta de 3 docs restauré à l'identique — `2d7875b`), et rien n'a été poussé
+avant que le verdict ne soit effectivement relevé.
+
+**Tête de branche `fc4f3ce` (docs) : également TOUT VERT** — `ci` `36221709391` **7/7** (`F2 Flutter
+passed` 59 tests, `F4 Flutter API passed` 7 tests, `G security`, `H2 confidentiality`, `H1 dev`,
+`H1 staging`), `flutter` `36221709398` **succès**, `docker` `36221709407` **succès**. Les commits
+strictement documentaires qui suivent ne modifient ni code ni tests, et leur propre run est relevé de
+la même façon (pas de « vert » supposé). **Relevé : `ci` `36223235356` **7/7 vert**,
+`flutter` `36223235348` **succès**, `docker` `36223235345` **succès** — cherché, pas supposé (le jeton
+du bac à sable est retombé en `401` juste après ce relevé). Tête `6792345` : même faisceau de preuves
+(`F2 Flutter passed` 59 tests, `F4 Flutter API passed` 7 tests).
+
+**Clôture — tête `2b15dcf` : TOUT VERT, relevé.** `ci` `36227971730` **7/7** (`admin-web`,
+`backup-drill`, `support-console`, `database`, `e2e`, `security`, `quality`), `flutter` `36227971737`
+**succès**, `docker` `36227971739` **succès** ; annotations `F2 Flutter passed` (59 tests),
+`F4 Flutter API passed` (7 tests), `G security`, `H2 confidentiality`, `H1 dev` et `H1 staging`.
+Le relevé a demandé trois tentatives : le jeton du bac à sable renvoyait `401` sur `gh api … /user`
+alors qu'il répondait `200` sur `/rate_limit` — un jeton **limité au dépôt**, pas un jeton mort ; le
+403 sur les points d'entrée non couverts ne dit donc rien de l'état réel. Chaque run de cette branche
+est jugé par **son propre** verdict, y compris les commits documentaires.
+
+## Complément 2026-09-25 (nuit) — D6 : la photo hors ligne est retirée, pas laissée en suspens
+
+`POST /sync/push` refusait d'échouer franchement sur `add_photo` : la commande créait une ligne
+`media_assets` **sans octets** (lecture ⇒ `404 MEDIA_CONTENT_MISSING`) et le client croyait avoir
+envoyé une photo. Décision D6 = **option (c)**, exécutée : la commande est refusée explicitement
+(`OFFLINE_PHOTO_UNSUPPORTED`, message nommant `POST /api/v1/media/upload`), le chemin d'écriture sans
+octets (`applyAddPhoto` + `MediaService.registerFromSync`) est supprimé, et côté client
+`MediaUploader.enqueueOfflinePhoto` / `offlineStorageKey` disparaissent — il n'y a donc plus de clé
+`photo/offline-*` ni de commande à enfiler nulle part. L'option (b) (base64 dans la file de
+synchronisation) reste fermée par le garde L2E ; l'option (a) (file locale + `POST /media/upload`)
+redeviendra le chemin le jour où une UI de capture existera — c'est écrit au plan §6.
+
+Preuves : `phase6` (refus + **aucun** `media_assets` fantôme), `phase25` (refus identique même avec
+une clé d'une autre organisation), `phase77` (9 cas, garde de payload toujours actif), contrat
+`media-client-wiring` réécrit (5/5, 3 mutations rouges), build API + worker verts.
+
+**Verdicts.** Localement : gate D **exit 0** (73 suites, rôles de production), `phase6`/`phase25`/
+`phase77` vertes, builds API + worker verts, 13 suites statiques 80/80. *Verdict CI final — `ce69bbd` : TOUT VERT* (premier run entièrement vert de cette branche). Run `ci`
+
+**Mesure locale à la clôture (26/09, arbre de la tête)** — les compteurs cités plus haut (13 suites
+statiques, 80/80) sont ceux du lot D6 : ils restaient vrais, mais le dépôt en compte davantage depuis.
+État mesuré aujourd'hui : **15 suites statiques hors API/PG → 83/83**, `media-client-wiring` **8/8**
+(7 avant L2H), `claims-contract` 10/10 (qui revalide ses propres compteurs : 76 migrations, 71 suites
+`phaseNN`), `parent-session-contract` 9/9, `production-compose-contract` 18/18 ; **121/121** tests
+unitaires API, `npm run lint` exit 0, et `phase67` vert sur PostgreSQL 18.4 réel (banc d'upload complet,
+`run_pg.mjs` port 54329).
+`36218031204` : **7/7 jobs** (`database`, `quality`, `security`, `e2e`, `admin-web`,
+`support-console`, `backup-drill`), run `flutter` **success**, run `docker` **success**. Deux
+annotations disent l'essentiel : `F4 Flutter API passed` (7 tests Flutter/Drift réels contre l'API
+HTTP + PostgreSQL) et `F2 Flutter passed` (**57 tests et l'analyse, avec le lockfile appliqué** —
+`--enforce-lockfile` actif, donc une dérive de dépendance échoue au lieu de changer le binaire en
+silence). Le faux vert et les trois défauts qu'il masquait sont clos ; D6 est prouvée de bout en bout.
+
+
+## Mise à jour 2026-09-24 (soir) — CI : régression du lot 1 corrigée, verrou ajouté
+
+**Contrat à respecter par toute nouvelle suite** : un processus `NODE_ENV=production`
+ne doit JAMAIS hériter du raccourci de banc d'essai `RATE_LIMIT_DISABLED`
+(le runner d'isolation l'exporte à `1`, le job CI `database` à `true`). Depuis le
+lot 1, la garde de configuration refuse ce raccourci en production : une suite qui
+lance `apps/api/dist/main.js` ou `apps/worker/dist/main.js` avec `...process.env`
+voit le processus mourir au boot (« GARDE CONFIG PRODUCTION ») au lieu du motif
+qu'elle teste. Utiliser `PRODUCTION_SPAWN_ENV` (`tests/tenant-isolation/helpers.mjs`) —
+`phase26` refuse tout spawn de production non neutralisé (verrou, 5 fichiers
+signalés sur `HEAD` avant correctif, 0 après). Suites corrigées : `phase22`,
+`phase26`, `phase27`, `phase28`, `phase49`.
+
+**État CI au 2026-09-24** — le job `database` est rouge, pour deux causes :
+1. **H1 (préexistant, environnemental)** : le runner ne peut plus
+   tirer `postgres:18-alpine` ni `quay.io/minio/minio` (`unauthorized`) — *(correctif
+   du 25/09/2026 : cause = MinIO retiré des registres publics ; le défaut est
+   désormais une image construite localement depuis la release officielle vérifiée
+   par somme, cf. § H1 des findings CI).* Le gate
+   se terminait la veille (`52e6ef3`) : rien de code n'a changé de ce côté.
+2. **Régression du lot 1 (corrigée ici)** : `Gate D interrompu :: … phase26 …`
+   → le gate s'arrêtait **avant la batterie**, qui n'a donc pas tourné en CI sur
+   `f73c7c0`, `e3728cc`, `225fead`.
+
+**Rejouer la CI en local** (le mode 1 ne suffit pas — il ne joue ni phase26 ni
+les rôles de production) :
+```bash
+DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test \
+  RATE_LIMIT_DISABLED=true NODE_ENV=test STORAGE_BACKEND=local \
+  STORAGE_LOCAL_DIR=/tmp/creche-storage-ci PAYMENT_WEBHOOK_SECRET=phase8-test-secret \
+  ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
+```
+Lire les échecs CI par les **annotations check-runs** (les logs par API/job
+échouent en `EOF`) : voir `docs/CI-DATABASE-JOB-FINDINGS.md`, dernière section.
+
+## Mise à jour 2026-09-24 — lot 5 : vérité documentaire verrouillée
+
+L'audit du 2026-09-24 avait relevé quatre documents « flatteurs » (capacités absentes annoncées au
+présent, compteurs périmés) alors que toutes les suites passaient au vert : le code était sain, la
+documentation mentait, rien ne pouvait le signaler. C'est désormais l'inverse.
+
+**Contrat** : `tests/tenant-isolation/claims-contract.test.mjs` (**10 contrôles au 25/09/2026**,
+**aucune base, aucun
+Docker** → exécuté dans le job CI `quality`). Il recalcule la réalité et la confronte aux
+documents :
+- aucune occurrence de l'ordonnanceur externe dans le code/config, et chaque mention
+  documentaire doit être une mise en garde (l'ordonnancement est en base : `scheduler_ticks`) ;
+- healthcheck Docker : mesuré **fichier par fichier** (`postgres` partout, `api` + `worker` en
+  production et staging depuis le lot 6.1, `postgres` seul en dev — le motif est écrit dans le
+  fichier), **aucun** `HEALTHCHECK` dans les Dockerfiles (sans `curl` ni `wget`, l'image
+  `node:22-slim` impose une sonde Node appelée par Compose) — et aucune phrase de documentation ne
+  peut revendiquer plus, ni citer un décompte périmé (`grep -c healthcheck … # n`) ;
+- compteurs recalculés à chaque exécution (migrations, entrées du runner, suites `phaseNN`,
+  fichiers du dossier d'isolation, ADR, runbooks, routes HTTP via l'inventaire, chemins OpenAPI) ;
+- workflows CI : les quatre workflows existent sous `.github/workflows/` et rien n'attend dans
+  `ci-templates/` ; le récit d'époque (« en attente hors du dépôt, restriction de permission »)
+  est banni hors tournure explicitement historique (ajout du 25/09/2026) ;
+- phrases bannies (les affirmations fausses de l'audit + `presignGet(`) : interdites sauf corrigées
+  sur la même ligne.
+
+**Conséquence pour la suite** : ajouter une migration, une suite, une route ou un ADR **fait
+échouer la CI** tant que les documents qui les revendiquent n'ont pas été mis à jour. C'est la
+friction voulue — mettre à jour le **document**, jamais le contrat (sauf décision explicite).
+Une volumétrie brute de fichiers doit porter sa **date** (« N fichiers au 2026-09-24 ») : elle
+n'est pas verrouillée, une mesure datée n'est pas une propriété.
+
+**Preuve par mutation** : 6 mutations exécutées (route périmée, phrase « healthcheck » non
+qualifiée, phrase fausse canonique réintroduite, compteur de suites périmé, décompte de
+healthchecks périmé, sonde renommée sur disque) → mutation : 6 rouges ; restaurations → 9/9 vert
+(journal au plan §5).
+Mesure du jour : 198 routes / 50 sans `@Roles`, 76 migrations, 73 entrées, 71 suites `phaseNN`,
+89 fichiers d'isolation, 14 ADR, 32 runbooks.
+
+---
+
+## Mise à jour 2026-09-24 — lot 1.5 : « un gardien que rien n'appelle ne garde rien »
+
+Le lot 1 avait câblé les 4 gardiens orphelins **cités** par l'audit. En recensant la classe entière
+(et non les seuls cas nommés), un cinquième est apparu : `scripts/audit-seeds-pii.mjs` — la preuve que
+les seeds SQL + pilote sont 100 % synthétiques (téléphones DZ, emails, NIN), écrite pour la CI mais
+appelée par aucun workflow.
+
+Désormais :
+- l'**audit PII des seeds tourne en CI** (`node scripts/audit-seeds-pii.mjs --strict`, job `quality`) :
+  la politique « aucune donnée réelle commitée » est un contrôle, pas une déclaration d'en-tête ;
+- un **cliquet** empêche le retour de la classe : `scripts/check-guards-wired.mjs` calcule par
+  fermeture transitive, depuis les workflows, quels scripts sont atteignables, et refuse tout gardien
+  non câblé. Convention de nommage : `check-*`, `audit-*`, `verify-*`, `inventory-*` — mesuré :
+  **12 gardiens recensés, 0 orphelin**. Il se contrôle lui-même (il est dans sa propre liste).
+- Limite assumée et écrite dans le script : une procédure de runbook qui dit « lancez ce gardien »
+  ne compte pas — un document n'exécute rien.
+
+Preuve par mutation : étape CI du gardien PII retirée → rouge (« 1 gardien que rien n'appelle ») ;
+nouveau gardien fictif sans appelant → rouge ; PII réelle injectée dans un seed → `--strict` rouge
+(« domaine gmail.com non reconnu comme synthétique »). Restaurations : vertes.
+
+
+
+---
+
+## Mise à jour 2026-09-25 — lot L6.3 : le stub `compress_media` disparaît (décision D3 = a)
+
+Le worker portait un handler qui ne pouvait qu'échouer (`NOT_IMPLEMENTED: compression média`) et
+qu'**aucun chemin de code ne mettait en file** : une dette silencieuse annoncée comme intégration.
+Décision produit : **le retirer**.
+
+- `apps/worker/src/main.ts` : handler supprimé ; une ligne héritée portant ce type échoue
+  explicitement (`Type de job inconnu: compress_media`), jamais avec un faux succès ;
+- `phase27` : le cas « échec handler ⇒ `failed` à la limite » s'appuie sur un type inconnu (la
+  propriété testée ne dépend plus d'un stub) et un **verrou** refuse la réintroduction d'un handler
+  `NOT_IMPLEMENTED` permanent — prouvé par mutation (15/15 → 14/1 stub réintroduit → 15/15 restauré) ;
+- si la compression devient un besoin : **côté clients** avant envoi, les plafonds serveur
+  (8 Mio API / 12 Mio nginx) restant la garantie. La liste citée dans le commentaire de la
+  migration 014 n'est pas modifiée (checksum d'une migration appliquée).
+
+---
+
+## Mise à jour 2026-09-25 — lot L4 : la rétention de la messagerie existe (décision DPO D2 = a)
+
+L'audit laissait la question ouverte et le plan en attente d'une décision : `notification_queue`
+et `messages` **croissaient sans borne** (seuls les journaux étaient purgés, 5 ans). Décision du
+DPO le 2026-09-25 : **purger avec des seuils dédiés**.
+
+- migration **076** : `retention_purge_messaging(cutoff_notifs, cutoff_messages)` — SECURITY
+  DEFINER (le worker tourne NOBYPASSRLS sans contexte tenant), purge par lots de 5000, plus deux
+  index de purge ; `retention_expired_body_marker()` est le **marqueur partagé** du contenu expiré
+  (volontairement sans nombre de jours : le seuil est configurable).
+- job worker `retention_purge` : journaux (5 ans) **puis** messagerie —
+  `NOTIFICATION_RETENTION_DAYS` (défaut **90 j**, lignes `sent`/`failed` uniquement : une
+  notification en cours de retry ou en cours de traitement **survit**, quel que soit son âge) et
+  `MESSAGES_RETENTION_DAYS` (défaut **365 j**, expiration du **contenu** : le corps devient le
+  marqueur et la pièce jointe est détachée — la ligne, l'auteur et la date restent, le fil ne se
+  troue pas).
+- suite `phase76-messaging-retention.pg.test.mjs` : **15 assertions** exécutées par le rôle
+  applicatif (le chemin exact du worker) sur PG 18 réel, ajoutée au runner (73 entrées depuis `phase77`).
+- **hors périmètre assumé** : `notification_inbox` (voie de lecture durable) et les fichiers
+  joints (`media_assets`) ne sont pas purgés — deux décisions séparées si le DPO veut leur durée.
+
+Preuves : suite 15/15, **3 mutations rouges** (liste blanche de statut retirée, suppression de la
+ligne au lieu de l'expiration du contenu, garde d'idempotence retirée), restaurations vérifiées ;
+compteurs du contrat de vérité mis à jour **parce qu'il est passé rouge** (« ci.yml revendique
+075, la réalité est 76 ») ; journal complet au plan de réparation §5 « L4 ».
+
+---
+
+## Mise à jour 2026-09-24 — lot 6.1 : sondes de vivacité API et worker (F2)
+
+**Ce qui manquait** : `postgres` était le seul service sondé par Docker. L'API exposait bien
+`GET /api/v1/health` (proxifié par nginx), mais **Docker ne l'interrogeait pas** ; le worker
+n'exposant aucun port, il n'avait aucun marqueur de vie. Un processus vivant mais figé (pool
+saturé, boucle bloquée) restait donc en service indéfiniment — la panne silencieuse par
+excellence.
+
+**Livré** :
+- `apps/api/src/healthcheck.ts` → sonde qui interroge le **vrai** endpoint public
+  (`http://127.0.0.1:$APP_PORT/api/v1/health`), sortie 0/1, timeout `HEALTHCHECK_TIMEOUT_MS`.
+  Pourquoi un script Node : l'image d'exécution est `node:22-slim`, **sans `curl` ni `wget`**.
+- `apps/worker/src/liveness.ts` → marqueur local (`WORKER_LIVENESS_FILE`, défaut
+  `/tmp/creche-worker-alive`) réécrit toutes les 10 s (`WORKER_LIVENESS_INTERVAL_MS`), écriture
+  **atomique** (`rename`), supprimé à l'arrêt propre ; `apps/worker/src/healthcheck.ts` refuse un
+  marqueur absent ou plus vieux que 3 intervalles. Le heartbeat en base (`jobs_heartbeat`, 053)
+  n'existe que **pendant un job** : un worker sain et au repos aurait paru mort — d'où un marqueur
+  de processus.
+- Compose : sondes `api` + `worker` en **production et staging** (`interval 30s`, `timeout 5s`,
+  `retries 3`, `start_period` 30 s / 60 s). En **dev** : pas de sonde, motif écrit dans le fichier
+  (sources montées + compilation à chaud, `dist/` non garanti au démarrage).
+- Redémarrage : `restart: unless-stopped` existait déjà ; un conteneur `unhealthy` est redémarré
+  par l'ordonnanceur/`docker` selon la politique d'exploitation, et le bail du job en cours est
+  repris par `jobs_reap_stale` (053) — **aucun job perdu**.
+- Le contrat de vérité documentaire (lot 5) a été **mis à jour, pas contourné** : la mesure attendue
+  par fichier est explicite, et un nouveau verrou compare tout décompte cité dans la doc
+  (`grep -c healthcheck … # n`) à la mesure du disque.
+
+**Preuves exécutées (24/09)** :
+1. `apps/worker` a désormais sa porte de tests (`apps/worker/jest.config.mts`, `npm run test:unit`
+   à la racine couvre api **et** worker) : **5 tests** du marqueur (dont péremption, atomicité,
+   câblage réel dans `main.ts`) — soit **122 tests unitaires** au total avec l'API.
+2. API : **7 cas** de la sonde (`apps/api/src/healthcheck.spec.ts`) exécutés **en cours de
+   processus** contre de vrais serveurs HTTP (200 `{"status":"ok"}` → saine ; 500, corps inattendu,
+   corps non-JSON, rien n'écoute, serveur muet → malsaine). Pourquoi pas le script compilé : le job
+   CI `quality` **ne construit pas** l'API — la première version lançait `apps/api/dist/healthcheck.js`
+   et a rougi la CI ; la logique vit maintenant dans `checkApiHealth()`, et la sonde **compilée** est
+   prouvée hors CI (rc=0 contre l'API réelle, rc=1 sur port mort).
+3. Bout en bout, hors Docker : API réelle `node apps/api/dist/main.js` sur :3399 →
+   `node apps/api/dist/healthcheck.js` ⇒ **rc=0** (« API saine ») ; même sonde sur un port mort ⇒
+   **rc=1**.
+4. Worker réel `node apps/worker/dist/main.js` (rôle `creche_app_test`, boucle de jobs active) :
+   marqueur écrit puis rafraîchi ⇒ sonde **rc=0** ; marqueur antidaté de 60 s ⇒ **rc=1**
+   (« marqueur périmé de 60 s (maximum 6 s) ») ; après `SIGTERM` et arrêt propre ⇒ marqueur
+   **supprimé** et sonde **rc=1** (« marqueur absent »).
+5. `docker compose config` : les trois fichiers restent valides (analyse YAML) ; sondes confirmées
+   sur `api` et `worker` en prod/staging.

@@ -33,7 +33,9 @@ Prérequis :
 - **Node ≥ 20** uniquement pour les scripts exécutés sur l'hôte (migrations
   standalone, seeds, suites de tests — `engines` du manifeste racine) ;
 - **Flutter 3.47.1** seulement pour développer ou bâtir les apps mobiles ;
-- **k6** optionnel pour les tests de charge (`tests/load/`).
+- **k6** optionnel — non exécuté ici, binaire absent (`tests/load/sync.k6.js`, à lancer depuis
+  un poste qui a k6) : le test de charge **exécuté** par le dépôt est `npm run test:capacity`
+  (`tests/load/capacity-bench.mjs`, sans k6).
 
 Depuis la racine du monorepo, sur des données **synthétiques uniquement** :
 

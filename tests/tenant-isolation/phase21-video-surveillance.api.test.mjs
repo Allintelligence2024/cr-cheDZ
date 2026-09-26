@@ -18,7 +18,11 @@
  *   7. purge DPIA 30 j : clip local backdaté → worker (job video_clips_purge)
  *      supprime le FICHIER réel ET la ligne ; clip récent conservé ;
  *   8. honnêteté : clip S3 backdaté sans S3 joignable → job ÉCHOUÉ (jamais
- *      de fausse purge) et la ligne reste.
+ *      de fausse purge) et la ligne reste ;
+ *   9. D5 (2026-09-25) : **aucun client du dépôt n'envoie de clip** — l'ACQUISITION
+ *      n'est pas câblée et `POST /video/clips/presign-upload` est *fail-closed* en
+ *      production (pas de sous-domaine public, D1 = A). Verrou : le jour où un écran
+ *      câble l'envoi, ce test échoue et force la décision D5 (voie + plafond).
  *
  * Prérequis : DATABASE_URL PostgreSQL réel, API + worker compilés (dist/).
  */
@@ -26,7 +30,7 @@ import { execSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createDpiaReviewer } from '../fixtures/dpia-reviewer.mjs';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
@@ -239,6 +243,27 @@ const main = async () => {
       JSON.stringify(failedHonest));
     const s3Row = await db.query(`SELECT COUNT(*)::int AS n FROM video_clips WHERE id=$1`, [s3ClipId]);
     ok('Ligne S3 NON purgée (conservée pour réessai)', s3Row.rows[0].n === 1);
+
+    // ── 9. D5 : l'acquisition des clips n'est câblée nulle part (verrou)
+    // Décision D5 = (c) : la vidéosurveillance n'est pas présentée comme
+    // opérationnelle tant que la voie d'envoi (API streaming vs S3 public) et le
+    // plafond de taille ne sont pas tranchés. Ce verrou transforme la décision en
+    // contrainte exécutable : câbler un envoi de clip sans trancher D5 fait rougir la CI.
+    const CLIENT_DIRS = ['apps/admin-web/src', 'apps/staff-mobile/lib', 'apps/parent-mobile/lib']
+      .map((d) => join(repo, d));
+    const offenders = [];
+    const walkClients = (dir) => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) { walkClients(full); continue; }
+        if (!/\.(ts|tsx|dart)$/.test(entry.name)) continue;
+        const text = readFileSync(full, 'utf8');
+        if (/clips\/presign-upload/.test(text)) offenders.push(`${full} → presign d'envoi de clip`);
+        if (/['"`]\/video\/clips['"`].*post|post.*['"`]\/video\/clips['"`]/i.test(text)) offenders.push(`${full} → POST /video/clips`);
+      }
+    };
+    for (const dir of CLIENT_DIRS) if (existsSync(dir)) walkClients(dir);
+    ok('D5 : aucun client n\'envoie de clip (acquisition non tranchée)', offenders.length === 0, offenders.join(' | '));
   } finally {
     if (worker) worker.kill();
     try {
@@ -265,7 +290,7 @@ const main = async () => {
     console.error(`\nÉCHEC Phase 21 vidéosurveillance : ${failures.length} assertion(s) — ${failures.join(' | ')}`);
     process.exit(1);
   }
-  console.log('\n✓ Phase 21 vidéosurveillance validée (8 cas) sur PostgreSQL réel NOBYPASSRLS.');
+  console.log('\n✓ Phase 21 vidéosurveillance validée (9 cas) sur PostgreSQL réel NOBYPASSRLS.');
 };
 
 main().catch((e) => { console.error(e.stack); process.exit(1); });

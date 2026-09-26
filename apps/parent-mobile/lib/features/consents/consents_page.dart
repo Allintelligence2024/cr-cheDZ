@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../core/api_client.dart';
+import '../../core/error_state.dart';
 
 class ConsentsPage extends StatefulWidget {
   const ConsentsPage({super.key, required this.api, required this.childId});
@@ -18,6 +20,12 @@ class _ConsentsPageState extends State<ConsentsPage> {
     _items = widget.api.consents(widget.childId);
   }
 
+  void _reload() {
+    setState(() {
+      _items = widget.api.consents(widget.childId);
+    });
+  }
+
   Future<void> _toggle(String type, bool value) async {
     await widget.api.saveConsent(widget.childId, type, value);
     setState(() => _items = widget.api.consents(widget.childId));
@@ -28,6 +36,9 @@ class _ConsentsPageState extends State<ConsentsPage> {
     return FutureBuilder<List<dynamic>>(
       future: _items,
       builder: (context, s) {
+        if (s.hasError) {
+          return buildApiError(context, s.error, _reload);
+        }
         if (!s.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -35,7 +46,7 @@ class _ConsentsPageState extends State<ConsentsPage> {
         Map<String, dynamic>? photo;
         for (final item in all) {
           if (item is Map && item['consent_type'] == 'photo_individual') {
-            photo = (item as Map).cast<String, dynamic>();
+            photo = item.cast<String, dynamic>();
             break;
           }
         }

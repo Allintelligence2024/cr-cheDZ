@@ -39,7 +39,11 @@ try {
   await db.query("INSERT INTO consent_records(organization_id,guardian_id,child_id,consent_type,granted,granted_at) VALUES($1,$2,$3,'photo_individual',true,NOW())", [org, guardian, child]);
   await db.query("INSERT INTO daily_log_events(organization_id,child_id,event_date,event_type,occurred_at,recorded_by,activity_name,visible_to_parents) VALUES($1,$2,CURRENT_DATE,'activity',NOW(),$3,'H2C_ACTIVITY',true)", [org, child, director.id]);
   await db.query("INSERT INTO allergies(organization_id,child_id,allergen,allergen_type,severity,created_by) VALUES($1,$2,'H2C_ALLERGEN','food','mild',$3)", [org, child, director.id]);
-  const media = (await db.query("INSERT INTO media_assets(organization_id,child_id,uploaded_by,media_type,storage_key,mime_type,is_visible_to_parents,children_in_photo,all_consents_checked) VALUES($1,$2,$3,'photo',$4,'image/jpeg',true,ARRAY[$2::uuid],true) RETURNING id", [org, child, director.id, `${org}/photo/h2c.jpg`])).rows[0].id;
+  const photoKey = `${org}/photo/h2c.jpg`;
+  const PHOTO_BYTES = Buffer.from('H2C_PHOTO_BYTES_same_origin', 'utf8');
+  await mkdir(dirname(join(root, photoKey)), { recursive: true });
+  await writeFile(join(root, photoKey), PHOTO_BYTES);
+  const media = (await db.query("INSERT INTO media_assets(organization_id,child_id,uploaded_by,media_type,storage_key,mime_type,is_visible_to_parents,children_in_photo,all_consents_checked) VALUES($1,$2,$3,'photo',$4,'image/jpeg',true,ARRAY[$2::uuid],true) RETURNING id", [org, child, director.id, photoKey])).rows[0].id;
   const invoice = (await db.query("INSERT INTO invoices(organization_id,child_id,invoice_number,period_year,period_month,subtotal,total_amount,due_date,created_by) VALUES($1,$2,$3,2026,9,100,100,'2026-09-30',$4) RETURNING id", [org, child, randomUUID(), director.id])).rows[0].id;
   const payment = (await db.query("INSERT INTO payments(organization_id,child_id,reference_number,amount,method,status,created_by,site_id) VALUES($1,$2,$3,100,'cash','confirmed',$4,$5) RETURNING id", [org, child, randomUUID(), director.id, site])).rows[0].id;
   const key = `${org}/invoices/${invoice}.pdf`;
@@ -120,8 +124,10 @@ try {
           if (name === 'invoice detail') assert.equal(response.body.id, invoice);
           if (name === 'receipt detail') assert.equal(response.body.id, payment);
           if (name === 'health') assert.equal(response.body.allergies[0].allergen, 'H2C_ALLERGEN');
-          if (name === 'photo URL') assert.ok(response.body.url.includes('X-Amz-Signature='));
-          if (name === 'photos') assert.ok(response.body[0].url.includes('X-Amz-Signature='));
+          // LOT 2 (P0 F5) : plus d'URL signée S3 (MinIO lié à 127.0.0.1 en
+          // production — URL injoignable). Le lien est un chemin same-origin.
+          if (name === 'photo URL') assert.equal(response.body.url, `/api/v1/parent/children/${child}/media/${media}/content`);
+          if (name === 'photos') assert.equal(response.body[0].url, `/api/v1/parent/children/${child}/media/${media}/content`);
           if (name === 'invoice PDF') assert.ok(response.body.includes('H2C_PDF_BYTES'));
         }
       });
@@ -139,6 +145,18 @@ try {
       }
     }
   }
+  await check('authorized parent fetches the real photo BYTES through the same-origin path', async () => {
+    const listing = await req('GET', `/parent/children/${child}/media`, parent);
+    assert.equal(listing.status, 200, JSON.stringify(listing.body));
+    const path = listing.body[0].url;
+    assert.ok(path.startsWith('/api/v1/parent/'), path);
+    assert.ok(!path.includes('http'), path);
+    const origin = base.slice(0, -'/api/v1'.length); // le lien rendu est déjà absolu depuis la racine
+    const response = await fetch(origin + path, { headers: { authorization: `Bearer ${parent.token}` }, signal: AbortSignal.timeout(15000) });
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(response.status, 200, `status=${response.status}`);
+    assert.ok(bytes.equals(PHOTO_BYTES), `${bytes.length} vs ${PHOTO_BYTES.length}`);
+  });
 } finally {
   if (app) await app.close();
   if (pool) await pool.end();

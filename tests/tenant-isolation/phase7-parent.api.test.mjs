@@ -21,6 +21,7 @@ import { execSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import { APP_TEST_ROLE, appUrl, ensureAppRole } from './helpers.mjs';
@@ -44,6 +45,9 @@ const main = async () => {
   process.env.DATABASE_URL = appUrl();
   process.env.RATE_LIMIT_DISABLED = 'true';
   process.env.NODE_ENV = 'test'; // SMS OTP désactivé + development_code exposé
+  // LOT 2 : backend local + répertoire explicite (preuve d'octets servis).
+  process.env.STORAGE_BACKEND = 'local';
+  process.env.STORAGE_LOCAL_DIR = process.env.STORAGE_LOCAL_DIR ?? '/tmp/pgtest/p7store';
   const { createApp } = await import(pathToFileURL(join(repo, 'apps/api/dist/app.factory.js')).href);
   const app = await createApp();
   await app.listen(0);
@@ -120,24 +124,40 @@ const main = async () => {
     ok('Parent B ne signale pas une absence → 403', absentB.status === 403);
 
     // ── 4/5. Photos : URLs signées + révocation immédiate ───────────────────
-    console.log('\n4-5) Photos (URLs signées, révocation immédiate)');
+    console.log('\n4-5) Photos (chemins same-origin servis par l’API, révocation immédiate)');
     await api('POST', '/parent/consents', ta, { child_id: child.rows[0].id, consent_type: 'photo_individual', granted: true });
+    // Clé préfixée par l'organisation : c'est ce que l'API produit toujours
+    // (presign → storageKey(orgId, …)) et ce que la politique de lecture
+    // vérifie désormais explicitement (défense croisée, LOT 2).
+    const photoKey = `${org.rows[0].id}/photo/${tag}-fake-1.jpg`;
+    const photoBytes = Buffer.from(`P7-PHOTO-${randomUUID()}`);
+    mkdirSync(dirname(join(process.env.STORAGE_LOCAL_DIR, photoKey)), { recursive: true });
+    writeFileSync(join(process.env.STORAGE_LOCAL_DIR, photoKey), photoBytes);
     const media = await db.query(
       `INSERT INTO media_assets(organization_id,child_id,uploaded_by,media_type,storage_key,mime_type,is_visible_to_parents,all_consents_checked,children_in_photo,exif_stripped)
        VALUES($1,$2,$3,'photo',$5,'image/jpeg',true,true,$4::uuid[],true) RETURNING id`,
-      [org.rows[0].id, child.rows[0].id, creator.rows[0].id, [child.rows[0].id], `p7/${tag}/fake-1.jpg`],
+      [org.rows[0].id, child.rows[0].id, creator.rows[0].id, [child.rows[0].id], photoKey],
     );
     const mediaId = media.rows[0].id;
     const photosB = await api('GET', `/parent/children/${child.rows[0].id}/media`, tb);
     ok('Parent B ne reçoit pas les URLs photo → 403', photosB.status === 403);
     const photosA = await api('GET', `/parent/children/${child.rows[0].id}/media`, ta);
-    ok('Parent A reçoit la photo avec URL signée', photosA.status === 200 && photosA.body.length === 1 && typeof photosA.body[0].url === 'string' && photosA.body[0].url.startsWith('http'));
+    const expectedUrl = `/api/v1/parent/children/${child.rows[0].id}/media/${mediaId}/content`;
+    ok('Parent A reçoit la photo sous forme de chemin same-origin (LOT 2 — plus d’URL MinIO)',
+      photosA.status === 200 && photosA.body.length === 1 && photosA.body[0].url === expectedUrl,
+      `url=${String(photosA.body[0]?.url).slice(0, 120)}`);
     const downloadA = await api('GET', `/parent/children/${child.rows[0].id}/media/${mediaId}/download`, ta);
-    ok('Parent A reçoit l’URL signée directe', downloadA.status === 200 && downloadA.body.url?.startsWith('http'));
+    ok('Parent A reçoit le même chemin direct', downloadA.status === 200 && downloadA.body.url === expectedUrl);
+    // Preuve de joignabilité : le lien rendu sert réellement les octets.
+    const origin = base.replace(/\/api\/v1$/, ''); // le lien rendu est déjà absolu depuis la racine
+    const photoRes = await fetch(`${origin}${expectedUrl}`, { headers: { authorization: `Bearer ${ta}` } });
+    const photoContent = Buffer.from(await photoRes.arrayBuffer());
+    ok('Le lien parent sert réellement les octets de la photo',
+      photoRes.status === 200 && photoContent.equals(photoBytes), `status=${photoRes.status} ${photoContent.length}/${photoBytes.length} url=${origin}${expectedUrl} corps=${photoContent.toString('utf8').slice(0, 200)}`);
     const revoked = await api('POST', '/parent/consents', ta, { child_id: child.rows[0].id, consent_type: 'photo_individual', granted: false });
     ok('Révocation du consentement acceptée', revoked.status === 201 || revoked.status === 200);
     const photosAfter = await api('GET', `/parent/children/${child.rows[0].id}/media`, ta);
-    ok('Après révocation : plus aucune URL photo', photosAfter.status === 200 && photosAfter.body.length === 0);
+    ok('Après révocation : plus aucun chemin photo', photosAfter.status === 200 && photosAfter.body.length === 0);
     const downloadAfter = await api('GET', `/parent/children/${child.rows[0].id}/media/${mediaId}/download`, ta);
     ok('Après révocation : download → 422 CONSENT_REVOKED', downloadAfter.status === 422 && downloadAfter.body.code === 'CONSENT_REVOKED');
 

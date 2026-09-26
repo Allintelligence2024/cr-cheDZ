@@ -6,7 +6,8 @@
   "scripts": {
     "build": "npm run build --workspace @creche/prod-config --prefix ../.. && tsc -p tsconfig.json",
     "start:dev": "ts-node src/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",

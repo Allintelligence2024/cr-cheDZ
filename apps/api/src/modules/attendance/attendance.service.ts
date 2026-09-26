@@ -145,6 +145,17 @@ export class AttendanceService {
     const child = await this.childOfTenant(client, p.childId);
     if (!child) return this.rejected('PERMISSION_DENIED', 'Enfant introuvable dans cette organisation');
 
+    // L2I — `site_id` est un identifiant DÉCLARÉ par le client, au même titre
+    // que `child_id`. Le défaut restait sûr (le site de l'enfant, plus bas),
+    // mais la valeur fournie était recopiée SANS vérification — et une clé
+    // étrangère PostgreSQL ne consulte pas le RLS : une session de cette
+    // organisation pouvait référencer le site d'une autre (mesuré : 201 + ligne
+    // liée à un site hors périmètre).
+    if (p.siteId) {
+      const ownSite = await this.siteOfTenant(client, p.siteId);
+      if (!ownSite) return this.rejected('PERMISSION_DENIED', 'Site introuvable dans cette organisation');
+    }
+
     const today = await this.todayInAlgiers(client);
     const session = await this.sessionForUpdate(client, p.childId, today);
     let sessionId: string;
@@ -312,6 +323,16 @@ export class AttendanceService {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
+
+  /**
+   * L2I — un site fourni par le client doit appartenir au tenant courant. La
+   * lecture passe par la connexion du tenant : le RLS fait le tri, donc un
+   * identifiant hors périmètre ne ramène rien (et non « il existe ailleurs »).
+   */
+  private async siteOfTenant(client: PoolClient, siteId: string): Promise<boolean> {
+    const res = await client.query(`SELECT 1 FROM sites WHERE id = $1`, [siteId]);
+    return res.rows.length > 0;
+  }
 
   private async childOfTenant(client: PoolClient, childId: string): Promise<{ id: string; site_id: string; room_id: string | null } | null> {
     // RLS : un enfant d'un autre tenant → 0 ligne.

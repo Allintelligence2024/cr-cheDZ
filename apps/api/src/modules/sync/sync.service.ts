@@ -5,11 +5,82 @@ import { TenantContextService } from '../../shared/database/tenant-context.servi
 import { AppError } from '../../shared/errors';
 import { AttendanceService } from '../attendance/attendance.service';
 import { JournalService } from '../journal/journal.service';
-import { MediaService } from '../media/media.service';
 import type { SyncOperationDto, SyncPushResult } from './dto/sync.dto';
 
 const MAX_PULL_BATCH = 500;
 const DEVICE_TIME_TOLERANCE_MS = 5 * 60 * 1000; // ±5 min
+
+/**
+ * Les OCTETS ne passent pas par la file de synchronisation (décision D6 du plan
+ * de réparation ; audit 2026-09-24, constat 33 : « photos offline en base64 en
+ * clair »).
+ *
+ * Pourquoi un refus explicite ici — et pas un simple « champ ignoré » :
+ *  - `sync_operations.payload` est stockée **verbatim** en JSONB : un client qui
+ *    met une photo en base64 dans le payload la ferait **persister côté serveur**,
+ *    hors du pipeline média (consentements, `is_visible_to_parents`, journal des
+ *    accès) et hors de toute purge dédiée — une donnée d'enfant non voulue dans
+ *    l'historique de synchronisation ;
+ *  - le handler `add_photo` ne consomme PAS ce champ : l'accepter donnerait un
+ *    « accepted » trompeur (l'asset existerait sans octets, lecture 404) ;
+ *  - le chemin correct existe : `POST /api/v1/media/upload` (lot 2B) — l'API
+ *    écrit les octets après consentement et plafond.
+ *
+ * Le contrôle porte sur la FORME, jamais sur un nom de champ : un champ renommé
+ * (`photo_data`, `content`, …) ne doit pas contourner la règle. Deux règles :
+ *  1. payload sérialisé ≤ `MAX_SYNC_PAYLOAD_BYTES` ;
+ *  2. aucune valeur textuelle de ≥ `BASE64_BLOB_MIN_CHARS` caractères qui soit
+ *     strictement du base64 (alphabet + padding, sans espace) — c'est-à-dire un
+ *     transport d'octets, pas une note de texte.
+ *
+ * Le refus est **volontairement non persisté** : ce qu'on refuse de stocker, on
+ * ne le stocke pas — même en « rejected ». Un nouvel envoi du même
+ * `event_id` reçoit la même réponse, sans effet de bord (idempotent par nature).
+ */
+const MAX_SYNC_PAYLOAD_BYTES = 16 * 1024;
+const BASE64_BLOB_MIN_CHARS = 4096;
+
+export function refuseNonStorablePayload(op: { payload: Record<string, unknown> }):
+  { status: 'rejected'; reason: string; message: string } | null {
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(op.payload ?? {});
+  } catch {
+    return {
+      status: 'rejected',
+      reason: 'PAYLOAD_NOT_SERIALIZABLE',
+      message: 'Payload de synchronisation non sérialisable',
+    };
+  }
+  const base64ish = (value: string): boolean =>
+    value.length >= BASE64_BLOB_MIN_CHARS && /^[A-Za-z0-9+/]+={0,2}$/.test(value);
+
+  const carriesBase64 = (value: unknown): boolean => {
+    if (typeof value === 'string') return base64ish(value);
+    if (Array.isArray(value)) return value.some(carriesBase64);
+    if (value && typeof value === 'object') {
+      return Object.values(value as Record<string, unknown>).some(carriesBase64);
+    }
+    return false;
+  };
+
+  if (serialized.length > MAX_SYNC_PAYLOAD_BYTES) {
+    return {
+      status: 'rejected',
+      reason: 'PAYLOAD_TOO_LARGE_FOR_SYNC',
+      message: `Payload de synchronisation trop volumineux (max ${MAX_SYNC_PAYLOAD_BYTES} octets) : `
+        + 'les fichiers passent par POST /api/v1/media/upload',
+    };
+  }
+  if (carriesBase64(op.payload)) {
+    return {
+      status: 'rejected',
+      reason: 'PAYLOAD_BINARY_NOT_ALLOWED',
+      message: 'Les octets ne passent pas par la file de synchronisation : utiliser POST /api/v1/media/upload',
+    };
+  }
+  return null;
+}
 
 interface CommandOutcome {
   status: 'accepted' | 'rejected' | 'conflict';
@@ -37,7 +108,6 @@ export class SyncService {
     private readonly tenantContext: TenantContextService,
     private readonly attendance: AttendanceService,
     private readonly journal: JournalService,
-    private readonly media: MediaService,
   ) {}
 
   async push(deviceId: string, userId: string, operations: SyncOperationDto[]): Promise<SyncPushResult> {
@@ -74,6 +144,11 @@ export class SyncService {
     deviceId: string,
     tenantId: string,
   ): Promise<CommandOutcome> {
+    // Refus AVANT toute connexion et tout INSERT : ce qu'on refuse de stocker
+    // ne doit pas atteindre `sync_operations.payload` (voir le garde ci-dessus).
+    const refusal = refuseNonStorablePayload(op);
+    if (refusal) return refusal;
+
     return this.tenantContext.withTenantConnection(async (client): Promise<CommandOutcome> => {
       if (!this.isKnownCommand(op.command)) {
         return { status: 'rejected', reason: 'UNKNOWN_COMMAND', message: `Commande ${op.command} inconnue` };
@@ -198,7 +273,24 @@ export class SyncService {
       case 'log_incident':
         return this.applyDailyLog(client, op, base);
       case 'add_photo':
-        return this.applyAddPhoto(client, op, base);
+        // Décision D6 (2026-09-25, option c) : la photo HORS LIGNE n'existe pas
+        // en V1. Le fait mesuré (lots L2D/L2E) : aucune UI ne capture ni
+        // n'enfile d'image, et cette commande créait une ligne `media_assets`
+        // SANS octets — la lecture rendait ensuite `404 MEDIA_CONTENT_MISSING`,
+        // donc le client croyait avoir envoyé une photo qui n'existait pas, et
+        // son `storage_key` laissait croire le contraire dans l'historique de
+        // synchronisation. La photo en LIGNE passe par
+        // `POST /api/v1/media/upload` (octets par l'API, plafond 8 Mo,
+        // consentement vérifié, journal des accès).
+        // Réversible : le jour où une UI capture, ce rejet redevient l'appel au
+        // canal (a) — file locale + `POST /media/upload` à la reconnexion.
+        return {
+          status: 'rejected',
+          reason: 'OFFLINE_PHOTO_UNSUPPORTED',
+          message:
+            'Photo hors ligne non prise en charge — utiliser POST /api/v1/media/upload '
+            + '(الصورة دون اتصال غير مدعومة — استخدم POST /api/v1/media/upload)',
+        };
       default:
         return { status: 'rejected', reason: 'UNKNOWN_COMMAND', message: `Commande ${op.command} inconnue` };
     }
@@ -247,50 +339,6 @@ export class SyncService {
       return { status: 'accepted' };
     } catch {
       return { status: 'rejected', reason: 'INTERNAL_ERROR', message: 'Erreur lors de l\'écriture du journal' };
-    }
-  }
-
-  /** Photo offline : enregistre l'asset (jamais visible sans consentement). */
-  private async applyAddPhoto(
-    client: PoolClient,
-    op: SyncOperationDto,
-    base: { childId: string; siteId?: string | null; occurredAt: Date; recordedBy: string; deviceId?: string | null; syncEventId?: string | null },
-  ): Promise<CommandOutcome> {
-    const tenantId = this.tenantContext.getTenantId();
-    const p = op.payload as Record<string, unknown>;
-    const child = await client.query(
-      `SELECT id FROM children\n       -- C6 : filtre organisation explicite en plus de la RLS (fail-closed).\n       WHERE id = $1 AND organization_id = current_setting('app.tenant_id')::uuid AND deleted_at IS NULL`,
-      [base.childId],
-    );
-    if (child.rows.length === 0) {
-      return { status: 'rejected', reason: 'PERMISSION_DENIED', message: 'Enfant introuvable dans cette organisation' };
-    }
-    if (!p.storage_key || !p.mime_type) {
-      return { status: 'rejected', reason: 'MISSING_FIELDS', message: 'storage_key et mime_type requis' };
-    }
-    // C3 (audit 2026-09) : rejet PAR OPÉRATION (pas un 500 global) si la clé
-    // est hors du périmètre du tenant.
-    if (!String(p.storage_key).startsWith(`${tenantId}/`)) {
-      return { status: 'rejected', reason: 'STORAGE_KEY_TENANT_MISMATCH', message: 'Clé de stockage hors organisation' };
-    }
-    try {
-      await this.media.registerFromSync(client, tenantId, {
-        childId: base.childId,
-        userId: base.recordedBy,
-        deviceId: base.deviceId,
-        syncEventId: base.syncEventId,
-        storageKey: p.storage_key as string,
-        mimeType: p.mime_type as string,
-        takenAt: (p.taken_at as string | undefined) ?? base.occurredAt.toISOString(),
-        checksum: p.checksum as string | undefined,
-        childrenInPhoto: p.children_in_photo as string[] | undefined,
-      });
-      return { status: 'accepted' };
-    } catch (err) {
-      if (err instanceof AppError && err.code === 'STORAGE_KEY_TENANT_MISMATCH') {
-        return { status: 'rejected', reason: err.code, message: err.messageFr };
-      }
-      return { status: 'rejected', reason: 'INTERNAL_ERROR', message: 'Erreur lors de l\'enregistrement de la photo' };
     }
   }
 

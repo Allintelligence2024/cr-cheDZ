@@ -85,6 +85,9 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION support_retry_job(uuid) TO creche_app_test');
   // Phase 11 (migration 034) : rétention des journaux (5 ans)
   await admin.query('GRANT EXECUTE ON FUNCTION retention_purge_logs(timestamptz) TO creche_app_test');
+  // L4/D2 (migration 076) : rétention de la messagerie (file + contenu)
+  await admin.query('GRANT EXECUTE ON FUNCTION retention_purge_messaging(timestamptz, timestamptz) TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON FUNCTION retention_expired_body_marker() TO creche_app_test');
   // Phase 11 (migration 035) : console support — feature flags
   await admin.query('GRANT EXECUTE ON FUNCTION support_list_flags() TO creche_app_test');
   await admin.query('GRANT EXECUTE ON FUNCTION support_set_flag(text, uuid, boolean) TO creche_app_test');
@@ -131,3 +134,19 @@ export function appUrl() {
   u.password = APP_TEST_PASSWORD;
   return u.toString();
 }
+
+/**
+ * Raccourci de banc d'essai à NE JAMAIS propager à un processus NODE_ENV=production.
+ *
+ * Le runner (`run-isolation-suites.sh`) exporte `RATE_LIMIT_DISABLED=1` et le
+ * job CI `true`, pour que les suites puissent marteler l'API d'un même process.
+ * Un spawn de production qui fait `...process.env` transmet donc ce raccourci —
+ * or la garde de configuration (plan de réparation 2026-09-24, lot 1) le REFUSE
+ * en production : le processus meurt au boot (« GARDE CONFIG PRODUCTION ») et le
+ * test échoue pour la mauvaise raison, en accusant les rôles de base.
+ *
+ * Un environnement de production ne désactive jamais la limitation de débit :
+ * tout spawn `NODE_ENV=production` le dit donc explicitement.
+ * Verrou anti-régression : phase26 (§ « raccourci de banc d'essai »).
+ */
+export const PRODUCTION_SPAWN_ENV = { RATE_LIMIT_DISABLED: 'false' };

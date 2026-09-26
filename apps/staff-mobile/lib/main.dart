@@ -78,10 +78,13 @@ class _StaffAppState extends State<StaffApp> {
       setState(() => _ready = true);
     } catch (_) {
       api?.close(); await opening?.close();
-      if (mounted && epoch == _epoch) setState(() {
-        _ready = true;
-        _sessionError = 'Session sans organisation ou base locale incompatible — aucune donnée réaffectée';
-      });
+      if (mounted && epoch == _epoch) {
+        setState(() {
+          _ready = true;
+          _sessionError =
+              'Session sans organisation ou base locale incompatible — aucune donnée réaffectée';
+        });
+      }
     }
   }
 

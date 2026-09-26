@@ -2,21 +2,22 @@ import { resolveStorageBackend, type StorageBackend } from '@creche/prod-config'
 import { exportRange } from '@creche/prod-config';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, createReadStream } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
 import { S3ClientService } from '../../shared/storage/s3-client.service';
+import { openS3Object, type StorageObject } from '../../shared/storage/object-stream';
 
 /**
  * Exports Excel (roadmap v2).
  *
  * La demande crée un job `export_report` (worker) ; la référence est suivie
  * dans report_exports (migration 038). Le téléchargement est autorisé pour
- * le tenant demandeur uniquement (RLS) — backend local (buffer) ou S3 (URL
- * signée), jamais de faux « prêt » avant que le worker n'ait écrit le fichier.
+ * le tenant demandeur uniquement (RLS) — et servi par l'API en flux
+ * (LOT 2 : plus d'URL signée rendue au client), jamais de faux « prêt » avant
+ * que le worker n'ait écrit le fichier.
  *
  * E1 : plus de client S3 recréé à chaque téléchargement — S3ClientService
  * mutualisé (bucket + credentials résolus une seule fois au boot).
@@ -66,8 +67,15 @@ export class ExportsService {
     });
   }
 
-  /** Téléchargement : buffer (local) ou URL signée (S3) — 404 si absent du tenant, 409 si pas prêt. */
-  async download(exportId: string): Promise<{ kind: 'buffer'; buffer: Buffer; filename: string } | { kind: 'redirect'; url: string; filename: string }> {
+  /**
+   * Téléchargement : FLUX (local ou S3) — 404 si absent du tenant, 409 si pas prêt.
+   *
+   * LOT 2 (P0 F5) : le fichier est servi par l'API (same-origin). Avant, le
+   * backend S3 rendait une URL signée bâtie sur `S3_ENDPOINT`
+   * (`http://minio:9000` en production, MinIO lié à 127.0.0.1) : le
+   * navigateur recevait une redirection vers un hôte injoignable.
+   */
+  async download(exportId: string): Promise<{ kind: 'object'; object: StorageObject; filename: string }> {
     requireTenant(this.tenantContext);
     const row = await this.tenantContext.withTenantConnection(async (client) => {
       const r = await client.query(
@@ -120,11 +128,18 @@ export class ExportsService {
           404,
         );
       }
-      return { kind: 'buffer', buffer: await readFile(filePath), filename };
+      return { kind: 'object', object: { stream: createReadStream(filePath), contentType: null, contentLength: null }, filename };
     }
-    // E1 : URL signée via le client S3 mutualisé (900 s, comme avant).
-    const url = await this.s3.presignGet(row.storage_key as string, 900);
-    return { kind: 'redirect', url, filename };
+    const object = await openS3Object(this.s3.client, this.s3.bucket, key);
+    if (!object) {
+      throw new AppError(
+        'EXPORT_FILE_MISSING',
+        'Le fichier d’export est introuvable sur le stockage',
+        'ملف التصدير غير موجود في التخزين',
+        404,
+      );
+    }
+    return { kind: 'object', object, filename };
   }
 
   private computeRange(reportType: string, period: string): [string, string] {

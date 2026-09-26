@@ -3,7 +3,7 @@
  * feat(config)) : `@creche/prod-config`, exécutée par l'API ET le worker au
  * bootstrap seulement si NODE_ENV=production.
  *
- * Cas couverts (8) :
+ * Cas couverts (11) :
  *   1. config de production SÛRE → validate [] + assert ne jette pas ;
  *   2. PAYMENT_WEBHOOK_SECRET absent → bloquée, variable nommée ;
  *   3. PAYMENT_WEBHOOK_SECRET < 32 caractères → bloquée, variable nommée ;
@@ -14,7 +14,14 @@
  *      bloquée, variable nommée ;
  *   7. config SATIM partielle → bloquée, SATIM_* nommés ;
  *   8. NODE_ENV=test/development → garde INACTIVE (mêmes défauts, pas de
- *      blocage) — ne rien casser en test/development.
+ *      blocage) — ne rien casser en test/development ;
+ *   9. G5 : TOTP_ENCRYPTION_KEY absente/malformée en production → bloquée ;
+ *  10. RATE_LIMIT_DISABLED='true' ou '1' en production → bloquée (lot 1 du
+ *      plan de réparation 2026-09-24 : le garde applicatif les interprète
+ *      comme une désactivation, sans regarder NODE_ENV) ; 'false'/absente
+ *      admises — sinon on bloquerait une configuration saine ;
+ *  11. rappel : hors production, RATE_LIMIT_DISABLED reste libre (tests et
+ *      runner d'isolation l'exportent à '1').
  */
 import { assertProductionConfig, validateProductionConfig } from '@creche/prod-config';
 
@@ -103,5 +110,22 @@ describe('@creche/prod-config — garde de configuration (NODE_ENV=production)',
     const faulty = { ...safeEnv, PAYMENT_WEBHOOK_SECRET: 'court', JWT_SECRET: 'dev_jwt_secret_change_in_prod_minimum_32_chars' };
     expect(() => assertProductionConfig({ ...faulty, NODE_ENV: 'test' })).not.toThrow();
     expect(() => assertProductionConfig({ ...faulty, NODE_ENV: 'development' })).not.toThrow();
+  });
+
+  test("L1 : RATE_LIMIT_DISABLED='true'|'1' bloquée en production, 'false'/absente admise", () => {
+    // Le garde applicatif (rate-limit.guard.ts) sort en `true` pour ces deux
+    // valeurs SANS regarder NODE_ENV : démarrer la production avec elles
+    // revient à désarmer la limitation de débit applicative.
+    for (const value of ['true', '1']) {
+      expect(validateProductionConfig({ ...safeEnv, RATE_LIMIT_DISABLED: value }).join('\n')).toMatch(/RATE_LIMIT_DISABLED/);
+      expect(() => assertProductionConfig({ ...safeEnv, RATE_LIMIT_DISABLED: value })).toThrow(/RATE_LIMIT_DISABLED/);
+    }
+    // Valeurs que le garde N'interprète PAS comme une désactivation, et
+    // configuration saine : aucune ne doit être refusée (pas de sur-blocage).
+    for (const value of ['false', '0', '', undefined]) {
+      expect(validateProductionConfig({ ...safeEnv, RATE_LIMIT_DISABLED: value })).toEqual([]);
+    }
+    // Hors production : la variable reste libre (tests, runner d'isolation).
+    expect(() => assertProductionConfig({ ...safeEnv, NODE_ENV: 'test', RATE_LIMIT_DISABLED: '1' })).not.toThrow();
   });
 });

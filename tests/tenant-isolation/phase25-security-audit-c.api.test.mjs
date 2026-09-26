@@ -250,10 +250,21 @@ const main = async () => {
         payload: { child_id: childForSync, storage_key: `${B.org}/photo/offline.jpg`, mime_type: 'image/jpeg' },
       }],
     });
-    ok('Sync push add_photo avec clé de B → opération rejetée (STORAGE_KEY_TENANT_MISMATCH)',
+    // Décision D6 (option c, 2026-09-25) : la commande `add_photo` est refusée
+    // AVANT toute lecture de `storage_key` — la preuve utile ici est donc
+    // « la voie hors ligne n'écrit rien », quelle que soit la clé. Le contrôle
+    // de clé hors tenant reste prouvé sur le chemin média EN LIGNE, juste
+    // au-dessus (register media avec clé de l'org B → 400).
+    ok('Sync push add_photo → refusée (OFFLINE_PHOTO_UNSUPPORTED), même avec une clé d’une autre org',
       crossSync.status === 200 && Array.isArray(crossSync.body.rejected)
-        && crossSync.body.rejected[0]?.reason === 'STORAGE_KEY_TENANT_MISMATCH',
+        && crossSync.body.rejected[0]?.reason === 'OFFLINE_PHOTO_UNSUPPORTED',
       JSON.stringify(crossSync.body).slice(0, 160));
+    const crossAssets = await db.query(
+      `SELECT COUNT(*)::int AS n FROM media_assets WHERE storage_key = $1`,
+      [`${B.org}/photo/offline.jpg`],
+    );
+    ok('Aucun média créé (ni dans A, ni dans B) par la voie hors ligne',
+      crossAssets.rows[0].n === 0, `lignes=${crossAssets.rows[0].n}`);
 
     // ── C5 : room_id cross-tenant dans l'import ─────────────────────────────
     console.log('\nC5) Import d\'enfants — room_id cross-tenant');

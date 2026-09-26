@@ -7,10 +7,12 @@
  *  1. Journal HTTP : meal → daily_log_events + agrégats ; note privée hors fil ;
  *     incident → notification parent ; correction append-only
  *  2. Action groupée (repas de section) : 12 enfants → 12 événements
- *  3. Médias : presign (URL signée S3), register, consentement obligatoire (422),
- *     consentement OK → visible, download journalisé, cross-tenant 404,
+ *  3. Médias : presign upload (URL signée PUT), register, consentement obligatoire
+ *     (422), consentement OK → visible, download journalisé (chemin same-origin
+ *     + octets réellement servis — LOT 2), cross-tenant 404,
  *     rôles (éducatrice ne publie pas), consentement révoqué → 422
- *  4. Sync : add_photo → media créé non visible ; log_incident → notification
+ *  4. Sync : `add_photo` → **REFUSÉE** explicitement (décision D6, option c :
+ *     pas de photo hors ligne en V1, aucune trace créée) ; log_incident → notification
  *  5. Notifications : check_in → notification_queue + inbox (gardien can_receive_push)
  *  6. Worker : processNextJob (job done) + drainNotificationQueue (sent)
  *  7. Stress : 60 opérations offline mixtes → agrégats exacts
@@ -20,6 +22,7 @@
 import { execSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
@@ -47,6 +50,9 @@ async function main() {
   await ensureAppRole(admin);
   process.env.DATABASE_URL = appUrl();
   process.env.RATE_LIMIT_DISABLED = 'true';
+  // LOT 2 : backend local + répertoire explicite pour prouver les OCTETS servis.
+  process.env.STORAGE_BACKEND = 'local';
+  process.env.STORAGE_LOCAL_DIR = process.env.STORAGE_LOCAL_DIR ?? '/tmp/pgtest/p6store';
 
   const { createApp } = await import(pathToFileURL(join(REPO, 'apps/api/dist/app.factory.js')).href);
   const app = await createApp();
@@ -233,6 +239,12 @@ async function main() {
       && presign.body.storage_key?.startsWith(`${A.org}/photo/`),
       JSON.stringify(presign.body));
 
+    // Fichier réel écrit dans le stockage (le presign n'a pas d'upload réel ici).
+    const storeDir = process.env.STORAGE_LOCAL_DIR;
+    const photoBytes = Buffer.from(`P6-PHOTO-${randomUUID()}`);
+    mkdirSync(dirname(join(storeDir, presign.body.storage_key)), { recursive: true });
+    writeFileSync(join(storeDir, presign.body.storage_key), photoBytes);
+
     const reg = await api('POST', '/media', tokenA, {
       storage_key: presign.body.storage_key, mime_type: 'image/jpeg',
       child_id: childA, children_in_photo: [childA],
@@ -261,8 +273,16 @@ async function main() {
       && withConsent.body.is_visible_to_parents === true);
 
     const download = await api('GET', `/media/${reg.body.id}/download`, tokenA);
-    check('Download → URL signée + journalisée', download.status === 200
-      && download.body.url.includes('X-Amz-Signature'));
+    check('Download → chemin same-origin + journalisé (LOT 2 : plus d’URL MinIO)', download.status === 200
+      && download.body.url === `/api/v1/media/${reg.body.id}/content`);
+    // Preuve de JOIGNABILITÉ : ce que l'ancien test ne vérifiait pas — les
+    // octets réellement servis par l'API sur le lien rendu.
+    const origin = base.slice(0, -'/api/v1'.length); // le lien rendu est déjà absolu depuis la racine
+    const contentRes = await fetch(`${origin}${download.body.url}`, { headers: { authorization: `Bearer ${tokenA}` } });
+    const contentBytes = Buffer.from(await contentRes.arrayBuffer());
+    check('Contenu servi sur le lien rendu : octets identiques au fichier stocké',
+      contentRes.status === 200 && contentBytes.equals(photoBytes),
+      `status=${contentRes.status} ${contentBytes.length}/${photoBytes.length}`);
     const accessLogs = await admin.query(
       `SELECT COUNT(*)::int AS n FROM media_access_logs WHERE media_id = $1`,
       [reg.body.id],
@@ -294,8 +314,8 @@ async function main() {
     check('Consentement révoqué → 422 (publication refusée)',
       revokedPublish.status === 422 && revokedPublish.body.code === 'CONSENT_REQUIRED');
 
-    // ── 4. Sync : add_photo + log_incident ──────────────────────────────────
-    console.log('\n4) Sync — photos et incidents offline');
+    // ── 4. Sync : add_photo REFUSÉE (D6 option c) + log_incident ─────────
+    console.log('\n4) Sync — photo hors ligne refusée, incidents offline');
     const photoSync = await api('POST', '/sync/push', tokenA, {
       device_id: device.body.device_id,
       operations: [{
@@ -308,14 +328,18 @@ async function main() {
         occurred_at_device: new Date().toISOString(),
       }],
     });
-    check('add_photo sync → accepted', photoSync.status === 200 && photoSync.body.accepted.length === 1,
-      JSON.stringify(photoSync.body));
+    check('add_photo hors ligne → rejetée OFFLINE_PHOTO_UNSUPPORTED (D6 option c)',
+      photoSync.status === 200 && photoSync.body.rejected?.length === 1
+        && photoSync.body.rejected[0].reason === 'OFFLINE_PHOTO_UNSUPPORTED',
+      JSON.stringify(photoSync.body).slice(0, 200));
+    check('le refus nomme la route photo correcte (POST /api/v1/media/upload)',
+      String(photoSync.body.rejected?.[0]?.message ?? '').includes('/media/upload'));
     const offlineMedia = await admin.query(
-      `SELECT is_visible_to_parents FROM media_assets WHERE storage_key = $1`,
+      `SELECT COUNT(*)::int AS n FROM media_assets WHERE storage_key = $1`,
       [`${A.org}/photo/offline-1.jpg`],
     );
-    check('Photo offline enregistrée, non visible', offlineMedia.rows.length === 1
-      && offlineMedia.rows[0].is_visible_to_parents === false);
+    check('aucun media_assets fantôme (la voie hors ligne n’écrit rien)',
+      offlineMedia.rows[0].n === 0, `lignes=${offlineMedia.rows[0].n}`);
 
     const incidentSync = await api('POST', '/sync/push', tokenA, {
       device_id: device.body.device_id,

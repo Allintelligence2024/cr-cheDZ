@@ -3,10 +3,11 @@
 // Ne jamais pointer ces tests vers une sauvegarde restaurée de données réelles.
 import assert from 'node:assert/strict';
 import { test, before, after } from 'node:test';
-import { readFileSync, mkdtempSync, cpSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, cpSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import pg from 'pg';
+import { PRODUCTION_SPAWN_ENV } from './helpers.mjs';
 
 assert.equal(process.env.ALLOW_DATABASE_RESET, '1', 'Base jetable : ALLOW_DATABASE_RESET=1 requis');
 const adminUrl = process.env.DATABASE_URL;
@@ -73,7 +74,12 @@ test('D3 : table nouvelle du migrateur lisible sans GRANT manuel', async () => {
 });
 
 const productionEnv = (url) => ({
-  ...process.env, NODE_ENV: 'production', DATABASE_URL: url, APP_PORT: '0',
+  // `...process.env` porte le raccourci de banc d'essai RATE_LIMIT_DISABLED
+  // (runner d'isolation, job CI) ; la garde de configuration le REFUSE en
+  // production : sans cette neutralisation, le processus mourait au boot avec
+  // « GARDE CONFIG PRODUCTION » au lieu du motif testé — c'est exactement la
+  // panne observée en CI (gate D interrompu, 2026-09-24).
+  ...process.env, ...PRODUCTION_SPAWN_ENV, NODE_ENV: 'production', DATABASE_URL: url, APP_PORT: '0',
   JWT_SECRET: 'phase-d-only-jwt-secret-32-characters-minimum',
   PAYMENT_WEBHOOK_SECRET: 'phase-d-only-webhook-secret-32-characters',
   // G5 : la garde production exige désormais la clé de chiffrement des secrets
@@ -217,6 +223,26 @@ test('D2 : API et worker démarrent réellement en production avec creche_app', 
   }
 });
 
+
+test('D2 : aucun spawn de production n’hérite du raccourci de banc d’essai RATE_LIMIT_DISABLED', () => {
+  // Verrou anti-régression (CI rouge du 2026-09-24) : le job « database »
+  // exporte RATE_LIMIT_DISABLED=true et le runner d'isolation l'exporte à '1'
+  // pour les suites en processus. Toute suite qui lance une ENTRÉE de
+  // production (dist/main.js) avec `...process.env` doit neutraliser ce
+  // raccourci, sinon le processus meurt au boot et la suite échoue pour la
+  // mauvaise raison (elle accuse les rôles de base).
+  const dir = join(process.cwd(), 'tests', 'tenant-isolation');
+  const offenders = readdirSync(dir)
+    .filter((file) => file.endsWith('.mjs'))
+    .filter((file) => {
+      const src = readFileSync(join(dir, file), 'utf8');
+      const spawnsProductionEntrypoint = src.includes('dist/main.js');
+      const runsInProduction = /NODE_ENV[^\n]*'production'/.test(src) || /\?\s*'production'/.test(src);
+      const neutralized = src.includes('PRODUCTION_SPAWN_ENV') || src.includes("RATE_LIMIT_DISABLED: 'false'");
+      return spawnsProductionEntrypoint && runsInProduction && !neutralized;
+    });
+  assert.deepEqual(offenders, [], `raccourci de banc d'essai propagé à un boot de production : ${offenders.join(', ')}`);
+});
 
 test('D1 : bootstrap secrets distincts, rejouable après migrations, sans fuite en sortie', () => {
   const env = {

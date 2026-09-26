@@ -1,53 +1,50 @@
-// Rapport 5 analyses — Phase 4 (F2, F6, F7) : upload média.
+// Rapport 5 analyses — Phase 4 (F2, F7) : upload média.
+// F6 (clé de stockage hors ligne) a été retirée le 2026-09-25 avec la décision D6
+// (option c) : la photo hors ligne n'existe pas en V1, il n'y a donc plus de clé à
+// fabriquer ni de commande à enfiler.
+// L2F (2026-09-26) : l'upload en LIGNE passe désormais par l'API
+// (`POST /api/v1/media/upload`, multipart) — le presign S3 est mort en
+// production (lot 2B), donc le PUT signé et le second appel `POST /media` ont
+// disparu. Ce fichier le prouve : un seul appel, un corps multipart complet, et
+// une reprise UNIQUEMENT sur panne de transport.
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:staff_mobile/core/database/app_database.dart';
 import 'package:staff_mobile/core/media/media_uploader.dart';
 import 'package:staff_mobile/core/network/api_client.dart';
-import 'package:staff_mobile/core/sync/sync_scope.dart';
 
-const org = '11111111-1111-4111-8111-111111111111';
-const user = '22222222-2222-4222-8222-222222222222';
 const child = '33333333-3333-4333-8333-333333333333';
 
+/// Client d'API instrumenté : n'accepte QUE l'envoi multipart vers
+/// `/media/upload`. Tout autre appel (presign, register) fait échouer le test —
+/// c'est la garde la plus directe contre un retour au chemin mort.
 class RecordingApi extends ApiClient {
+  RecordingApi({List<Object>? script}) : script = script ?? const <Object>[];
+
+  /// Un [DioExceptionType] à lever aux premiers envois, puis succès.
+  final List<Object> script;
   final calls = <Map<String, dynamic>>[];
+  int uploads = 0;
+
   @override
-  Future<T> post<T>(String path, [Object? body]) async {
-    calls.add({'path': path, 'body': body});
-    if (path == '/media/presign-upload') {
-      return <String, dynamic>{'upload_url': 'https://s3.local/signed', 'storage_key': '$org/photo/1-p.jpg'} as T;
+  Future<T> upload<T>(String path, FormData form, {Options? options}) async {
+    uploads += 1;
+    calls.add({'path': path, 'form': form, 'options': options});
+    // Le script se consomme : au-delà, les envois réussissent. (Un modulo ferait
+    // rejouer la panne à l'infini — l'erreur que la CI a attrapée au 1er jet.)
+    final step = uploads <= script.length ? script[uploads - 1] : 'ok';
+    if (step is DioExceptionType) {
+      throw DioException(requestOptions: RequestOptions(path: path), type: step);
     }
-    return <String, dynamic>{'id': 'asset-1', ...(body as Map<String, dynamic>)} as T;
+    return <String, dynamic>{'id': 'asset-1'} as T;
   }
-}
 
-class RecordingEngine {
-  final enqueued = <Map<String, dynamic>>[];
-  Future<String> enqueue({required String command, required String entityType, required Map<String, dynamic> payload}) async {
-    enqueued.add({'command': command, 'entityType': entityType, 'payload': payload});
-    return 'op-1';
-  }
-}
-
-/// Adaptateur HTTP scripté : chaque appel consomme le prochain scénario.
-class ScriptedAdapter implements HttpClientAdapter {
-  ScriptedAdapter(this.script);
-  final List<Object> script; // int = code HTTP ; DioExceptionType = panne transport
-  final requests = <RequestOptions>[];
   @override
-  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
-    requests.add(options);
-    final step = script.removeAt(0);
-    if (step is DioExceptionType) throw DioException(requestOptions: options, type: step);
-    return ResponseBody.fromString('', step as int);
-  }
-  @override
-  void close({bool force = false}) {}
+  Future<T> post<T>(String path, [Object? body]) async => fail(
+        'le client média ne doit plus rien envoyer hors /media/upload '
+        '(appel interdit observé : $path)',
+      );
 }
 
 void main() {
@@ -64,64 +61,83 @@ void main() {
     });
   });
 
-  group('F6 — clé offline dans le périmètre du tenant', () {
-    test('offlineStorageKey commence par <org>/', () {
-      final key = MediaUploader.offlineStorageKey(org, now: DateTime.fromMillisecondsSinceEpoch(1700000000000));
-      expect(key, '$org/photo/offline-1700000000000.jpg');
-      expect(key.startsWith('$org/'), isTrue); // garde serveur STORAGE_KEY_TENANT_MISMATCH
-    });
-    test('enqueueOfflinePhoto utilise l\'organisation de la base locale + SHA-256', () async {
-      final db = AppDatabase.testing(SyncScope(org, user), NativeDatabase.memory());
-      addTearDown(db.close);
-      final engine = RecordingEngine();
-      final id = await MediaUploader(RecordingApi()).enqueueOfflinePhoto(db, engine, childId: child, bytes: bytes);
-      expect(id, 'op-1');
-      final p = engine.enqueued.single['payload'] as Map<String, dynamic>;
-      expect(engine.enqueued.single['command'], 'add_photo');
-      expect((p['storage_key'] as String).startsWith('$org/'), isTrue);
-      expect(p['storage_key'], isNot(startsWith('offline/')));
-      expect(p['checksum'], 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
-      expect(base64Decode(p['bytes'] as String), bytes);
-    });
-  });
-
-  group('F7 — PUT signé : délais + 1 retry', () {
-    MediaUploader build(ScriptedAdapter adapter, RecordingApi api) {
-      final dio = Dio()..httpClientAdapter = adapter;
-      return MediaUploader(api, uploadDio: dio);
+  group('L2F — l’upload passe par l’API (multipart)', () {
+    MapEntry<String, MultipartFile> fileOf(FormData form) {
+      expect(form.files, hasLength(1), reason: 'une seule partie fichier');
+      return form.files.single;
     }
 
-    test('panne réseau puis succès → 2 tentatives, asset enregistré avec checksum', () async {
-      final adapter = ScriptedAdapter([DioExceptionType.connectionError, 200]);
+    String fieldOf(FormData form, String key) =>
+        form.fields.singleWhere((f) => f.key == key).value;
+
+    test('un seul appel : /media/upload, champ « file » typé, child_id + checksum', () async {
       final api = RecordingApi();
-      final asset = await build(adapter, api).uploadPhoto(childId: child, bytes: bytes, mimeType: 'image/jpeg');
-      expect(adapter.requests.length, 2);
-      expect(adapter.requests.first.sendTimeout, MediaUploader.uploadSendTimeout);
-      expect(adapter.requests.first.connectTimeout, MediaUploader.uploadConnectTimeout);
-      expect(asset['checksum'], MediaUploader.sha256Hex(bytes));
-      expect(api.calls.last['path'], '/media');
+      final asset = await MediaUploader(api).uploadPhoto(
+        childId: child,
+        bytes: bytes,
+        mimeType: 'image/jpeg',
+      );
+
+      expect(asset['id'], 'asset-1');
+      expect(api.uploads, 1);
+      expect(api.calls.single['path'], '/media/upload');
+      final form = api.calls.single['form'] as FormData;
+      final file = fileOf(form);
+      // Le serveur lit `file.mimetype` : sans type explicite, la partie serait
+      // application/octet-stream et l'API refuserait (MEDIA_MIME_NOT_ALLOWED).
+      expect(file.value.contentType.toString(), 'image/jpeg');
+      expect(file.value.length, bytes.length);
+      expect(file.value.filename, endsWith('.jpg'));
+      expect(fieldOf(form, 'child_id'), child);
+      expect(fieldOf(form, 'checksum'), MediaUploader.sha256Hex(bytes));
+      // Le client n'affirme pas avoir retiré les métadonnées EXIF : il ne le fait
+      // pas (dette documentée) — un champ `exif_stripped: true` serait un mensonge.
+      expect(form.fields.map((f) => f.key), isNot(contains('exif_stripped')));
+      // Aucune clé de stockage fabriquée côté client : le serveur la compose.
+      expect(api.calls.single['form'].toString(), isNot(contains('presign')));
     });
 
-    test('deux pannes réseau → échec après exactement 2 tentatives, pas d\'enregistrement', () async {
-      final adapter = ScriptedAdapter([DioExceptionType.sendTimeout, DioExceptionType.sendTimeout]);
-      final api = RecordingApi();
+    test('panne de transport puis succès → 2 tentatives, corps RECONSTRUIT', () async {
+      final api = RecordingApi(script: [DioExceptionType.connectionError]);
+      final asset = await MediaUploader(api).uploadPhoto(
+        childId: child,
+        bytes: bytes,
+        mimeType: 'image/jpeg',
+      );
+
+      expect(asset['id'], 'asset-1');
+      expect(api.uploads, 2);
+      expect(api.calls, hasLength(2));
+      // Un FormData finalisé n'est pas rejouable : chaque tentative a le sien.
+      expect(identical(api.calls[0]['form'], api.calls[1]['form']), isFalse);
+    });
+
+    test('deux pannes de transport → échec après exactement 2 tentatives', () async {
+      final api = RecordingApi(
+        script: [DioExceptionType.sendTimeout, DioExceptionType.sendTimeout],
+      );
       await expectLater(
-        build(adapter, api).uploadPhoto(childId: child, bytes: bytes, mimeType: 'image/jpeg'),
+        MediaUploader(api).uploadPhoto(childId: child, bytes: bytes, mimeType: 'image/jpeg'),
         throwsA(isA<DioException>()),
       );
-      expect(adapter.requests.length, 2);
-      expect(api.calls.map((c) => c['path']), isNot(contains('/media')));
+      expect(api.uploads, 2);
     });
 
-    test('réponse 403 (URL signée expirée) → AUCUN retry', () async {
-      final adapter = ScriptedAdapter([403, 200]);
-      final api = RecordingApi();
+    test('réponse serveur (4xx) → un seul essai, aucune reprise', () async {
+      final api = RecordingApi(script: [DioExceptionType.badResponse]);
       await expectLater(
-        build(adapter, api).uploadPhoto(childId: child, bytes: bytes, mimeType: 'image/jpeg'),
-        throwsA(isA<DioException>().having((e) => e.response?.statusCode, 'status', 403)),
+        MediaUploader(api).uploadPhoto(childId: child, bytes: bytes, mimeType: 'image/jpeg'),
+        throwsA(isA<DioException>()),
       );
-      expect(adapter.requests.length, 1);
-      expect(api.calls.map((c) => c['path']), isNot(contains('/media')));
+      expect(api.uploads, 1);
+    });
+
+    test('les délais de l’envoi sont bornés (jamais d’attente infinie)', () async {
+      final api = RecordingApi();
+      await MediaUploader(api).uploadPhoto(childId: child, bytes: bytes, mimeType: 'image/jpeg');
+      final options = api.calls.single['options'] as Options?;
+      expect(options?.sendTimeout, MediaUploader.uploadSendTimeout);
+      expect(options?.receiveTimeout, MediaUploader.uploadReceiveTimeout);
     });
 
     test('isRetryable : transport oui, réponse/annulation non', () {

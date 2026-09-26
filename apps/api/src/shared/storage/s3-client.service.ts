@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 
 /**
  * E1 (remédiation audits combinés) : client S3 UNIQUE pour toute l'API.
@@ -45,9 +44,15 @@ export class S3ClientService {
     await this._client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
-  /** URL signée GET de courte durée (jamais de lecture objet via l'API). */
-  presignGet(key: string, expirySeconds: number): Promise<string> {
-    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
-    return getSignedUrl(this._client, command, { expiresIn: expirySeconds });
-  }
+  // ── Pourquoi il n'y a PLUS de presignGet ici (LOT 2 — P0 F5) ────────────
+  //
+  // L'ancienne méthode signait des URLs GET avec l'endpoint INTERNE
+  // (`S3_ENDPOINT=http://minio:9000` en production, MinIO lié à 127.0.0.1) :
+  // toutes les URLs rendues au client étaient injoignables. La lecture passe
+  // désormais par l'API (shared/storage/object-stream.ts) et rien ne doit
+  // signer contre l'endpoint interne.
+  //
+  // Option B (plan de réparation) si la charge de lecture devient un sujet :
+  // un sous-domaine public + TLS, et une méthode de signature qui construit
+  // le client sur CETTE origine publique — jamais sur `S3_ENDPOINT`.
 }

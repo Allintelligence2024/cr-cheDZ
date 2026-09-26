@@ -6,12 +6,14 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { S3ClientService } from '../../shared/storage/s3-client.service';
+import { openLocalObject, openS3Object, type StorageObject } from '../../shared/storage/object-stream';
 
 /**
  * Stockage des PDF de facturation.
  *
  * Deux backends explicitement configurés (aucune magie) :
- * - `STORAGE_BACKEND=s3`    (défaut hors production uniquement) : S3/MinIO, URLs signées en lecture ;
+ * - `STORAGE_BACKEND=s3`    (défaut hors production uniquement) : S3/MinIO, lecture en flux par l'API
+ *   (LOT 2 — plus d'URL signée rendue au client, cf. shared/storage/object-stream.ts) ;
  * - `STORAGE_BACKEND=local` : répertoire local `STORAGE_LOCAL_DIR`
  *   (pratique pour les tests et les déploiements mono-serveur).
  *
@@ -45,7 +47,7 @@ export class PdfStorageService {
     return `${orgId}/invoices/${invoiceId}.pdf`;
   }
 
-  /** Lecture du PDF (backend local) ou URL signée (backend S3). */
+  /** Lecture complète du PDF (buffer) — pour les usages qui exigent le buffer. */
   async read(key: string): Promise<Buffer> {
     if (this.isLocal()) {
       return readFile(join(this.localDir(), key));
@@ -57,9 +59,17 @@ export class PdfStorageService {
     return Buffer.concat(chunks);
   }
 
-  /** URL signée courte durée (backend S3). */
-  presign(key: string): Promise<string> {
-    return this.s3.presignGet(key, 900);
+  /**
+   * Ouvre le PDF en FLUX (backend local ou S3) — `null` s'il n'existe pas.
+   *
+   * LOT 2 (P0 F5) : remplace `presign()`, supprimé. L'API rendait une URL
+   * signée bâtie sur `S3_ENDPOINT` (`http://minio:9000` en production, MinIO
+   * lié à 127.0.0.1) : aucun navigateur ni téléphone ne pouvait l'ouvrir. Le
+   * PDF est désormais servi par l'API elle-même, same-origin.
+   */
+  open(key: string): Promise<StorageObject | null> {
+    if (this.isLocal()) return openLocalObject(this.localDir(), key);
+    return openS3Object(this.s3.client, this.s3.bucket, key);
   }
 
   /** Le PDF existe-t-il sur le backend local ? (détection d'erreur précoce) */

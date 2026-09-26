@@ -13,6 +13,11 @@ import { HealthService } from '../health/health.service';
 import { MediaService } from '../media/media.service';
 import { AuditService } from '../privacy/audit.service';
 
+/** Chemin same-origin de lecture d'une photo côté parent (LOT 2 — P0 F5). */
+export function parentPhotoContentPath(childId: string, mediaId: string): string {
+  return `/api/v1/parent/children/${childId}/media/${mediaId}/content`;
+}
+
 /** Portail parent. Le contrôle est toujours child_guardians, jamais le rôle JWT. */
 @Injectable()
 export class ParentsService {
@@ -135,7 +140,37 @@ export class ParentsService {
     return result;
   }
 
+  /**
+   * Lien de lecture pour un parent : chemin **parent-scopé** same-origin.
+   *
+   * Pourquoi ne pas réutiliser le chemin `/media/:id/content` : il est réservé
+   * au personnel (`@Roles(...STAFF_ROLES)`). Un parent n'a que les routes
+   * `/parent/...`, qui revérifient la filiation (`child_guardians` vivant) et
+   * le consentement photo à CHAQUE lecture. Le passage par `media.downloadUrl`
+   * conserve la journalisation d'accès (media_access_logs + carnet 25-11).
+   */
   async photoUrl(userId: string, childId: string, mediaId: string, ip?: string): Promise<{ url: string; key: string }> {
+    await this.assertPhotoAllowed(userId, childId, mediaId);
+    const { key } = await this.media.downloadUrl(userId, mediaId, ip);
+    return { url: parentPhotoContentPath(childId, mediaId), key };
+  }
+
+  /**
+   * Contenu d'une photo pour un parent — flux same-origin (LOT 2, P0 F5).
+   *
+   * Les contrôles sont refaits AVANT toute lecture d'octets : filiation
+   * (`child_guardians` vivant), `is_visible_to_parents`, puis consentement
+   * photo courant pour CHAQUE enfant présent (le retrait est immédiat, y
+   * compris sur une photo ancienne déjà publiée). La journalisation
+   * (media_access_logs + carnet d'accès) est celle de `MediaService`.
+   */
+  async photoContent(userId: string, childId: string, mediaId: string, ip?: string) {
+    await this.assertPhotoAllowed(userId, childId, mediaId);
+    return this.media.streamContent(userId, mediaId, ip);
+  }
+
+  /** Garde commune « cette photo est-elle lisible par ce parent, maintenant ? ». */
+  private async assertPhotoAllowed(userId: string, childId: string, mediaId: string): Promise<void> {
     await this.assertPermission(userId, childId, 'can_view_journal');
     const tenantId = requireTenant(this.tenantContext);
     await this.tenantContext.withTenantConnection(async (client) => {
@@ -151,7 +186,6 @@ export class ParentsService {
         throw new AppError('CONSENT_REVOKED', 'Le consentement photo a été retiré', 'تم سحب الموافقة على الصورة', 422);
       }
     });
-    return this.media.downloadUrl(userId, mediaId, ip);
   }
 
   // ── Factures et reçus (lecture seule, permission can_receive_invoices) ────
@@ -200,14 +234,25 @@ export class ParentsService {
       ipAddress: ipAddress ?? null,
     });
     if (!invoice.pdf_url) throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
-    if (this.pdfStorage.isLocal()) {
-      // C4 : un pdf_url orphelin → 404, jamais un 500 (ENOENT).
-      if (!this.pdfStorage.exists(invoice.pdf_url as string)) {
-        throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
-      }
-      return { kind: 'buffer' as const, buffer: await this.pdfStorage.read(invoice.pdf_url as string), invoice };
+    // Défense croisée (audit) : la clé doit rester sous le préfixe DU TENANT.
+    // Le worker écrit `${org}/invoices/${id}.pdf` ; une clé corrompue en base
+    // ne doit jamais permettre de lire le PDF d'une autre organisation.
+    if (!invoice.pdf_url.startsWith(`${invoice.organization_id}/`)) {
+      throw new AppError(
+        'STORAGE_POLICY',
+        'Clé de stockage hors du périmètre de l’organisation',
+        'مفتاح تخزين خارج نطاق المؤسسة',
+        422,
+      );
     }
-    return { kind: 'redirect' as const, url: await this.pdfStorage.presign(invoice.pdf_url as string), invoice };
+    // LOT 2 (P0 F5) : plus de redirection vers une URL signée (MinIO n'est pas
+    // joignable depuis un client). Le PDF est servi en flux same-origin par
+    // l'API — un pdf_url orphelin reste un 404 clair, jamais un 500 (C4).
+    const object = await this.pdfStorage.open(invoice.pdf_url as string);
+    if (!object) {
+      throw new AppError('PDF_NOT_READY', 'Le PDF n’est pas encore généré', 'لم يتم إنشاء ملف PDF بعد', 404);
+    }
+    return { kind: 'object' as const, object, invoice };
   }
 
   async receipts(userId: string): Promise<Array<Record<string, unknown>>> {

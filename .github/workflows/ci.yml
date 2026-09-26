@@ -39,8 +39,26 @@ jobs:
       STORAGE_BACKEND: local
       STORAGE_LOCAL_DIR: /tmp/creche-storage-ci
       PAYMENT_WEBHOOK_SECRET: phase8-test-secret
+      # H1 : identifiants FACULTATIFS pour le tirage des images d'infrastructure.
+      # Vides par défaut → l'étape de connexion est simplement ignorée (comportement
+      # inchangé). Les fournir (secrets de dépôt) débloque un runner dont l'accès
+      # anonyme à Quay est refusé, sans aucune modification de code.
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+      # H1 (24-25/09/2026) : `unauthorized` sur `quay.io/minio/minio`, puis MinIO
+      # retiré des deux registres publics (Docker Hub 12/09, Quay 24/09). Le défaut
+      # n'est donc PLUS un tirage : la stack CONSTRUIT l'image depuis la release
+      # officielle, somme SHA-256 vérifiée par le builder
+      # (`infrastructure/docker/minio.Dockerfile`). Cette connexion reste utile
+      # pour le chemin d'exploitation : `MINIO_IMAGE` peut pointer un miroir hébergé
+      # sur Quay, auquel cas les secrets de dépôt le rendent tirable.
+      # Aucun de ces chemins ne fabrique un vert : une somme différente, une
+      # architecture non prévue ou un miroir injoignable font échouer H1.
+      - name: Registre Quay (facultatif — H1)
+        if: env.QUAY_USERNAME != ''
+        run: echo "$QUAY_PASSWORD" | docker login quay.io --username "$QUAY_USERNAME" --password-stdin
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -51,14 +69,20 @@ jobs:
         run: npm run typecheck
       - name: admin-web — matrice d'accès UI par rôle (F3)
         run: npm run test:unit --workspace @creche/admin-web
-      - name: Migrations (reset + status 001→063)
+      # Nom corrigé (lot 1) : 75 migrations sur disque (001 → 075), pas 063.
+      # Complété au lot L4 : 076 ajoutée → 76 migrations (001 → 076).
+      - name: Migrations (reset + status 001→076)
         run: |
           node scripts/migrate.mjs --reset
           node scripts/migrate.mjs
           node scripts/migrate.mjs --status
       - name: Seeds
         run: node scripts/seed.mjs
-      - name: schema-check (+ garde RLS anti-bypass)
+      # Nom corrigé (plan de réparation 2026-09-24, lot 1) : schema-check ne
+      # lance PAS le garde anti-bypass — c'est run-isolation-suites.sh qui
+      # l'exécute avant les suites (le libellé précédent laissait croire
+      # l'inverse).
+      - name: schema-check (structure RLS, dérive migrations)
         run: node tests/tenant-isolation/schema-check.mjs --verbose
       - name: rls-behavior-check (rôle NOBYPASSRLS)
         run: node tests/tenant-isolation/rls-behavior-check.mjs
@@ -66,7 +90,13 @@ jobs:
         run: |
           npm run build --workspace @creche/api
           npm run build --workspace @creche/worker
-      - name: Suites d'isolation (isolation + phase3 → phase24 (auto))
+      # Nom corrigé (plan de réparation 2026-09-24, lot 1) : l'étape rejouait
+      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase77 (73 entrées
+      # dans SUITES, plus le garde anti-bypass RLS en tête).
+      # (nom entre guillemets : un « : » non échappé dans une valeur YAML la
+      # transformerait en mapping imbriqué — le workflow deviendrait invalide
+      # et la CI s'arrêterait de tourner sans que le diff le montre)
+      - name: "Suites d'isolation (garde RLS anti-bypass + 73 suites — isolation, phase3 → phase77)"
         run: bash scripts/run-isolation-suites.sh
 
   backup-drill:
@@ -149,6 +179,55 @@ jobs:
       - run: npm ci
       - name: Lint (eslint --max-warnings=0)
         run: npm run lint
+      # ── Gardiens jusqu'ici ORPHELINS (plan de réparation 2026-09-24, lot 1) ─
+      # Écrits, documentés et référencés dans package.json, mais appelés par
+      # AUCUN workflow : un rouge chez eux ne pouvait pas être vu avant une
+      # revue humaine. Aucun n'a besoin de base ni de Docker (npm ci fournit
+      # `typescript`, requis par l'inventaire des gardes de route).
+      - name: Garde .env.example (variables requises documentées)
+        run: node scripts/check-env-example.mjs
+      - name: Garde manifest Android (INTERNET en release)
+        run: node scripts/check-android-manifest.mjs
+      - name: Inventaire des gardes de route (198 routes × @Roles/@Public)
+        run: node scripts/inventory-route-guards.mjs
+      - name: Sanity check des scripts de charge (seuils p95)
+        run: node scripts/verify-load-tests.mjs
+      # LOT 6.2 (audit 2026-09-24, §4.3) : « un gardien que rien n'appelle ne
+      # garde rien ». Le lot 1 avait câblé 4 orphelins ; ce contrôle recense par
+      # CONVENTION DE NOM (`check-*`, `audit-*`, `verify-*`, `inventory-*`) et
+      # refuse tout gardien non atteignable depuis un workflow — il a trouvé le
+      # 5e (`audit-seeds-pii`) et se protège lui-même. Aucune base, aucun Docker.
+      - name: Gardiens câblés (aucun gardien orphelin)
+        run: node scripts/check-guards-wired.mjs
+      # Le 5e gardien trouvé : la preuve que les seeds (SQL + pilote) sont 100 %
+      # synthétiques — téléphones DZ, emails, NIN. `--strict` (exit 1 dès qu'un
+      # motif non synthétique apparaît) : la politique « données réelles jamais
+      # commitées » n'est pas une déclaration d'en-tête, c'est un contrôle.
+      - name: Audit PII des seeds (100 % synthétiques, mode strict)
+        run: node scripts/audit-seeds-pii.mjs --strict
+      # LOT 5 (plan de réparation 2026-09-24) : contrat de VÉRITÉ DOCUMENTAIRE.
+      # L'audit a relevé des documents annonçant des capacités ABSENTES du dépôt
+      # (ordonnanceur externe, healthcheck Docker généralisé) et des compteurs
+      # périmés, alors que toutes les suites étaient vertes : le code était sain,
+      # la documentation mentait, et rien ne pouvait le signaler. Ce contrat
+      # confronte les affirmations au DISQUE (implémentations, healthchecks des
+      # composes, migrations, suites, ADR, runbooks, routes, chemins OpenAPI) et
+      # refuse les phrases bannies non corrigées. Aucune base, aucun Docker.
+      - name: Contrat de vérité documentaire (affirmations vs disque)
+        run: node --test tests/tenant-isolation/claims-contract.test.mjs
+      # L2C (F5, volet client) : le presign d'écriture est MORT en production
+      # depuis le lot 2B (UPLOAD_VIA_API_REQUIRED). Ce contrat interdit de
+      # câbler un écran sur l'ancien chemin sans rebrancher, et exige que
+      # chaque exception reste vraie ET inatteignable depuis l'UI. Aucune
+      # base, aucun build.
+      - name: Contrat média client (presign d'écriture mort)
+        run: node --test tests/tenant-isolation/media-client-wiring.test.mjs
+      # L3 (C2) : la session parent (15 min) doit se renouveler — un seul refresh
+      # partagé par les appels concurrents, et une session morte renvoie à la
+      # connexion au lieu de laisser l'app en 401. Les tests qui l'exécutent sont
+      # joués par le job `flutter` (aucune base, aucun Docker ici).
+      - name: Contrat session parent (refresh single-flight + erreurs)
+        run: node --test tests/tenant-isolation/parent-session-contract.test.mjs
       # Design system : contraste WCAG AA des deux thèmes + parité des
       # couleurs Sérénité entre theme.css (web) et serenite_theme.dart
       # (les 2 apps Flutter, qui ne peuvent pas importer le CSS).
@@ -162,7 +241,10 @@ jobs:
         run: node scripts/check-spa-static-paths.mjs
       # P1-4 : couverture mesurée, seuils-cliquets (jest.config.mts) — un
       # recul sur une unité de sécurité/argent couverte fait échouer le job.
-      - name: Tests unitaires API (jest --coverage, seuils)
+      # Lot 6.1 : `test:unit` couvre désormais aussi le worker (sonde de
+      # vivacité F2) — l'API garde le cliquet de couverture, le worker ses
+      # tests propres (apps/worker/jest.config.mts).
+      - name: Tests unitaires api + worker (jest --coverage, seuils)
         run: npm run test:unit
       - name: Rapport de couverture (artifact)
         if: always()

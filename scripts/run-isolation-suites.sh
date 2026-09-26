@@ -95,6 +95,18 @@ SUITES=(
   phase63-sync-retention.pg.test.mjs
   phase64-auth-cookies.api.test.mjs
   phase65-feature-flag-disable.api.test.mjs
+  # LOT 2 (P0 F5) : contenu servi par l'API, same-origin — preuve d'octets
+  # réels (médias, photos parent, exports, PDF, clips) + verrou anti-régression.
+  phase66-content-same-origin.api.test.mjs
+  # LOT 2B (P0 F5) : l'UPLOAD passe par l'API (multipart) — octets écrits par
+  # le serveur, intégrité/signature binaire, plafonds, consentement, verrou
+  # anti-régression du presign d'upload.
+  phase67-media-upload.api.test.mjs
+  phase76-messaging-retention.pg.test.mjs
+  # L2E (audit constat 33, D6) : les OCTETS ne passent pas par la file de
+  # synchronisation — payload stocké verbatim, handler add_photo qui ne le
+  # consomme pas ; refus de FORME (taille + blob base64), non persisté.
+  phase77-sync-payload-guard.api.test.mjs
 )
 
 FILTER="${1:-}"

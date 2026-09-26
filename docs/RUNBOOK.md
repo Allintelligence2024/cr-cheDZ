@@ -48,6 +48,8 @@ programmer mensuellement).
 | OTP SMS indisponible | Twilio non configuré | Erreur `SMS_UNAVAILABLE` 503 ; configurer `TWILIO_*` |
 | 409 CAPACITY_EXCEEDED | Capacité atteinte | Vérifier `organizations.max_children` (décret 19-253) |
 | Latence fil du jour | Index manquant | `EXPLAIN ANALYZE` ; ajouter un index via migration numérotée |
+| `docker compose up` : `unauthorized` ou `pull access denied` au **tirage d'image** (MinIO) | **les images MinIO ne sont plus publiées** : Docker Hub a retiré `minio/minio` (12/09/2026) puis Quay.io a coupé l'accès anonyme (24/09/2026) — aucun identifiant ne répare un dépôt disparu | **rien à faire pour le défaut** : depuis le 25/09/2026 le dépôt **construit** l'image (`node scripts/build-minio-image.mjs`, binaire de la release officielle, somme SHA-256 vérifiée par le builder). Si vous préférez votre **miroir** : `MINIO_IMAGE=<votre miroir>/minio:<tag>@sha256:…` (le compose le tire, sans reconstruction locale). Diagnostic : le message **nomme l'image** (`Registry pull failed for <image>`) |
+| Échec de construction MinIO : `checksum mismatch` / `MINIO_ARCH non supportée` | architecture autre que `amd64` (ex. Apple Silicon) ou somme d'une autre version | `node scripts/build-minio-image.mjs` choisit la bonne somme selon la machine ; à la main : `docker build -f infrastructure/docker/minio.Dockerfile --build-arg MINIO_ARCH=arm64 --build-arg MINIO_SHA256=5c83cd2c…6f03d -t creche-minio:RELEASE.2025-09-07T16-13-09Z infrastructure/docker` |
 
 ## 4. Montée de version (expand/contract, zero-downtime)
 
@@ -71,7 +73,16 @@ programmer mensuellement).
   échéance ANPDP +5 jours automatique ; notifier via `POST /privacy/violations/:id/anpdp-notify`
   (SMTP configuré requis).
 - Demandes de droits : export JSON via `POST /privacy/requests/:id/export`.
-- Rétention : job `retention_purge` (5 ans) — `RETENTION_DAYS` (défaut 1825).
+- Rétention : job `retention_purge`, en deux volets depuis le 25/09/2026 (L4/D2) :
+  journaux (5 ans — `RETENTION_DAYS`, défaut 1825), puis messagerie —
+  `NOTIFICATION_RETENTION_DAYS` (défaut 90 j) pour la file de notifications
+  **terminées** (`pending`/`processing` ne sont jamais purgés : un retry en cours
+  survit) et `MESSAGES_RETENTION_DAYS` (défaut 365 j) pour le **contenu** des
+  messages (la ligne et le fil restent, le corps devient le marqueur
+  `retention_expired_body_marker()`). RLS : la purge passe par la fonction
+  `retention_purge_messaging` (SECURITY DEFINER, rôle de migration BYPASSRLS) —
+  le rôle applicatif ne peut pas écrire dans ces tables sans contexte tenant.
+  `notification_inbox` n'est **pas** purgée (voie de lecture durable).
 - Vidéosurveillance (DPIA 25-11) : planifier le job quotidien
   `video_clips_purge` (INSERT INTO background_jobs …, comme retention_purge)
   sur chaque org ayant le flag actif — purge stockage + lignes à 30 jours,

@@ -91,8 +91,13 @@ dans la conception des Dockerfiles :
 4. **Chemins COPY** : `apps/api/dist` (nest), `apps/worker/dist` (tsc),
    `apps/{admin-web,support-console}/dist` (vite) — tous validés par le build
    CI réussi.
-5. **EXPOSE / healthcheck alignés** : api/worker sur `3000` (api EXPOSE 3000,
-   worker sans port), web sur `80`.
+5. **EXPOSE alignés** : api/worker sur `3000` (api EXPOSE 3000,
+   worker sans port), web sur `80`. **Healthcheck Docker : `postgres` uniquement**
+   (mesure du 24/09/2026, matin) : aucun `HEALTHCHECK` ne sondait l'API, qui exposait
+   seulement `GET /api/v1/health` (voir `docs/VERIFICATION_ANALYSE_2026-09-24.md` § F2).
+   **Corrigé le même jour (lot 6.1)** : `api` et `worker` sont désormais sondés en production et
+   en staging (`apps/{api,worker}/dist/healthcheck.js` via Compose) — cette phrase décrit
+   l'état d'avant correction.
 
 ## Dépendances runtime (ÉTAPE 0)
 

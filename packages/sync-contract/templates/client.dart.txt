@@ -7,7 +7,9 @@ const syncCursorMaximum = '__MAX__';
 final Map<String, dynamic> _syncSchema = jsonDecode(r'''__SCHEMA__''') as Map<String, dynamic>;
 
 bool isSyncCursor(Object? value) {
-  if (value is! String) return false;
+  if (value is! String) {
+    return false;
+  }
   final match = RegExp(r'__PATTERN__').firstMatch(value);
   return match?.group(0) == value &&
       (value.length < syncCursorMaximum.length ||
@@ -15,7 +17,9 @@ bool isSyncCursor(Object? value) {
 }
 
 String syncCursor(Object? value) {
-  if (!isSyncCursor(value)) throw const FormatException('Invalid sync int64 cursor');
+  if (!isSyncCursor(value)) {
+    throw const FormatException('Invalid sync int64 cursor');
+  }
   return value as String;
 }
 
@@ -23,7 +27,9 @@ String syncCursor(Object? value) {
 // keywords; extending the schema requires extending this validator and tests.
 void validateSync(String definition, Object? value) {
   final definitions = _syncSchema['definitions'] as Map<String, dynamic>;
-  if (!definitions.containsKey(definition)) throw ArgumentError(definition);
+  if (!definitions.containsKey(definition)) {
+    throw ArgumentError(definition);
+  }
   _validate(definitions[definition] as Map<String, dynamic>, value, definition);
 }
 
@@ -47,18 +53,34 @@ void _validate(Map<String, dynamic> schema, Object? value, String path) {
   }
   final type = schema['type'];
   final types = type is List ? type : [if (type != null) type];
-  if (types.isNotEmpty && !types.any((t) => _typeMatches(t as String, value))) invalid();
-  if (schema.containsKey('enum') && !(schema['enum'] as List).contains(value)) invalid();
+  if (types.isNotEmpty && !types.any((t) => _typeMatches(t as String, value))) {
+    invalid();
+  }
+  if (schema.containsKey('enum') && !(schema['enum'] as List).contains(value)) {
+    invalid();
+  }
   if (value is String) {
     final length = value.runes.length;
-    if (schema.containsKey('minLength') && length < (schema['minLength'] as int)) invalid();
-    if (schema.containsKey('maxLength') && length > (schema['maxLength'] as int)) invalid();
-    if (schema.containsKey('pattern') && !RegExp(schema['pattern'] as String).hasMatch(value)) invalid();
-    if (schema['format'] == 'sync-cursor' && !isSyncCursor(value)) invalid();
+    if (schema.containsKey('minLength') && length < (schema['minLength'] as int)) {
+      invalid();
+    }
+    if (schema.containsKey('maxLength') && length > (schema['maxLength'] as int)) {
+      invalid();
+    }
+    if (schema.containsKey('pattern') && !RegExp(schema['pattern'] as String).hasMatch(value)) {
+      invalid();
+    }
+    if (schema['format'] == 'sync-cursor' && !isSyncCursor(value)) {
+      invalid();
+    }
     if (schema['format'] == 'uuid' &&
-        !RegExp(r'^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$', caseSensitive: false).hasMatch(value)) invalid();
+        !RegExp(r'^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$', caseSensitive: false).hasMatch(value)) {
+      invalid();
+    }
   }
-  if (value is num && schema.containsKey('minimum') && value < (schema['minimum'] as num)) invalid();
+  if (value is num && schema.containsKey('minimum') && value < (schema['minimum'] as num)) {
+    invalid();
+  }
   if (value is List && schema.containsKey('items')) {
     for (var i = 0; i < value.length; i++) {
       _validate(schema['items'] as Map<String, dynamic>, value[i], '$path[$i]');
@@ -66,7 +88,9 @@ void _validate(Map<String, dynamic> schema, Object? value, String path) {
   }
   if (value is Map<String, dynamic>) {
     for (final key in (schema['required'] as List? ?? [])) {
-      if (!value.containsKey(key)) invalid();
+      if (!value.containsKey(key)) {
+        invalid();
+      }
     }
     final properties = schema['properties'] as Map<String, dynamic>? ?? {};
     for (final key in value.keys) {

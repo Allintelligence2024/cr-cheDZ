@@ -172,7 +172,15 @@ export class VideoService {
     const tenantId = await this.assertVideoEnabled();
     await this.cameraOfTenant(dto.camera_id);
     const key = `${tenantId}/video/${dto.camera_id}/${Date.now()}-${dto.filename}`;
-    const { url } = await this.storage.presignPut(key, dto.mime_type);
+    // Même garde que les photos (lot 2B) : en production sans origine publique,
+    // AUCUNE URL signée n'est rendue. Le téléversement de clips PAR L'API n'est
+    // pas encore livré (fichiers vidéo : dimensionnement dédié) — l'appelant
+    // reçoit un 503 explicite plutôt qu'une URL injoignable.
+    const { url } = await this.storage.presignPut(
+      key,
+      dto.mime_type,
+      'le téléversement de clips par l’API (non encore disponible — voir docs/PLAN_REPARATION_2026-09-24.md, volet B)',
+    );
     await this.audit.log({
       organizationId: tenantId,
       userId,
@@ -309,31 +317,46 @@ export class VideoService {
     });
   }
 
-  async downloadUrl(clipId: string, userId: string, ipAddress?: string): Promise<{ storage_backend: string; download_url?: string; content_url?: string }> {
+  /**
+   * Visionnage : TOUJOURS un chemin same-origin (LOT 2 — P0 F5).
+   *
+   * Avant, un clip sur S3 renvoyait `download_url` = URL signée bâtie sur
+   * `S3_ENDPOINT` (`http://minio:9000` en production, MinIO lié à
+   * 127.0.0.1) : illisible depuis un client. `storage_backend` reste exposé
+   * pour information, mais les deux backends se regardent au même endroit.
+   */
+  async downloadUrl(clipId: string, userId: string, ipAddress?: string): Promise<{ storage_backend: string; content_url: string }> {
     const tenantId = await this.assertVideoEnabled();
     const clip = await this.clipOfTenant(clipId);
     await this.auditView(clipId, tenantId, userId, ipAddress);
-    if (clip.storage_backend === 'local') {
-      return { storage_backend: 'local', content_url: `/api/v1/video/clips/${clipId}/content` };
-    }
-    return { storage_backend: 's3', download_url: await this.storage.presignGet(clip.storage_key) };
+    return { storage_backend: clip.storage_backend, content_url: `/api/v1/video/clips/${clipId}/content` };
   }
 
-  /** Backend local (dev/test) : lecture réelle du fichier — visionnage journalisé.
-   *  E2 : flux continu (createReadStream) au lieu du fichier complet en
-   *  mémoire — la pression mémoire ne dépend plus de la taille du clip. */
-  async streamContent(clipId: string, userId: string, ipAddress?: string): Promise<{ stream: Readable; mimeType: string; size: number }> {
+  /** Lecture réelle du clip — visionnage journalisé, flux continu.
+   *
+   *  E2 : flux (createReadStream / GetObject) au lieu du clip complet en
+   *  mémoire — la pression mémoire ne dépend plus de la taille du clip.
+   *  LOT 2 (P0 F5) : le backend S3 est désormais servi ici aussi (plus
+   *  d'URL signée rendue au client, cf. shared/storage/object-stream.ts). */
+  async streamContent(clipId: string, userId: string, ipAddress?: string): Promise<{ stream: Readable; mimeType: string; size: number | null }> {
     const tenantId = await this.assertVideoEnabled();
     const clip = await this.clipOfTenant(clipId);
-    if (clip.storage_backend !== 'local') {
-      throw new AppError(
-        'USE_SIGNED_URL',
-        'Ce clip est stocké sur S3 : utilisez l’URL signée de download',
-        'هذا المقطع مخزّن في S3 : استخدم رابط التحميل الموقّع',
-        422,
-      );
-    }
     await this.auditView(clipId, tenantId, userId, ipAddress);
+    if (clip.storage_backend !== 'local') {
+      // Défense croisée : la clé doit rester sous le préfixe vidéo DU TENANT,
+      // puis lecture S3 en flux (objet absent → 404, jamais un 500).
+      this.assertStorageKeyPolicy(tenantId, clip.storage_key);
+      const object = await this.storage.open(clip.storage_key);
+      if (!object) {
+        throw new AppError(
+          'CLIP_FILE_MISSING',
+          'Fichier du clip introuvable sur le stockage',
+          'ملف المقطع غير موجود في التخزين',
+          404,
+        );
+      }
+      return { stream: object.stream, mimeType: clip.mime_type, size: object.contentLength };
+    }
     // Garde anti path-traversal (audit) : la clé doit rester sous le préfixe
     // vidéo DU TENANT (défense croisée : un clip A ne peut jamais lire le
     // répertoire d'un autre tenant dans la même racine), PUIS resolve() +

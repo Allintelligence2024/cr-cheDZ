@@ -3,6 +3,7 @@ import { IsUUID } from 'class-validator';
 import type { Request, Response } from 'express';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { sendStorageObject } from '../../shared/storage/object-stream';
 import { CreateCameraDto, ListClipsQuery, PresignClipDto, RegisterClipDto, UpdateCameraDto } from './dto/video.dto';
 import { VideoService } from './video.service';
 
@@ -62,30 +63,32 @@ export class VideoController {
     return this.video.listClips(query);
   }
 
-  /** URL de visionnage (signée S3 ou endpoint local) — visionnage journalisé. */
+  /** Chemin de visionnage same-origin (LOT 2 : plus d'URL signée) — journalisé. */
   @Get('clips/:id/download')
   @Roles(...VIDEO_ROLES)
   download(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload, @Req() req: Request) {
     return this.video.downloadUrl(p.id, u.sub, req.ip);
   }
 
-  /** Backend local (dev/test) : flux binaire réel — visionnage journalisé. */
+  /**
+   * Flux binaire réel du clip (local ou S3, LOT 2) — visionnage journalisé.
+   *
+   * E2 : le clip est streamé (plus de buffer complet en mémoire) ; un fichier
+   * disparu entre la garde et la lecture produit un 404 propre si rien n'est
+   * encore parti, sinon une coupure de connexion — jamais un 200 vide.
+   */
   @Get('clips/:id/content')
   @Roles(...VIDEO_ROLES)
   async content(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload, @Req() req: Request, @Res() res: Response): Promise<void> {
-    // E2 : le clip est streamé depuis le disque (plus de buffer complet).
     const { stream, mimeType, size } = await this.video.streamContent(p.id, u.sub, req.ip);
-    res.setHeader('content-type', mimeType);
-    res.setHeader('content-length', size);
-    stream.on('error', (error) => {
-      // Fichier disparu entre la garde existsSync et la lecture : si rien
-      // n'est encore parti, répondre 404 propre ; sinon couper la connexion.
-      if (!res.headersSent) {
-        res.status(404).json({ statusCode: 404, code: 'CLIP_FILE_MISSING', message_fr: 'Fichier du clip introuvable sur le stockage local', message_ar: 'ملف المقطع غير موجود في التخزين المحلي', timestamp: new Date().toISOString(), path: req.path });
-      } else {
-        res.destroy(error);
-      }
+    sendStorageObject(res, req, { stream, contentType: mimeType, contentLength: size }, {
+      inline: true,
+      filename: `clip-${p.id}.mp4`,
+      onStreamError: {
+        code: 'CLIP_FILE_MISSING',
+        messageFr: 'Fichier du clip introuvable sur le stockage',
+        messageAr: 'ملف المقطع غير موجود في التخزين',
+      },
     });
-    stream.pipe(res);
   }
 }

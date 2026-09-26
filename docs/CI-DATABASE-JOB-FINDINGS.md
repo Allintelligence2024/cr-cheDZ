@@ -1,6 +1,12 @@
 # Job CI « database » — du blocage de 6 h au vert
 
-_Dernière mise à jour : 23/09/2026 — branche `arena/01a0ca72-cr-chedz` (PR #49)._
+_Dernière mise à jour : 24/09/2026 — branche `arena/01a0d3c1-cr-chedz` (PR #50, plan de réparation)._
+
+> **24/09/2026 — le job est redevenu rouge, pour deux causes distinctes** : un H1
+> environnemental (tirage de registre refusé sur le runner, `main` incluse) et une
+> **régression du lot 1 du plan de réparation** (raccourci `RATE_LIMIT_DISABLED`
+> hérité par les spawns de production) — cette seconde cause est corrigée et
+> verrouillée. Détail et preuves : section « 24/09/2026 » en fin de document.
 
 ## Résumé
 
@@ -184,6 +190,223 @@ elle aurait produit un échec **intermittent** — le pire type à diagnostiquer
 suites worker (`phase13`, `21`, `23`, `28`, `36`) ; `phase11` était la seule du
 dépôt à lire ce statut sans attendre. `failed` est traité comme terminal : un
 vrai échec est signalé immédiatement, jamais masqué en `done`.
+
+## 24/09/2026 — le job redevient rouge : deux causes distinctes
+
+Le job avait été remis au vert le 23/09 (`52e6ef3`). Les runs du 24/09 sur `main`
+(`3b8f51b`) puis sur la branche du plan de réparation (`f73c7c0`, `e3728cc`,
+`225fead`) sont rouges **pour deux raisons différentes**, qualifiées par les
+annotations `check-runs` (méthode ci-dessous — `gh run view --log-failed` et
+`gh api …/jobs/<id>/logs` échouent toujours en `EOF`).
+
+| Run | Symptôme observé | Cause | État |
+|---|---|---|---|
+| `3b8f51b` (main) | gate **terminé**, `rc=1` | H1 dev **et** staging : `Registry pull failed … unauthorized: access to the requested resource is not authorized` — tirage de `postgres:18-alpine` et `quay.io/minio/minio` **avant** tout `docker compose` | **préexistant, environnemental** : le job était vert la veille (`52e6ef3`) et aucun fichier de registre/stack n'a changé. Le runner GitHub n'obtient plus le tirage anonyme. Non reproductible ici (pas de Docker) → **non corrigé**, à traiter côté credentials/miroir |
+| `f73c7c0`, `e3728cc`, `225fead` | gate **interrompu AVANT la batterie** : `Gate D interrompu :: … phase26-production-roles.test.mjs (exit 1)` | **régression du lot 1** : le job CI exporte `RATE_LIMIT_DISABLED: 'true'` (raccourci de banc d'essai) ; `phase26` lance les **entrées de production** avec `...process.env` → la garde de configuration refuse le démarrage (« GARDE CONFIG PRODUCTION — RATE_LIMIT_DISABLED ») au lieu de rendre `DATABASE_ROLE_UNSAFE`. 2 tests rouges → **la batterie d'isolation n'a jamais tourné en CI sur ces trois commits** | **corrigé** (voir ci-dessous) |
+
+Conséquence à retenir : un lot peut être vert en local (les suites tournent alors
+avec `PRODUCTION_ROLE_TESTS` non défini, et `RATE_LIMIT_DISABLED` n'entre en jeu
+que dans les spawns de production) et **rouge en CI** pour une variable
+d'environnement du job. C'est exactement le cas ici.
+
+### Verdicts observés le 24/09 au soir (branche du plan de réparation)
+
+| Commit | Job `database` | Job `quality` | Lecture |
+|---|---|---|---|
+| `94507aa` | `in_progress` (franchi phase26) | — | la régression du lot 1 est traitée |
+| `9fd826a` | **terminé**, `rc=1` — **H1 seul** | `success` | plus aucun arrêt anticipé : toutes les suites tournent, les preuves G1–G5/H2a–H2l sont émises, seul H1 rougit |
+| `6584c52` (lot 6.1) | terminé `20:01:22 → 20:30:59`, **rc=1 — H1 seul** | **échec** : « Tests unitaires api + worker » | la CI attrape ce que le local ne voyait pas (`quality` ne construit pas l'API) → corrigé en `8cc7583` |
+| `8cc7583` | **terminé** (`20:37:03 → 21:07:03`, 30 min), `rc=1` — **H1 seul** | **`success`** | batterie complète : preuves émises `G1=26; G1b=24; G1c=38; G1d=44; G2=113; G3=33; G4=17; G5=18`, `H2a=21; …; H2l=14`, `F4` (7 tests Flutter/Drift réels), `F2` (59 tests Flutter) ; échecs : **2 × H1**, tous deux `quay.io/minio/minio` (dev + staging) — **aucune autre suite** ; `quality` vert avec les 2 gardiens du lot 1.5 et 117+5 tests unitaires |
+| `f442176` | documentation seule (aucun code) | — | verdicts consignés ici même |
+
+Détail des annotations de `6584c52` (job `database`) : deux `Registry pull failed … unauthorized`
+(staging puis dev), la `version` obsolète de compose (avertissement), et `Process completed with
+exit code 1` — **aucune autre suite en échec**.
+
+### Verdicts observés le 25/09 (lots L4, L6.3, L6.4)
+
+| Commit | Job `database` | Job `quality` | Lecture |
+|---|---|---|---|
+| `9a33e37` (verdict gate D, docs) | **terminé** `14:54:53 → 15:22:52` (28 min), `rc=1` — **H1 seul** | `success` | étape « Registre Quay (facultatif — H1) » = **`skipped`** (aucun secret de dépôt) ; les échecs sont **exactement** `H1 staging failure` + `H1 dev failure` et leur trace d'appel — **aucune annotation « Suite en échec »** |
+| `3f88481` (lot L6.4 / D5) | **terminé** `14:57:08 → 15:27:01` (30 min), `rc=1` — **H1 seul** | `success` | même signature : `H1 staging failure`, `H1 staging 1`, `H1 dev failure` (+ « exit code 1 ») — rien d'autre |
+| `5266fff` (lot H1 : MinIO reconstruit depuis la release officielle) — 3 workflows | **`ci` : `success`** (32 min) — `database` **VERT** ; `flutter` : `success` ; `docker` : `success` | `quality` `success`, `admin-web` `success`, `e2e` `success`, `support-console` `success`, `security` `success`, `backup-drill` `success` | step 4 « Registre Quay (facultatif — H1) » = **`skipped`** (aucun secret) et le job passe quand même : la voie par défaut ne dépend d'aucun registre. step 14 « 73 suites — isolation, phase3 → phase77 » = **`success`**. Annotations du check-run : **aucun échec**, uniquement des *notices* — dont « Delivered staging compose: … actual API HTTP health and worker claim/finish verified » et « Delivered dev compose: … » ⇒ l'image MinIO **construite localement** (somme SHA-256 vérifiée par le builder) a servi les deux stacks |
+| `ff23058` (lot L2E : garde de payload + `phase77`) — 3 workflows | `ci` : **terminé** `16:11:29 → 16:41:07` (29,5 min), `rc=1` — **H1 seul** ; `flutter` : `success` ; `docker` : `success` | `quality` `success`, `admin-web` `success`, `e2e` `success`, `support-console` `success`, `security` `success`, `backup-drill` `success` | step 14 désormais **« 73 suites — isolation, phase3 → phase77 »** (libellé du commit) ; annotations **failure** = 2 tirages `quay.io/minio/minio@sha256:14cea49…` refusés + `Process completed with exit code 1.` + 1 avertissement Compose « version obsolete » — **aucune annotation « Suite en échec »** ⇒ `phase77` (dernière entrée de la batterie) est passée **en CI, rôles de production** |
+| `beb3f27` (lot L2D) — 3 workflows | `ci` : **terminé**, `rc=1` — **H1 seul** ; `flutter` : `success` ; `docker` : `success` | `quality` `success`, `support-console` `success`, `e2e` `success`, `admin-web` `success`, `backup-drill` `success`, `security` `success` | `ci` : step 14 « Suites d'isolation (garde RLS anti-bypass + 72 suites — isolation, phase3 → phase76) » = `failure`, mais annotations **failure** = `H1 staging failure`, `H1 dev failure`, `Process completed with exit code 1.` et **deux** « Registry pull failed for `quay.io/minio/minio@sha256:14cea49…` » — **aucune annotation « Suite en échec »** |
+
+**Comment on sait que la batterie entière — `phase76` compris — est passée en CI** (chaîne
+explicite, pour ne pas conclure d'un log illisible) :
+
+1. le step rouge est `bash scripts/run-isolation-suites.sh` ; en environnement GitHub Actions, ce
+   runner **délègue au gate D** (`scripts/run-isolation-suites.sh:19-23` : `GITHUB_ACTIONS=true` →
+   `node scripts/test-production-roles.mjs`) ;
+2. dans le gate, l'échec H1 est **mémorisé** (`stackFailed`) et le `process.exit(1)` n'a lieu
+   qu'à la **dernière ligne** (`test-production-roles.mjs:261`), après la batterie de 72 suites
+   (`ligne 174`) — donc la batterie tourne même quand H1 échoue ;
+3. le runner émet **une annotation par suite fautive** (`::error title=Suite en échec::<suite>`,
+   `run-isolation-suites.sh:153`) — et les check-runs des deux commits n'en portent **aucune** ;
+4. la durée observée (28–30 min) correspond au trajet complet (builds H1 + 72 suites), pas à un
+   arrêt précoce ;
+5. relevé du 25/09 16:15 sur `beb3f27` (`36155006147`) : les annotations `failure` du check-run du
+   job `database` sont **exactement** les deux lignes H1, leurs deux tirages Quay refusés et le
+   `exit code 1` — le décompte d'annotations ne contient **pas** le mot « Suite ». Le step porte
+   encore l'ancien libellé (« 72 suites — phase3 → phase76 ») : le commit suivant (`ff23058`, lot
+   L2E) renomme le step en « 73 suites — phase3 → phase77 ».
+
+Conclusion (avant correctif) : **H1 restait le seul rouge**, tirage anonyme de
+`quay.io/minio/minio` refusé depuis le runner — et `phase76-messaging-retention.pg.test.mjs` (lot L4)
+puis `phase77-sync-payload-guard.api.test.mjs` (lot L2E, dernière entrée du runner) ont été
+exécutées **et passées** en CI, en mode rôles de production. **Correctif du 25/09/2026** : la cause
+était amont (images MinIO retirées des deux registres publics) ; l'image par défaut est désormais
+**construite** depuis la release officielle, somme vérifiée par le builder. **Verdict de clôture :
+`5266fff` → job `database` VERT (32 min), sans aucun secret de registre** — le dépôt n'a plus de job
+rouge, et le gate D (73 suites d'isolation rejouées avec les rôles de production) prouve en même
+temps que la batterie complète passe.
+
+### H1 — ce que le code dit exactement (mesuré le 24/09, soir)
+
+`scripts/test-staging-stack.mjs:66-68` : la stack de staging **construit** ses images
+applicatives localement (`docker build -f apps/api/Dockerfile -t ghcr.io/creche-saas/api:staging .`,
+idem worker) puis **ne tire du registre que deux images d'infrastructure publiques** :
+
+```js
+for (const name of ['postgres', 'minio']) process.stdout.write(await pullRegistryImage(config.services[name].image, { env }));
+```
+
+Autrement dit, l'`unauthorized` observé ne concerne **ni un dépôt privé ni des
+credentials GHCR manquants** : il porte sur des images d'infrastructure publiques,
+ce qui oriente le diagnostic vers le runner plutôt que vers le dépôt.
+
+**Le diagnostic s'est affiné avec l'instrumentation du lot 1.6** (run `8cc7583`,
+annotations du job `database`) : `postgres` est essayé **en premier** dans la
+boucle et **passe** — donc Docker Hub fonctionne — tandis que
+`quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493…` échoue **deux
+fois** (staging puis dev). Le blocage est donc **précisément Quay.io**, pas un
+« registre » en général : c'est une information actionnable pour l'exploitant.
+
+**Instrumentation ajoutée (lot 1.6)** : l'erreur **nomme désormais l'image**
+(`Registry pull failed for quay.io/minio/minio: … unauthorized …`) — l'annotation
+CI citait « unauthorized » sans dire laquelle des deux, ce qui était inexploitable
+pour l'ops. Vérifié par test : `tests/tenant-isolation/registry-pull.test.mjs`
+(« the failing image is named in the error »), exécuté en CI. Le comportement de
+fond est inchangé : réessais uniquement sur timeout réseau, échec définitif
+immédiat sinon, **aucun repli « vert de complaisance »**.
+
+**CAUSE RACINE IDENTIFIÉE ET TRAITÉE (25/09/2026, lot H1)** — le blocage n'était ni
+le runner ni un réglage du dépôt : **MinIO a retiré ses images des deux registres
+publics**. Mesures concordantes : l'API Docker Hub rend `404` pour `minio/minio`
+(dépôt supprimé le 12/09/2026, le manifeste anonyme rendant `401`), et Quay.io a
+coupé l'accès anonyme le 24/09/2026 à ~12:55 UTC (`unauthorized: access to the
+requested resource is not authorized`, alors que d'autres dépôts publics du même
+registre répondent `200`). Aucun identifiant ne répare un dépôt disparu : le
+chemin « secrets Quay » ne pouvait donc pas suffire.
+
+Conséquence traitée dans le dépôt : **le défaut n'est plus un tirage**. L'image
+MinIO est désormais **construite localement** depuis le binaire publié de la
+release épinglée, dont la somme SHA-256 est vérifiée par le builder lui-même
+(`ADD --checksum`, pas une confiance dans le réseau) — `infrastructure/docker/minio.Dockerfile`
++ `scripts/build-minio-image.mjs`, avec provenance des sommes (assets GitHub de la
+release `RELEASE.2025-09-07T16-13-09Z`, relevés par API) écrite dans le fichier.
+Trois propriétés sont verrouillées par `production-compose-contract` : même image
+par défaut dans les trois environnements, **aucune référence à un registre mort**,
+**aucun `build:` sous le service minio** (sinon `docker compose up` avec
+`MINIO_IMAGE=<miroir>` reconstruirait en local et retaggerait le miroir : la
+surcharge deviendrait un mensonge). `MINIO_IMAGE` reste opérant pour un miroir
+d'exploitation, et la connexion Quay facultative est conservée pour ce cas.
+
+Les deux voies ci-dessous restent donc valides comme **surcharges**, mais elles ne
+sont plus nécessaires au vert : H1 ne dépend plus d'un registre tiers.
+
+**Remédiations d'exploitation (lot 1.7)** — deux chemins, aucun ne fabrique un vert :
+
+| Voie | Geste | Effet | Épinglage |
+|---|---|---|---|
+| **A — miroir** (sans secret) | définir `MINIO_IMAGE` (env du job, du runner ou du VPS) | le compose et `test-staging-stack.mjs` tirent l'image **configurée** (aucun build local : pas de `build:` sous minio) | le défaut du dépôt est l'image **construite depuis la release épinglée** (`creche-minio:RELEASE.2025-09-07T16-13-09Z`, somme vérifiée par le builder), identique dans les trois environnements |
+| **B — identifiants** | fournir les secrets de dépôt `QUAY_USERNAME` / `QUAY_PASSWORD` | le job `database` se connecte à Quay (`docker login`, mot de passe par **stdin**) puis tire normalement | inchangé — utile seulement si le miroir choisi est hébergé sur Quay (le dépôt `minio/minio` de Quay, lui, n'est plus tirale anonymement) |
+
+Sans A **ni** B, H1 **ne reste plus rouge** (25/09/2026) : le défaut construit
+l'image localement depuis la release officielle vérifiée par somme. Les trois
+chemins sont verrouillés par des tests (`production-compose-contract` : surcharge
+présente, image par défaut identique dans les trois environnements, aucune
+référence à un registre mort, aucun `build:` sous minio, pins du Dockerfile et
+cohérence Dockerfile ↔ script de construction ; `registry-pull` : étape
+conditionnelle, `--password-stdin`, aucun mot de passe littéral, miroir tiré sur
+la config résolue).
+
+**Vérification en CI du lot 1.7 (25/09, run `36140324519`, commit `7945c85`)** :
+l'étape « Registre Quay (facultatif — H1) » est **`skipped`** — la condition
+`if: env.QUAY_USERNAME != ''` se comporte comme prévu quand les secrets sont
+absents, sans casser le job. Le reste du job est vert jusqu'à l'étape 14 (build
+inclus) ; les 5 annotations d'échec sont **exactement** les deux tirages Quay
+(`H1 staging failure`, `H1 dev failure`) plus leur trace d'appel, sha épinglé
+inchangé (`sha256:14cea493…`). Autrement dit la remédiation n'a introduit aucune
+régression et **H1 reste le seul rouge**, ce qui est l'état voulu tant qu'aucune
+des deux voies n'est activée.
+
+### Correctif — 24/09
+
+- `tests/tenant-isolation/helpers.mjs` : nouvelle constante partagée
+  **`PRODUCTION_SPAWN_ENV = { RATE_LIMIT_DISABLED: 'false' }`** — un environnement
+  de production ne désactive jamais la limitation de débit.
+- Les **cinq** suites qui lançaient une entrée de production avec `...process.env`
+  la neutralisent désormais : `phase22`, `phase26`, `phase27`, `phase28`, `phase49`
+  (`phase27`/`phase28` seulement en mode gate : `PRODUCTION_ROLE_TESTS=1`).
+- **Verrou anti-régression** dans `phase26` : toute suite qui lance
+  `dist/main.js` en production sans neutraliser le raccourci fait échouer le gate.
+  Mesuré avant/après : **5 fichiers signalés** (contenu de `HEAD`) → **0** après
+  correctif.
+
+### Preuve (bac à sable, PG 18.4 réel, sans Docker)
+
+```bash
+# Reproduction de la condition CI (le job exporte RATE_LIMIT_DISABLED=true) :
+DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test \
+  ALLOW_DATABASE_RESET=1 RATE_LIMIT_DISABLED=true \
+  node --test tests/tenant-isolation/phase26-production-roles.test.mjs
+# AVANT : # pass 12 / # fail 2  — « Boot exit 1 : GARDE CONFIG PRODUCTION …
+#          RATE_LIMIT_DISABLED » et « input did not match /DATABASE_ROLE_UNSAFE/ »
+# APRÈS : # pass 15 / # fail 0
+
+# Gate D complet, environnement fidèle au job « database » :
+DATABASE_URL=… RATE_LIMIT_DISABLED=true NODE_ENV=test STORAGE_BACKEND=local \
+  STORAGE_LOCAL_DIR=/tmp/creche-storage-ci PAYMENT_WEBHOOK_SECRET=phase8-test-secret \
+  ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
+```
+
+**Résultat du gate complet rejoué localement avec cet environnement : `rc=0`,
+`72/72 suites vertes`** (phase26 `# pass 15 / # fail 0`, phase22 44 assertions,
+phase27 14, phase28 23, phase47 38, phase49 48, phase66 35, phase67 37 ; preuves
+H2a–H2l et G1–G5 émises ; sous-gates Docker/Flutter « NOT EXECUTED locally »).
+
+Ce rejeu a une vertu propre : la batterie est allée jusqu'au bout pour la
+première fois depuis l'apparition du rouge et elle a **trouvé un défaut dans le
+correctif lui-même** — un import oublié dans
+`phase22` (`ReferenceError: PRODUCTION_SPAWN_ENV is not defined`, 1 suite rouge
+sur 72). Les suites `phase27` (14/0), `phase28` (23/0), `phase47` (38/0) et
+`phase49` (48/0) sont vertes en mode rôles de production. Le défaut a été
+corrigé puis rejoué seul (`phase22` : 44 assertions ✓), avant le gate complet de
+contrôle.
+
+## Anomalie `quality` du 25/09 — `f442176`, tranchée comme instabilité
+
+Le run `36139870972` (commit `f442176`, deux fichiers de documentation
+uniquement) a un `quality` **rouge** sur le seul step « Tests unitaires api +
+worker (jest --coverage, seuils) ». Le même step est **vert** sur `8cc7583` et
+sur `7945c85`, qui contiennent exactement le même code de test.
+
+Vérifications :
+
+- `gh api .../actions/jobs/108086777476/logs` → `EOF` (même limitation de
+  stockage que le reste du dépôt) ; la seule annotation est « Process completed
+  with exit code 1. » — pas de message d'assertion.
+- Relance ciblée impossible : `gh run rerun 36139870972 --failed` →
+  `cannot be rerun; its workflow file may be broken`.
+- Rejeu local de la condition exacte du job (`dist/` **supprimé**, puis
+  `npm run test:unit`) : **3 itérations sur 3 vertes**, `117+5` tests,
+  `16+1` suites.
+
+Conclusion : instabilité du job, pas une régression. `f442176` est de toute
+façon remplacé par `7945c85` (même contenu + lot 1.7), dont `quality` est vert.
+Aucun cliquet n'a été baissé pour ce rouge.
 
 ## Lire les échecs CI sur ce dépôt
 

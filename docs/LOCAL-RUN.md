@@ -18,7 +18,7 @@ le seed pilote et les suites de tests hôte.
 ```bash
 # 1. Stack complète :
 #    postgres 18 → minio → bootstrap-roles (creche_migrator / creche_app)
-#    → migrate (70 migrations + seeds + schema-check) → api + worker + admin-web
+#    → migrate (76 migrations + seeds + schema-check) → api + worker + admin-web
 #    -p creche-dev-v3 = PROJET NEUF : un volume formatté PostgreSQL 16 n'est
 #    PAS lisible par PG18 (BACKUP-RUNBOOK « Upgrade PostgreSQL 16 → 18 »).
 docker compose -p creche-dev-v3 -f infrastructure/docker/docker-compose.dev.yml up --build
@@ -37,6 +37,8 @@ Accès :
 |---|---|
 | Admin web | `http://localhost:4000` (proxy `/api` → `api:3000`) |
 | Santé API | `http://localhost:3000/api/v1/health` |
+| Sonde conteneur API | `docker compose … exec api node apps/api/dist/healthcheck.js` (identique au `HEALTHCHECK`) |
+| Sonde conteneur worker | `docker compose … exec worker node apps/worker/dist/healthcheck.js` (marqueur de vivacité) |
 | MinIO API / console (dev) | `http://127.0.0.1:9000` / `http://127.0.0.1:9001` |
 
 Comptes de test : `docs/pilot/ONBOARDING.md` (mot de passe = `PILOT_PASSWORD`).
@@ -66,7 +68,7 @@ npm ci                                  # Node ≥ 20 (engines du manifeste raci
 node run_pg.mjs &                       # PG 18.4 — port 54329, base creche_test
 export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 
-node scripts/migrate.mjs                # 70 migrations (checksums SHA-256, ADR-007)
+node scripts/migrate.mjs                # 76 migrations (checksums SHA-256, ADR-007)
 node scripts/seed.mjs                   # rôles/permissions système — AUCUNE donnée d'org
 node tests/tenant-isolation/schema-check.mjs
 node tests/tenant-isolation/rls-behavior-check.mjs    # GATE RLS (rôle NOBYPASSRLS)
@@ -96,7 +98,7 @@ npm run db:reset                        # migrate --reset && migrate && seed
 ## Checklist d'acceptation G-local (porte Phase 1)
 
 - [ ] `git log` ≥ 2 commits (baseline remédiation)
-- [ ] PG18 : 70 migrations + `db:check-schema` + `db:check-rls` verts sur base neuve
+- [ ] PG18 : 76 migrations + `db:check-schema` + `db:check-rls` verts sur base neuve
 - [ ] `up --build` : tous les services up (bootstrap-roles, migrate, api, worker, admin-web, minio)
 - [ ] seeds + 5 crèches pilotes ; login **directrice pilot-01** sur `:4000`
 - [ ] Smoke : 1 pointage arrivée/départ, 1 entrée journal, 1 photo (MinIO), 1 export PDF (worker)
@@ -112,7 +114,11 @@ npm run db:reset                        # migrate --reset && migrate && seed
    application role ») sont **par conception** : en mode normal, `appUrl()`
    renvoie `creche_app_test` alors que la garde `DATABASE_ROLE_UNSAFE` exige
    exactement `creche_app` sous `NODE_ENV=production`. Ces checks ne passent
-   qu'en mode 2.
+   qu'en mode 2. (Compteur historique : la batterie compte désormais **73
+   entrées** — 71 `phaseNN` + `schema-check` + `rls-behavior-check`.)
+   **Le mode 1 ne suffit pas à qualifier un lot** : il ne joue ni phase26 ni les
+   rôles de production, et c'est précisément là que le 24/09 une régression a
+   échappé (voir `docs/CI-DATABASE-JOB-FINDINGS.md` § 24/09/2026).
 2. **Gate D — mode rôles de production (l'équivalent exact du job `database` CI)** :
    ```bash
    ALLOW_DATABASE_RESET=1 \
@@ -127,9 +133,23 @@ npm run db:reset                        # migrate --reset && migrate && seed
    PG 18.4 : 65/65 suites vertes, preuves H2a–H2l et G1–G5 OK, rc=0.**
    C'est le gate à rejouer avant tout merge sensible.
 
+   **Reproduire la condition du job CI** (et non seulement celle du bac à
+   sable) — le job `database` exporte `RATE_LIMIT_DISABLED: 'true'`, que les
+   spawns de production refusent depuis le lot 1 du plan de réparation :
+   ```bash
+   DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test \
+     RATE_LIMIT_DISABLED=true NODE_ENV=test STORAGE_BACKEND=local \
+     STORAGE_LOCAL_DIR=/tmp/creche-storage-ci PAYMENT_WEBHOOK_SECRET=phase8-test-secret \
+     ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs
+   ```
+   Toute suite qui lance une **entrée de production** (`apps/api/dist/main.js`,
+   `apps/worker/dist/main.js`) neutralise le raccourci avec
+   `PRODUCTION_SPAWN_ENV` (`tests/tenant-isolation/helpers.mjs`) ; `phase26` le
+   vérifie pour tout le dépôt (verrou).
+
 ## État de validation (2026-09-21, sandbox sans Docker)
 
-- **Voie B : VALIDÉE** — PG 18.4 embarqué : 70/70 migrations, seeds,
+- **Voie B : VALIDÉE** — PG 18.4 embarqué : 76/76 migrations, seeds,
   `schema-check` ✓, `rls-behavior-check` (GATE) ✓, build api+worker ✓,
   smoke API `{"status":"ok"}` sur `/api/v1/health`, **Gate D 65/65 vert**
   (rôles de production, see § modes ci-dessus).

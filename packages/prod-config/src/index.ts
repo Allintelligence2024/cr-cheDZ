@@ -26,6 +26,9 @@ import { validateTotpEncryptionKey, validateTotpEncryptionKeyProduction } from '
  *  - H2k METRICS_COLLECTOR_TOKEN_HASHES : chaque entrée doit être un digest
  *    SHA-256 (64 hex) ; toute entrée invalide bloque le démarrage — jamais un
  *    silence qui laisserait croire qu'un collecteur est révoqué ou actif.
+ *  - RATE_LIMIT_DISABLED : en production, 'true' ou '1' bloque le démarrage
+ *    (le garde applicatif les interprète comme une désactivation, sans
+ *    regarder NODE_ENV) — voir le plan de réparation du 2026-09-24, lot 1.
  */
 
 /** Défaut de développement du JwtModule (identity.module.ts) — jamais en prod. */
@@ -95,6 +98,22 @@ export function validateProductionConfig(env: EnvLike = process.env): string[] {
   // 6. G5 : clé de chiffrement au repos des secrets TOTP — présence exigée en
   //    production (jamais de secret base32 en clair), format vérifié partout.
   problems.push(...validateTotpEncryptionKeyProduction(env));
+
+  // 7. Limitation de débit applicative : `RateLimitGuard` sort en `true` dès
+  //    que RATE_LIMIT_DISABLED vaut 'true' ou '1' (rate-limit.guard.ts), sans
+  //    regarder NODE_ENV. Une surcharge d'environnement hors compose
+  //    désarmerait donc silencieusement la limitation (nginx reste la seconde
+  //    barrière, mais elle ne couvre pas les appels internes ni un futur
+  //    déploiement sans edge). La correspondance est EXACTEMENT celle du garde
+  //    (comparaison stricte) : on ne refuse pas une valeur qu'il n'interprète
+  //    pas comme une désactivation.
+  const rateLimitDisabled = env.RATE_LIMIT_DISABLED;
+  if (rateLimitDisabled === 'true' || rateLimitDisabled === '1') {
+    problems.push(
+      'RATE_LIMIT_DISABLED: désactivation de la limitation de débit interdite en production '
+        + "(valeur 'true' ou '1' → le garde applicatif sort en `true` sans regarder NODE_ENV)",
+    );
+  }
 
   return problems;
 }

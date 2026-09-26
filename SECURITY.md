@@ -27,10 +27,52 @@
 - **Uploads** : URLs signées S3/MinIO courtes (1 h), consentements photo
   re-vérifiés à chaque URL, accès journalisés ; clés de stockage contrôlées
   côté DTO, côté service (`assertStorageKeyInTenant`) et en base
-  (contrainte 049).
+  (contrainte 049). *(L'upload par URL signée reste à proxyfier par l'API —
+  voir « Lecture des contenus » ci-dessous.)*
+- **Lecture des contenus (2026-09-24, lot 2 du plan de réparation)** : plus **aucune**
+  URL de stockage n'est rendue au client. Photos, photos parent, exports Excel, PDF de
+  facture et clips vidéo sont servis **en flux par l'API, same-origin**
+  (`/api/v1/…/content`), derrière le même garde JWT et les mêmes contrôles métier
+  (filiation `child_guardians` + consentement photo re-vérifiés **à chaque lecture**,
+  journalisation `media_access_logs` + carnet 25-11 conservée). `presignGet` a été
+  supprimé ; `getSignedUrl` ne sert plus qu'aux **PUT** d'upload. La lecture disque passe
+  par un containment unique (anti `..`) et une politique de préfixe tenant —
+  désormais appliquée aussi à `invoices.pdf_url` (aucune contrainte SQL sur cette
+  colonne, contrairement aux quatre tables de la migration 049).
+  `cache-control: private, no-store` sur tout contenu. Vérifié par
+  `tests/tenant-isolation/phase66-content-same-origin.api.test.mjs`.
+- **Écriture des contenus (2026-09-24, volet B du lot 2)** : les octets des médias passent par
+  l'API — `POST /api/v1/media/upload` (multipart, rôles personnel). La **clé de stockage est
+  construite côté serveur** sous le préfixe de l'organisation (le client ne choisit jamais son
+  périmètre) ; avant toute écriture, le serveur vérifie le **SHA-256** annoncé
+  (`MEDIA_CHECKSUM_MISMATCH`) et la **signature binaire** réelle du fichier
+  (`MEDIA_CONTENT_MISMATCH`) contre une liste blanche de types (`image/jpeg|png|webp`,
+  `application/pdf` — donc **pas de SVG/HTML**, qui seraient du XSS stocké servi same-origin).
+  Plafonds : 8 Mio (produit, 422 bilingue) et 12 Mio (dur, 413 JSON), `client_max_body_size 12M`
+  côté nginx. En production, le presign d'écriture est **refusé** (503
+  `UPLOAD_VIA_API_REQUIRED`) tant que `S3_PUBLIC_ENDPOINT` n'est pas configuré : aucune URL
+  `minio:9000`/`127.0.0.1` ne peut plus être rendue à un client. **Limites connues** : le client
+  `staff-mobile` appelle encore le presign (basculement non livré) ; le téléversement de **clips
+  vidéo** par l'API n'est pas implémenté (presign *fail-closed* en attendant) ; la photo **hors
+  ligne** crée encore un asset sans transférer les octets (défaut consigné au plan §3.2).
+  Vérifié par `tests/tenant-isolation/phase67-media-upload.api.test.mjs` + 15 tests unitaires.
 - **Webhook** : signature HMAC-SHA256 sur le corps brut, idempotence par
   `external_reference`.
 - **Erreurs** : `AppError` FR/AR, jamais de SQL brut ni d'anglais exposé.
+- **En-têtes de bord (2026-09-24, lot 1 du plan de réparation)** :
+  `Content-Security-Policy` servie par nginx (`default-src 'self'`, `object-src 'none'`,
+  `base-uri 'self'`, `frame-ancestors 'none'`, `form-action 'self'`, `connect-src 'self'`).
+  **Étape 1 sur 2** : `script-src` tolère encore `'unsafe-inline'` pour le bootstrap
+  anti-FOUC et le chargement non bloquant de la police écrits dans `index.html` ; l'étape 2
+  (extraction de ces deux inline → `script-src 'self'` strict) exige la vérification
+  navigateur du job `e2e`. Vérifié par `tests/tenant-isolation/edge-headers-contract.test.mjs`.
+- **Limitation de débit** : en production, `RATE_LIMIT_DISABLED=true|1` **bloque le démarrage**
+  (`@creche/prod-config`) — le garde applicatif interprète ces valeurs comme une désactivation
+  sans regarder `NODE_ENV`. Correspondance stricte avec la sémantique du garde, `false`/absent
+  admis.
+- **Gardiens exécutés en CI** : les gardes `.env.example`, manifest Android, inventaire des
+  gardes de route et seuils de charge sont désormais lancés par le job `quality` (ils ne
+  l'étaient par **aucun** workflow avant le 2026-09-24).
 
 ## Dépendances — `npm audit --omit=dev` : **0 vulnérabilité** ✅
 
