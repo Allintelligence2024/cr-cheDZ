@@ -522,6 +522,15 @@ la même façon (pas de « vert » supposé). **Relevé : `ci` `36223235356` **7
 du bac à sable est retombé en `401` juste après ce relevé). Tête `6792345` : même faisceau de preuves
 (`F2 Flutter passed` 59 tests, `F4 Flutter API passed` 7 tests).
 
+**Clôture — tête `2b15dcf` : TOUT VERT, relevé.** `ci` `36227971730` **7/7** (`admin-web`,
+`backup-drill`, `support-console`, `database`, `e2e`, `security`, `quality`), `flutter` `36227971737`
+**succès**, `docker` `36227971739` **succès** ; annotations `F2 Flutter passed` (59 tests),
+`F4 Flutter API passed` (7 tests), `G security`, `H2 confidentiality`, `H1 dev` et `H1 staging`.
+Le relevé a demandé trois tentatives : le jeton du bac à sable renvoyait `401` sur `gh api … /user`
+alors qu'il répondait `200` sur `/rate_limit` — un jeton **limité au dépôt**, pas un jeton mort ; le
+403 sur les points d'entrée non couverts ne dit donc rien de l'état réel. Chaque run de cette branche
+est jugé par **son propre** verdict, y compris les commits documentaires.
+
 ## Complément 2026-09-25 (nuit) — D6 : la photo hors ligne est retirée, pas laissée en suspens
 
 `POST /sync/push` refusait d'échouer franchement sur `add_photo` : la commande créait une ligne
