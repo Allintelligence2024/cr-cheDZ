@@ -116,6 +116,12 @@ export class BillingController {
     return this.billing.listReminders(p.invoiceId);
   }
 
+  @Post('invoices/:invoiceId/mark-overdue')
+  @Roles('director', 'accountant')
+  markOverdue(@Param() p: InvoiceIdParam) {
+    return this.billing.markOverdue(p.invoiceId);
+  }
+
   // ── Paiements ─────────────────────────────────────────────────────────────
 
   /** Paiement en ligne (CIB/Edahabia) : init passerelle SATIM → URL de redirection. */

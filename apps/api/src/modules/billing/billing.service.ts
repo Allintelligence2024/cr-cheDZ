@@ -343,9 +343,20 @@ export class BillingService {
       const inv = await c.query(`SELECT 1 FROM invoices WHERE id=$1 AND organization_id=$2`, [invoiceId, org]);
       if (!inv.rows[0]) throw Errors.notFound();
       return (await c.query(
-        `SELECT id, level, channel, balance_due, guardian_id, notes, sent_by, sent_at FROM invoice_reminders WHERE invoice_id=$1 AND organization_id=$2 ORDER BY level`,
+        `SELECT id, level, channel, balance_due, guardian_id, notes, sent_at FROM invoice_reminders WHERE invoice_id=$1 AND organization_id=$2 ORDER BY level`,
         [invoiceId, org],
       )).rows;
+    });
+  }
+
+  async markOverdue(invoiceId: string): Promise<Record<string, unknown>> {
+    const org = requireTenant(this.tenant);
+    return this.tenant.withTenantConnection(async (c) => {
+      const inv = (await c.query(`SELECT id, status FROM invoices WHERE id=$1 AND organization_id=$2 FOR UPDATE`, [invoiceId, org])).rows[0];
+      if (!inv) throw Errors.notFound();
+      await c.query(`SELECT invoices_mark_overdue($1)`, [org]);
+      const updated = (await c.query(`SELECT * FROM invoices WHERE id=$1`, [invoiceId])).rows[0];
+      return updated;
     });
   }
 

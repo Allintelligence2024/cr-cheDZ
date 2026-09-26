@@ -1,31 +1,86 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext } from '@playwright/test';
 
-/**
- * E2E S1 (remédiation 2026-09-21, Phase 4) — flux de facturation complet.
- *
- * Cible : directeur de crèche pilote.
- * Scénario :
- *   1. Création facture → 201, total cohérent avec les lignes
- *   2. Encaissement partiel → statut 'partially_paid', reliquat affiché
- *   3. Nouvelle tentative d'édition du partiellement_payé → bouton désactivé
- *      (cf. R19 — ligne « partially_paid non éditable »)
- *   4. Avance du temps (ou simule `mark_overdue` via API) → statut 'overdue'
- *   5. Tentative d'édition d'une facture overdue → 422 / bouton désactivé
- *
- * ⚠ Squelette — à exécuter sur la cible VPS avec :
- *   - DATABASE_URL pointant vers la base pilote
- *   - Playwright + navigateurs installés (`npx playwright install`)
- *   - Variables E2E_DIRECTOR_EMAIL / E2E_DIRECTOR_PASSWORD pointant vers
- *     un directeur de la crèche pilot-01 (cf. docs/pilot/ONBOARDING.md)
- *
- * PRÉREQUIS MANQUANTS en sandbox : navigateur, app réelle, base pilote.
- * Ce fichier est commité pour servir de spécification — voir
- * docs/PHASE4-MANUAL.md §S1 pour la procédure d'exécution.
- */
-const EMAIL = process.env.E2E_DIRECTOR_EMAIL ?? 'pilot-01.directrice@pilote.dz';
-const PASSWORD = process.env.E2E_DIRECTOR_PASSWORD ?? 'TODO_PASSWORD';
+const EMAIL = 'e2e.director@test.dz';
+const PASSWORD = 'Password123!';
 
-test.describe.skip('billing — flux facture → encaissement → overdue', () => {
+async function apiLogin(request: APIRequestContext): Promise<string> {
+  const res = await request.post('/api/v1/auth/login', {
+    data: { email: EMAIL, password: PASSWORD },
+  });
+  expect(res.ok()).toBeTruthy();
+  const body = await res.json();
+  return body.access_token as string;
+}
+
+async function getCurrentOrg(request: APIRequestContext, token: string): Promise<string> {
+  const meRes = await request.get('/api/v1/me', {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(meRes.ok()).toBeTruthy();
+  const me = await meRes.json();
+  const orgId = me.memberships?.[0]?.organization_id;
+  expect(orgId).toBeTruthy();
+  return orgId as string;
+}
+
+async function getChildId(request: APIRequestContext, token: string): Promise<string> {
+  const childrenRes = await request.get('/api/v1/children', {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(childrenRes.ok()).toBeTruthy();
+  const children = await childrenRes.json();
+  const childId = children.items?.[0]?.id ?? children[0]?.id;
+  expect(childId).toBeTruthy();
+  return childId as string;
+}
+
+async function getContractId(request: APIRequestContext, token: string): Promise<string> {
+  const contractsRes = await request.get('/api/v1/billing/contracts', {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  expect(contractsRes.ok()).toBeTruthy();
+  const contracts = await contractsRes.json();
+  const contract = contracts.items?.[0] ?? contracts[0];
+  expect(contract).toBeTruthy();
+  return contract.id as string;
+}
+
+async function findAvailablePeriod(
+  request: APIRequestContext,
+  token: string,
+  contractId: string,
+): Promise<{ year: number; month: number }> {
+  const year = new Date().getFullYear();
+  for (let month = 1; month <= 12; month++) {
+    const res = await request.post('/api/v1/billing/invoices/generate', {
+      headers: { authorization: `Bearer ${token}` },
+      data: {
+        contract_id: contractId,
+        period_year: year,
+        period_month: month,
+        due_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      },
+    });
+    if (res.ok()) {
+      const invoice = await res.json();
+      return { year, month, invoiceId: invoice.id as string };
+    }
+    const body = await res.json();
+    if (body.code !== 'INVOICE_ALREADY_EXISTS') {
+      throw new Error(`Unexpected error: ${JSON.stringify(body)}`);
+    }
+  }
+  throw new Error('No available period found for invoice generation');
+}
+
+test.describe('billing — flux facture → encaissement → overdue', () => {
+  let token: string;
+  let invoiceId: string;
+
+  test.beforeAll(async ({ request }) => {
+    token = await apiLogin(request);
+  });
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/login');
     await page.getByLabel('Email').fill(EMAIL);
@@ -34,30 +89,53 @@ test.describe.skip('billing — flux facture → encaissement → overdue', () =
     await expect(page.getByText('Bienvenue')).toBeVisible();
   });
 
-  test('création facture', async ({ page, request }) => {
-    // TODO : appeler POST /billing/invoices (via request) avec 2 lignes
-    // (1 × repas + 1 × garde), vérifier 201 + total = SUM(lines).
-    test.skip(true, 'Squelette S1 — voir docs/PHASE4-MANUAL.md §S1');
+  test('création facture', async ({ request }) => {
+    const contractId = await getContractId(request, token);
+    const { invoiceId: newInvoiceId } = await findAvailablePeriod(request, token, contractId);
+    invoiceId = newInvoiceId;
   });
 
-  test('encaissement partiel → statut partially_paid', async ({ page }) => {
-    // TODO : naviguer vers la facture, cliquer « Encaisser », saisir un
-    // montant < total, vérifier l'apparition du badge « Partiellement payé »
-    // et du reliquat. Vérifier que la ligne invoice_lines n'est PAS éditable.
-    test.skip(true, 'Squelette S1 — voir docs/PHASE4-MANUAL.md §S1');
+  test('encaissement partiel → statut partially_paid', async ({ request, page }) => {
+    expect(invoiceId).toBeTruthy();
+
+    const invoiceRes = await request.get(`/api/v1/billing/invoices/${invoiceId}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(invoiceRes.ok()).toBeTruthy();
+    const invoice = await invoiceRes.json();
+    const total = Number(invoice.total_amount);
+    const partialAmount = Math.round(total / 2);
+
+    await page.goto('/billing');
+    await page.getByRole('button', { name: 'Paiements' }).click();
+
+    await page.getByLabel('Facture (UUID)').fill(invoiceId);
+    await page.getByLabel('Montant (DZD)').fill(String(partialAmount));
+    await page.getByRole('button', { name: 'Paiement espèces' }).click();
+    await expect(page.getByText('Paiement enregistré')).toBeVisible();
+
+    await page.goto('/billing');
+    await page.getByRole('button', { name: 'Factures' }).click();
+    await expect(page.getByText('Partiellement payée').first()).toBeVisible();
   });
 
   test('partially_paid non éditable (R19)', async ({ page }) => {
-    // TODO : sur une facture partiellement_paid, vérifier que les boutons
-    // « Modifier » / « Supprimer » sont absents ou disabled. Le contrôle
-    // DB est `invoices_mark_overdue` SECURITY INVOKER + check R19 côté app.
-    test.skip(true, 'Squelette S1 — voir docs/PHASE4-MANUAL.md §S1');
+    await page.goto('/billing');
+    await page.getByRole('button', { name: 'Factures' }).click();
+    await expect(page.getByRole('button', { name: 'Modifier' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Supprimer' })).toHaveCount(0);
   });
 
-  test('facture overdue (R15)', async ({ page, request }) => {
-    // TODO : via l'API POST /billing/invoices/:id/mark-overdue (director
-    // only), basculer la facture. Vérifier l'UI badge « En retard » + le
-    // blocage d'édition (cf. invoice_immutable — R15).
-    test.skip(true, 'Squelette S1 — voir docs/PHASE4-MANUAL.md §S1');
+  test('facture overdue (R15)', async ({ request, page }) => {
+    expect(invoiceId).toBeTruthy();
+
+    const overdueRes = await request.post(`/api/v1/billing/invoices/${invoiceId}/mark-overdue`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(overdueRes.ok()).toBeTruthy();
+
+    await page.goto('/billing');
+    await page.getByRole('button', { name: 'Factures' }).click();
+    await expect(page.getByText('En retard')).toBeVisible();
   });
 });
