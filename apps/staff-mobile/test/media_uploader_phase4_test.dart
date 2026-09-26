@@ -22,7 +22,7 @@ const child = '33333333-3333-4333-8333-333333333333';
 class RecordingApi extends ApiClient {
   RecordingApi({List<Object>? script}) : script = script ?? const <Object>[];
 
-  /// 'ok' ou un [DioExceptionType] à lever, consommé à chaque envoi.
+  /// Un [DioExceptionType] à lever aux premiers envois, puis succès.
   final List<Object> script;
   final calls = <Map<String, dynamic>>[];
   int uploads = 0;
@@ -31,7 +31,9 @@ class RecordingApi extends ApiClient {
   Future<T> upload<T>(String path, FormData form, {Options? options}) async {
     uploads += 1;
     calls.add({'path': path, 'form': form, 'options': options});
-    final step = script.isEmpty ? 'ok' : script[(uploads - 1) % script.length];
+    // Le script se consomme : au-delà, les envois réussissent. (Un modulo ferait
+    // rejouer la panne à l'infini — l'erreur que la CI a attrapée au 1er jet.)
+    final step = uploads <= script.length ? script[uploads - 1] : 'ok';
     if (step is DioExceptionType) {
       throw DioException(requestOptions: RequestOptions(path: path), type: step);
     }

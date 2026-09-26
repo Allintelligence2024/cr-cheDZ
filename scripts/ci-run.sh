@@ -52,7 +52,7 @@ if [ "$rc" -ne 0 ]; then
   #    ROUGE sans aucune annotation quand l'échec venait d'un lint (`info •`)
   #    ou de la résolution de dépendances — un rouge muet ne vaut pas mieux
   #    qu'un vert faux (vécu le 2026-09-25, run 36194782638).
-  matches=$(grep -aE 'error •|warning •|info •|issues? found|\[E\]|Expected:|Actual:|Which:|Error:|error:|Exception|FAILURE|What went wrong|Failed to|Because .* depends|version solving failed' "$log" || true)
+  matches=$(grep -aE 'error •|warning •|info •|issues? found|\[E\]|Expected:|Actual:|Which:|Error:|error:|Exception|FAILURE|What went wrong|Failed to|Because .* depends|version solving failed|Failing tests:|^[[:space:]]+\S+\.dart:' "$log" || true)
   # 2) sinon, repli : la fin du log, pour qu'un échec soit TOUJOURS lisible
   #    dans les annotations (les artefacts ne sont pas toujours accessibles).
   if [ -z "$matches" ]; then
