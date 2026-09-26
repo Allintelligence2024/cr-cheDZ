@@ -514,6 +514,25 @@ nouveau verrou statique `L2G` dans `media-client-wiring` (7 contrôles) interdis
 `exifStripped ?? true`, et **mutation mesurée** (`?? true` → `colonne=true`, verrou 6/7). Le retrait
 EXIF reste une dette ; il n'est plus un mensonge.
 
+## Complément 2026-09-26 — L2H : `log_event_id` est vérifié comme `child_id`
+
+Trouvé en relisant le même fichier que L2G : dans `createAsset` (média), `child_id` et
+`children_in_photo` passaient par `childOfTenant`, mais **`log_event_id` était inséré sans aucune
+vérification**. Les clés étrangères PostgreSQL **ne consultent pas le RLS** : la contrainte vérifie
+l'existence de la ligne, pas son organisation. Un média de l'organisation A pouvait donc être rattaché
+à un événement de journal de B — **mesuré** : `201` et une ligne réellement créée (sonde ajoutée au
+banc *avant* le correctif).
+
+Corrigé par une garde `logEventOfTenant` (même forme que `childOfTenant` : lecture sur la connexion du
+tenant, `404` bilingue sinon), appelée dans `createAsset` — donc sur les deux chemins d'écriture,
+`upload` (production) et `register` (dev/legacy).
+
+Preuves : `phase67` refuse le lien hors périmètre, **ne crée aucune ligne**, et accepte toujours le lien
+légitime (contrôle inverse : sans lui, une garde qui refuserait tout passerait) ; verrou statique `L2H`
+dans `media-client-wiring` (**8 contrôles**) ; mutations `→ 2 rouges` (garde retirée) puis `→ 7/8`
+(verrou), restaurations vertes. Hors périmètre, dit tel quel : la cohérence *enfant ↔ événement* quand
+les deux sont fournis (aucun chemin de lecture ne joint les deux tables aujourd'hui).
+
 **Verdict CI du lot (`79077a8`) — TOUT VERT.** `ci` `36234555506` **7/7 jobs** (`database` inclus),
 `flutter` `36234555547` **succès**, `docker` `36234555526` **succès**. Le gate D rejoue `phase67` sur
 PostgreSQL réel : la nouvelle assertion (« la colonne doit valoir `false` ») y passe, donc le correctif

@@ -224,6 +224,48 @@ async function main() {
     ok('`exif_stripped` reste FAUX : personne ne dépouille l’image, l’API ne doit pas l’affirmer',
       nominalRow?.exif_stripped === false,
       `colonne=${JSON.stringify(nominalRow?.exif_stripped)} (défaut attendu : false)`);
+
+    // L2H — `log_event_id` : identifiant DÉCLARÉ par le client, comme `child_id`
+    // et `children_in_photo` — sauf que lui n'était vérifié nulle part. Et une
+    // clé étrangère PostgreSQL NE consulte PAS le RLS : l'insertion aboutit,
+    // même vers l'organisation voisine. Ici on l'exige du bon côté de la
+    // frontière, en mesurant la base (pas la réponse seule).
+    const foreignEvent = (await admin.query(
+      `INSERT INTO daily_log_events(organization_id, child_id, recorded_by, event_type, event_date, occurred_at, note_text)
+       VALUES($1,$2,$3,'note',CURRENT_DATE,NOW(),'événement de B') RETURNING id`,
+      [B.org, B.child, B.director],
+    )).rows[0].id;
+    const foreignLink = await upload(tokenA, {
+      bytes: jpegBytes(`${tag}-logevent`),
+      fields: { child_id: A.child, log_event_id: foreignEvent },
+    });
+    ok('`log_event_id` d’une AUTRE organisation → refus (lien inter-tenant impossible)',
+      foreignLink.status >= 400 && foreignLink.status < 500,
+      `status=${foreignLink.status} ${JSON.stringify(foreignLink.body)?.slice(0, 120)}`);
+    const linked = (await admin.query(
+      'SELECT count(*)::int AS n FROM media_assets WHERE log_event_id=$1', [foreignEvent],
+    )).rows[0].n;
+    ok('Aucun média rattaché à un événement de journal hors périmètre',
+      linked === 0, `médias liés à l’événement de B : ${linked}`);
+
+    // Contrôle inverse, indispensable : une garde qui refuse TOUT passerait le
+    // test ci-dessus. Un événement de la MÊME organisation doit rester accepté
+    // et réellement rattaché — sinon on aurait remplacé un trou par un mur.
+    const ownEvent = (await admin.query(
+      `INSERT INTO daily_log_events(organization_id, child_id, recorded_by, event_type, event_date, occurred_at, note_text)
+       VALUES($1,$2,$3,'note',CURRENT_DATE,NOW(),'événement de A') RETURNING id`,
+      [A.org, A.child, A.director],
+    )).rows[0].id;
+    const ownLink = await upload(tokenA, {
+      bytes: jpegBytes(`${tag}-logevent-ok`),
+      fields: { child_id: A.child, log_event_id: ownEvent },
+    });
+    const ownLinked = ownLink.body?.id
+      ? (await admin.query('SELECT log_event_id FROM media_assets WHERE id=$1', [ownLink.body.id])).rows[0]
+      : null;
+    ok('`log_event_id` de la MÊME organisation → accepté et rattaché (la garde n’est pas un mur)',
+      ownLink.status === 201 && ownLinked?.log_event_id === ownEvent,
+      `status=${ownLink.status} lien=${ownLinked?.log_event_id} attendu=${ownEvent}`);
     const onDisk = key ? join(STORE, key) : '';
     ok('Objet réellement écrit dans le stockage', !!onDisk && existsSync(onDisk), onDisk);
     ok('Octets stockés IDENTIQUES aux octets envoyés',

@@ -207,6 +207,7 @@ export class MediaService {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       if (input.childId) await this.childOfTenant(client, input.childId);
+      if (input.logEventId) await this.logEventOfTenant(client, input.logEventId);
       if (input.childrenInPhoto?.length) {
         for (const cid of input.childrenInPhoto) {
           await this.childOfTenant(client, cid);
@@ -500,6 +501,30 @@ export class MediaService {
       );
       return res.rows;
     });
+  }
+
+  /**
+   * L2H — `log_event_id` est un identifiant DÉCLARÉ par le client, au même
+   * titre que `child_id`... sauf que lui n'était vérifié nulle part : il
+   * partait tel quel dans l'INSERT. Or les clés étrangères PostgreSQL **ne
+   * consultent pas le RLS** — l'insertion aboutissait donc même vers
+   * l'organisation voisine (mesuré : 201 + ligne créée). La garde lit
+   * l'événement sur la connexion du tenant : le RLS fait le tri, et un
+   * identifiant hors périmètre devient un 404, comme un enfant inconnu.
+   */
+  private async logEventOfTenant(client: PoolClient, logEventId: string): Promise<void> {
+    const res = await client.query(
+      `SELECT id FROM daily_log_events WHERE id = $1`,
+      [logEventId],
+    );
+    if (res.rows.length === 0) {
+      throw new AppError(
+        'NOT_FOUND',
+        'Événement de journal introuvable dans cette organisation',
+        'حدث اليومية غير موجود',
+        404,
+      );
+    }
   }
 
   private async childOfTenant(client: PoolClient, childId: string): Promise<void> {

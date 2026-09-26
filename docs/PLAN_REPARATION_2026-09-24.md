@@ -1146,6 +1146,49 @@ La différence avec avant est que plus aucun acteur n'affirme l'avoir fait.
 Session de preuve locale : `npm ci` (929 paquets), builds `api` + `worker`, PostgreSQL 18.4 embarqué
 (`run_pg.mjs`, port 54329), `phase67` vert, **121 tests unitaires API** verts, `npm run lint` exit 0.
 
+### L2H — `log_event_id` : l'identifiant déclaré que personne ne vérifiait (2026-09-26)
+
+**Ce que l'audit de L2F a mis au jour, à la lecture du même fichier** : dans `createAsset`,
+`child_id` et `children_in_photo` passent par `childOfTenant` (une lecture sur la connexion du tenant,
+donc sous RLS), mais **`log_event_id` partait tel quel dans l'INSERT**. Or une clé étrangère
+PostgreSQL **ne consulte pas le RLS** : la contrainte vérifie l'existence de la ligne, pas son
+appartenance. Un média de l'organisation A pouvait donc être rattaché à un événement de journal de
+l'organisation B.
+
+**Mesuré, pas déduit** — sonde ajoutée au banc avant tout correctif :
+
+```
+✗ `log_event_id` d’une AUTRE organisation → refus (lien inter-tenant impossible)
+   — status=201 {"id":"59c19768-…","storage_key":"…/photo/…"}
+✗ Aucun média rattaché à un événement de journal hors périmètre
+   — médias liés à l’événement de B : 1
+✗ 2 échec(s)
+```
+
+Un `201` et une ligne réellement écrite : le lien inter-tenant passait, et l'acteur fautif était le
+serveur, pas le client.
+
+**Livré** : garde `logEventOfTenant` (même forme que `childOfTenant` : lecture de l'événement sur la
+connexion du tenant, `404` bilingue sinon), appelée dans `createAsset` — donc couverte sur **les deux**
+chemins, `upload` (production) et `register` (dev/legacy).
+
+**Preuves** :
+- banc `phase67` : trois assertions — refus du `log_event_id` d'une autre organisation, **aucune ligne
+  créée** en base, et **contrôle inverse** : un événement de la même organisation reste accepté et
+  réellement rattaché. Ce troisième point est indispensable : une garde qui refuse *tout* passerait
+  les deux premiers tests ;
+- verrou statique `L2H` dans `media-client-wiring` (**7 → 8 contrôles**) ;
+- **mutations exécutées** : garde retirée de `createAsset` → le banc rejoue exactement les 2 échecs
+  ci-dessus (`201`, 1 ligne liée) tandis que le contrôle inverse reste vert ; garde retirée du fichier
+  → verrou statique **7/8**. Restauration → **3/3** et **8/8**.
+
+**Ce que L2H ne fait pas** : il ne vérifie pas la **cohérence enfant ↔ événement** (un événement
+appartient à un enfant précis ; `child_id` et `log_event_id` peuvent désigner deux enfants différents
+de la même organisation). Aucun chemin de lecture ne joint aujourd'hui `media_assets` à
+`daily_log_events` — c'est donc une incohérence de données latente, pas une fuite : elle est nommée
+ici plutôt que corrigée à l'aveugle, car trancher suppose une décision produit (une photo de groupe
+peut légitimement montrer plusieurs enfants, que `children_in_photo` couvre déjà).
+
 ### L2D — Photos hors ligne : la limitation devient mesurée, et le contournement verrouillé (2026-09-25)
 
 **Constat (déjà documenté, désormais exécutable)** : la commande `add_photo` de `POST /sync/push`

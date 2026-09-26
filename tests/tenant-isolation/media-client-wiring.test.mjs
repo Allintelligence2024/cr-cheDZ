@@ -195,6 +195,23 @@ test('L2G — le serveur n’affirme pas avoir retiré les métadonnées EXIF', 
     + 'défaut attendu `?? false` (et non un `true` fabriqué)');
 });
 
+test('L2H — le serveur vérifie le périmètre de `log_event_id` (identifiant déclaré)', () => {
+  // `child_id` et `children_in_photo` étaient vérifiés ; `log_event_id` ne
+  // l'était nulle part — il partait tel quel dans l'INSERT. Or les clés
+  // étrangères PostgreSQL ne consultent pas le RLS : la ligne s'écrivait même
+  // vers l'organisation voisine (mesuré : 201 + rattachement effectif). La
+  // suite `phase67` le prouve de bout en bout ; ici on empêche la garde de
+  // disparaître sans qu'aucun test de base ne s'en aperçoive.
+  const service = codeOf('apps/api/src/modules/media/media.service.ts');
+  assert.match(service, /await this\.logEventOfTenant\(client, input\.logEventId\)/,
+    'l’upload média doit vérifier que `log_event_id` appartient au tenant (comme `child_id`) : '
+    + 'sans cette garde, un média d’une organisation peut être rattaché à l’événement de journal '
+    + 'd’une autre (les clés étrangères PostgreSQL contournent le RLS)');
+  assert.match(service, /private async logEventOfTenant\(/,
+    'le garde `logEventOfTenant` a disparu — il lit l’événement sur la connexion du tenant, '
+    + 'donc le RLS fait le tri');
+});
+
 test('F5 client — chaque exception reste vraie et inatteignable depuis l’interface', () => {
   for (const [file, { why, requireDeadCall }] of JUSTIFIED) {
     const abs = join(REPO, file);

@@ -499,6 +499,16 @@ par `phase67` après un upload nominal (elle doit valoir `false`) et un verrou s
 `colonne=true` et verrou 6/7. Le retrait EXIF lui-même reste non implémenté — mais plus personne ne
 l'affirme.
 
+**Complément du 26/09 (lot L2H) — `log_event_id` : l'identifiant déclaré que rien ne vérifiait.** Dans
+`createAsset`, `child_id` et `children_in_photo` étaient contrôlés, `log_event_id` non : il partait tel
+quel dans l'INSERT, et **une clé étrangère PostgreSQL ne consulte pas le RLS** — l'insertion aboutissait
+même vers l'organisation voisine. Mesuré avant correctif : `201` et **1 ligne réellement rattachée** à
+l'événement de l'autre organisation. Corrigé par une garde `logEventOfTenant` (lecture sur la connexion
+du tenant, `404` sinon) appelée dans `createAsset`, donc sur les chemins `upload` **et** `register` ;
+`phase67` prouve le refus, l'absence de ligne, **et** que le chemin légitime (même organisation) reste
+accepté — une garde qui refuse tout passerait sinon les deux premiers tests. Verrou statique `L2H`
+(`media-client-wiring`, 8 contrôles) et mutations exécutées dans les deux sens.
+
 **Verdict CI du lot (`79077a8`) — TOUT VERT.** `ci` `36234555506` **7/7 jobs** (`database` inclus),
 `flutter` `36234555547` **succès**, `docker` `36234555526` **succès**. Le gate D rejoue `phase67` sur
 PostgreSQL réel : la nouvelle assertion (« la colonne doit valoir `false` ») y passe, donc le correctif
