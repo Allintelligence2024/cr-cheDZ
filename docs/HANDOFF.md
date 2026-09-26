@@ -464,7 +464,7 @@ booléen du client staff-mobile les fait échouer ; rotation G1b persistée ; re
 (`offline`/serveur/401) et état d'erreur homogène (`core/error_state.dart`) sur le fil, les photos,
 les consentements et la liste d'enfants ; feuille d'absence qui n'avale plus l'échec ;
 `apps/parent-mobile/test/` (12 tests) **exécutés par la CI — vert sur `ce69bbd`** ; verrou statique
-`parent-session-contract` (**8/8**, `quality` + gate D) — dont la règle « aucun échec masqué par un tube », ajoutée après le faux vert mesuré en CI le 25/09.
+`parent-session-contract` (**9/9**, `quality` + gate D) — 8 règles de session parent + la règle « aucun échec masqué par un tube », ajoutée après le faux vert mesuré en CI le 25/09, et la 9e sur la résolution des dépendances (`--enforce-lockfile`).
 
 **Lockfile** : `flutter.yml` contraint la résolution (`--enforce-lockfile`) dès que `pubspec.lock`
 est versionné, et sinon **publie** la résolution réelle du run pour qu'elle soit committée — en

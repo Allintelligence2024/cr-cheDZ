@@ -1296,7 +1296,7 @@ l'erreur vient du compilateur qui construit le binaire livré.
 - `flutter.yml` — étape **`parent-mobile — tests`** (`flutter test`, journal publié en artefact) et
   étape **lockfile** : résolution **contrainte** (`--enforce-lockfile`) dès que `pubspec.lock` est
   versionné, sinon la résolution réelle du run est **publiée** (annotations) pour être committée.
-- Verrou statique `tests/tenant-isolation/parent-session-contract.test.mjs` (**8/8** — la 8e règle interdit le faux vert du tube ; job `quality`
+- Verrou statique `tests/tenant-isolation/parent-session-contract.test.mjs` (**9/9** — la 8e règle interdit le faux vert du tube, la 9e exige la résolution contrainte des dépendances ; job `quality`
   + bundle du gate D) : un seul point d'entrée de refresh dans `lib/`, single-flight (et refus
   explicite du drapeau booléen), rejeu borné, purge + retour connexion, états d'erreur par écran,
   tests **réellement exécutés** par la CI (**vert** sur `ce69bbd`), contrôle du lockfile.
