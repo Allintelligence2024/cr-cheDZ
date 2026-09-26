@@ -504,6 +504,12 @@ inutilisables) puis sur un re-clone : la branche a été récupérée par la rec
 préservé, `.git` neuf, delta de 3 docs restauré à l'identique — `2d7875b`), et rien n'a été poussé
 avant que le verdict ne soit effectivement relevé.
 
+**Tête de branche `fc4f3ce` (docs) : également TOUT VERT** — `ci` `36221709391` **7/7** (`F2 Flutter
+passed` 59 tests, `F4 Flutter API passed` 7 tests, `G security`, `H2 confidentiality`, `H1 dev`,
+`H1 staging`), `flutter` `36221709398` **succès**, `docker` `36221709407` **succès**. Les commits
+strictement documentaires qui suivent ne modifient ni code ni tests, et leur propre run est relevé de
+la même façon (pas de « vert » supposé).
+
 **Mise à jour du 25/09/2026 (nuit) — un « vert » qui ne prouvait rien.** En relevant le verdict du
 run `flutter` (jeton GitHub rétabli), une annotation isolée est apparue dans un job **vert** :
 `::error::4 tests passed, 1 failed.` — les 17 steps étaient verts. Cause : `flutter test | tee

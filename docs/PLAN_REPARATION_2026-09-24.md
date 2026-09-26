@@ -1085,6 +1085,12 @@ inutilisables) puis sur un re-clone : la branche a été récupérée par la rec
 préservé, `.git` neuf, delta de 3 docs restauré à l'identique — `2d7875b`), et rien n'a été poussé
 avant que le verdict ne soit effectivement relevé.
 
+**Tête de branche `fc4f3ce` (docs) : également TOUT VERT** — `ci` `36221709391` **7/7** (`F2 Flutter
+passed` 59 tests, `F4 Flutter API passed` 7 tests, `G security`, `H2 confidentiality`, `H1 dev`,
+`H1 staging`), `flutter` `36221709398` **succès**, `docker` `36221709407` **succès**. Les commits
+strictement documentaires qui suivent ne modifient ni code ni tests, et leur propre run est relevé de
+la même façon (pas de « vert » supposé).
+
 **Ce que L2F ne fait pas** : il n'ajoute pas d'écran de capture photo (aucun `image_picker`, aucune
 caméra) et n'implémente pas le retrait EXIF côté client. L'uploader est prêt et prouvé ; le câblage
 d'un écran reste une décision produit, et le stripping EXIF une dette explicite.
