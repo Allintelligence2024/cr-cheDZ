@@ -509,6 +509,17 @@ du tenant, `404` sinon) appelée dans `createAsset`, donc sur les chemins `uploa
 accepté — une garde qui refuse tout passerait sinon les deux premiers tests. Verrou statique `L2H`
 (`media-client-wiring`, 8 contrôles) et mutations exécutées dans les deux sens.
 
+**Résidu nommé, mesuré le 26/09 (lot L2H)** — la même classe existe ailleurs et n'est pas close :
+les champs `dto.*_id` (identifiants déclarés par le client) apparaissent **~120 fois** dans les
+services de l'API, répartis sur les modules `children` (22), `billing` (22), `staff` (19), `privacy`
+(14), `messaging` (9), `attendance` (9), `users` (7), `video` (6), `attestations` (6)… Un balayage
+automatique par nom de garde (`*OfTenant`, `assertStorageKeyInTenant`) désigne 13 fichiers sans
+garde apparente, mais **cette heuristique ne prouve rien** : plusieurs modules valident sous un autre
+nom, et l'inverse est possible. Le volet média est, lui, close et prouvé (`phase67` + verrou `L2H`) ;
+le chemin frère `journal` a été relu et **valide** bien (`childOfTenant`, `room_id` dérivé de
+l'enfant, jamais du client). Un balayage systématique des autres modules demande sa propre décision et
+ses propres bancs — il est donc **ouvert, nommé ici**, et non maquillé en « rien à signaler ».
+
 **Verdict CI du lot (`79077a8`) — TOUT VERT.** `ci` `36234555506` **7/7 jobs** (`database` inclus),
 `flutter` `36234555547` **succès**, `docker` `36234555526` **succès**. Le gate D rejoue `phase67` sur
 PostgreSQL réel : la nouvelle assertion (« la colonne doit valoir `false` ») y passe, donc le correctif

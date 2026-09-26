@@ -1189,6 +1189,17 @@ de la même organisation). Aucun chemin de lecture ne joint aujourd'hui `media_a
 ici plutôt que corrigée à l'aveugle, car trancher suppose une décision produit (une photo de groupe
 peut légitimement montrer plusieurs enfants, que `children_in_photo` couvre déjà).
 
+**Résidu nommé, mesuré le 26/09 (lot L2H)** — la même classe existe ailleurs et n'est pas close :
+les champs `dto.*_id` (identifiants déclarés par le client) apparaissent **~120 fois** dans les
+services de l'API, répartis sur les modules `children` (22), `billing` (22), `staff` (19), `privacy`
+(14), `messaging` (9), `attendance` (9), `users` (7), `video` (6), `attestations` (6)… Un balayage
+automatique par nom de garde (`*OfTenant`, `assertStorageKeyInTenant`) désigne 13 fichiers sans
+garde apparente, mais **cette heuristique ne prouve rien** : plusieurs modules valident sous un autre
+nom, et l'inverse est possible. Le volet média est, lui, close et prouvé (`phase67` + verrou `L2H`) ;
+le chemin frère `journal` a été relu et **valide** bien (`childOfTenant`, `room_id` dérivé de
+l'enfant, jamais du client). Un balayage systématique des autres modules demande sa propre décision et
+ses propres bancs — il est donc **ouvert, nommé ici**, et non maquillé en « rien à signaler ».
+
 ### L2D — Photos hors ligne : la limitation devient mesurée, et le contournement verrouillé (2026-09-25)
 
 **Constat (déjà documenté, désormais exécutable)** : la commande `add_photo` de `POST /sync/push`
