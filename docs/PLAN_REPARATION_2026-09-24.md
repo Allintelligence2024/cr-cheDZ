@@ -1222,6 +1222,45 @@ s'arrête que par une règle explicite. Elle s'arrête donc ici : **le verdict d
 documentaire se lit dans l'onglet Checks de la PR #50**, qui est la source vivante — le dépôt, lui,
 consigne les verdicts des commits de **code** et l'état de la tête au moment de la clôture.
 
+### L2I — `site_id` au pointage : identifiant déclaré, périmètre non vérifié (2026-09-26)
+
+**Suite du balayage ouvert par L2H.** Le motif exact a été recherché dans toute l'API (un identifiant
+du client recopié tel quel dans un objet d'écriture) et il ne reste **qu'un** endroit de cette forme :
+`attendance.service.ts`, `applyCheckIn` — `siteId: dto.site_id ?? null`, puis
+`[tenantId, p.siteId ?? child.site_id, …]`. Le repli (`?? child.site_id`) est sûr ; la valeur
+**déclarée** ne l'était pas : elle partait dans l'INSERT sans vérification, et
+`attendance_sessions.site_id` est une **clé étrangère** — qui, on l'a mesuré deux fois (L2H, ici), ne
+consulte pas le RLS.
+
+**Mesuré avant correctif** (section 10 ajoutée au banc `phase58`, avec deux enfants dédiés) :
+
+```
+✗ `site_id` d’une AUTRE organisation → refus — status=201 {"id":"da3d0b14-…","site_id":"d315ae68-…"}
+✗ Aucune session créée pour un `site_id` hors périmètre — sessions créées pour l’enfant ciblé : 1
+✓ `site_id` de la MÊME organisation → accepté et rattaché (la garde n’est pas un mur)
+```
+
+La sonde est placée **en fin de suite** : elle crée des sessions, donc la mettre au milieu décalait les
+compteurs de ratio des sections précédentes (constaté au premier essai : 7 échecs au lieu de 2 — la
+sonde mesurait aussi sa propre interférence). Leçon : un banc qui compte des présents ne supporte pas
+qu'on en ajoute au milieu.
+
+**Livré** : garde `siteOfTenant` (lecture sur la connexion du tenant, donc RLS), appelée dans
+`applyCheckIn` **avant** toute écriture, avec le même vocabulaire que `childOfTenant`
+(`PERMISSION_DENIED`, message bilingue). Comme `applyCheckIn` est partagé, la garde couvre **les deux
+chemins** : HTTP (`POST /attendance/check-in`) **et** sync (`sync.service.ts` transmet `payload.site_id`
+— le client hors ligne peut donc proposer un site, il sera vérifié de la même façon).
+
+**Preuves** : `phase58` section 10, trois assertions (refus hors périmètre, **aucune session créée**,
+contrôle inverse) ; **mutation** exécutée — garde retirée → `201` + 1 session créée (2 rouges),
+restaurée → 3/3 et « Phase 58 validée ». Les suites qui font des pointages (`phase5`, `phase6`,
+`phase35`, `phase36`, `phase58`, `phase7`, `phase9`, `phase13`, `phase16`) sont couvertes par le gate D,
+qui a été rejoué en entier après le correctif.
+
+**Ce que L2I ne fait pas** : il ne vérifie pas que le `site_id` fourni est *cohérent* avec l'enfant
+(un enfant du site 1 peut être pointé « au site 2 » de la même organisation — cas légitime : accueil
+dans un autre bâtiment). Il garantit seulement que le site appartient au **même tenant**.
+
 ### L2D — Photos hors ligne : la limitation devient mesurée, et le contournement verrouillé (2026-09-25)
 
 **Constat (déjà documenté, désormais exécutable)** : la commande `add_photo` de `POST /sync/push`

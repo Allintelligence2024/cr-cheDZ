@@ -544,6 +544,24 @@ le chemin frère `journal` a été relu et **valide** bien (`childOfTenant`, `ro
 l'enfant, jamais du client). Un balayage systématique des autres modules demande sa propre décision et
 ses propres bancs — il est donc **ouvert, nommé ici**, et non maquillé en « rien à signaler ».
 
+## Complément 2026-09-26 — L2I : `site_id` du pointage vérifié (HTTP et sync)
+
+Le balayage ouvert par L2H a cherché le motif exact (identifiant du client recopié tel quel dans un
+objet d'écriture) dans toute l'API : il ne restait qu'un endroit, `attendance.service.ts` →
+`applyCheckIn`, où `dto.site_id` était inséré **sans vérification** (le repli sur le site de l'enfant,
+lui, était sûr). `attendance_sessions.site_id` étant une clé étrangère — et une FK ne consulte pas le
+RLS —, une session de l'organisation A pouvait référencer le site de B. Mesuré : `201` + une session
+liée.
+
+Corrigé par une garde `siteOfTenant` (lecture sous RLS) appliquée **avant toute écriture**, partagée
+par les deux chemins puisque `applyCheckIn` est commun à l'API HTTP et au sync hors ligne.
+
+Preuves : `phase58` section 10 (refus hors périmètre, **aucune session créée**, contrôle inverse
+accepté) ; mutation exécutée dans les deux sens. Note de méthode utile : la sonde est en **fin** de
+suite — placée au milieu, elle décalait les compteurs de ratio du banc (7 échecs au lieu de 2, elle
+mesurait sa propre interférence). Hors périmètre, dit tel quel : la cohérence *enfant ↔ site* (un
+accueil dans un autre bâtiment de la même organisation reste légitime) n'est pas vérifiée.
+
 **Verdict CI du lot L2H** — `ci` `36238450157` (`dc55624`, correctif + banc + verrou) : **7/7 jobs
 verts**, `database` inclus (le gate D rejoue `phase67` avec ses trois nouvelles assertions) ;
 `flutter` **succès**. `docker` de ce SHA a été **annulé** non par un échec mais par la concurrence du

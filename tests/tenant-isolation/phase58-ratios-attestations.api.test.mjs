@@ -107,6 +107,7 @@ const main = async () => {
     let room = r.body.rooms.find((x) => x.room_id === A.room);
     ok('Salle vide → status empty, paramètres RATIO_EDUC (10/éduc, min 2)', r.status === 200 && room && room.status === 'empty' && room.max_children_per_educator === 10 && room.min_educators === 2, JSON.stringify(room));
     for (let i = 0; i < 3; i++) await api('POST', '/attendance/check-in', tokenA, { child_id: children[i] });
+
     r = await api('GET', '/attendance/ratios', tokenA);
     room = r.body.rooms.find((x) => x.room_id === A.room);
     ok('3 présents / 1 éducatrice affectée → basis assigned, warning MIN_EDUCATORS, headroom 7', room.children_present === 3 && room.basis === 'assigned' && room.educators_counted === 1 && room.status === 'warning' && room.reasons.includes('MIN_EDUCATORS') && room.headroom === 7, JSON.stringify(room));
@@ -212,6 +213,35 @@ const main = async () => {
     ok('B : liste vide', (await api('GET', '/attestations', tokenB)).body.length === 0);
     const rls = await db.query(`SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='attestations'`);
     ok('attestations : RLS activée ET forcée', rls.rows[0].relrowsecurity && rls.rows[0].relforcerowsecurity);
+
+    // ── 10) L2I : `site_id` est un identifiant DÉCLARÉ par le client ────────
+    // Placé en fin de suite : la sonde crée des sessions, donc elle ne doit pas
+    // décaler les compteurs de ratio des sections précédentes. Le service
+    // retombait sur le site de l'enfant quand le champ était absent (défaut
+    // sûr), mais recopiait SANS VÉRIFICATION celui fourni par le client — et
+    // une clé étrangère PostgreSQL ne consulte pas le RLS : une session de
+    // l'org A pouvait référencer un site de l'org B (mesuré : 201 + ligne liée).
+    console.log('\n10) `site_id` déclaré : périmètre vérifié');
+    const mkChild = async (ref) => (await db.query(
+      `INSERT INTO children(organization_id,site_id,room_id,reference_number,first_name_fr,last_name_fr,date_of_birth,created_by) VALUES($1,$2,$3,$4,'Sofia','Test','2024-04-01',$5) RETURNING id`,
+      [A.org, A.site, A.room, ref, A.director],
+    )).rows[0].id;
+    const childAlien = await mkChild('P58-L2I-alien');
+    const childOwn = await mkChild('P58-L2I-own');
+    const alienSite = await api('POST', '/attendance/check-in', tokenA, { child_id: childAlien, site_id: B.site });
+    ok('`site_id` d’une AUTRE organisation → refus (site hors périmètre)',
+      alienSite.status >= 400 && alienSite.status < 500,
+      `status=${alienSite.status} ${JSON.stringify(alienSite.body).slice(0, 120)}`);
+    const alienRows = (await db.query('SELECT count(*)::int AS n FROM attendance_sessions WHERE child_id=$1', [childAlien])).rows[0].n;
+    ok('Aucune session créée pour un `site_id` hors périmètre',
+      alienRows === 0, `sessions créées pour l’enfant ciblé : ${alienRows}`);
+    const ownSite = await api('POST', '/attendance/check-in', tokenA, { child_id: childOwn, site_id: A.site });
+    const ownRow = ownSite.body?.id
+      ? (await db.query('SELECT site_id FROM attendance_sessions WHERE child_id=$1', [childOwn])).rows[0]
+      : null;
+    ok('`site_id` de la MÊME organisation → accepté et rattaché (la garde n’est pas un mur)',
+      (ownSite.status === 200 || ownSite.status === 201) && ownRow?.site_id === A.site,
+      `status=${ownSite.status} site=${ownRow?.site_id}`);
   } finally {
     try {
       await db.query(`DELETE FROM background_jobs WHERE organization_id IN ${cleanupOrgs} AND status='pending'`);

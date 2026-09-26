@@ -517,6 +517,13 @@ du tenant, `404` sinon) appelée dans `createAsset`, donc sur les chemins `uploa
 accepté — une garde qui refuse tout passerait sinon les deux premiers tests. Verrou statique `L2H`
 (`media-client-wiring`, 8 contrôles) et mutations exécutées dans les deux sens.
 
+**Complément du 26/09 (lot L2I) — `site_id` au pointage.** Le balayage de la même classe a trouvé un
+second cas, et un seul : `applyCheckIn` recopiait `dto.site_id` sans vérification (le repli
+`?? child.site_id` était sûr, la valeur déclarée non). Mesuré avant correctif : `201` et une session
+réellement rattachée au site d'une autre organisation. Garde `siteOfTenant` posée **avant toute
+écriture**, partagée par HTTP et sync. `phase58` section 10 : refus hors périmètre, aucune session
+créée, contrôle inverse accepté ; mutation → `201` + 1 session (2 rouges).
+
 **Résidu nommé, mesuré le 26/09 (lot L2H)** — la même classe existe ailleurs et n'est pas close :
 les champs `dto.*_id` (identifiants déclarés par le client) apparaissent **~120 fois** dans les
 services de l'API, répartis sur les modules `children` (22), `billing` (22), `staff` (19), `privacy`
