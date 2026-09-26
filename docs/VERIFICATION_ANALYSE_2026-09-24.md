@@ -508,7 +508,10 @@ avant que le verdict ne soit effectivement relevé.
 passed` 59 tests, `F4 Flutter API passed` 7 tests, `G security`, `H2 confidentiality`, `H1 dev`,
 `H1 staging`), `flutter` `36221709398` **succès**, `docker` `36221709407` **succès**. Les commits
 strictement documentaires qui suivent ne modifient ni code ni tests, et leur propre run est relevé de
-la même façon (pas de « vert » supposé).
+la même façon (pas de « vert » supposé). **Relevé : `ci` `36223235356` **7/7 vert**,
+`flutter` `36223235348` **succès**, `docker` `36223235345` **succès** — cherché, pas supposé (le jeton
+du bac à sable est retombé en `401` juste après ce relevé). Tête `6792345` : même faisceau de preuves
+(`F2 Flutter passed` 59 tests, `F4 Flutter API passed` 7 tests).
 
 **Mise à jour du 25/09/2026 (nuit) — un « vert » qui ne prouvait rien.** En relevant le verdict du
 run `flutter` (jeton GitHub rétabli), une annotation isolée est apparue dans un job **vert** :
