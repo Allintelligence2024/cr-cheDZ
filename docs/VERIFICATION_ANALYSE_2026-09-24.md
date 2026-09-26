@@ -490,13 +490,19 @@ et c'est le test qui avait tort : son double consommait son script avec un modul
 en `e1d12e9`, avec un diagnostic qui **nomme** désormais le test fautif (`Failing tests:` capté par
 `ci-run.sh`) au lieu de ne publier que l'exception.
 
-**Verdict du correctif** (`e1d12e9`/`d9fbf72`) : `flutter` (APK) `36220107343` **succès** ;
-`docker` `36220107439` **succès** ; `ci` `36220107367` — `gh run watch --exit-status` a rendu **rc=0**
-(donc run vert) mais le relevé des annotations s'est interrompu net : le jeton GitHub du bac à sable est
-retombé en `401 Bad credentials` à cet instant, et **aussi bien `gh` que `git` sont devenus
-inutilisables** (les deux jetons de l'environnement refusés, helper d'identifiants vide). Rien n'est
-présumé : la ligne `ci` (compteurs F2, `F4`, job `database`) sera complétée dès que la connexion GitHub
-sera rétablie — c'est la seule pièce manquante du lot L2F.
+**Verdict du correctif (`e1d12e9`) — run complet VERT.** `ci` `36220107367` : **7/7 jobs**
+(`database` inclus, ~31 min) ; `flutter` (APK) `36220107343` **succès** ; `docker` `36220107439`
+**succès**. Annotations de preuve : **`F2 Flutter passed` — 59 tests Flutter réels et l'analyse, avec
+le lockfile appliqué** (57 au run précédent : les 2 tests nets du groupe L2F sont bien comptés) ;
+**`F4 Flutter API passed`** — 7 tests Flutter/Drift contre HTTP + PostgreSQL ; `G security`,
+`H2 confidentiality`, `H1 dev` et `H1 staging` passés. **Le lot L2F est donc clos, preuve à l'appui** :
+le test corrigé passe, et le diagnostic qui nomme le test fautif est en place pour les prochains échecs
+Dart.
+
+Le relevé initial était tombé sur une panne du jeton GitHub du bac à sable (`401`, `gh` **et** `git`
+inutilisables) puis sur un re-clone : la branche a été récupérée par la recette éprouvée (arbre
+préservé, `.git` neuf, delta de 3 docs restauré à l'identique — `2d7875b`), et rien n'a été poussé
+avant que le verdict ne soit effectivement relevé.
 
 **Mise à jour du 25/09/2026 (nuit) — un « vert » qui ne prouvait rien.** En relevant le verdict du
 run `flutter` (jeton GitHub rétabli), une annotation isolée est apparue dans un job **vert** :
