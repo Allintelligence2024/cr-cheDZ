@@ -448,6 +448,14 @@ d'analyse n'était **jamais** bloquante avant ce durcissement. Un troisième dé
 le durcissement lui-même : `publish $matches` non quoté découpait le diagnostic en mots — vu par
 exécution, corrigé, et le repli est désormais verrouillé par le contrat.
 
+*Preuves d'exécution* : gate D local **exit 0** (73 suites journalisées, rôles de production),
+`phase6`/`phase25`/`phase77` vertes, builds API + worker verts, 13 suites statiques 80/80, contrat
+`media-client-wiring` 5/5 (3 mutations). Job CI `flutter` **vert** sur `8fecc6a` (le retrait Dart
+compile). Le job `database` de ce même commit était rouge **pour une raison nommée et corrigée** :
+le banc F4 comptait encore la photo hors ligne comme un média accepté — adapté en `3b7e128` (le
+refus y devient une preuve, statut + motif vérifiés côté client ET côté base). *Verdict de
+`3b7e128` non relevé : le jeton GitHub de l'environnement est retombé (401) pendant l'attente.*
+
 **Mise à jour du 25/09/2026 (nuit, suite) — D6 tranchée : la photo hors ligne n'existe pas en V1.**
 Le défaut constaté par exécution pendant les lots 2B/L2D (un asset créé **sans octets**, lecture
 `404 MEDIA_CONTENT_MISSING`, `storage_key` qui laissait croire le contraire) n'est plus une

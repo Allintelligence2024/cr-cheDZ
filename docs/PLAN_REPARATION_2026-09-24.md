@@ -1414,6 +1414,28 @@ la décision D1 = **A** (contenu servi par l'API, pas de sous-domaine public) re
 **Recommandation** : **(a)** si la vidéosurveillance est au programme du pilote ; sinon **(c)**, pour
 ne pas laisser croire que la fonction est opérationnelle.
 
+**D6 — exécution (2026-09-25, nuit).** Option (c) livrée : refus explicite côté serveur, chemin
+d'écriture sans octets supprimé, client nettoyé, contrats réécrits, suites API adaptées (phase6,
+phase25, phase77) et banc F4 (`test_live/sync_api_f4_test.dart` + runner) mis en accord avec la
+décision — ce dernier compte désormais le refus comme une **preuve** : statut local `rejected` +
+motif `OFFLINE_PHOTO_UNSUPPORTED`, et côté base `status='rejected'` avec
+`rejection_reason='OFFLINE_PHOTO_UNSUPPORTED'`.
+
+*Preuves exécutées localement* : **gate D complet vert (exit 0, 73 suites journalisées, rôles et
+grants de production)** ; `phase6` ✅ (refus + aucun `media_assets` fantôme), `phase25` ✅
+(C1/C2/C4/C3/C5), `phase77` ✅ (9 cas) ; builds `@creche/api` et `@creche/worker` verts ; 13 suites
+statiques **80/80** ; contrat `media-client-wiring` 5/5 avec **3 mutations rouges** (branche qui
+réécrit, `registerFromSync` de retour, route plus nommée *dans la branche* — la 1re tentative de
+mutation avait visé le message du garde L2E, preuve que le contrat cible bien la bonne occurrence).
+
+*Verdicts CI* : job `flutter` **vert** sur `8fecc6a` (le retrait Dart compile, analyse propre, APK
+construits) et sur `265be27` ; job `database` **rouge** sur `8fecc6a` — cause nommée par le job
+lui-même : le banc F4 attendait encore 3 médias (`media metadata … offline add_photo survives`), il
+comptait la photo hors ligne comme acceptée. Corrigé en `3b7e128`. **Verdict de ce correctif non
+relevé : le jeton GitHub de l'environnement est retombé (401) pendant l'attente** — même panne que
+le 24/09 et le 25/09 dans la soirée. Rien n'est revendiqué sans verdict : ce qui est prouvé est
+prouvé localement (ci-dessus), ce qui ne l'est pas est écrit ici.
+
 ### D6 — Photos hors ligne : par où passent les OCTETS ? *(produit + tech)*
 
 > **DÉCISION — 2026-09-25, option (c), exécutée.** La voie hors ligne est **retirée**, pas laissée

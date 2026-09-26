@@ -491,6 +491,13 @@ Preuves : `phase6` (refus + **aucun** `media_assets` fantôme), `phase25` (refus
 une clé d'une autre organisation), `phase77` (9 cas, garde de payload toujours actif), contrat
 `media-client-wiring` réécrit (5/5, 3 mutations rouges), build API + worker verts.
 
+**Verdicts.** Localement : gate D **exit 0** (73 suites, rôles de production), `phase6`/`phase25`/
+`phase77` vertes, builds API + worker verts, 13 suites statiques 80/80. En CI : job `flutter` vert
+(`8fecc6a`), job `database` rouge sur ce commit pour une raison nommée — le banc F4 comptait la photo
+hors ligne comme acceptée ; corrigé en `3b7e128`, **verdict non relevé (jeton GitHub retombé, 401,
+pendant l'attente)**.
+
+
 ## Mise à jour 2026-09-24 (soir) — CI : régression du lot 1 corrigée, verrou ajouté
 
 **Contrat à respecter par toute nouvelle suite** : un processus `NODE_ENV=production`
