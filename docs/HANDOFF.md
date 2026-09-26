@@ -551,6 +551,13 @@ workflow (`docker.yml` : `cancel-in-progress: true`), le push documentaire suiva
 — le `docker` `36238470882` de la tête `18f2705` est **succès**. `ci` `36238470721` (`18f2705`) :
 **7/7 verts**. Relevé, pas supposé.
 
+**Clôture de la tête `c7c044a` — TOUT VERT, relevé.** `ci` `36240148764` **7/7 jobs** (`admin-web`,
+`backup-drill`, `support-console`, `database`, `e2e`, `security`, `quality`), `flutter` `36240148755`
+**succès**, `docker` `36240148768` **succès** — annotations `F2 Flutter passed` (59 tests),
+`F4 Flutter API passed` (7 tests), `G security`, `H2 confidentiality`, `H1 dev`, `H1 staging`.
+Avec ce relevé, **chaque commit de la branche a son verdict**, y compris les commits documentaires
+(L2G, L2H et leurs verdicts) : plus aucun « vert » n'est supposé par continuité.
+
 **Verdict CI du lot (`79077a8`) — TOUT VERT.** `ci` `36234555506` **7/7 jobs** (`database` inclus),
 `flutter` `36234555547` **succès**, `docker` `36234555526` **succès**. Le gate D rejoue `phase67` sur
 PostgreSQL réel : la nouvelle assertion (« la colonne doit valoir `false` ») y passe, donc le correctif
