@@ -1214,6 +1214,14 @@ workflow (`docker.yml` : `cancel-in-progress: true`), le push documentaire suiva
 Avec ce relevé, **chaque commit de la branche a son verdict**, y compris les commits documentaires
 (L2G, L2H et leurs verdicts) : plus aucun « vert » n'est supposé par continuité.
 
+**Dernier tour de la boucle documentaire — et sa règle d'arrêt.** `8b926b0` (compteurs historiques
+distingués de la mesure courante) : `ci` `36245551678` **7/7**, `flutter` **succès**, `docker`
+**succès** — relevé. Ce commit est le **dernier dont le verdict est consigné dans un document** :
+consigner un verdict produit un commit, qui produit un run, qui produit un verdict… la boucle ne
+s'arrête que par une règle explicite. Elle s'arrête donc ici : **le verdict du dernier commit
+documentaire se lit dans l'onglet Checks de la PR #50**, qui est la source vivante — le dépôt, lui,
+consigne les verdicts des commits de **code** et l'état de la tête au moment de la clôture.
+
 ### L2D — Photos hors ligne : la limitation devient mesurée, et le contournement verrouillé (2026-09-25)
 
 **Constat (déjà documenté, désormais exécutable)** : la commande `add_photo` de `POST /sync/push`

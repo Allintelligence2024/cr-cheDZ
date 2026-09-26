@@ -542,6 +542,14 @@ workflow (`docker.yml` : `cancel-in-progress: true`), le push documentaire suiva
 Avec ce relevé, **chaque commit de la branche a son verdict**, y compris les commits documentaires
 (L2G, L2H et leurs verdicts) : plus aucun « vert » n'est supposé par continuité.
 
+**Dernier tour de la boucle documentaire — et sa règle d'arrêt.** `8b926b0` (compteurs historiques
+distingués de la mesure courante) : `ci` `36245551678` **7/7**, `flutter` **succès**, `docker`
+**succès** — relevé. Ce commit est le **dernier dont le verdict est consigné dans un document** :
+consigner un verdict produit un commit, qui produit un run, qui produit un verdict… la boucle ne
+s'arrête que par une règle explicite. Elle s'arrête donc ici : **le verdict du dernier commit
+documentaire se lit dans l'onglet Checks de la PR #50**, qui est la source vivante — le dépôt, lui,
+consigne les verdicts des commits de **code** et l'état de la tête au moment de la clôture.
+
 **Verdict CI du lot (`79077a8`) — TOUT VERT.** `ci` `36234555506` **7/7 jobs** (`database` inclus),
 `flutter` `36234555547` **succès**, `docker` `36234555526` **succès**. Le gate D rejoue `phase67` sur
 PostgreSQL réel : la nouvelle assertion (« la colonne doit valoir `false` ») y passe, donc le correctif
