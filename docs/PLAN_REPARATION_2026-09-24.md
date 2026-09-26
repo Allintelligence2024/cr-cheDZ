@@ -1062,6 +1062,15 @@ retiré, `exif_stripped` rajouté) ; le Dart lui-même (6 tests du groupe L2F, d
 puis succès → 2 tentatives, corps reconstruit ») est exécuté par le job `flutter` — c'est la CI qui
 juge, comme pour L3.
 
+**Le 1er jet a été rejeté par la CI — et le fautif était le test, pas le code** (`76fd61b` : 58 tests,
+1 échec, `DioException [connection error]: null`). Mon double `RecordingApi` consommait son script avec
+un modulo : un script d'**un** élément rejouait donc la panne aux **deux** tentatives, et le scénario
+« panne de transport puis succès » ne pouvait pas passer — il mesurait le double, pas l'uploader. Le
+script se consomme maintenant (au-delà de la liste, les envois réussissent). L'annotation ne publiait
+que l'exception, jamais le test fautif : `ci-run.sh` capte désormais `Failing tests:` et les chemins
+`…/fichier.dart: nom du test`, donc le prochain échec Dart sera **nommé** dans l'annotation au lieu de
+laisser deviner. Correctif : `e1d12e9`.
+
 **Ce que L2F ne fait pas** : il n'ajoute pas d'écran de capture photo (aucun `image_picker`, aucune
 caméra) et n'implémente pas le retrait EXIF côté client. L'uploader est prêt et prouvé ; le câblage
 d'un écran reste une décision produit, et le stripping EXIF une dette explicite.

@@ -484,7 +484,11 @@ fichier, `child_id` et le `checksum` que le serveur vérifie. Le client ne fabri
 stockage, ne signe plus rien, et n'affirme plus `exif_stripped: true` sans le faire. Le verrou
 `media-client-wiring` n'admet plus **aucune** exception (6 contrôles, 3 mutations rouges) ; le Dart
 est jugé par le job `flutter`. Restent explicitement hors périmètre : l'écran de capture (décision
-produit) et le retrait EXIF côté client.
+produit) et le retrait EXIF côté client. Le 1er jet (`76fd61b`) a été rejeté par la CI sur **un** test,
+et c'est le test qui avait tort : son double consommait son script avec un modulo, donc un script d'un
+élément rejouait la panne aux deux tentatives (« panne puis succès » impossible à satisfaire). Corrigé
+en `e1d12e9`, avec un diagnostic qui **nomme** désormais le test fautif (`Failing tests:` capté par
+`ci-run.sh`) au lieu de ne publier que l'exception.
 
 **Mise à jour du 25/09/2026 (nuit) — un « vert » qui ne prouvait rien.** En relevant le verdict du
 run `flutter` (jeton GitHub rétabli), une annotation isolée est apparue dans un job **vert** :

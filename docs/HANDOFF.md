@@ -494,6 +494,11 @@ Preuves : `media-client-wiring` **6/6** avec liste d'exceptions **vide** et 3 mu
 exécuté par le job `flutter`. Hors périmètre, dit tel quel : aucun écran de capture n'existe encore,
 et le retrait EXIF côté client reste une dette.
 
+Le 1er jet (`76fd61b`) est tombé sur **un** test, côté test : son double cyclait un script d'un seul
+élément et rejouait donc la panne aux deux tentatives — « panne puis succès » ne pouvait pas passer.
+Script consommé séquentiellement depuis `e1d12e9`, et `ci-run.sh` publie maintenant le **nom** du test
+fautif (`Failing tests:`), pas seulement l'exception.
+
 ## Complément 2026-09-25 (nuit) — D6 : la photo hors ligne est retirée, pas laissée en suspens
 
 `POST /sync/push` refusait d'échouer franchement sur `add_photo` : la commande créait une ligne
