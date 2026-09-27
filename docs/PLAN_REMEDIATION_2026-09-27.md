@@ -95,11 +95,11 @@ les actions P0 du plan sont **corrigés** par le lot 0 ci-dessous.
 | **L0** | **Corriger les affirmations réfutées** du rapport d'analyse (P0-1, P0-3, trigger DELETE) et les P0 du plan | D5 | 0,3 j | Sections corrigées ; `claims-contract` 10/10 | ✅ livré |
 | **L1 — PHASE 1** | **Indexer `organization_id` sur les tables tenant** + gardien + banc + suite | D1 | 1 j | migration 077 appliquée, gardien en CI, banc 5,8×/16,1×, suite `phase78`, 74 entrées + garde RLS rejouées | ✅ livré (`92dd960`) |
 | **L2** | **e2e** : compléter les 2 specs + garde anti-squelette | D2, D3 | 1–2 j | 13/13 collectés sans skip ; gardien CI, seed paie et preuve API 16/16 ; exécution Chromium encore attendue | 🟡 implémenté, navigateur bloqué |
-| **L3** | **Vérité documentaire** : « limites connues » vérifiées contre le code | D4 | 0,5 j | gardien qui échoue si une limite citée n'existe plus | ⏳ |
+| **L3** | **Vérité documentaire** : « limites connues » vérifiées contre le code | D4 | 0,5 j | gardien qui échoue si une limite citée n'existe plus | ✅ livré |
 | **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | workflows ajoutés ; demande de réglage dépôt documentée | ⏳ |
 | **L5** | **UI d'anonymisation** dans `admin-web` (écran directeur) | D7 | 2 j | écran + test d'accès par rôle | ⏳ |
 
-**Ordre recommandé** : L0 ✅ → L1 ✅ → L2 🟡 (implémenté, navigateur à exécuter) → L3 (documentation) → L4 (CI) → L5 (UI).
+**Ordre recommandé** : L0 ✅ → L1 ✅ → L2 🟡 (implémenté, navigateur à exécuter) → L3 ✅ → L4 (CI) → L5 (UI).
 
 ---
 
@@ -254,6 +254,8 @@ déjà : ce lot est **uniquement** de l'UI + un test d'accès par rôle.
 | 2026-09-27 | L1 | Migration 077, gardien, suite phase78, câblage CI | §11 |
 | 2026-09-27 | L1 | **3 réfutations vérifiées dans le rapport** : P0-1 et P0-3 (code rebranché / correctif appliqué), ligne « `invoices` sans trigger DELETE » (`trg_no_delete_invoices` existe) | §1, §11.4 |
 | 2026-09-27 | L1 | **1 rétractation** : une « correction » insérée la veille citait `audit_events`/`audit_archive`/`trg_audit_no_mod` — aucune de ces trois choses n'existe. Encadré retiré, constat d'origine rétabli | §11.4 |
+| 2026-09-27 | L3 | Réécriture précise des limites vidéo/EXIF dans `SECURITY.md`, avec chemins de preuve | §13 |
+| 2026-09-27 | L3 | Contrat `claims-contract` étendu : **11/11** ; 2 mutations (limite vidéo retirée, MIME vidéo ajouté) échouent comme prévu | §13 |
 
 ---
 
@@ -454,3 +456,38 @@ La batterie PG a été rejouée après le seed modifié : **70/75**, avec les m�
 sont corrigés, tandis que les relevés datés restent historiquement exacts ; le
 contrat compare les marqueurs explicitement courants plutôt que de réécrire le
 passé. `check-guards-wired.mjs` confirme **14/14 gardiens atteignables**.
+
+## 13. Lot 3 — vérité des « Limites connues »
+
+**Conclusion : lot 3 livré.** La section « Limites connues » de `SECURITY.md`
+a été relue contre les chemins réels, puis le contrat existant a reçu un test
+qui échoue si les affirmations cessent de correspondre au code.
+
+- Les deux limites historiques sont bien **closes** : `staff-mobile` envoie
+  maintenant ses octets à `/media/upload`; `add_photo` hors ligne est refusé
+  sans créer d'asset.
+- La limite vidéo est formulée précisément : l'API n'a pas d'endpoint binaire
+  d'upload de clip et sa route media n'accepte pas de type vidéo. Le presign
+  S3 n'est refusé en production **que si** `S3_PUBLIC_ENDPOINT` manque ; avec
+  un endpoint public configuré, il peut émettre une URL PUT. La preuve unitaire
+  `storage.service.spec.ts` couvre explicitement les deux branches.
+- La limite EXIF couvre les deux côtés : l'uploader mobile transmet les octets
+  sans transformation et n'envoie pas le champ; l'API écrit `file.buffer` tel
+  quel et enregistre `exif_stripped=false` par défaut. Les appels qui donnent
+  `true` restent une déclaration de l'appelant, pas une mesure du serveur.
+- Le test `SECURITY.md — « Limites connues »` est dans
+  `tests/tenant-isolation/claims-contract.test.mjs`, déjà exécuté par `quality`.
+  Il vérifie aussi les preuves existantes dans `phase21`, `phase67`, `phase77`,
+  les tests Dart et `storage.service.spec.ts`.
+
+**Preuve locale :** `node --test tests/tenant-isolation/claims-contract.test.mjs`
+→ **11/11**. Deux mutations ont été réintroduites temporairement puis
+restaurées : (1) prétendre que l'upload vidéo API est implémenté sans changer
+le code, (2) ajouter `video/mp4` à `MEDIA_MIME_TYPES` sans réviser la limite.
+Dans les deux cas le contrat échoue (**10 pass / 1 fail**), puis revient à
+11/11 sans mutation. `git diff --check` est vert.
+
+Cette preuve est locale, non une exécution CI : le workflow `ci` ne se déclenche
+que sur `main` ou `pull_request`, et aucune PR n'est ouverte pour cette branche.
+Le statut Playwright du lot 2 reste séparément BLOQUÉ ; aucune exécution
+Chromium n'est revendiquée ici.

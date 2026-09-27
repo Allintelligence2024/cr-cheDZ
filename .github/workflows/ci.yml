@@ -222,7 +222,8 @@ jobs:
       # la documentation mentait, et rien ne pouvait le signaler. Ce contrat
       # confronte les affirmations au DISQUE (implémentations, healthchecks des
       # composes, migrations, suites, ADR, runbooks, routes, chemins OpenAPI) et
-      # refuse les phrases bannies non corrigées. Aucune base, aucun Docker.
+      # désormais les « Limites connues » de SECURITY.md aux sources + tests
+      # exécutables. Il refuse les phrases bannies non corrigées. Aucune base, aucun Docker.
       - name: Contrat de vérité documentaire (affirmations vs disque)
         run: node --test tests/tenant-isolation/claims-contract.test.mjs
       # LOT 2 (remédiation 2026-09-27) : deux specs Playwright étaient livrées

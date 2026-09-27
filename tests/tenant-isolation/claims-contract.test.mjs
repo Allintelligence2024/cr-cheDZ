@@ -24,7 +24,10 @@
  *     aucun document de référence ne peut les présenter comme « non poussés »
  *     (épisode historique de la permission `workflows`) ;
  *  5. phrases bannies : les deux affirmations fausses nommées par l'audit ne
- *     peuvent réapparaître que corrigées sur la même ligne.
+ *     peuvent réapparaître que corrigées sur la même ligne ;
+ *  6. « Limites connues » de SECURITY.md : chaque capacité retirée est
+ *     confrontée au code et à son test, et les deux limites encore ouvertes
+ *     restent étayées par des sources et des preuves exécutables.
  *
  * Conventions assumées (et pourquoi) :
  *  - TOUTE la documentation est scannée (y compris les rapports datés) : un
@@ -406,4 +409,126 @@ test('les affirmations fausses de l’audit ne peuvent revenir que corrigées su
     });
   }
   assert.deepEqual(bad, [], `affirmation fausse non corrigée :\n  ${bad.join('\n  ')}`);
+});
+
+// ── 7. SECURITY.md : chaque limite connue est rapprochée d’une preuve ───────
+test('SECURITY.md — « Limites connues » reflète le code et les preuves exécutables', () => {
+  const security = read('SECURITY.md');
+  const start = security.indexOf('**Limites connues**');
+  const end = security.indexOf('\n- **Webhook**', start);
+  assert.ok(start >= 0 && end > start, 'section « Limites connues » introuvable ou non délimitée');
+  const section = security.slice(start, end);
+
+  // Les deux anciennes limites doivent rester explicitement closes : une
+  // phrase historique conservée sans statut deviendrait à nouveau une fausse
+  // alerte pour l’opérateur.
+  assert.match(section, /~~le client `staff-mobile` appelle encore le presign~~\s*→\s*\*\*CORRIGÉ\*\*/);
+  assert.match(section, /~~la photo hors ligne crée un asset sans transférer les octets~~\s*→\s*\*\*RETIRÉ\*\*/);
+
+  const openAt = section.indexOf('**Reste réellement ouvert**');
+  assert.ok(openAt >= 0, 'la section ne distingue plus les limites encore ouvertes');
+  const open = section.slice(openAt);
+  const bulletOffsets = [...open.matchAll(/^ {4}- /gm)].map((m) => m.index);
+  assert.equal(bulletOffsets.length, 2,
+    `2 limites ouvertes sont attendues (upload vidéo API, retrait EXIF) ; trouvées : ${bulletOffsets.length}`);
+  const bullets = bulletOffsets.map((offset, i) => open.slice(offset, bulletOffsets[i + 1] ?? open.length));
+  const videoClaim = bullets.find((b) => /clips vidéo/i.test(b)) ?? '';
+  const exifClaim = bullets.find((b) => /EXIF/i.test(b)) ?? '';
+  assert.ok(videoClaim, 'limite « téléversement des clips vidéo par l’API » disparue sans réévaluation');
+  assert.ok(exifClaim, 'limite du retrait EXIF disparue sans réévaluation');
+  assert.match(videoClaim, /par l['’]API[\s\S]*?pas implémenté/i);
+  assert.match(videoClaim, /peut toutefois émettre\s+un PUT en production si `S3_PUBLIC_ENDPOINT` est configuré/);
+  assert.match(videoClaim, /sans cette\s+variable, il échoue explicitement en 503 `UPLOAD_VIA_API_REQUIRED`/);
+  assert.match(videoClaim, /phase21-video-surveillance\.api\.test\.mjs/);
+  assert.match(exifClaim, /aucun retrait EXIF n'est effectué par l'uploader `staff-mobile` ni par\s+l'upload API/i);
+  assert.match(exifClaim, /transmet les octets sans les transformer/);
+  assert.match(exifClaim, /le serveur conserve les octets reçus/);
+  assert.match(exifClaim, /n['’]envoie pas `exif_stripped`/i);
+  assert.match(exifClaim, /enregistre `false` par défaut/);
+  assert.match(exifClaim, /phase67-media-upload\.api\.test\.mjs/);
+
+  // Sources sans commentaires : un mot cité dans un commentaire ou une
+  // documentation ne constitue pas une preuve du comportement du programme.
+  const codeOnly = (source) => source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  // Les deux défauts historiques corrigés restent corrigés dans les sources.
+  const mobilePath = 'apps/staff-mobile/lib/core/media/media_uploader.dart';
+  const mobileUploader = codeOnly(read(mobilePath));
+  assert.match(mobileUploader, /_api\.upload[\s\S]{0,160}['"]\/media\/upload['"]/,
+    `${mobilePath} doit envoyer les octets à POST /media/upload`);
+  assert.doesNotMatch(mobileUploader, /\/media\/presign-upload/,
+    `${mobilePath} a réintroduit un appel au presign d’écriture`);
+
+  const syncService = codeOnly(read('apps/api/src/modules/sync/sync.service.ts'));
+  const offlinePhoto = syncService.match(/case 'add_photo':([\s\S]*?)\n\s*default:/);
+  assert.ok(offlinePhoto, 'branche serveur `add_photo` introuvable');
+  assert.match(offlinePhoto[1], /OFFLINE_PHOTO_UNSUPPORTED/);
+  assert.doesNotMatch(offlinePhoto[1], /INSERT INTO media_assets|registerFromSync/,
+    'la commande hors ligne écrirait à nouveau un asset sans octets');
+  const offlineProof = read('tests/tenant-isolation/phase77-sync-payload-guard.api.test.mjs');
+  assert.match(offlineProof, /OFFLINE_PHOTO_UNSUPPORTED/);
+  assert.match(offlineProof, /aucune ligne media_assets créée/);
+
+  // La voie POST /media/upload partage une liste blanche photo/PDF. Aucune
+  // route du module vidéo ne reçoit de fichier : le POST /video/clips existant
+  // enregistre des métadonnées, tandis que le presign PUT n’est utilisable en
+  // production que si un endpoint public est configuré.
+  const mediaDto = read('apps/api/src/modules/media/dto/media.dto.ts');
+  const mimeList = mediaDto.match(/export const MEDIA_MIME_TYPES\s*=\s*\[([^\]]*)\]\s*as const;/);
+  assert.ok(mimeList, 'liste MEDIA_MIME_TYPES introuvable');
+  const mimes = [...mimeList[1].matchAll(/['"]([^'"]+)['"]/g)].map((m) => m[1]);
+  assert.ok(mimes.length > 0 && !mimes.some((mime) => mime.startsWith('video/')),
+    `MEDIA_MIME_TYPES accepte maintenant la vidéo : ${mimes.join(', ')} — réévaluer la limite`);
+  const mediaController = codeOnly(read('apps/api/src/modules/media/media.controller.ts'));
+  assert.match(mediaController, /@Post\('upload'\)[\s\S]*?FileInterceptor\('file'/,
+    'le flux multipart photo de l’API ne correspond plus à la preuve documentée');
+
+  const videoController = codeOnly(read('apps/api/src/modules/video/video.controller.ts'));
+  const videoPostRoutes = [...videoController.matchAll(/@Post\('([^']+)'\)/g)].map((m) => m[1]);
+  const videoUploadRoutes = videoPostRoutes.filter((path) => /upload/i.test(path));
+  assert.deepEqual(videoUploadRoutes, ['clips/presign-upload'],
+    `route binaire d’upload vidéo ajoutée/supprimée : ${videoUploadRoutes.join(', ')}`);
+  assert.doesNotMatch(videoController, /FileInterceptor|UploadedFile/,
+    'le contrôleur vidéo reçoit désormais des octets : réévaluer la limite');
+  const videoService = codeOnly(read('apps/api/src/modules/video/video.service.ts'));
+  assert.doesNotMatch(videoService, /^\s*(?:private\s+|protected\s+)?async\s+(?:upload|uploadClip|uploadVideo|ingestClip)\s*\(/m,
+    'un chemin d’ingestion de clips par l’API est apparu : réévaluer la limite');
+  assert.match(videoService, /this\.storage\.presignPut\(/,
+    'le chemin de presign vidéo a changé : réévaluer la note sur S3_PUBLIC_ENDPOINT');
+
+  const storageService = codeOnly(read('apps/api/src/modules/media/storage.service.ts'));
+  assert.match(storageService,
+    /if\s*\(\s*this\.config\.get<string>\('NODE_ENV'\)\s*===\s*'production'\s*&&\s*!publicEndpoint\s*\)/,
+    'la portée du refus de presign en production a changé');
+  const storageProof = read('apps/api/src/modules/media/storage.service.spec.ts');
+  assert.match(storageProof, /production sans S3_PUBLIC_ENDPOINT[\s\S]*?503 UPLOAD_VIA_API_REQUIRED/);
+  assert.match(storageProof, /production AVEC origine publique[\s\S]*?URL signée émise/,
+    'la preuve doit aussi couvrir la branche où le presign est autorisé');
+  const suiteRunner = read('scripts/run-isolation-suites.sh');
+  assert.match(suiteRunner, /phase21-video-surveillance\.api\.test\.mjs/);
+  assert.match(suiteRunner, /phase77-sync-payload-guard\.api\.test\.mjs/);
+
+  // EXIF : vérifier le chemin de données, pas seulement l’absence d’un mot.
+  // L’uploader transmet exactement l’argument bytes à MultipartFile ; l’API
+  // écrit file.buffer tel quel et conserve false par défaut. Les tests Dart et
+  // PostgreSQL couvrent respectivement le champ multipart et les octets en base.
+  assert.match(mobileUploader, /buildForm\([\s\S]{0,180}bytes:\s*bytes/,
+    'l’uploader transforme désormais les octets sans mettre à jour la limite EXIF');
+  assert.doesNotMatch(mobileUploader, /exif_stripped/,
+    'l’uploader déclare une suppression EXIF sans mise à jour documentaire');
+  const mobileProof = read('apps/staff-mobile/test/media_uploader_phase4_test.dart');
+  assert.match(mobileProof, /fields\.map\(\(f\) => f\.key\), isNot\(contains\('exif_stripped'\)\)/);
+
+  const mediaService = codeOnly(read('apps/api/src/modules/media/media.service.ts'));
+  assert.match(mediaService, /await this\.storage\.put\(storageKey, file\.buffer, file\.mimetype\)/,
+    'l’API ne conserve plus les octets reçus tels quels');
+  assert.match(mediaService, /exifStripped:\s*dto\.exif_stripped\s*\?\?\s*false/,
+    'la valeur EXIF par défaut n’est plus false — réévaluer la limite');
+  const mediaProof = read('tests/tenant-isolation/phase67-media-upload.api.test.mjs');
+  assert.match(mediaProof, /readFileSync\(onDisk\)\.equals\(jpeg\)/,
+    'la preuve API ne compare plus les octets stockés aux octets reçus');
+  assert.match(mediaProof, /nominalRow\?\.exif_stripped === false/);
+  assert.match(suiteRunner, /phase67-media-upload\.api\.test\.mjs/);
 });

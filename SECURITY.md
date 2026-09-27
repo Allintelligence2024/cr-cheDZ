@@ -1,4 +1,4 @@
-# Sécurité — posture (mise à jour 2026-09-19, remédiation lot F)
+# Sécurité — posture (mise à jour 2026-09-27, remédiation lot 3)
 
 ## Posture
 
@@ -54,22 +54,37 @@
   `minio:9000`/`127.0.0.1` ne peut plus être rendue à un client. Vérifié par
   `tests/tenant-isolation/phase67-media-upload.api.test.mjs` + 15 tests unitaires.
 
-  **Limites connues** (mises à jour le 2026-09-27 — les deux premières l'étaient
-  encore dans la version précédente de ce fichier et ont été RÉFUTÉES par
-  relecture du code ; une « limite » qui n'existe plus fait perdre du temps à
-  qui la lit et discrédite celles qui restent) :
+  **Limites connues** (mises à jour le 2026-09-27 — chacune est confrontée au
+  code et à une preuve exécutable par `tests/tenant-isolation/claims-contract.test.mjs`) :
   - ~~le client `staff-mobile` appelle encore le presign~~ → **CORRIGÉ** au lot
     L2F (2026-09-26) : `media_uploader.dart` envoie les octets à
     `POST /api/v1/media/upload` (multipart, vraie SHA-256, 1 seul retry sur
     panne de **transport**, délais bornés). Plus aucun appelant du presign
-    d'écriture ; verrouillé par `media-client-wiring.test.mjs`.
+    d'écriture ; verrouillé par `tests/tenant-isolation/media-client-wiring.test.mjs`.
   - ~~la photo hors ligne crée un asset sans transférer les octets~~ →
     **RETIRÉ** (décision D6 option c, 2026-09-25) : la commande `add_photo`
     est refusée par le serveur (`OFFLINE_PHOTO_UNSUPPORTED`) et le chemin
-    d'écriture sans octets n'existe plus.
-  - **Reste réellement ouvert** : le téléversement de **clips vidéo** par l'API
-    n'est pas implémenté (presign *fail-closed* en production, décision D5
-    option c) ; le retrait des métadonnées **EXIF** côté client reste à faire.
+    d'écriture sans octets n'existe plus ; prouvé par
+    `tests/tenant-isolation/phase77-sync-payload-guard.api.test.mjs`.
+  - **Reste réellement ouvert** :
+    - Le téléversement des **clips vidéo par l'API** n'est pas implémenté :
+      `POST /media/upload` n'accepte pas les types vidéo et le contrôleur vidéo
+      ne reçoit pas de fichier binaire. Le presign vidéo peut toutefois émettre
+      un PUT en production si `S3_PUBLIC_ENDPOINT` est configuré ; sans cette
+      variable, il échoue explicitement en 503 `UPLOAD_VIA_API_REQUIRED`.
+      Aucun écran client n'envoie actuellement de clip (décision D5). Preuves :
+      `apps/api/src/modules/video/video.controller.ts`,
+      `apps/api/src/modules/video/video.service.ts`,
+      `apps/api/src/modules/media/storage.service.spec.ts` et
+      `tests/tenant-isolation/phase21-video-surveillance.api.test.mjs`.
+    - Aucun retrait EXIF n'est effectué par l'uploader `staff-mobile` ni par
+      l'upload API : le client transmet les octets sans les transformer et
+      n'envoie pas `exif_stripped`; le serveur conserve les octets reçus et
+      enregistre `false` par défaut. Le champ reste une déclaration fournie
+      par l'appelant : ne pas le mettre à `true` sans dépouillement réel.
+      Preuves : `apps/staff-mobile/test/media_uploader_phase4_test.dart`,
+      `apps/api/src/modules/media/media.service.ts` et
+      `tests/tenant-isolation/phase67-media-upload.api.test.mjs`.
 - **Webhook** : signature HMAC-SHA256 sur le corps brut, idempotence par
   `external_reference`.
 - **Erreurs** : `AppError` FR/AR, jamais de SQL brut ni d'anglais exposé.
