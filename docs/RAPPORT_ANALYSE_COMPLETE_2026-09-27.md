@@ -457,6 +457,27 @@ CREATE POLICY sites_tenant_isolation ON sites
 
 ## 4.4 Intégrité financière (C04, durcie par 064)
 
+> **⚠️ CORRECTION du 2026-09-27, assortie d'une rétractation.** La ligne
+> `invoices — aucun trigger DELETE` ci-dessus est **fausse** : le trigger
+> `trg_no_delete_invoices` existe et une suppression est rejetée (`42501`).
+>
+> **Rétractation — plus instructive que la correction.** Une version précédente
+> de cet encadré affirmait exactement l'inverse pour une autre table
+> (`audit_archive`), citant des déclencheurs `trg_audit_no_mod` sur « les 6
+> tables du journal d'audit ». **Rien de tout cela n'existe** : il n'y a qu'une
+> table `audit_logs`, sans aucun déclencheur, et `audit_events` /
+> `audit_archive` ne sont pas dans ce schéma. J'avais donc installé une
+> réfutation fabriquée au-dessus d'un constat exact. L'encadré a été retiré et
+> cette note le remplace.
+>
+> **Règle que j'en tire, et qui vaut pour le reste du plan de remédiation :**
+> corriger un rapport est une opération **aussi risquée** que l'écrire, parce
+> qu'un encadré « ⚠️ correction » bénéficie d'un crédit que rien ne justifie —
+> il a l'air d'avoir été vérifié deux fois. Toute correction doit donc porter
+> sa preuve **rejouable** (`fichier:ligne`, ou la requête et son résultat), et
+> toute réfutation dont la preuve n'est pas retrouvée doit être **retirée**,
+> pas adoucie.
+
 | Mécanisme | Effet |
 |---|---|
 | `chk_invoice_amounts` | `subtotal/discount/total/paid ≥ 0`, `paid ≤ total`, `total = subtotal − discount` |
@@ -465,7 +486,7 @@ CREATE POLICY sites_tenant_isolation ON sites
 | `external_reference UNIQUE` | Idempotence du webhook (`ON CONFLICT DO NOTHING` puis relecture) |
 | `SELECT … FOR UPDATE` sur la facture | Sérialisation des allocations |
 | `payments_expire_pending` (051) | Expiration des paiements SATIM `pending` > 72 h |
-| `invoices` — aucun trigger DELETE | ⚠️ **Trou identifié** : suppression SQL possible (le rôle app a DELETE) |
+| `invoices` — aucun trigger DELETE | ~~⚠️ **Trou identifié** : suppression SQL possible (le rôle app a DELETE)~~ **RÉFUTÉ le 2026-09-27** : `trg_no_delete_invoices BEFORE DELETE … EXECUTE FUNCTION no_financial_delete()` **existe** (idem sur `payments` et `payment_allocations`) ; une suppression SQL est rejetée `42501`. |
 
 La vérification indépendante (`VERIFICATION_RAPPORT_5_ANALYSES.md`) a confirmé trois défauts résiduels, tous cotés MEDIUM/LOW :
 - **DB2** : le trigger 023 n'est `BEFORE INSERT` que sur les allocations ; **UPDATE/DELETE d'allocations non gardés**. Le garde verrouille la ligne *facture*, pas la ligne *paiement* → deux allocations concurrentes du même paiement vers deux factures peuvent dépasser le montant du paiement. Exposition limitée (l'app n'alloue qu'une fois) mais le trou SQL existe.
@@ -1094,13 +1115,21 @@ En 8 semaines : 76 migrations, 6 lots de remédiation, 7 gardiens, 5 décisions.
 
 ## S.4 Plan d'action priorisé
 
+> **⚠️ RÉVISÉ le 2026-09-27 (lot L0).** Une relecture systématique du code,
+> écrite pour servir de base au plan de remédiation, a **réfuté deux des quatre
+> actions P0** : les lignes 1 et 3 portaient sur des défauts qui n'existent pas
+> au code du 2026-09-27. Relire un rapport avec l'intention de le *mettre en
+> œuvre* — et non de le *publier* — est un filtre que la relecture courante ne
+> passe pas. Les lignes concernées sont barrées et conservées : supprimer une
+> erreur sans laisser sa trace, c'est s'interdire de la voir revenir.
+
 ### P0 — Avant tout pilote
 
 | # | Action | Preuve de sortie |
 |---|---|---|
-| 1 | **Rebrancher l'upload `staff-mobile` sur `POST /media/upload`** | Test Dart + suite d'isolation ; lever l'exception du contrat `media-client-wiring` |
+| ~~1~~ | ~~**Rebrancher l'upload `staff-mobile` sur `POST /media/upload`**~~ **RÉFUTÉ** — `media_uploader.dart` lit `returnAppBytes()`, un `Uint8List` **réel** ; le champ `bytes: ''` a disparu ; `AddPhotoCommand` est refusé côté serveur (`OFFLINE_PHOTO_UNSUPPORTED`) et deux suites l'interdisent. Il ne reste que `docs/sync.md` à corriger (D4). | — |
 | 2 | **Compléter les 2 specs e2e** (`billing-overdue-flow`, `payroll-finalize-lock`) et rendre le job `e2e` bloquant | 7/7 specs vertes + branch protection |
-| 3 | **Construire le chemin d'anonymisation à chaud par enfant/famille** | Suite `phaseNN` + runbook DPO ; s'appuyer sur 067/071 |
+| ~~3~~ | ~~**Construire le chemin d'anonymisation à chaud par enfant/famille**~~ **RÉFUTÉ** — `child-anonymization.ts` **rendra** `null` (`firstName: child.firstName ? … : null`), et le correctif de `redactChildren` **est appliqué** (`anonymizeChild()` : 9 champs effacés + `child_anonymization_audit`). Restent ouverts : la rétention de 400 j (D3, actuellement 365 j) et l'**écran** d'anonymisation (lot 5). | — |
 | 4 | **Rendre le job `quality` bloquant** | Branch protection modifiée |
 
 ### P1 — Avant la mise en production

@@ -107,6 +107,11 @@ SUITES=(
   # synchronisation — payload stocké verbatim, handler add_photo qui ne le
   # consomme pas ; refus de FORME (taille + blob base64), non persisté.
   phase77-sync-payload-guard.api.test.mjs
+  # LOT 1 (remédiation 2026-09-27, D1) : indexation tenant. Prouve surtout la
+  # CONTRE-PARTIE de l'optimisation — un index sur une table RLS ne doit pas
+  # élargir le périmètre des lignes rendues (isolation A/B + 0 ligne sans
+  # tenant), et la migration 077 est réapplicable sans drift.
+  phase78-tenant-index.pg.test.mjs
 )
 
 FILTER="${1:-}"

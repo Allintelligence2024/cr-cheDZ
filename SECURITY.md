@@ -51,11 +51,25 @@
   Plafonds : 8 Mio (produit, 422 bilingue) et 12 Mio (dur, 413 JSON), `client_max_body_size 12M`
   côté nginx. En production, le presign d'écriture est **refusé** (503
   `UPLOAD_VIA_API_REQUIRED`) tant que `S3_PUBLIC_ENDPOINT` n'est pas configuré : aucune URL
-  `minio:9000`/`127.0.0.1` ne peut plus être rendue à un client. **Limites connues** : le client
-  `staff-mobile` appelle encore le presign (basculement non livré) ; le téléversement de **clips
-  vidéo** par l'API n'est pas implémenté (presign *fail-closed* en attendant) ; la photo **hors
-  ligne** crée encore un asset sans transférer les octets (défaut consigné au plan §3.2).
-  Vérifié par `tests/tenant-isolation/phase67-media-upload.api.test.mjs` + 15 tests unitaires.
+  `minio:9000`/`127.0.0.1` ne peut plus être rendue à un client. Vérifié par
+  `tests/tenant-isolation/phase67-media-upload.api.test.mjs` + 15 tests unitaires.
+
+  **Limites connues** (mises à jour le 2026-09-27 — les deux premières l'étaient
+  encore dans la version précédente de ce fichier et ont été RÉFUTÉES par
+  relecture du code ; une « limite » qui n'existe plus fait perdre du temps à
+  qui la lit et discrédite celles qui restent) :
+  - ~~le client `staff-mobile` appelle encore le presign~~ → **CORRIGÉ** au lot
+    L2F (2026-09-26) : `media_uploader.dart` envoie les octets à
+    `POST /api/v1/media/upload` (multipart, vraie SHA-256, 1 seul retry sur
+    panne de **transport**, délais bornés). Plus aucun appelant du presign
+    d'écriture ; verrouillé par `media-client-wiring.test.mjs`.
+  - ~~la photo hors ligne crée un asset sans transférer les octets~~ →
+    **RETIRÉ** (décision D6 option c, 2026-09-25) : la commande `add_photo`
+    est refusée par le serveur (`OFFLINE_PHOTO_UNSUPPORTED`) et le chemin
+    d'écriture sans octets n'existe plus.
+  - **Reste réellement ouvert** : le téléversement de **clips vidéo** par l'API
+    n'est pas implémenté (presign *fail-closed* en production, décision D5
+    option c) ; le retrait des métadonnées **EXIF** côté client reste à faire.
 - **Webhook** : signature HMAC-SHA256 sur le corps brut, idempotence par
   `external_reference`.
 - **Erreurs** : `AppError` FR/AR, jamais de SQL brut ni d'anglais exposé.

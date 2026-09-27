@@ -86,6 +86,15 @@ jobs:
         run: node tests/tenant-isolation/schema-check.mjs --verbose
       - name: rls-behavior-check (rôle NOBYPASSRLS)
         run: node tests/tenant-isolation/rls-behavior-check.mjs
+      # LOT 1 (remédiation 2026-09-27, défaut D1) : toute table tenant (RLS)
+      # doit porter un index dont organization_id est la TÊTE. Sans lui, chaque
+      # requête balaie la table entière — le coût de service d'une crèche croît
+      # avec le nombre de crèches hébergées (mesuré 5,8× à 40 organisations,
+      # 16,1× à 100). Ce gardien lit pg_class/pg_index : il exige une base et
+      # refuse de rendre un vert sans catalogue (code 2), d'où sa place dans ce
+      # job et non dans `quality`.
+      - name: Indexation tenant (organization_id en tête d’index)
+        run: node scripts/check-tenant-index.mjs --verbose
       - name: Build api + worker
         run: |
           npm run build --workspace @creche/api
