@@ -8,7 +8,7 @@
  * alors que TOUTES les suites passaient au vert. Aucun test de code ne pouvait
  * attraper cela : le code était sain, la documentation mentait.
  *
- * Ce contrat verrouille cinq choses :
+ * Ce contrat verrouille sept choses :
  *  1. « Quartz » — aucune implémentation dans le dépôt, et aucune mention de
  *     documentation qui ne soit pas une mise en garde (jamais une revendication) ;
  *  2. healthcheck Docker — la réalité mesurée (postgres partout ; api et worker
@@ -19,15 +19,16 @@
  *  3. compteurs revendiqués (migrations, entrées d'isolation, suites, fichiers du
  *     dossier d'isolation, ADR, runbooks, routes HTTP, chemins OpenAPI) —
  *     confrontés au DISQUE à chaque exécution ;
- *  4. workflows CI (ajout du 25/09/2026) : les quatre workflows sont versionnés
- *     sous `.github/workflows/`, plus rien n'attend dans `ci-templates/`, et
- *     aucun document de référence ne peut les présenter comme « non poussés »
- *     (épisode historique de la permission `workflows`) ;
+ *  4. workflows CI : les cinq workflows sont versionnés sous
+ *     `.github/workflows/`, plus rien n'attend dans `ci-templates/`, et aucun
+ *     document de référence ne peut les présenter comme « non poussés » ;
  *  5. phrases bannies : les deux affirmations fausses nommées par l'audit ne
  *     peuvent réapparaître que corrigées sur la même ligne ;
  *  6. « Limites connues » de SECURITY.md : chaque capacité retirée est
  *     confrontée au code et à son test, et les deux limites encore ouvertes
- *     restent étayées par des sources et des preuves exécutables.
+ *     restent étayées par des sources et des preuves exécutables ;
+ *  7. sécurité CI : CodeQL (PR + hebdo) et Trivy (4 images, seuil HIGH/CRITICAL
+ *     bloquant avant push GHCR) restent réellement câblés.
  *
  * Conventions assumées (et pourquoi) :
  *  - TOUTE la documentation est scannée (y compris les rapports datés) : un
@@ -362,11 +363,11 @@ test('compteurs — routes HTTP et chemins OpenAPI', () => {
 //
 // Épisode historique : la GitHub App de poussée n'avait pas la permission
 // `workflows` — les workflows vivaient dans `ci-templates/` et la doc disait
-// « NON poussés ». La restriction est levée depuis : les 4 workflows sont sous
-// `.github/workflows/` et tournent à chaque push. Ce contrôle mesure la réalité
-// et interdit le retour de l'état périmé dans les documents de référence.
+// « NON poussés ». La restriction est levée depuis : les cinq workflows sont
+// versionnés et leurs déclencheurs sont définis dans chaque fichier. Ce contrôle
+// interdit le retour de l'état périmé dans les documents de référence.
 test('workflows CI : versionnés sur disque + revendication « non poussés » bannie', () => {
-  const WORKFLOWS = ['ci.yml', 'docker.yml', 'flutter.yml', 'security-audit.yml'];
+  const WORKFLOWS = ['ci.yml', 'codeql.yml', 'docker.yml', 'flutter.yml', 'security-audit.yml'];
   for (const wf of WORKFLOWS) {
     const abs = join(REPO, '.github', 'workflows', wf);
     assert.ok(existsSync(abs), `workflow absent du disque : .github/workflows/${wf}`);
@@ -386,7 +387,7 @@ test('workflows CI : versionnés sur disque + revendication « non poussés » b
   const bad = offenders(REFERENCE_DOCS, stale, [historic]);
   assert.deepEqual(
     bad, [],
-    `revendication périmée sur les workflows CI (la CI tourne : ci/docker/flutter/security-audit) :\n  ${bad.join('\n  ')}`,
+    `revendication périmée sur les workflows CI (ci/codeql/docker/flutter/security-audit) :\n  ${bad.join('\n  ')}`,
   );
 });
 
@@ -531,4 +532,53 @@ test('SECURITY.md — « Limites connues » reflète le code et les preuves exé
     'la preuve API ne compare plus les octets stockés aux octets reçus');
   assert.match(mediaProof, /nominalRow\?\.exif_stripped === false/);
   assert.match(suiteRunner, /phase67-media-upload\.api\.test\.mjs/);
+});
+
+// ── 7. L4 : CodeQL et Trivy sont présents, et l’image est scannée avant push ─
+test('sécurité CI — CodeQL sur PR/hebdo et Trivy bloquant avant GHCR', () => {
+  const codeql = read('.github/workflows/codeql.yml');
+  assert.match(codeql, /^name: codeql$/m);
+  assert.match(codeql, /^  push:\n    branches: \[main\]/m);
+  assert.match(codeql, /^  pull_request:\n    branches: \[main\]/m);
+  assert.match(codeql, /schedule:[\s\S]*?cron: ['"]\d+ \d+ \* \* \d+['"]/);
+  assert.match(codeql, /security-events:\s*write/);
+  assert.match(codeql, /github\/codeql-action\/init@[0-9a-f]{40}\s+#\s*v4\.38\.2/);
+  assert.match(codeql, /languages:\s*javascript-typescript/);
+  assert.match(codeql, /build-mode:\s*none/);
+  assert.match(codeql, /github\/codeql-action\/analyze@[0-9a-f]{40}\s+#\s*v4\.38\.2/);
+
+  const docker = read('.github/workflows/docker.yml');
+  const matrix = docker.match(/matrix:\s*app:\s*\[([^\]]+)\]/);
+  assert.ok(matrix, 'matrice Docker des applications introuvable');
+  assert.deepEqual(matrix[1].split(',').map((app) => app.trim()),
+    ['api', 'worker', 'admin-web', 'support-console'],
+    'Trivy doit scanner chacune des 4 images construites');
+  assert.match(docker, /load:\s*true/,
+    'le build doit charger localement l’image qui sera scannée');
+  assert.match(docker, /labels:\s*\$\{\{ steps\.meta\.outputs\.labels \}\}/,
+    'les labels OCI de metadata-action doivent être conservés sur l’image publiée');
+  assert.match(docker, /image-ref:\s*local\/creche-saas-\$\{\{ matrix\.app \}\}:\$\{\{ github\.sha \}\}/);
+  assert.match(docker, /uses:\s+aquasecurity\/trivy-action@[0-9a-f]{40}\s+#\s*v0\.36\.0/);
+  assert.match(docker, /severity:\s*CRITICAL,HIGH/);
+  assert.match(docker, /exit-code:\s*'1'/,
+    'une vulnérabilité HIGH/CRITICAL doit bloquer la publication');
+  assert.match(docker, /output:\s*trivy-results\.json/);
+  assert.doesNotMatch(docker, /^\s*push:\s*(?:true|\$\{\{)/m,
+    'build-push-action ne doit pas publier avant la réussite de Trivy');
+  const buildAt = docker.indexOf("name: Construire l'image localement");
+  const scanAt = docker.indexOf('uses: aquasecurity/trivy-action@');
+  const loginAt = docker.indexOf('name: Login GHCR');
+  const pushAt = docker.indexOf('docker push "$target"');
+  assert.ok(buildAt >= 0 && scanAt > buildAt && loginAt > scanAt && pushAt > loginAt,
+    'l’ordre exigé est build local → scan Trivy → login → push GHCR');
+  assert.match(docker, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'[\s\S]*?docker push/,
+    'aucune publication GHCR ne doit avoir lieu hors du push sur main');
+  assert.match(docker, /if: always\(\)[\s\S]*?actions\/upload-artifact@[0-9a-f]{40}[\s\S]*?trivy-results\.json/,
+    'le rapport Trivy doit rester téléchargeable quand un scan échoue');
+
+  const security = read('SECURITY.md');
+  assert.match(security, /CodeQL[\s\S]*?codeql\.yml/);
+  assert.match(security, /default setup[\s\S]*?403/i,
+    'le conflit éventuel avec Code Scanning default setup et la permission API limitée doivent rester déclarés');
+  assert.match(security, /Trivy[\s\S]*?CRITICAL,HIGH/);
 });

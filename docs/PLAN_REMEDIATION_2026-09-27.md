@@ -96,10 +96,10 @@ les actions P0 du plan sont **corrigés** par le lot 0 ci-dessous.
 | **L1 — PHASE 1** | **Indexer `organization_id` sur les tables tenant** + gardien + banc + suite | D1 | 1 j | migration 077 appliquée, gardien en CI, banc 5,8×/16,1×, suite `phase78`, 74 entrées + garde RLS rejouées | ✅ livré (`92dd960`) |
 | **L2** | **e2e** : compléter les 2 specs + garde anti-squelette | D2, D3 | 1–2 j | 13/13 collectés sans skip ; gardien CI, seed paie et preuve API 16/16 ; exécution Chromium encore attendue | 🟡 implémenté, navigateur bloqué |
 | **L3** | **Vérité documentaire** : « limites connues » vérifiées contre le code | D4 | 0,5 j | gardien qui échoue si une limite citée n'existe plus | ✅ livré |
-| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | workflows ajoutés ; demande de réglage dépôt documentée | ⏳ |
+| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | workflows + contrat local livrés ; run GitHub et réglage de protection encore à confirmer | 🟡 |
 | **L5** | **UI d'anonymisation** dans `admin-web` (écran directeur) | D7 | 2 j | écran + test d'accès par rôle | ⏳ |
 
-**Ordre recommandé** : L0 ✅ → L1 ✅ → L2 🟡 (implémenté, navigateur à exécuter) → L3 ✅ → L4 (CI) → L5 (UI).
+**Ordre recommandé** : L0 ✅ → L1 ✅ → L2 🟡 (implémenté, navigateur à exécuter) → L3 ✅ → L4 🟡 (workflows/contrat locaux livrés, run GitHub et protection en attente) → L5 (UI).
 
 ---
 
@@ -229,10 +229,31 @@ passer l'affirmation périmée sur le presign).
 
 ## 8. Lot 4 — durcissement CI (D6, ex-P0-4)
 
-- Workflow **CodeQL** (TypeScript + JavaScript), hebdomadaire + PR.
-- Scan d'images de conteneurs (Trivy) sur les 4 images GHCR.
+- Workflow **CodeQL** (JavaScript + TypeScript), sur PR/push vers `main` et
+  hebdomadaire.
+- Scan des 4 images par Trivy, en échec sur `CRITICAL,HIGH`, avant tout push
+  GHCR ; le rapport JSON est conservé comme artifact même en cas d'échec.
+- Avant le premier upload CodeQL, un administrateur doit vérifier que le
+  « default setup » Code Scanning n'est pas actif en parallèle : GitHub rejette
+  les uploads SARIF du workflow avancé si cette configuration reste activée
+  ([documentation](https://docs.github.com/en/code-security/code-scanning/troubleshooting-sarif-uploads/default-setup-enabled)).
+  L'API de lecture renvoie 403 à l'intégration.
 - `quality` en check requis : **réglage dépôt**, hors de portée de l'intégration
-  (403 observé) → consigné comme action manuelle avec la commande exacte.
+  (403 observé). Un administrateur peut l'ajouter sans écraser les checks déjà
+  requis avec cette commande additive :
+  ```bash
+  gh api --method POST \
+    repos/Allintelligence2024/cr-cheDZ/branches/main/protection/required_status_checks/contexts \
+    -f 'contexts[]=quality'
+  ```
+  Cette commande exige des droits d'administration et suppose une protection
+  classique active sur `main`. Elle ajoute `quality` à la liste existante ; elle
+  ne remplace pas `database` ni les autres contextes. Vérifier ensuite dans
+  **Settings → Branches → protection de `main` → Require status checks** que
+  `quality` apparaît, en conservant tous les checks existants. Si `main` est
+  gouvernée par un ruleset, ajouter le check dans **Settings → Rules → Rulesets**
+  plutôt que d'utiliser cet endpoint. L'intégration n'a pas pu lire le réglage
+  actuel (403 `Resource not accessible by integration`).
 
 ## 9. Lot 5 — UI d'anonymisation (D7)
 
@@ -256,6 +277,9 @@ déjà : ce lot est **uniquement** de l'UI + un test d'accès par rôle.
 | 2026-09-27 | L1 | **1 rétractation** : une « correction » insérée la veille citait `audit_events`/`audit_archive`/`trg_audit_no_mod` — aucune de ces trois choses n'existe. Encadré retiré, constat d'origine rétabli | §11.4 |
 | 2026-09-27 | L3 | Réécriture précise des limites vidéo/EXIF dans `SECURITY.md`, avec chemins de preuve | §13 |
 | 2026-09-27 | L3 | Contrat `claims-contract` étendu : **11/11** ; 2 mutations (limite vidéo retirée, MIME vidéo ajouté) échouent comme prévu | §13 |
+| 2026-09-27 | L4 | CodeQL v4.38.2 + Trivy v0.36.0 configurés ; le workflow conditionne le push GHCR au scan | §14 |
+| 2026-09-27 | L4 | Contrat sécurité **12/12**, mutation du seuil Trivy détectée ; YAML, lint, 14 gardiens vérifiés | §14 |
+| 2026-09-27 | L4 | Aucun run GitHub CodeQL/Trivy ; protection de `main` et « default setup » Code Scanning inaccessibles en lecture (403) | §14 |
 
 ---
 
@@ -491,3 +515,51 @@ Cette preuve est locale, non une exécution CI : le workflow `ci` ne se déclenc
 que sur `main` ou `pull_request`, et aucune PR n'est ouverte pour cette branche.
 Le statut Playwright du lot 2 reste séparément BLOQUÉ ; aucune exécution
 Chromium n'est revendiquée ici.
+
+## 14. Lot 4 — CodeQL + Trivy
+
+**Configuration et garde-fous locaux livrés ; validation sur GitHub en attente.**
+
+- `.github/workflows/codeql.yml` : JavaScript/TypeScript, `build-mode: none`,
+  PR/push vers `main`, planification hebdomadaire et lancement manuel. CodeQL
+  v4.38.2 est épinglé au SHA `2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2` ;
+  `analyze` dispose de `security-events: write` pour publier ses résultats lors
+  d'un run autorisé.
+- `.github/workflows/docker.yml` : matrice exacte des quatre images
+  (`api`, `worker`, `admin-web`, `support-console`), image chargée localement,
+  Trivy v0.36.0 épinglé au SHA
+  `ed142fd0673e97e23eac54620cfb913e5ce36c25`, seuil bloquant `CRITICAL,HIGH`,
+  puis login/push GHCR sur `main` uniquement après succès du scan. Le rapport
+  JSON est téléversé en `always()` comme artifact de 30 jours, y compris quand
+  le seuil fait échouer Trivy.
+- `claims-contract.test.mjs` (déjà exécuté par `quality`) vérifie les triggers
+  CodeQL, langue/mode, les quatre images, le seuil, l'artifact et l'ordre
+  build → scan → login → push.
+- `SECURITY.md` décrit la configuration et distingue explicitement les étapes
+  dont aucun run GitHub n'a encore été observé.
+- Le job `quality` est toujours à ajouter manuellement aux checks requis de
+  `main`. La commande additive qui préserve `database` et tout autre contexte
+  existant figure au §8. Les lectures REST de protection et de configuration
+  Code Scanning ont répondu 403 `Resource not accessible by integration` : l'état
+  effectif de `quality` et du « default setup » CodeQL ne peut donc pas être
+  affirmé ici.
+
+**Preuves exécutées localement :**
+
+- `node --test tests/tenant-isolation/claims-contract.test.mjs` → **12/12** ;
+- mutation temporaire `severity: CRITICAL,HIGH` → `CRITICAL` → contrat en échec
+  attendu ; restauration puis **12/12** ;
+- `npm run lint` → exit 0 (avertissement Node préexistant sur
+  `packages/shared-config/eslint.config.js`) ;
+- `node scripts/check-guards-wired.mjs` → **14/14** gardiens atteignables ;
+- parse YAML de `codeql.yml` et `docker.yml`, plus `git diff --check` → succès.
+
+**Pas encore prouvé :** aucun run GitHub Actions n'a été lancé ou observé ;
+CodeQL n'a pas analysé le dépôt sur un runner GitHub, Trivy n'a pas scanné les
+quatre images réelles, aucun rapport SARIF/JSON n'est revendiqué et le statut
+requis `quality` n'a pas été vérifié. Le statut Code Scanning « default setup »
+n'a pas non plus été vérifiable (API 403) ; un administrateur doit le contrôler
+avant le premier upload. Docker est indisponible localement et l'API de protection
+est inaccessible à l'intégration ; les preuves ci-dessus portent sur le YAML et
+le contrat, pas sur une exécution des scanners.
+Le lot reste donc marqué **🟡** jusqu'au run CI et au réglage administrateur.

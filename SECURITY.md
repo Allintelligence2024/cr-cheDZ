@@ -1,4 +1,4 @@
-# Sécurité — posture (mise à jour 2026-09-27, remédiation lot 3)
+# Sécurité — posture (mise à jour 2026-09-27, remédiation lot 4)
 
 ## Posture
 
@@ -121,27 +121,47 @@ Corrections appliquées le 2026-08-02 (migration de durcissement) :
 
 - semgrep local (règles maison, hors ligne) : 5 résultats — 1 vrai bug corrigé
   (Math.random pour les OTP), 4 faux positifs documentés (logs sans secret).
-- **CodeQL : NON configuré.** Aucun job CodeQL n'existe dans les workflows
-  (l'affirmation contraire présente ici avant le 2026-09-19 était fausse —
-  corrigée par le lot F de remédiation). L'audit des dépendances est assuré
-  par `npm audit` (job `security` de la CI à chaque push/PR + workflow
-  hebdomadaire `security-audit` avec ouverture d'issue automatique).
+- **CodeQL configuré, exécution GitHub non encore observée à la livraison** :
+  `.github/workflows/codeql.yml` est configuré pour analyser JavaScript/TypeScript
+  sur les PR vers `main`, les pushes sur `main` et chaque lundi à 05:23 UTC ;
+  l'étape `analyze` publiera les résultats dans GitHub Code Scanning lorsqu'elle
+  s'exécutera. Il complète `npm audit` (job `security` de `ci.yml` + audit
+  hebdomadaire `security-audit.yml`). Avant le premier run, un administrateur doit
+  vérifier dans **Settings → Code security and analysis → Code scanning** que la
+  configuration par défaut n'entre pas en conflit avec ce workflow : GitHub
+  refuse les uploads SARIF avancés si le « default setup » reste activé
+  ([documentation GitHub](https://docs.github.com/en/code-security/code-scanning/troubleshooting-sarif-uploads/default-setup-enabled)).
+  L'intégration n'a pas pu lire cette configuration (403).
+- **Images conteneur** : le workflow `docker.yml` est configuré pour construire
+  chacune des 4 images, les scanner avec Trivy, puis publier sur GHCR depuis
+  `main` seulement si le scan passe les seuils `CRITICAL,HIGH`. Il téléversera le
+  rapport JSON comme artifact même si le seuil fait échouer le job ; aucune
+  exécution GitHub de cette nouvelle étape n'est encore prouvée.
 
-## CI — état réel (2026-09-19)
+## CI — configuration versionnée (2026-09-27)
 
-Les workflows sont **commités et actifs** (`docs/CI-RESTORE.md` est historique) :
+Les workflows sont committés ; leurs déclencheurs et étapes sont dans les fichiers
+ci-dessous (`docs/CI-RESTORE.md` est historique). Les nouvelles étapes CodeQL et
+Trivy n'ont pas encore de run GitHub observé à la livraison de ce lot.
 
 | Workflow | Contenu |
 |---|---|
-| `ci.yml` | `database` (PG18 : migrations, seeds, schema-check, garde RLS, suites d'isolation sous rôles de prod), `quality` (eslint + jest), `e2e` (Playwright contre l'API réelle), `admin-web`, `support-console`, `security` (npm audit) |
-| `docker.yml` | Build (et push sur main) des images api/worker/admin-web/support-console |
-| `flutter.yml` | `pub get` + `analyze` des deux apps mobiles — les apps n'ont encore JAMAIS été compilées (dette assumée, issue #8) |
+| `ci.yml` | `database` (PG18 : migrations, seeds, schema-check, garde RLS, suites d'isolation sous rôles de prod), `backup-drill`, `quality` (eslint + contrats + jest), `e2e` (Playwright contre l'API réelle), `admin-web`, `support-console`, `security` (npm audit) |
+| `codeql.yml` | Configuré pour analyser JavaScript/TypeScript en PR vers `main`, push `main` et hebdomadaire ; l'upload Code Scanning interviendra au run |
+| `docker.yml` | Configure build local + scan Trivy des 4 images ; le push GHCR sur `main` est conditionné au passage de `CRITICAL,HIGH` |
+| `flutter.yml` | `pub get`, `analyze`, tests et compilation des APK release pour les deux apps ; sans secrets de signature, l'APK CI est debug-signé et non publiable |
 | `security-audit.yml` | `npm audit --omit=dev` hebdomadaire, issue auto si vulnérabilité |
 
 ## Recommandations restantes
 
-1. **Compiler réellement les apps Flutter** (issue #8) : c'est le dernier
-   point bloquant la livraison mobile.
-2. **Gate de merge** : `npm audit --omit=dev --audit-level=high` doit rester à 0.
-3. Headers de sécurité, TLS et rate limiting : configurés dans
+1. **Préparer les signatures mobiles** : fournir le keystore Android et les secrets
+   correspondants pour produire des APK/AAB publiables ; l'iOS (ipa) exige toujours
+   un compte Apple Developer.
+2. **Gate de merge** : le job `quality` reste à ajouter aux checks requis de la
+   branch protection `main` (réglage manuel, accès d'administration nécessaire) ;
+   conserver aussi `database`.
+3. Maintenir `npm audit --omit=dev --audit-level=high` à 0 et traiter les rapports
+   CodeQL/Trivy ; les seuils Trivy `CRITICAL,HIGH` sont configurés pour bloquer
+   le push GHCR (run à confirmer).
+4. Headers de sécurité, TLS et rate limiting : configurés dans
    `infrastructure/nginx/nginx.conf` (template, à déployer avec le VPS).

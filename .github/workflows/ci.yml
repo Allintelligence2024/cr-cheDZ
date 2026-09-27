@@ -223,7 +223,9 @@ jobs:
       # confronte les affirmations au DISQUE (implémentations, healthchecks des
       # composes, migrations, suites, ADR, runbooks, routes, chemins OpenAPI) et
       # désormais les « Limites connues » de SECURITY.md aux sources + tests
-      # exécutables. Il refuse les phrases bannies non corrigées. Aucune base, aucun Docker.
+      # exécutables, ainsi que les garde-fous CodeQL/Trivy (périmètre, seuil,
+      # ordre scan→publication). Il refuse les phrases bannies non corrigées.
+      # Aucune base, aucun Docker.
       - name: Contrat de vérité documentaire (affirmations vs disque)
         run: node --test tests/tenant-isolation/claims-contract.test.mjs
       # LOT 2 (remédiation 2026-09-27) : deux specs Playwright étaient livrées
