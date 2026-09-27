@@ -382,7 +382,14 @@ Qualité de conception observée :
 - **Ordonnanceur** : `scheduler_ticks` + `scheduler_enqueue_due()` + `scheduler_health()` avec alerte `SCHEDULER_OVERDUE` (déduplication par `overdueReported` Set).
 - **Purge vidéo « jamais de fausse purge »** : le stockage est supprimé **avant** la ligne de chaque clip ; un échec de stockage laisse la ligne en base et **fait échouer le job** (`VIDEO_PURGE_PARTIAL`).
 - **File de notifications** : `notif_queue_claim` / `notif_queue_finish` avec `notif_queue_reclaim(interval)` (audit O4 : un crash entre claim et finish laissait la ligne `processing` pour toujours).
-- **Sondes de vivacité** (lot 6.1) : `startLiveness()` réécrit un marqueur toutes les 10 s, lu par le `HEALTHCHECK` Docker ; démarré **après** les gardes de boot (un conteneur mal configuré ne doit pas paraître sain).
+- **Sondes de vivacité** (lot 6.1) : `startLiveness()` réécrit un marqueur toutes les
+  10 s ; ce n'est pas un test externe de disponibilité de bout en bout.
+- **Portée du `HEALTHCHECK` Docker — couverture limitée** : seuls **`postgres`, `api`,
+  `worker` en production et préproduction**, et **`postgres` seul en développement**,
+  sont déclarés sondés dans les fichiers Compose. Les autres services ne sont pas
+  couverts par une sonde Docker. Cette liste est vérifiée automatiquement par le
+  contrat F2 de `tests/tenant-isolation/claims-contract.test.mjs` ; elle interdit
+  de généraliser en disant que « les conteneurs sont sondés ».
 
 ## 3.7 Ce que l'analyse retient
 

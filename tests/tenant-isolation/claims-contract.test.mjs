@@ -288,8 +288,13 @@ test('compteurs — migrations : les recettes courantes ne mentent pas', () => {
     sites: [
       // Libellé du job CI (« Migrations (reset + status 001→075) »).
       { file: '.github/workflows/ci.yml', regex: /001→(\d{3})/g },
-      // Recette locale : toute mention « N migrations » doit dire la vérité.
-      { file: 'docs/LOCAL-RUN.md', regex: /(\d+)\s+migrations/g },
+      // Recettes locales COURANTES : leurs compteurs doivent correspondre au disque.
+      // Le bloc « État de validation (2026-09-21) » reste un relevé historique
+      // (76 migrations réellement exécutées ce jour-là) et ne doit pas être
+      // réécrit pour refléter le présent.
+      { file: 'docs/LOCAL-RUN.md', regex: /migrate \((\d+) migrations/g },
+      { file: 'docs/LOCAL-RUN.md', regex: /node scripts\/migrate\.mjs\s+#\s*(\d+) migrations/g },
+      { file: 'docs/LOCAL-RUN.md', regex: /PG18 : (\d+) migrations/g },
     ],
   });
 });
@@ -300,21 +305,27 @@ test('compteurs — batterie d’isolation : entrées, suites, fichiers', () => 
     actual: RUNNER_ENTRIES,
     sites: [
       { file: '.github/workflows/ci.yml', regex: /anti-bypass \+ (\d+) suites/g },
-      { file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /\*\*(\d+)\*\* entrées/g },
+      // Le rapport daté conserve ses mesures historiques ; seul son marqueur
+      // « comptage courant » est comparé au disque.
+      { file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /Comptage courant 2026-09-27[^\n]*runner : (\d+) entrées/g },
       { file: 'docs/ANALYSE_PILIERS_MANQUANTS.md', regex: /(\d+) entrées/g },
-      { file: 'docs/HANDOFF.md', regex: /(\d+) entrées/g },
-      { file: 'docs/LOCAL-RUN.md', regex: /\*\*(\d+)\s*\n?\s*entrées\*\*/g },
+      // HANDOFF et LOCAL-RUN contiennent des relevés datés, exacts à leur date.
+      // Seul le marqueur actuel est une revendication d'état présent.
+      { file: 'docs/HANDOFF.md', regex: /État courant 2026-09-27[^\n]*runner : (\d+) entrées/g },
+      { file: 'docs/LOCAL-RUN.md', regex: /État courant du runner au 2026-09-27[^\n]*\*\*(\d+) entrées\*\*/g },
     ],
   });
   assertClaim({
     label: 'suites phaseNN',
     actual: PHASE_SUITES,
-    sites: [{ file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /\*\*(\d+)\*\* suites `phaseNN`/g }],
+    // Les anciennes mesures datées restent dans le rapport ; vérifier uniquement
+    // son marqueur courant, mis à jour avec chaque lot de la remédiation.
+    sites: [{ file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /Comptage courant 2026-09-27[^\n]*suites phaseNN : (\d+)/g }],
   });
   assertClaim({
     label: 'fichiers du dossier d’isolation',
     actual: ISOLATION_FILES,
-    sites: [{ file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /\*\*(\d+)\*\* fichiers dans/g }],
+    sites: [{ file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /Comptage courant 2026-09-27[^\n]*fichiers d’isolation : (\d+)/g }],
   });
 });
 

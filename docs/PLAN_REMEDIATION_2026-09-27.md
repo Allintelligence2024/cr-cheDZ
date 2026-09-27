@@ -53,7 +53,7 @@ les actions P0 du plan sont **corrigés** par le lot 0 ci-dessous.
 
 ---
 
-## 2. Défauts retenus — mesurés, datés
+## 2. Défauts retenus — mesurés, datés (état initial au 2026-09-27 ; sorties en §11–12)
 
 | # | Défaut | Mesure | Sévérité |
 |---|---|---|---|
@@ -92,15 +92,14 @@ les actions P0 du plan sont **corrigés** par le lot 0 ci-dessous.
 
 | Lot | Objectif | Défaut | Effort | Preuve de sortie | Statut |
 |---|---|---|---|---|---|
-| **L0** | **Corriger les affirmations réfutées** du rapport d'analyse (P0-1, P0-3, trigger DELETE) et les P0 du plan | D5 | 0,3 j | Sections corrigées + `claims` étendu | ⏳ |
-| **L1 — PHASE 1** | **Indexer `organization_id` sur les tables tenant** + gardien + banc + suite | D1 | 1 j | migration 077 appliquée, gardien en CI, banc 5,8×/16,1×, suite `phase78`, 73 suites rejouées | ⏳ **en cours** |
-| **L2** | **e2e** : compléter les 2 specs + garde anti-squelette | D2, D3 | 1–2 j | 13/13 actifs ; gardien `check-e2e-skeletons` en CI | ⏳ |
+| **L0** | **Corriger les affirmations réfutées** du rapport d'analyse (P0-1, P0-3, trigger DELETE) et les P0 du plan | D5 | 0,3 j | Sections corrigées ; `claims-contract` 10/10 | ✅ livré |
+| **L1 — PHASE 1** | **Indexer `organization_id` sur les tables tenant** + gardien + banc + suite | D1 | 1 j | migration 077 appliquée, gardien en CI, banc 5,8×/16,1×, suite `phase78`, 74 entrées + garde RLS rejouées | ✅ livré (`92dd960`) |
+| **L2** | **e2e** : compléter les 2 specs + garde anti-squelette | D2, D3 | 1–2 j | 13/13 collectés sans skip ; gardien CI, seed paie et preuve API 16/16 ; exécution Chromium encore attendue | 🟡 implémenté, navigateur bloqué |
 | **L3** | **Vérité documentaire** : « limites connues » vérifiées contre le code | D4 | 0,5 j | gardien qui échoue si une limite citée n'existe plus | ⏳ |
 | **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | workflows ajoutés ; demande de réglage dépôt documentée | ⏳ |
 | **L5** | **UI d'anonymisation** dans `admin-web` (écran directeur) | D7 | 2 j | écran + test d'accès par rôle | ⏳ |
 
-**Ordre recommandé** : L0 (vérité) → **L1 (indexation, en cours)** → L2
-(e2e) → L3 (documentaire) → L4 (CI) → L5 (UI).
+**Ordre recommandé** : L0 ✅ → L1 ✅ → L2 🟡 (implémenté, navigateur à exécuter) → L3 (documentation) → L4 (CI) → L5 (UI).
 
 ---
 
@@ -192,23 +191,34 @@ tables de petite taille) la voie transactionnelle est sûre ; la voie
 2. banc exécuté : plan `Index Scan` et gain > 1,5× (mesuré : 5,8× et 16,1×) ;
 3. gardien `check-tenant-index.mjs` vert ;
 4. suite `phase78` verte ;
-5. **les 73 suites d'isolation + le garde anti-bypass RLS rejoués sans
-   régression** (un index ne doit rien changer fonctionnellement).
+5. **les 74 entrées du runner + le garde anti-bypass RLS rejoués sans
+   régression** (un index ne doit rien changer fonctionnellement ; le runner
+   journalise aussi 75 contrôles quand on compte le garde séparé).
 
 ---
 
 ## 6. Lot 2 — e2e (D2, D3)
 
 - **L2.1** Compléter `billing-overdue-flow.spec.ts` (4 tests) et
-  `payroll-finalize-lock.spec.ts` (3 tests) selon le cahier déjà rédigé dans
-  `HANDOFF-AGENT-ANTIGRAVITY.md` §ITEM 1.
-- **L2.2** Gardien `check-e2e-skeletons.mjs` : refuse tout `test.skip(` sans
-  justification datée et sans référence à un lot, et refuse qu'un fichier de
-  spec soit **entièrement** skippé. Câblé dans `quality`.
-- **Blocage** : l'exécution navigateur est **BLOQUÉE** ici (Chromium
-  introuvable, téléchargement refusé). Les specs seront écrites et revues, et
-  les comportements API sous-jacents prouvés par requêtes HTTP directes contre
-  l'API démarrée sur PG 18 — jamais présentés comme « specs vertes ».
+  `payroll-finalize-lock.spec.ts` (3 tests) selon `docs/PHASE4-MANUAL.md` §S1.
+  *Rectificatif :* le plan initial référençait `HANDOFF-AGENT-ANTIGRAVITY.md`
+  §ITEM 1, un fichier qui n'existe pas dans ce dépôt ; la référence vérifiée est
+  la procédure S1 ci-dessus.
+- **L2.2** Gardien `check-e2e-skeletons.mjs`, câblé dans `quality` : refuse les
+  `describe.skip` et `test.skip(true)`, les fichiers sans test réellement actif,
+  et tout skip conditionnel sans date ISO + référence de lot. Il vérifie aussi
+  les codes d'erreur des assertions, les couples méthode+chemin des appels
+  Playwright contre les décorateurs NestJS réels, et les libellés contre le
+  code serveur et le corpus UI.
+- **L2.3** Étendre `seed-e2e.mjs` : sur base neuve et sur compte déjà présent,
+  créer/compléter l'employé rémunéré requis par les tests de paie ; le seed
+  devient rejouable et échoue explicitement si aucun salaire positif n'existe.
+- **Blocage** : Chromium est introuvable et `npx playwright install chromium`
+  échoue au téléchargement. Les specs et le build/typecheck sont vérifiés, et
+  les comportements API sous-jacents sont prouvés par des requêtes HTTP directes
+  contre l'API démarrée sur PG 18 — jamais présentés comme « specs navigateur
+  vertes ». L'exécution navigateur sur un runner CI/recette équipé, avec base
+  PG18 jetable, reste une preuve de sortie à obtenir.
 
 ## 7. Lot 3 — vérité documentaire (D4)
 
@@ -319,10 +329,9 @@ zéro** — un aller-retour complet de la migration, obtenu sans l'avoir cherch�
 | Gardien CI | `scripts/check-tenant-index.mjs` | câblé dans le job `database` de `ci.yml` |
 | Suite d'isolation | `tests/tenant-isolation/phase78-tenant-index.pg.test.mjs` | ajoutée à `run-isolation-suites.sh` |
 | Banc de performance | `tests/perf/bench-tenant-index.mjs` | exécuté, résultats §5.2 |
-| Vérificateur de câblage | `scripts/check-guards-wired.mjs` | ✅ **13 gardiens**, tous atteignables |
+| Vérificateur de câblage | `scripts/check-guards-wired.mjs` | **13/13 à la clôture de L1** ; **14/14 après L2**, tous atteignables (dont le garde e2e) |
 
-**Suivi immédiat :** lot 2 (e2e) — 7 skips à résorber et garde anti-squelette à
-introduire, cf. §6.
+**Suivi immédiat :** lot 2 (e2e), désormais exécuté — résultats et preuves en §12.
 
 ### 11.4 Le lot 0 a surtout servi à me corriger, moi
 
@@ -353,3 +362,95 @@ contrôle de cohérence qui a suivi (`to_regclass()` → 0 ligne), ce texte aura
 - Toute affirmation de contrainte porte son chemin d'accès, ou disparaît.
 - Ce qui est **vérifié deux fois** gagne à être revérifié : c'est là que le
   crédit accordé dépasse la preuve disponible.
+
+## 12. Résultats du lot 2 — implémentation achevée, navigateur en attente
+
+### 12.1 Squelettes retirés et défauts réels des anciennes specs
+
+Les deux fichiers qui portaient `test.describe.skip` et des `test.skip(true, …)`
+contiennent maintenant **4 tests billing + 3 tests payroll**, tous actifs. La
+relecture a trouvé et retiré des affirmations factuellement fausses dans les
+squelettes :
+
+- `POST /billing/invoices`, `POST .../mark-overdue`, `PATCH /payroll/entries/:id`
+  n'existent pas ; les vrais endpoints sont `POST .../invoices/generate`,
+  `GET .../invoices/aged-balance` et `POST .../payroll/entries/:id/lines` ;
+- l'API ne porte aucun code `PAYROLL_RUN_LOCKED` : elle renvoie
+  `PAYROLL_FINALIZED` (422) après finalisation ;
+- le statut UI s'écrit « Partiellement payée » ;
+- la transition `overdue` n'est pas un endpoint ni un job : la lecture de
+  `aged-balance` la déclenche. `GET /billing/invoices` seul ne le fait pas.
+
+La spec vérifie donc explicitement le statut `sent` avant la balance âgée, puis
+`overdue` après — elle ne simule pas une route imaginaire.
+
+### 12.2 Fixture e2e rendue réellement exploitable
+
+`tests/tenant-isolation/seed-e2e.mjs` est maintenant rejouable et crée un
+employé rémunéré (`45 000 DZD`) avec membership. Preuves exécutées :
+
+- base PostgreSQL vierge + migrations + seeds + seed e2e : succès ;
+- réexécution sur le compte présent : succès, sans doublon ;
+- mutation « profil salarié supprimé » : le seed le recrée ;
+- mutation `base_salary = 0` : le seed sort avec le code 1 et nomme
+  `PAYROLL_NO_STAFF`, au lieu d'annoncer que la paie est testable.
+
+Sans cet employé, le vrai endpoint répondait **422 `PAYROLL_NO_STAFF`** ;
+sans membership, `POST /staff` répondait **400 `USER_NOT_MEMBER`**. Les specs
+ne pouvaient donc pas passer avec l'ancien seed, même sur un navigateur installé.
+
+### 12.3 Garde et mutations
+
+`scripts/check-e2e-skeletons.mjs` est câblé dans le job `quality`. Il contrôle
+les sept spécifications : absence de `describe.skip` et de `test.skip(true)`,
+au moins un test vraiment exécutable par fichier, justification date + lot pour
+les skips conditionnels, codes d'erreur réels dans les assertions, couples
+méthode+chemin présents dans les décorateurs NestJS, et libellés UI présents
+dans l'i18n/JSX.
+
+État propre : **7 fichiers, 0 skip, 23 appels HTTP vérifiés contre les routes
+NestJS et 86 libellés UI vérifiés**, exit 0 ; `npx playwright test --list`
+collecte **13 tests dans 7 fichiers** sans lancer Chromium.
+Six mutations exécutées ont rendu rouge le garde : (A) retour des anciens squelettes,
+(B) code `PAYROLL_RUN_LOCKED`, (C) endpoint `/mark-overdue`, (D) `POST` sur
+`/billing/invoices` (chemin existant en `GET` seulement), (E) faute d'accord
+« Partiellement payé », (F) skip conditionnel sans date ni lot. Les premières versions du garde ont elles-mêmes révélé plusieurs faux verts :
+un test qui ne faisait que se skipper compté actif, une capture UI vide, une
+correspondance par sous-chaîne qui acceptait la faute d'accord, et un contrôle
+qui vérifiait les segments sans vérifier la méthode HTTP. Ces angles ont été
+corrigés avant validation ; les mutations A–F ont ensuite été rejouées sur la
+version finale.
+
+### 12.4 Preuve API réellement exécutée — ce ne sont PAS des specs navigateur
+
+Sur PG 18 vierge, `NODE_ENV=test`, API réelle démarrée sur la base seedée :
+**22 assertions HTTP / 22 réussies**, rejouables avec
+`node scripts/prove-e2e-http.mjs` après seed e2e et démarrage de l'API. Elles
+couvrent génération `draft`, émission `sent`, paiement partiel
+(`4 000 / 12 000`, solde `8 000`),
+transition à `overdue` uniquement après `GET aged-balance`, second envoi refusé
+`409 INVOICE_ALREADY_SENT`, surpaiement refusé `422 PAYMENT_EXCEEDS_BALANCE`,
+génération du run `draft`, présence du bulletin à `45 000 DZD`, ajout de ligne
+avant clôture, finalisation et refus `422 PAYROLL_FINALIZED` après clôture.
+Le cas exact de la spec a aussi été rejoué sur une deuxième base vierge : période
+`2026-10` avec échéance `2025-01-15` → `draft` (201), `sent` (200), reste `sent`
+avant `aged-balance`, puis `overdue` après sa lecture (200).
+
+### 12.5 Limite d'exécution déclarée
+
+Le `tsc --noEmit` de `apps/admin-web` inclut maintenant `e2e/` et passe ; le
+build `@creche/admin-web` passe. En revanche, **Playwright/Chromium n'a pas
+été exécuté** : aucun navigateur n'était installé et `npx playwright install
+chromium` a échoué au téléchargement. Ne pas présenter les 7 specs comme
+vertes ; le passage navigateur sur la cible équipée reste à obtenir. Le garde
+statique, le seed, les assertions API et le typecheck sont des preuves
+complémentaires, pas un substitut au navigateur.
+
+### 12.6 Non-régression et état de la CI documentaire
+
+La batterie PG a été rejouée après le seed modifié : **70/75**, avec les mêmes
+5 échecs Gate D qu'avant et l'A/B sans indexes établi au §11.2. Les tests
+`claims-contract.test.mjs` passent maintenant **10/10** : les compteurs courants
+sont corrigés, tandis que les relevés datés restent historiquement exacts ; le
+contrat compare les marqueurs explicitement courants plutôt que de réécrire le
+passé. `check-guards-wired.mjs` confirme **14/14 gardiens atteignables**.

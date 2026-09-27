@@ -70,8 +70,9 @@ jobs:
       - name: admin-web — matrice d'accès UI par rôle (F3)
         run: npm run test:unit --workspace @creche/admin-web
       # Nom corrigé (lot 1) : 75 migrations sur disque (001 → 075), pas 063.
-      # Complété au lot L4 : 076 ajoutée → 76 migrations (001 → 076).
-      - name: Migrations (reset + status 001→076)
+      # Complété au lot L4, puis 077 au lot 1 de la remédiation du 2026-09-27
+      # (indexation tenant) : 77 migrations (001 → 077).
+      - name: Migrations (reset + status 001→077)
         run: |
           node scripts/migrate.mjs --reset
           node scripts/migrate.mjs
@@ -100,12 +101,12 @@ jobs:
           npm run build --workspace @creche/api
           npm run build --workspace @creche/worker
       # Nom corrigé (plan de réparation 2026-09-24, lot 1) : l'étape rejouait
-      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase77 (73 entrées
+      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase78 (74 entrées
       # dans SUITES, plus le garde anti-bypass RLS en tête).
       # (nom entre guillemets : un « : » non échappé dans une valeur YAML la
       # transformerait en mapping imbriqué — le workflow deviendrait invalide
       # et la CI s'arrêterait de tourner sans que le diff le montre)
-      - name: "Suites d'isolation (garde RLS anti-bypass + 73 suites — isolation, phase3 → phase77)"
+      - name: "Suites d'isolation (garde RLS anti-bypass + 74 suites — isolation, phase3 → phase78)"
         run: bash scripts/run-isolation-suites.sh
 
   backup-drill:
@@ -224,6 +225,17 @@ jobs:
       # refuse les phrases bannies non corrigées. Aucune base, aucun Docker.
       - name: Contrat de vérité documentaire (affirmations vs disque)
         run: node --test tests/tenant-isolation/claims-contract.test.mjs
+      # LOT 2 (remédiation 2026-09-27) : deux specs Playwright étaient livrées
+      # ENTIÈREMENT skippées — et, en les ouvrant, on a découvert qu'elles
+      # décrivaient une API inexistante (`mark-overdue`, `PATCH /payroll/entries/:id`,
+      # code `PAYROLL_RUN_LOCKED`). Une spec skippée ne manque donc pas seulement
+      # à la couverture : elle peut énoncer des contre-vérités que rien n'exécute
+      # pour les démentir. Ce gardien refuse les squelettes et compare les codes
+      # d'erreur, les couples méthode+chemin aux décorateurs NestJS, et les
+      # libellés aux sources UI. Aucune base, aucun navigateur : il lit les
+      # fichiers, ce qui le place dans `quality`.
+      - name: Specs e2e (aucun squelette, codes et endpoints réels)
+        run: node scripts/check-e2e-skeletons.mjs
       # L2C (F5, volet client) : le presign d'écriture est MORT en production
       # depuis le lot 2B (UPLOAD_VIA_API_REQUIRED). Ce contrat interdit de
       # câbler un écran sur l'ancien chemin sans rebrancher, et exige que

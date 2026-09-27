@@ -18,7 +18,7 @@ le seed pilote et les suites de tests hôte.
 ```bash
 # 1. Stack complète :
 #    postgres 18 → minio → bootstrap-roles (creche_migrator / creche_app)
-#    → migrate (76 migrations + seeds + schema-check) → api + worker + admin-web
+#    → migrate (77 migrations + seeds + schema-check) → api + worker + admin-web
 #    -p creche-dev-v3 = PROJET NEUF : un volume formatté PostgreSQL 16 n'est
 #    PAS lisible par PG18 (BACKUP-RUNBOOK « Upgrade PostgreSQL 16 → 18 »).
 docker compose -p creche-dev-v3 -f infrastructure/docker/docker-compose.dev.yml up --build
@@ -68,7 +68,7 @@ npm ci                                  # Node ≥ 20 (engines du manifeste raci
 node run_pg.mjs &                       # PG 18.4 — port 54329, base creche_test
 export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
 
-node scripts/migrate.mjs                # 76 migrations (checksums SHA-256, ADR-007)
+node scripts/migrate.mjs                # 77 migrations (checksums SHA-256, ADR-007)
 node scripts/seed.mjs                   # rôles/permissions système — AUCUNE donnée d'org
 node tests/tenant-isolation/schema-check.mjs
 node tests/tenant-isolation/rls-behavior-check.mjs    # GATE RLS (rôle NOBYPASSRLS)
@@ -98,7 +98,7 @@ npm run db:reset                        # migrate --reset && migrate && seed
 ## Checklist d'acceptation G-local (porte Phase 1)
 
 - [ ] `git log` ≥ 2 commits (baseline remédiation)
-- [ ] PG18 : 76 migrations + `db:check-schema` + `db:check-rls` verts sur base neuve
+- [ ] PG18 : 77 migrations + `db:check-schema` + `db:check-rls` verts sur base neuve
 - [ ] `up --build` : tous les services up (bootstrap-roles, migrate, api, worker, admin-web, minio)
 - [ ] seeds + 5 crèches pilotes ; login **directrice pilot-01** sur `:4000`
 - [ ] Smoke : 1 pointage arrivée/départ, 1 entrée journal, 1 photo (MinIO), 1 export PDF (worker)
@@ -170,3 +170,11 @@ npm run db:reset                        # migrate --reset && migrate && seed
   (garde D — comportement correct ; le runner exige `creche_migrator`).
 - **Données de test** : `run_pg.mjs` écrit dans `/tmp/pgtest` (purgeable,
   jamais de données réelles).
+
+## Compteur courant du runner — 2026-09-27
+
+**État courant du runner au 2026-09-27** : **74 entrées** (72 suites `phaseNN` +
+`schema-check` + `rls-behavior-check`). Les mentions de 73 entrées et 71 suites dans le
+relevé daté du 2026-09-21 ci-dessus sont conservées comme historiques ; elles ne
+remplacent pas la mesure courante. Source rejouable : la liste `SUITES` dans
+`scripts/run-isolation-suites.sh` et `tests/tenant-isolation/claims-contract.test.mjs`.
