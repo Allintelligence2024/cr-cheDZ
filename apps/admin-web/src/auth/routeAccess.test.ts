@@ -1,10 +1,12 @@
 // F3 — matrice d'accès UI (miroir des @Roles serveur). Exécuté par node --test
 // (voir `npm run test:unit` dans apps/admin-web).
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { ROUTE_ROLES, canAccess, currentRole, homeFor } from './routeAccess.ts';
+import { ROUTE_ROLES, canAccess, canAnonymizeChild, currentRole, homeFor } from './routeAccess.ts';
 
 const ORG = 'org-1';
+const privacyPageSource = readFileSync(new URL('../pages/PrivacyPage.tsx', import.meta.url), 'utf8');
 const user = (role: string, extra: Partial<Parameters<typeof canAccess>[0] & object> = {}) => ({
   is_super_admin: false,
   memberships: [{ organization_id: ORG, role_slug: role }],
@@ -52,6 +54,38 @@ test('non connecté / rôle inconnu : refus ; route non listée : autorisée', (
   assert.equal(canAccess(null, '/'), false);
   assert.equal(canAccess(user('mystery'), '/payroll'), false);
   assert.equal(canAccess(user('mystery'), '/whatever'), true);
+});
+
+test('anonymisation enfant : director et super_admin seulement', () => {
+  assert.equal(canAnonymizeChild(user('director')), true);
+  assert.equal(canAnonymizeChild(user('super_admin')), true);
+  assert.equal(canAnonymizeChild(user('accountant')), false);
+  assert.equal(canAnonymizeChild(user('educator')), false);
+  assert.equal(canAnonymizeChild(user('parent_primary')), false);
+  assert.equal(canAnonymizeChild(null), false);
+  assert.equal(canAnonymizeChild(user('educator', { is_super_admin: true })), true);
+});
+
+test('anonymisation : rôle de l’organisation courante, pas une autre adhésion', () => {
+  const multiRole = {
+    is_super_admin: false,
+    memberships: [
+      { organization_id: 'other', role_slug: 'director' },
+      { organization_id: ORG, role_slug: 'accountant' },
+    ],
+    current_organization_id: ORG,
+  };
+  assert.equal(canAnonymizeChild(multiRole), false);
+});
+
+test('PrivacyPage protège le tab et n’envoie que des dossiers sortis non anonymisés', () => {
+  assert.match(privacyPageSource, /const mayAnonymizeChildren = canAnonymizeChild\(user\)/);
+  assert.match(privacyPageSource, /mayAnonymizeChildren \? \[\{ id: 'anonymize'/);
+  assert.match(privacyPageSource, /tab === 'anonymize' && mayAnonymizeChildren && <AnonymizeChildTab \/>/);
+  assert.match(privacyPageSource, /status: 'departed'/);
+  assert.match(privacyPageSource, /child\.status === 'departed'/);
+  assert.match(privacyPageSource, /Anonyme-\[0-9a-f\]\{8\}/);
+  assert.match(privacyPageSource, /trimmedReason\.length < 5 \|\| !confirmed/);
 });
 
 test('homeFor : renvoi vers un écran accessible (jamais une boucle vers une route refusée)', () => {

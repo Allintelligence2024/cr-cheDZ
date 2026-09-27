@@ -1,6 +1,8 @@
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
+import { useAuth } from '../auth/AuthContext';
+import { canAnonymizeChild } from '../auth/routeAccess';
 import { http } from '../api/client';
 import { useI18n } from '../i18n';
 
@@ -51,10 +53,12 @@ interface ViolationRow {
   created_at: string;
 }
 
-type Tab = 'registry' | 'dpias' | 'requests' | 'violations';
+type Tab = 'registry' | 'dpias' | 'requests' | 'violations' | 'anonymize';
 
 export function PrivacyPage(): React.JSX.Element {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const mayAnonymizeChildren = canAnonymizeChild(user);
   const [tab, setTab] = useState<Tab>('registry');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -67,6 +71,7 @@ export function PrivacyPage(): React.JSX.Element {
     { id: 'dpias', label: t('privacy.dpias') },
     { id: 'requests', label: t('privacy.requests') },
     { id: 'violations', label: t('privacy.violations') },
+    ...(mayAnonymizeChildren ? [{ id: 'anonymize' as const, label: t('privacy.anonymizeTab') }] : []),
   ];
 
   return (
@@ -84,7 +89,249 @@ export function PrivacyPage(): React.JSX.Element {
       {tab === 'dpias' && <DpiasTab onError={showError} onMessage={showMessage} />}
       {tab === 'requests' && <RequestsTab onError={showError} onMessage={showMessage} />}
       {tab === 'violations' && <ViolationsTab onError={showError} onMessage={showMessage} />}
+      {tab === 'anonymize' && mayAnonymizeChildren && <AnonymizeChildTab />}
     </div>
+  );
+}
+
+interface DepartedChildOption {
+  id: string;
+  reference_number: string;
+  first_name_fr: string;
+  last_name_fr: string;
+  date_of_birth: string;
+  status: string;
+}
+
+interface AnonymizeChildResult {
+  child_id: string;
+  already_anonymized: boolean;
+  anonymized_at?: string;
+  guardian_ids?: string[];
+  user_ids?: string[];
+  media_storage_keys?: string[];
+  counts?: Record<string, number>;
+  media_purge?: { purged: number; failed: Array<{ key: string; error: string }> };
+}
+
+/** Anonymisation irreversible, visible uniquement aux directeurs/super-admins. */
+function AnonymizeChildTab(): React.JSX.Element {
+  const { t, locale } = useI18n();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [candidates, setCandidates] = useState<DepartedChildOption[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [searchTruncated, setSearchTruncated] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState<DepartedChildOption | null>(null);
+  const [reason, setReason] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<AnonymizeChildResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const searchDeparted = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault();
+    const query = searchTerm.trim();
+    if (!query) {
+      setError(t('privacy.anonymizeSearchRequired'));
+      return;
+    }
+
+    setSearching(true);
+    setError(null);
+    setCandidates([]);
+    setHasSearched(false);
+    setSearchTruncated(false);
+    setSelected(null);
+    setReason('');
+    setConfirmed(false);
+    setResult(null);
+    try {
+      const params = new URLSearchParams({ status: 'departed', search: query, limit: '100' });
+      const response = await http.get<{ items: DepartedChildOption[]; total: number }>(`/children?${params.toString()}`);
+      const items = response.items ?? [];
+      setSearchTruncated(response.total > items.length);
+      // Le marqueur exact vient de anonymize_child : les pseudonymes ne sont
+      // jamais reproposés comme de nouveaux dossiers à traiter.
+      setCandidates(items.filter((child) =>
+        child.status === 'departed' && !/^Anonyme-[0-9a-f]{8}$/i.test(child.first_name_fr),
+      ));
+      setHasSearched(true);
+    } catch (e: unknown) {
+      setCandidates([]);
+      setHasSearched(false);
+      setSearchTruncated(false);
+      setError((e as { messageFr?: string })?.messageFr ?? t('common.error'));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const chooseChild = (child: DepartedChildOption): void => {
+    setSelected(child);
+    setReason('');
+    setConfirmed(false);
+    setResult(null);
+    setError(null);
+  };
+
+  const anonymize = async (): Promise<void> => {
+    const trimmedReason = reason.trim();
+    if (!selected || trimmedReason.length < 5 || !confirmed || submitting) return;
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = await http.post<AnonymizeChildResult>(
+        `/privacy/children/${encodeURIComponent(selected.id)}/anonymize`,
+        { reason: trimmedReason },
+      );
+      setResult(response);
+      setCandidates((items) => items.filter((child) => child.id !== selected.id));
+      setSelected(null);
+      setReason('');
+      setConfirmed(false);
+    } catch (e: unknown) {
+      setError((e as { messageFr?: string })?.messageFr ?? t('common.error'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const dateLocale = locale === 'fr' ? 'fr-FR' : 'ar-DZ';
+  const keys = result?.media_storage_keys ?? [];
+  const failedKeys = new Set((result?.media_purge?.failed ?? []).map((item) => item.key));
+  const canSubmit = Boolean(selected && reason.trim().length >= 5 && confirmed && !submitting);
+
+  return (
+    <Card title={t('privacy.anonymizeTitle')}>
+      <p style={{ color: tokens.colors.textMuted }}>{t('privacy.anonymizeIntro')}</p>
+      <form onSubmit={(event) => void searchDeparted(event)} style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 280px' }}>
+          <TextField
+            label={t('privacy.anonymizeSearchLabel')}
+            value={searchTerm}
+            onChange={(value) => {
+              setSearchTerm(value.slice(0, 100));
+              setCandidates([]);
+              setHasSearched(false);
+              setSearchTruncated(false);
+              setSelected(null);
+              setResult(null);
+              setError(null);
+            }}
+            placeholder={t('privacy.anonymizeSearchPlaceholder')}
+            required
+            disabled={searching || submitting}
+            dir="auto"
+            hint={`${searchTerm.length}/100`}
+          />
+        </div>
+        <Button type="submit" disabled={!searchTerm.trim() || searching || submitting}>
+          {searching ? t('common.loading') : t('privacy.anonymizeSearchButton')}
+        </Button>
+      </form>
+
+      {error && <p role="alert" style={{ color: tokens.colors.danger }}>{error}</p>}
+      {hasSearched && searchTruncated && (
+        <p role="note" style={{ color: tokens.colors.warning }}>{t('privacy.anonymizeRefine')}</p>
+      )}
+
+      {hasSearched && candidates.length > 0 && (
+        <div aria-busy={searching} style={{ marginTop: tokens.spacing.md }}>
+          <Table
+            headers={[t('common.name'), t('children.ref'), t('children.birth'), t('common.actions')]}
+            rows={candidates.map((child) => [
+              `${child.first_name_fr} ${child.last_name_fr}`,
+              child.reference_number,
+              new Date(child.date_of_birth).toLocaleDateString(dateLocale),
+              <Button key={child.id} variant="ghost" disabled={submitting} onClick={() => chooseChild(child)}>
+                {t('privacy.anonymizeSelect')}
+              </Button>,
+            ])}
+          />
+        </div>
+      )}
+      {hasSearched && candidates.length === 0 && !searchTruncated && (
+        <p style={{ color: tokens.colors.textMuted }}>{t('privacy.anonymizeNoResults')}</p>
+      )}
+
+      {selected && (
+        <section style={{ marginTop: tokens.spacing.lg, border: `1px solid ${tokens.colors.border}`, borderRadius: tokens.radius.md, padding: tokens.spacing.lg }}>
+          <h3 style={{ marginTop: 0 }}>{t('privacy.anonymizeSelected')}</h3>
+          <p>
+            <strong>{selected.first_name_fr} {selected.last_name_fr}</strong>
+            {' — '}{t('children.ref')}: {selected.reference_number}
+            {' — '}{t('children.birth')}: {new Date(selected.date_of_birth).toLocaleDateString(dateLocale)}
+          </p>
+          <p role="note" style={{ color: tokens.colors.danger, fontWeight: 600 }}>{t('privacy.anonymizeWarning')}</p>
+          <div style={{ maxWidth: 560 }}>
+            <TextField
+              label={t('privacy.anonymizeReason')}
+              value={reason}
+              onChange={(value) => {
+                setReason(value.slice(0, 500));
+                setConfirmed(false);
+              }}
+              required
+              disabled={submitting}
+              hint={t('privacy.anonymizeReasonHint')}
+            />
+          </div>
+          <label style={{ display: 'flex', gap: 10, alignItems: 'flex-start', margin: `${tokens.spacing.sm} 0 ${tokens.spacing.md}`, lineHeight: 1.5 }}>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              disabled={submitting}
+              onChange={(event) => setConfirmed(event.target.checked)}
+              style={{ marginTop: 4 }}
+            />
+            <span>{t('privacy.anonymizeConfirm')}</span>
+          </label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Button variant="danger" disabled={!canSubmit} onClick={() => void anonymize()}>
+              {submitting ? t('common.loading') : t('privacy.anonymizeSubmit')}
+            </Button>
+            <Button variant="ghost" disabled={submitting} onClick={() => setSelected(null)}>
+              {t('privacy.anonymizeCancel')}
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {result && (
+        <section aria-live="polite" style={{ marginTop: tokens.spacing.lg, border: `1px solid ${tokens.colors.border}`, borderRadius: tokens.radius.md, padding: tokens.spacing.lg }}>
+          <h3 style={{ marginTop: 0 }}>{t('privacy.anonymizeResult')}</h3>
+          <p style={{ color: result.already_anonymized ? tokens.colors.textMuted : tokens.colors.success, fontWeight: 600 }}>
+            {result.already_anonymized ? t('privacy.anonymizeAlready') : t('privacy.anonymizeSuccess')}
+          </p>
+          {!result.already_anonymized && (
+            <>
+              <ul>
+                <li>{t('privacy.anonymizeGuardians')}: {result.counts?.guardians ?? result.guardian_ids?.length ?? 0}</li>
+                <li>{t('privacy.anonymizeAccounts')}: {result.counts?.users ?? result.user_ids?.length ?? 0}</li>
+                <li>{t('privacy.anonymizeMedia')}: {result.counts?.media_assets ?? 0}</li>
+                <li>{t('privacy.anonymizePurged')}: {result.media_purge?.purged ?? 0}</li>
+                <li>{t('privacy.anonymizeFailed')}: {result.media_purge?.failed.length ?? 0}</li>
+              </ul>
+              <h4>{t('privacy.anonymizeKeys')}</h4>
+              {keys.length === 0 ? (
+                <p style={{ color: tokens.colors.textMuted }}>{t('privacy.anonymizeNoKeys')}</p>
+              ) : (
+                <ul>
+                  {keys.map((key, index) => (
+                    <li key={`${key}-${index}`}>
+                      <code dir="ltr" style={{ overflowWrap: 'anywhere' }}>{key}</code>
+                      {' — '}{failedKeys.has(key) ? t('privacy.anonymizeKeyFailed') : t('privacy.anonymizeKeyPurged')}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </section>
+      )}
+    </Card>
   );
 }
 

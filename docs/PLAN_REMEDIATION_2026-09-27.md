@@ -20,7 +20,7 @@
 | **PostgreSQL 18.4 réel** (`embedded-postgres`, `run_pg.mjs`, port 54329) | ✅ | Migrations, seeds, suites PG, mesures de plans exécutables |
 | Node 22 + `npm ci` (929 paquets) | ✅ | Build API/worker, jest, gardiens `node --test` |
 | Build `@creche/api` + `@creche/worker` | ✅ | Suites d'isolation API exécutables |
-| **Navigateur (Chromium Playwright)** | ❌ | **e2e navigateur : BLOQUÉ** (téléchargement refusé, 2 hôtes testés) |
+| **Navigateur (Chromium Playwright)** | ❌ local / ✅ CI (`36357511493`) | Le job `e2e` a installé Chromium et réussi, y compris les assertions de purge média ; le run CI complet s'est terminé avec succès (`database` inclus). |
 | SDK Flutter / Dart | ❌ | Compilation et exécution Dart : **BLOQUÉ** |
 | Docker | ❌ | Composes non démarrables |
 | k6 | ❌ | Non exécuté (le banc `capacity-bench` reste la mesure de référence) |
@@ -94,12 +94,12 @@ les actions P0 du plan sont **corrigés** par le lot 0 ci-dessous.
 |---|---|---|---|---|---|
 | **L0** | **Corriger les affirmations réfutées** du rapport d'analyse (P0-1, P0-3, trigger DELETE) et les P0 du plan | D5 | 0,3 j | Sections corrigées ; `claims-contract` 10/10 | ✅ livré |
 | **L1 — PHASE 1** | **Indexer `organization_id` sur les tables tenant** + gardien + banc + suite | D1 | 1 j | migration 077 appliquée, gardien en CI, banc 5,8×/16,1×, suite `phase78`, 74 entrées + garde RLS rejouées | ✅ livré (`92dd960`) |
-| **L2** | **e2e** : compléter les 2 specs + garde anti-squelette | D2, D3 | 1–2 j | 13/13 collectés sans skip ; gardien CI, seed paie et preuve API 16/16 ; exécution Chromium encore attendue | 🟡 implémenté, navigateur bloqué |
+| **L2** | **e2e** : compléter les 2 specs + garde anti-squelette | D2, D3 | 1–2 j | 13/13 collectés sans skip ; gardien CI, seed paie et preuve API 16/16 ; job Chromium `e2e` réussi sur la PR #51 (`36356110967`) | ✅ preuve navigateur CI |
 | **L3** | **Vérité documentaire** : « limites connues » vérifiées contre le code | D4 | 0,5 j | gardien qui échoue si une limite citée n'existe plus | ✅ livré |
-| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | workflows + contrat local livrés ; run GitHub et réglage de protection encore à confirmer | 🟡 |
-| **L5** | **UI d'anonymisation** dans `admin-web` (écran directeur) | D7 | 2 j | écran + test d'accès par rôle | ⏳ |
+| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | PR #51 : CodeQL et `quality` verts ; Trivy échoue sur les 4 images ; protection encore à confirmer | 🟡 |
+| **L5** | **UI d'anonymisation** dans `admin-web` (écran directeur) | D7 | 2 j | UI + garde de rôle, API `phase56b` 10/10 ; Chromium a validé le parcours et le rendu de l'échec de purge média (`36357511493`) | ✅ livré, preuve navigateur CI |
 
-**Ordre recommandé** : L0 ✅ → L1 ✅ → L2 🟡 (implémenté, navigateur à exécuter) → L3 ✅ → L4 🟡 (workflows/contrat locaux livrés, run GitHub et protection en attente) → L5 (UI).
+**Ordre recommandé** : L0 ✅ → L1 ✅ → L2 ✅ (job Chromium `e2e` réussi sur la PR #51) → L3 ✅ → L4 🟡 (CodeQL et quality verts sur PR #51, Trivy à investiguer, protection administrateur en attente) → L5 ✅ (API `phase56b` et parcours UI avec échec de purge média prouvés).
 
 ---
 
@@ -279,7 +279,9 @@ déjà : ce lot est **uniquement** de l'UI + un test d'accès par rôle.
 | 2026-09-27 | L3 | Contrat `claims-contract` étendu : **11/11** ; 2 mutations (limite vidéo retirée, MIME vidéo ajouté) échouent comme prévu | §13 |
 | 2026-09-27 | L4 | CodeQL v4.38.2 + Trivy v0.36.0 configurés ; le workflow conditionne le push GHCR au scan | §14 |
 | 2026-09-27 | L4 | Contrat sécurité **12/12**, mutation du seuil Trivy détectée ; YAML, lint, 14 gardiens vérifiés | §14 |
-| 2026-09-27 | L4 | Aucun run GitHub CodeQL/Trivy ; protection de `main` et « default setup » Code Scanning inaccessibles en lecture (403) | §14 |
+| 2026-09-27 | L4 | PR brouillon #51 : CodeQL + `quality` verts ; build des 4 images OK mais Trivy échoue sur chaque scan, artifacts JSON déposés ; protection/default setup toujours inaccessibles (403) | §14 |
+| 2026-09-27 | L5 | Onglet d'anonymisation `admin-web`, réservé à director/super_admin ; raison, confirmation, résultats structurés | §15 |
+| 2026-09-27 | L5 | Matrice + visibilité **10/10**, mutation détectée, API `phase56b` **10/10** ; E2E média passé sur `2151f77` (`36356961132`), puis revalidé avec toute la suite sur le head `5022050` (`36357511493`) ; typecheck/lint/gardien verts | §12.7, §15 |
 
 ---
 
@@ -389,7 +391,7 @@ contrôle de cohérence qui a suivi (`to_regclass()` → 0 ligne), ce texte aura
 - Ce qui est **vérifié deux fois** gagne à être revérifié : c'est là que le
   crédit accordé dépasse la preuve disponible.
 
-## 12. Résultats du lot 2 — implémentation achevée, navigateur en attente
+## 12. Résultats du lot 2 — implémentation achevée, navigateur vérifié sur CI
 
 ### 12.1 Squelettes retirés et défauts réels des anciennes specs
 
@@ -464,13 +466,13 @@ avant `aged-balance`, puis `overdue` après sa lecture (200).
 
 ### 12.5 Limite d'exécution déclarée
 
-Le `tsc --noEmit` de `apps/admin-web` inclut maintenant `e2e/` et passe ; le
-build `@creche/admin-web` passe. En revanche, **Playwright/Chromium n'a pas
-été exécuté** : aucun navigateur n'était installé et `npx playwright install
-chromium` a échoué au téléchargement. Ne pas présenter les 7 specs comme
-vertes ; le passage navigateur sur la cible équipée reste à obtenir. Le garde
-statique, le seed, les assertions API et le typecheck sont des preuves
-complémentaires, pas un substitut au navigateur.
+Lors de la validation locale initiale, le `tsc --noEmit` de `apps/admin-web`
+(incluant `e2e/`) et le build passaient, mais aucun navigateur n'était installé
+et `npx playwright install chromium` échouait au téléchargement. Cette limite
+était strictement locale : le job Chromium `e2e` de la PR #51 a ensuite réussi
+sur le head `64a4139` (preuve détaillée au §12.7). La machine locale reste sans
+Chromium ; la réussite CI, et non la collecte ou le garde statique, constitue
+la preuve d'exécution navigateur pour L2.
 
 ### 12.6 Non-régression et état de la CI documentaire
 
@@ -480,6 +482,25 @@ La batterie PG a été rejouée après le seed modifié : **70/75**, avec les m�
 sont corrigés, tandis que les relevés datés restent historiquement exacts ; le
 contrat compare les marqueurs explicitement courants plutôt que de réécrire le
 passé. `check-guards-wired.mjs` confirme **14/14 gardiens atteignables**.
+
+### 12.7 Exécution Playwright sur le draft PR #51
+
+Le run CI `36356110967`, sur le head `64a4139e3e7b954db50834cf08be746e283599ed`,
+a réussi le job `e2e` (job `108724056363`) et Chromium a passé le parcours
+director de base : création d'un enfant sorti synthétique, recherche,
+motif + confirmation, POST réel et pseudonyme persisté. Cette version
+n'insérait pas encore de média.
+
+Après renforcement du test, le run `36356961132` sur le head `2151f773e72df3037a85ae6b4ee3534ef31d7712`
+a également réussi le job `e2e` (job `108726503307`). Cette fois, la spec
+insérait un `media_assets` après la création API ; le navigateur a vérifié le
+compte « Médias masqués: 1 », zéro objet supprimé, un échec de purge, la clé
+exacte et « Purge à reprendre manuellement ». Le serveur API d'E2E pointe
+explicitement vers `127.0.0.1:9`, rendant l'échec S3 déterministe. La couverture
+navigateur de la branche d'échec média de L5 est donc prouvée. Le run
+`36356961132` s'est ensuite terminé avec succès, job `database` compris. La même
+suite a repassé sur le head `5022050` (mise à jour documentaire) avec le run CI
+`36357511493`, également terminé avec succès.
 
 ## 13. Lot 3 — vérité des « Limites connues »
 
@@ -511,14 +532,14 @@ le code, (2) ajouter `video/mp4` à `MEDIA_MIME_TYPES` sans réviser la limite.
 Dans les deux cas le contrat échoue (**10 pass / 1 fail**), puis revient à
 11/11 sans mutation. `git diff --check` est vert.
 
-Cette preuve est locale, non une exécution CI : le workflow `ci` ne se déclenche
-que sur `main` ou `pull_request`, et aucune PR n'est ouverte pour cette branche.
-Le statut Playwright du lot 2 reste séparément BLOQUÉ ; aucune exécution
-Chromium n'est revendiquée ici.
+Cette preuve est locale, distincte des exécutions GitHub. La PR draft #51 est
+ouverte et les résultats Playwright des lots 2 et 5 sont documentés au §12.7 ;
+le blocage Chromium local décrit plus haut ne doit pas être confondu avec les
+jobs CI réussis.
 
 ## 14. Lot 4 — CodeQL + Trivy
 
-**Configuration et garde-fous locaux livrés ; validation sur GitHub en attente.**
+**Configuration livrée ; première validation GitHub observée via le draft PR #51.**
 
 - `.github/workflows/codeql.yml` : JavaScript/TypeScript, `build-mode: none`,
   PR/push vers `main`, planification hebdomadaire et lancement manuel. CodeQL
@@ -535,14 +556,15 @@ Chromium n'est revendiquée ici.
 - `claims-contract.test.mjs` (déjà exécuté par `quality`) vérifie les triggers
   CodeQL, langue/mode, les quatre images, le seuil, l'artifact et l'ordre
   build → scan → login → push.
-- `SECURITY.md` décrit la configuration et distingue explicitement les étapes
-  dont aucun run GitHub n'a encore été observé.
-- Le job `quality` est toujours à ajouter manuellement aux checks requis de
-  `main`. La commande additive qui préserve `database` et tout autre contexte
-  existant figure au §8. Les lectures REST de protection et de configuration
-  Code Scanning ont répondu 403 `Resource not accessible by integration` : l'état
-  effectif de `quality` et du « default setup » CodeQL ne peut donc pas être
-  affirmé ici.
+- `SECURITY.md` conserve les constats datés au moment de livraison ; les
+  exécutions postérieures au draft PR #51 sont consignées ci-dessous.
+- Le job `quality` a **réussi sur la PR brouillon #51** (run CI `36354609729`),
+  mais il reste à l'ajouter manuellement aux checks requis de `main`. La
+  commande additive qui préserve `database` et tout autre contexte existant
+  figure au §8. Les lectures REST de protection et de configuration Code
+  Scanning ont répondu 403 `Resource not accessible by integration` : le réglage
+  effectif de protection et l'état administrateur du « default setup » CodeQL
+  ne peuvent toujours pas être affirmés ici.
 
 **Preuves exécutées localement :**
 
@@ -554,12 +576,112 @@ Chromium n'est revendiquée ici.
 - `node scripts/check-guards-wired.mjs` → **14/14** gardiens atteignables ;
 - parse YAML de `codeql.yml` et `docker.yml`, plus `git diff --check` → succès.
 
-**Pas encore prouvé :** aucun run GitHub Actions n'a été lancé ou observé ;
-CodeQL n'a pas analysé le dépôt sur un runner GitHub, Trivy n'a pas scanné les
-quatre images réelles, aucun rapport SARIF/JSON n'est revendiqué et le statut
-requis `quality` n'a pas été vérifié. Le statut Code Scanning « default setup »
-n'a pas non plus été vérifiable (API 403) ; un administrateur doit le contrôler
-avant le premier upload. Docker est indisponible localement et l'API de protection
-est inaccessible à l'intégration ; les preuves ci-dessus portent sur le YAML et
-le contrat, pas sur une exécution des scanners.
-Le lot reste donc marqué **🟡** jusqu'au run CI et au réglage administrateur.
+**Résultats GitHub observés sur PR brouillon #51 :**
+
+- CodeQL (`36354609637`) : job complet **réussi**, y compris l'étape d'analyse
+  et publication ; aucun nombre de findings n'est déduit de la seule réussite.
+- Docker/Trivy (`36354609601`) : construction des quatre images réussie ; les
+  quatre étapes Trivy se terminent en échec, les quatre rapports JSON sont
+  téléversés et les étapes de login/push GHCR sont bien ignorées sur une PR.
+  Les téléchargements de logs et d'artifacts ont renvoyé `EOF` depuis le service
+  GitHub ; la cause exacte et les identifiants CVE restent donc **non établis**.
+- CI (`36354609729`) : run terminé avec succès ; `quality`, `e2e`, `database`,
+  `admin-web`, `support-console`, `security` (audit npm de production) et
+  `backup-drill` ont réussi. Le job e2e correspond au head antérieur à l'ajout
+  du scénario PrivacyPage.
+- Flutter (`36354609679`) : job réussi.
+- Rerun CI (`36356110967`, head `64a4139`) : run désormais terminé avec succès,
+  y compris `database`; le job `e2e` a passé le scénario PrivacyPage initial
+  (§12.7). CodeQL (`36356110942`) et Flutter (`36356110934`) ont réussi. Docker
+  (`36356110990`) : images construites, quatre scans Trivy en échec ; les
+  rapports de ce run n'ont pas pu être récupérés (`EOF`).
+- Head contenant le code `2151f77` : CI `36356961132` terminé avec succès, y
+  compris `database` et le parcours Playwright média. CodeQL `36356961110` et
+  Flutter `36356961080` réussis ; Docker `36356961150` a construit les quatre
+  images mais échoué aux quatre scans Trivy.
+- Head testé `5022050` (mise à jour documentaire) : CI `36357511493` terminé
+  avec succès, `database` et `e2e` compris ; CodeQL `36357511515` et Flutter
+  `36357511508` réussis. Docker `36357511521` : construction des quatre images
+  réussie, quatre scans Trivy en échec. Artifacts présents : API `10943489161`,
+  worker `10943938364`, admin-web `10944244130`, support-console `10944433369`.
+  Le téléchargement de l'artifact API via `gh run download` renvoie `EOF` ; le
+  contenu des rapports et les CVE restent donc non qualifiés.
+
+Les jobs CI, navigateur, CodeQL et Flutter sont verts sur le head actuel. Le
+seul check workflow rouge est Docker/Trivy ; son diagnostic dépend encore des
+rapports d'artifacts accessibles depuis l'interface GitHub.
+
+**Encore non vérifié :** les lectures REST de protection et de Code Scanning
+restent en 403 ; un administrateur doit confirmer que `quality` est requis et
+vérifier le réglage « default setup » CodeQL. Trivy n'est pas vert et ses
+findings ne peuvent pas être qualifiés sans ses rapports. Le lot reste donc
+**🟡** : CodeQL et `quality` validés sur GitHub, Trivy à diagnostiquer,
+protection administrateur en attente.
+
+## 15. Lot 5 — UI d'anonymisation
+
+**Écran compilé ; parcours Chromium avec média synthétique et rendu de l'échec de purge passé en CI (`36357511493`).**
+
+- `PrivacyPage` reçoit un onglet d'anonymisation visible uniquement si
+  `canAnonymizeChild(user)` l'autorise. L'accès général à la page Vie privée
+  reste inchangé pour le comptable ; seul cet onglet destructif lui est caché.
+- La garde utilise le rôle de l'organisation courante : seuls `director` et
+  `super_admin` (dont le super-admin plateforme) passent. Le serveur conserve
+  l'autorité finale : `POST /privacy/children/:id/anonymize` est toujours
+  protégé par `@Roles('director', 'super_admin')`.
+- Recherche au moyen de `GET /children?status=departed&search=…&limit=100` ;
+  l'interface n'affiche que `status=departed` et masque le marqueur SQL exact
+  des dossiers déjà anonymisés (`Anonyme-` + 8 caractères hexadécimaux).
+- Avant le POST, la directrice doit sélectionner le dossier, saisir un motif
+  de **5 à 500 caractères** (validation minimale après trim), puis cocher une
+  confirmation explicite. Un avertissement annonce l'irréversibilité.
+- Le résultat structuré indique les comptes de tuteurs anonymisés, comptes
+  parents désactivés et médias concernés ; il liste les clés S3 concernées et
+  distingue les purges réussies des échecs à reprendre manuellement. Aucun
+  message ne prétend qu'une clé a été purgée si l'API signale un échec.
+- Tous les textes du nouvel onglet sont ajoutés aux catalogues français et
+  arabe. Aucun endpoint ni comportement serveur n'a été modifié dans ce lot.
+
+**Preuves exécutées localement :**
+
+- `npm run test:unit --workspace @creche/admin-web` → **10/10** : rôles
+  autorisés/refusés, super-admin plateforme, rôle de l'organisation courante,
+  et contrat source vérifiant que l'onglet/UI est bien conditionné, ne recherche
+  que des enfants sortis non anonymisés et exige motif + confirmation ;
+- mutation temporaire supprimant le garde `mayAnonymizeChildren` au rendu du
+  tab → test « PrivacyPage protège le tab » en échec attendu ; restauration puis
+  **10/10** ;
+- `apps/admin-web/e2e/privacy-anonymization.spec.ts` : le parcours director
+  contre la vraie API et PostgreSQL a passé sur `64a4139`, puis sa variante média
+  a réussi sur le head `2151f77` dans le job `e2e` du run `36356961132` (preuve
+  §12.7). Le test crée une ligne média synthétique après le POST de création et
+  vérifie dans l'UI la clé exacte, l'échec de purge et le statut de reprise ;
+- `npx playwright test --config apps/admin-web/playwright.config.ts --list` →
+  **14 tests collectés / 8 fichiers** en local ; la variante média a ensuite été
+  exécutée et a passé en Chromium CI (`36356961132`, §12.7). `npm run typecheck
+  --workspace @creche/admin-web`, lint et `check-e2e-skeletons.mjs` → succès
+  (8 specs, 25 routes, 104 libellés) ;
+- PostgreSQL 18.4 embarqué neuf : migrations **001–077** et seeds appliqués ;
+  `npm run build --workspace @creche/api` → succès ;
+- `node tests/tenant-isolation/phase56b-anonymize-child.api.test.mjs` →
+  **10/10** : 401/403, isolation tenant, refus enfant actif/motif court/UUID
+  invalide, anonymisation director, clôture de demande, idempotence et purge
+  S3 honnête (l'endpoint de test MinIO est volontairement indisponible ; la
+  clé est signalée en échec, jamais déclarée purgée) ; données synthétiques
+  seulement dans la base locale `creche_test` (non production) ;
+- `npm run build --workspace @creche/admin-web` → succès (`tsc -b` + Vite) ;
+  chunk PrivacyPage **12,93 kB / 3,65 kB gzip**. Vite signale aussi le chunk
+  ExcelJS existant > 500 kB, sans échec ;
+- `npm run lint` → exit 0 (avertissement Node préexistant sur la configuration
+  ESLint) ; `git diff --check` → succès.
+
+**Résultat de l'exécution :** aucun navigateur n'est installé localement
+(`npx playwright install --list` renvoie `ENOENT` sur
+`~/.cache/ms-playwright/.links`, aucun Chromium dans le `PATH`), mais Chromium
+CI a passé la variante média dans les runs `36356961132` et `36357511493`.
+Celle-ci insère une ligne `media_assets` après la création API ; le serveur E2E
+force l'endpoint S3 à `http://127.0.0.1:9`. Les assertions ont confirmé
+`Médias masqués: 1`, `Objets supprimés du stockage: 0`, un échec de purge, la
+clé exacte et le libellé de reprise manuelle. La suite API `phase56b` (10/10)
+valide aussi le contrat serveur. **L5 est livré** avec preuve UI navigateur CI ;
+le run global `36357511493`, database inclus, est terminé avec succès.
