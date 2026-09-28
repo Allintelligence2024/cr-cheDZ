@@ -13,6 +13,7 @@ import { pathToFileURL } from 'node:url';
 const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
 const HIGH_SEVERITIES = new Set(['CRITICAL', 'HIGH']);
 const MAX_SUMMARY_FINDINGS = 20;
+// GitHub Actions permits at most ten warning annotations per step.
 const MAX_ANNOTATIONS = 10;
 
 const clean = (value) => String(value ?? '—').replace(/[\r\n|]/g, ' ').trim() || '—';

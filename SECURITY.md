@@ -131,11 +131,16 @@ Corrections appliquées le 2026-08-02 (migration de durcissement) :
   L'intégration n'a pas pu lire cette configuration (403).
 - **Images conteneur** : `docker.yml` construit les quatre images et ne publie
   sur GHCR depuis `main` qu'après des scans Trivy sans `CRITICAL,HIGH`. Le run
-  `36377366392` a bien construit les images et archivé les rapports, mais Trivy
-  échoue encore sur les quatre scans. Le résumé et les annotations Checks
-  exposent les findings ; versions et CVE observées sont documentées dans
-  [`docs/PLAN_REMEDIATION_2026-09-27.md` §14](docs/PLAN_REMEDIATION_2026-09-27.md#14-lot-4--codeql--trivy).
-  Les nouvelles bases runtime sont en revalidation ; L4 n'est pas clos.
+  `36380608074` passe pour admin-web/support-console, mais échoue encore pour
+  API/worker. Les annotations API/worker montrent quatre CVE HIGH du runtime
+  Debian 13.7 (`CVE-2026-76642`, `CVE-2026-54369`, `CVE-2026-16742`,
+  `CVE-2025-69720`) ; elles sont plafonnées à dix par étape et ne prouvent pas
+  l'exhaustivité du JSON. La tentative Trixie a donc un résultat partiel ; le
+  candidat courant passe les runtimes API/worker à Node Alpine 3.24 et doit être
+  rescanné. Les artifacts sont archivés, mais leur téléchargement depuis ce
+  poste échoue (`EOF`/`SSL_ERROR_SYSCALL`). Finding et versions observées sont
+  consignés dans [`docs/PLAN_REMEDIATION_2026-09-27.md` §14](docs/PLAN_REMEDIATION_2026-09-27.md#14-lot-4--codeql--trivy).
+  L4 reste ouvert et aucun finding n'est déclaré résolu avant le scan complet.
 
 ## CI — configuration versionnée (2026-09-27)
 
@@ -160,10 +165,11 @@ du plan de remédiation.
 2. **Gate de merge** : le job `quality` reste à ajouter aux checks requis de la
    branch protection `main` (réglage manuel, accès d'administration nécessaire) ;
    conserver aussi `database`.
-3. Maintenir `npm audit --omit=dev --audit-level=high` à 0, terminer la mise à
-   jour des bases Node/Nginx et revalider les quatre images jusqu'à zéro finding
-   `CRITICAL,HIGH`. Trivy bloque effectivement le push GHCR ; le run courant a
-   identifié des findings mais les téléchargements complets d'artifacts restent
-   indisponibles (`EOF`).
+3. Maintenir `npm audit --omit=dev --audit-level=high` à 0 et revalider les quatre
+   images jusqu'à zéro finding `CRITICAL,HIGH`. Le premier changement de bases a
+   fait passer les images web, mais API/worker restent rouges ; le candidat Node
+   Alpine 3.24 attend son build et ses scans. Trivy bloque effectivement le push
+   GHCR ; ne déclarer aucun finding résolu avant les rapports complets et scans
+   verts.
 4. Headers de sécurité, TLS et rate limiting : configurés dans
    `infrastructure/nginx/nginx.conf` (template, à déployer avec le VPS).

@@ -9,7 +9,7 @@ RUN npm run build --workspace @creche/prod-config
 RUN npm run build --workspace @creche/worker
 RUN npm prune --omit=dev
 
-FROM node:22.23.3-trixie-slim AS runtime
+FROM node:22.23.3-alpine3.24 AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/package.json /app/package-lock.json ./

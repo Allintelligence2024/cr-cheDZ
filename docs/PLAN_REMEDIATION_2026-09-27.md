@@ -657,51 +657,75 @@ confirment que ce npm embarque `brace-expansion` 2.0.2. La commande a été
 exécutée dans `/tmp/npm-10.9.9`, hors dépôt. La vulnérabilité détectée vient donc
 du gestionnaire npm intégré à l'image Node, pas du lockfile applicatif.
 
-### Correctif automatisé des images — revalidation Trivy en attente
+### Première tentative de correction L4 — commit `ba3937e`, revalidation Trivy
 
-- Builder et runtime API/worker passent à `node:22.23.3-trixie` /
-  `node:22.23.3-trixie-slim`, mêmes versions Node et distribution Trixie pour
-  éviter le mélange de libc entre compilation et exécution. Le runtime retire
-  `npm`, `npx`, Corepack et Yarn : les conteneurs exécutent directement `node`,
-  tandis que la phase de build conserve npm pour `npm ci`.
-- Les deux images web passent à `nginx:1.30.5-alpine3.24-slim` au lieu de
-  `nginx:1.27-alpine`, avec la branche stable et Alpine 3.24 explicites.
-- Le contrat `claims-contract` verrouille ces bases ainsi que le retrait des
-  gestionnaires de paquets dans les deux runtimes Node.
-- Sources officielles consultées : [Node 22.23.3 (npm 10.9.9)]
-  (https://nodejs.org/en/blog/release/v22.23.3), [tags officiels Node]
-  (https://hub.docker.com/_/node), [recommandation Node Docker de retirer npm/Yarn
-  des images finales](https://github.com/nodejs/docker-node/blob/main/docs/BestPractices.md)
-  et [tags officiels Nginx stable / Alpine slim]
-  (https://hub.docker.com/_/nginx).
-- Ce choix vise les origines observées sans imposer un override npm 5
-  potentiellement incompatible avec les consommateurs 1.x/2.x. **Aucun correctif
-  n'est déclaré avant que le prochain build et les quatre scans Trivy passent** ;
-  Docker n'est pas disponible localement.
+Le commit `ba3937e30e36fcdd861bca7ebdabf0766d6cc701` a été poussé sur la PR
+#51 (toujours en draft) et construit les quatre images. Les vérifications locales
+avant push (contrat 12/12, lint, 14 gardiens et `git diff --check`) réussissaient ;
+Docker n’est pas disponible dans le poste de travail.
 
-Les artifacts du run sont présents : API `10951237319`, worker `10951965151`,
-admin-web `10951247192`, support-console `10951231401`. L'étape Job Summary a
-réussi et les annotations sont accessibles par l'API Checks (jobs API
-`108784630926`, worker `108784631019`, admin-web `108784630822`, support-console
-`108784630974`), mais `gh run view --log-failed` et le téléchargement du rapport
-API via `gh run download` renvoient encore `EOF`. Les annotations livrent les 10
-premières findings par image ; le JSON intégral et tout finding au-delà du
-plafond restent à examiner avant une correction exhaustive. À la date de ce
-run, aucun Dockerfile, lockfile ou tag n'avait encore été modifié ; la tentative
-automatisée suivante, qui n'est pas considérée résolue avant un nouveau scan,
-est décrite ci-dessous.
+- API/worker : builders `node:22.23.3-trixie`, runtimes candidats
+  `node:22.23.3-trixie-slim`. npm, npx, Corepack et Yarn sont retirés du runtime
+  (le processus d’application démarre directement avec `node`).
+- Admin/support : runtime `nginx:1.30.5-alpine3.24-slim`.
+- Le run Docker `36380608074` a construit les quatre images. Trivy a réussi pour
+  admin-web et support-console, avec le résumé « Aucune vulnérabilité
+  CRITICAL/HIGH dans le JSON ». Les scans API et worker ont échoué au seuil
+  HIGH/CRITICAL. Le résultat partiel ci-dessous provient **des annotations
+  réellement émises par Trivy**, et non d’une déduction à partir de l’échec.
 
-Sur le même head `58cb5b366dcf0698d8fd1bc18fec15aad27824cc`, CodeQL
-`36376953393` a réussi ; CI `36376953473` et Flutter `36376953487` étaient
-encore en cours à la dernière lecture.
+#### Findings annotés dans les images API/worker (Debian 13.7)
 
-**Encore non vérifié :** les lectures REST de protection et de Code Scanning
-restent en 403 ; un administrateur doit confirmer que `quality` est requis et
-vérifier le réglage « default setup » CodeQL. Trivy reste rouge sur les quatre
-images. Les résultats permettent maintenant d'identifier les findings annotés,
-mais ni le JSON complet ni l'exhaustivité de la liste ne sont établis. Le lot
-reste **🟡** : CodeQL et `quality` validés sur GitHub, Trivy à corriger puis à
-revalider, protection administrateur en attente.
+Les deux jobs ont émis les mêmes dix annotations HIGH (10 par étape est la
+limite GitHub Actions). Les `FixedVersion` montrées sont `—`, ce qui veut dire
+qu’aucune version corrigée n’est donnée dans ces annotations, et non qu’un
+correctif amont n’existe pas.
+
+| CVE HIGH observée | Paquets et versions signalés par Trivy | Titre/signalement de l’annotation |
+|---|---|---|
+| `CVE-2026-76642` | `libmount1`, `liblastlog2-2`, `libblkid1` `2.41.5-0+deb13u1` ; `bsdutils` `1:2.41.5-0+deb13u1` | `util-linux`: l’échec d’un helper externe de montage exécute encore les hooks privilégiés `X-mount` |
+| `CVE-2026-54369` | `libacl1` `2.3.2-2+b1` | Traversée de lien symbolique / élévation de privilèges via les fonctions libacl |
+| `CVE-2026-16742` | `libudev1`, `libsystemd0` `257.13-1~deb13u1` | `systemd-homed`: élévation locale faute de vérification de signature du home-record |
+| `CVE-2025-69720` | `ncurses-bin`, `ncurses-base`, `libtinfo6` `6.5+20250216-2` | Débordement de tampon susceptible de permettre une exécution de code |
+
+Les dix annotations couvrent ces quatre IDs pour chaque image, mais le script
+limite les annotations à dix par étape. Les artifacts JSON complets existent
+(API `10952472278`, worker `10952234220`, admin-web `10952467320`,
+support-console `10952203026`) ; leur téléchargement depuis ce poste échoue
+encore (`gh run view`/`gh run download` : `EOF`, accès direct au stockage :
+`SSL_ERROR_SYSCALL`). Je ne conclus donc pas que ces annotations constituent
+l’inventaire exhaustif du JSON API/worker. Le résumé Trivy signale les findings
+observés ; une absence au-delà du plafond n’est pas établie.
+
+#### Candidat suivant — runtimes Node sur Alpine 3.24
+
+Le scan confirme que le tag Nginx stable sur Alpine 3.24 passe dans les deux
+images web. Les findings annotés restants des images API/worker proviennent de
+paquets du runtime Debian 13.7 (`util-linux`, `acl`, `systemd`, `ncurses`). Le
+candidat suivant conserve le builder Trixie et remplace **uniquement** les
+runtimes API/worker par `node:22.23.3-alpine3.24`; les deux runtimes web restent
+sur Nginx déjà rescanné sans HIGH/CRITICAL. L’inspection du graphe de dépendances
+`npm --omit=dev` ne trouve pas d’addon natif `.node` dans les chemins de
+paquets runtime API/worker ; le build et le scan GitHub restent nécessaires
+pour valider le changement de libc et l’image finale. Le tag Node Alpine 3.24 est
+listé par l’image officielle Node :
+[Node Docker Hub](https://hub.docker.com/_/node). Les références du premier
+candidat restent [Node 22.23.3 (npm 10.9.9)]
+(https://nodejs.org/en/blog/release/v22.23.3) et les
+[bonnes pratiques Node Docker](https://github.com/nodejs/docker-node/blob/main/docs/BestPractices.md).
+
+Le contrat `claims-contract` verrouille maintenant les builders Node Trixie, le
+candidat runtime Alpine 3.24 pour API/worker, le retrait des gestionnaires de
+paquets et Nginx stable Alpine slim. Sur ce candidat, `claims-contract` passe
+12/12, `npm run lint`, les 14 gardiens et `git diff --check` passent ; Docker
+n’est pas disponible localement. **Aucun correctif n’est déclaré tant que le
+nouveau build et les quatre scans Trivy ne passent pas.** Le PR reste en draft.
+
+L’administration de la protection de branche (`quality` requis) et de Code
+Scanning « default setup » reste une confirmation manuelle en attente : les API
+REST renvoient 403. Comme demandé, ces vérifications seront refaites après les
+tentatives automatisables. La revue finale du PR attend également les scans
+Trivy et ces confirmations.
 
 ## 15. Lot 5 — UI d'anonymisation
 

@@ -13,8 +13,8 @@
  *     documentation qui ne soit pas une mise en garde (jamais une revendication) ;
  *  2. healthcheck Docker — la réalité mesurée (postgres partout ; api et worker
  *     en prod/staging depuis le lot 6.1 ; 0 `HEALTHCHECK` dans les Dockerfiles,
- *     les sondes étant des scripts Node appelés par Compose — l'image
- *     `node:22-slim` n'a ni curl ni wget) ne peut pas être contredite par une
+ *     les sondes étant des scripts Node appelés par Compose, sans dépendre
+ *     d'outils HTTP ajoutés à l'image) ne peut pas être contredite par une
  *     phrase de documentation non qualifiée, ni par un décompte périmé ;
  *  3. compteurs revendiqués (migrations, entrées d'isolation, suites, fichiers du
  *     dossier d'isolation, ADR, runbooks, routes HTTP, chemins OpenAPI) —
@@ -561,8 +561,8 @@ test('sécurité CI — CodeQL sur PR/hebdo et Trivy bloquant avant GHCR', () =>
   }
   for (const app of ['api', 'worker']) {
     const dockerfile = read(`apps/${app}/Dockerfile`);
-    assert.match(dockerfile, /^FROM node:22\.23\.3-trixie-slim AS runtime$/m,
-      `${app} doit exécuter sur la variante Trixie slim correspondante`);
+    assert.match(dockerfile, /^FROM node:22\.23\.3-alpine3\.24 AS runtime$/m,
+      `${app} doit exécuter sur une base Node Alpine 3.24 explicite`);
     assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/,
       `${app} ne doit pas embarquer npm en production : l'application est lancée directement par node`);
   }

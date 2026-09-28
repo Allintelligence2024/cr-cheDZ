@@ -9,7 +9,7 @@ RUN npm run build --workspace @creche/prod-config
 RUN npm run build --workspace @creche/api
 RUN npm prune --omit=dev && mkdir -p apps/api/node_modules
 
-FROM node:22.23.3-trixie-slim AS runtime
+FROM node:22.23.3-alpine3.24 AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 # npm ci a déjà tourné en build : on copie l'arbre prod TEL QUEL
