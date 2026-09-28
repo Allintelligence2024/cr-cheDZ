@@ -96,10 +96,10 @@ les actions P0 du plan sont **corrigés** par le lot 0 ci-dessous.
 | **L1 — PHASE 1** | **Indexer `organization_id` sur les tables tenant** + gardien + banc + suite | D1 | 1 j | migration 077 appliquée, gardien en CI, banc 5,8×/16,1×, suite `phase78`, 74 entrées + garde RLS rejouées | ✅ livré (`92dd960`) |
 | **L2** | **e2e** : compléter les 2 specs + garde anti-squelette | D2, D3 | 1–2 j | 13/13 collectés sans skip ; gardien CI, seed paie et preuve API 16/16 ; job Chromium `e2e` réussi sur la PR #51 (`36356110967`) | ✅ preuve navigateur CI |
 | **L3** | **Vérité documentaire** : « limites connues » vérifiées contre le code | D4 | 0,5 j | gardien qui échoue si une limite citée n'existe plus | ✅ livré |
-| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | CodeQL/quality verts ; Trivy échoue sur les 4 images ; résumé ajouté au workflow, nouveau run à valider, réglages administrateur à confirmer | 🟡 |
+| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | CodeQL/quality verts ; les annotations du run `36376953373` exposent les findings des 4 images ; JSON complet et réglages administrateur restent à valider | 🟡 |
 | **L5** | **UI d'anonymisation** dans `admin-web` (écran directeur) | D7 | 2 j | UI + garde de rôle, API `phase56b` 10/10 ; Chromium a validé le parcours et le rendu de l'échec de purge média (`36357511493`) | ✅ livré, preuve navigateur CI |
 
-**Ordre recommandé** : L0 ✅ → L1 ✅ → L2 ✅ (job Chromium `e2e` réussi sur la PR #51) → L3 ✅ → L4 🟡 (CodeQL et quality verts sur PR #51, Trivy à investiguer, protection administrateur en attente) → L5 ✅ (API `phase56b` et parcours UI avec échec de purge média prouvés).
+**Ordre recommandé** : L0 ✅ → L1 ✅ → L2 ✅ (job Chromium `e2e` réussi sur la PR #51) → L3 ✅ → L4 🟡 (CodeQL et `quality` verts ; findings Trivy maintenant identifiés, corrections/revue du JSON complet et protection administrateur encore en attente) → L5 ✅ (API `phase56b` et parcours UI avec échec de purge média prouvés).
 
 ---
 
@@ -282,7 +282,7 @@ déjà : ce lot est **uniquement** de l'UI + un test d'accès par rôle.
 | 2026-09-27 | L4 | PR brouillon #51 : CodeQL + `quality` verts ; build des 4 images OK mais Trivy échoue sur chaque scan, artifacts JSON déposés ; protection/default setup toujours inaccessibles (403) | §14 |
 | 2026-09-27 | L5 | Onglet d'anonymisation `admin-web`, réservé à director/super_admin ; raison, confirmation, résultats structurés | §15 |
 | 2026-09-27 | L5 | Matrice + visibilité **10/10**, mutation détectée, API `phase56b` **10/10** ; E2E média passé sur `2151f77` (`36356961132`), puis revalidé avec toute la suite sur le head `5022050` (`36357511493`) ; typecheck/lint/gardien verts | §12.7, §15 |
-| 2026-09-28 | L4 | Ajout du résumé Trivy dans Job Summary + annotations Checks, conditionnées à `GITHUB_ACTIONS=true` ; contrat 12/12, lint, 14 gardiens et diff check verts ; nouveau run en attente | §14 |
+| 2026-09-28 | L4 | Résumé Trivy exécuté sur les 4 images au run `36376953373` ; 10 annotations HIGH/CRITICAL par image récupérées par l'API Checks ; findings documentés, artefacts JSON encore en `EOF` | §14 |
 
 ---
 
@@ -540,7 +540,7 @@ jobs CI réussis.
 
 ## 14. Lot 4 — CodeQL + Trivy
 
-**Configuration de base validée via le draft PR #51 ; visibilité des findings ajoutée, nouveau run à valider.**
+**Configuration de base validée via le draft PR #51 ; la visibilité des findings a été exercée sur le run `36376953373`.**
 
 - `.github/workflows/codeql.yml` : JavaScript/TypeScript, `build-mode: none`,
   PR/push vers `main`, planification hebdomadaire et lancement manuel. CodeQL
@@ -629,15 +629,52 @@ jobs CI réussis.
   l'ajout ; il devra être validé dans le nouveau run déclenché par cette mise à
   jour avant de conclure quoi que ce soit sur les CVE.
 
+### Résultats observables du run Docker `36376953373` (head `58cb5b3`)
+
+Les quatre images se construisent ; les quatre scans Trivy échouent comme
+attendu sur le seuil `CRITICAL,HIGH`. Sur les quatre jobs, l'étape « Résumé
+Trivy » et l'archivage réussissent. L'API Checks retourne **10 annotations
+`warning` par image** (les 10 premières de la liste HIGH/CRITICAL, car le script
+plafonne volontairement à 10 ; ce nombre n'est donc pas une preuve du total
+complet). Les IDs sont exposés dans le titre de chaque annotation. Les findings
+ci-dessous sont ceux des annotations reçues, pas une assertion indépendante
+d'exploitabilité ou d'impact en production.
+
+| Image(s) | Findings HIGH/CRITICAL retournés dans les annotations |
+|---|---|
+| `api`, `worker` — cible `debian 12.15` + `Node.js` | **CRITICAL** : `CVE-2026-8376` (`perl-base` 5.36.0-7+deb12u3, débordement heap lors de la compilation d'expressions régulières 32-bit) ; `CVE-2026-42496` (`perl-base` 5.36.0-7+deb12u3, avis dont le titre cite `perl-archive-tar` et un traversal de liens symboliques) ; `CVE-2026-13221` (`perl-base` 5.36.0-7+deb12u3, traitement incorrect de grandes expressions régulières) ; `CVE-2023-45853` (`zlib1g` 1:1.2.13.dfsg-1, débordement entier puis heap dans `zipOpenNewFileInZip4_6`). **HIGH** : `CVE-2026-16742` (`libsystemd0` 252.39-1~deb12u2, `systemd-homed`) ; `CVE-2026-14257` et `CVE-2026-13149` (`brace-expansion` 2.0.2, DoS ; les annotations donnent des versions corrigées respectives `5.0.8, 3.0.3, 2.1.3, 1.1.17` et `5.0.7, 1.1.16, 2.1.2`) ; `CVE-2025-69720` (`ncurses-bin`, `ncurses-base` et `libtinfo6`, tous 6.4-4, débordement de tampon). `FixedVersion` est `—` pour les paquets OS ci-dessus dans les annotations : cela signifie qu'aucune version n'y est fournie, pas qu'il n'existe aucun correctif en amont. |
+| `admin-web`, `support-console` — cible `alpine 3.21.3` | **CRITICAL** : `CVE-2026-31789` (`libssl3` et `libcrypto3` 3.3.3-r0, débordement de tampon heap sur systèmes 32-bit ; version indiquée `3.3.7-r0`). **HIGH** : `CVE-2025-59375` (`libexpat` 2.7.0-r0 → `2.7.2-r0`) ; `CVE-2025-49796`, `CVE-2025-49795`, `CVE-2025-49794`, `CVE-2025-32415` et `CVE-2025-32414` (`libxml2` 2.13.4-r5 → `2.13.9-r0` pour les trois premiers, `2.13.4-r6` pour les deux derniers ; les titres indiquent type confusion, déréférencement nul, UAF et lectures hors limites/DoS) ; `CVE-2025-15467` (`libssl3` et `libcrypto3` 3.3.3-r0, IV CMS surdimensionné ; version indiquée `3.3.6-r0`). |
+
+Les lignes répétées de `ncurses` et OpenSSL sont des annotations par paquet ;
+la liste représente **8 IDs CVE uniques pour `api`/`worker` et 8 pour
+`admin-web`/`support-console`**. L'inspection locale du
+`package-lock.json` ne trouve pas `brace-expansion@2.0.2` (versions lockées
+observées : 2.1.4, 1.1.18 et 5.0.9). La provenance de cette alerte `Node.js`
+n'est donc pas attribuée au lockfile applicatif : vérifier le chemin exact
+dans le JSON/SBOM avant de toucher aux dépendances JS ou de conclure qu'elle
+vient de l'image de base.
+
+Les artifacts du run sont présents : API `10951237319`, worker `10951965151`,
+admin-web `10951247192`, support-console `10951231401`. L'étape Job Summary a
+réussi et les annotations sont accessibles par l'API Checks (jobs API
+`108784630926`, worker `108784631019`, admin-web `108784630822`, support-console
+`108784630974`), mais `gh run view --log-failed` et le téléchargement du rapport
+API via `gh run download` renvoient encore `EOF`. Les annotations livrent les 10
+premières findings par image ; le JSON intégral et tout finding au-delà du
+plafond restent à examiner avant une correction exhaustive. Aucun Dockerfile,
+lockfile ou tag d'image n'a été modifié en réaction à ces constats.
+
+Sur le même head `58cb5b366dcf0698d8fd1bc18fec15aad27824cc`, CodeQL
+`36376953393` a réussi ; CI `36376953473` et Flutter `36376953487` étaient
+encore en cours à la dernière lecture.
+
 **Encore non vérifié :** les lectures REST de protection et de Code Scanning
 restent en 403 ; un administrateur doit confirmer que `quality` est requis et
-vérifier le réglage « default setup » CodeQL. Trivy n'est pas vert. Les quatre
-rapports du run `36357511521` sont archivés mais restent illisibles via les
-récupérations tentées ; les CVE ne sont donc pas qualifiées. Le nouveau résumé
-permettra de les examiner dans les Checks/Job Summary après un run avec le
-changement ci-dessus ; ce run n'a pas encore fourni de résultat. Le lot reste
-**🟡** : CodeQL et `quality` validés sur GitHub, Trivy à diagnostiquer,
-protection administrateur en attente.
+vérifier le réglage « default setup » CodeQL. Trivy reste rouge sur les quatre
+images. Les résultats permettent maintenant d'identifier les findings annotés,
+mais ni le JSON complet ni l'exhaustivité de la liste ne sont établis. Le lot
+reste **🟡** : CodeQL et `quality` validés sur GitHub, Trivy à corriger puis à
+revalider, protection administrateur en attente.
 
 ## 15. Lot 5 — UI d'anonymisation
 
