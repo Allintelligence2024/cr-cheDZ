@@ -59,6 +59,12 @@ jobs:
           format: json
           output: trivy-results.json
           timeout: 10m
+      # Le résumé et les annotations restent visibles même si le téléchargement de l'artifact est inaccessible.
+      - name: Résumé Trivy (résultats visibles dans le job)
+        if: always()
+        env:
+          TRIVY_APP: ${{ matrix.app }}
+        run: node scripts/summarize-trivy.mjs trivy-results.json
       # Le rapport reste consultable même si le seuil de vulnérabilité fait échouer le job.
       - name: Archiver le rapport Trivy
         if: always()

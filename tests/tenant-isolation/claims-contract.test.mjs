@@ -48,9 +48,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { summarizeTrivyReport } from '../../scripts/summarize-trivy.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', 'out']);
@@ -575,6 +577,50 @@ test('sécurité CI — CodeQL sur PR/hebdo et Trivy bloquant avant GHCR', () =>
     'aucune publication GHCR ne doit avoir lieu hors du push sur main');
   assert.match(docker, /if: always\(\)[\s\S]*?actions\/upload-artifact@[0-9a-f]{40}[\s\S]*?trivy-results\.json/,
     'le rapport Trivy doit rester téléchargeable quand un scan échoue');
+  const summaryAt = docker.indexOf('name: Résumé Trivy (résultats visibles dans le job)');
+  const archiveAt = docker.indexOf('name: Archiver le rapport Trivy');
+  assert.match(docker, /if: always\(\)[\s\S]*?node scripts\/summarize-trivy\.mjs trivy-results\.json/,
+    'les constats Trivy doivent rester visibles dans le run même si l’artifact est inaccessible');
+  assert.ok(scanAt < summaryAt && summaryAt < archiveAt && archiveAt < loginAt,
+    'le résumé doit s’exécuter après le scan et avant l’archivage/publication');
+
+  const sample = summarizeTrivyReport({ Results: [{
+    Target: 'node:22-slim',
+    Vulnerabilities: [
+      { VulnerabilityID: 'CVE-2026-0001', PkgName: 'libc6', InstalledVersion: '2.36-9', FixedVersion: '2.36-10', Severity: 'CRITICAL' },
+      { VulnerabilityID: 'CVE-2026-0002', PkgName: 'express', InstalledVersion: '4.0.0', FixedVersion: '4.0.1', Severity: 'HIGH' },
+    ],
+  }] }, 'api');
+  assert.deepEqual(sample.counts, { CRITICAL: 1, HIGH: 1, MEDIUM: 0, LOW: 0, UNKNOWN: 0 });
+  assert.match(sample.markdown, /CVE-2026-0001/);
+  assert.equal(sample.annotations.length, 2);
+
+  const tempDir = mkdtempSync(join(tmpdir(), 'trivy-summary-'));
+  try {
+    const reportPath = join(tempDir, 'report.json');
+    writeFileSync(reportPath, JSON.stringify({ Results: [{
+      Target: 'node:22-slim',
+      Vulnerabilities: [{
+        VulnerabilityID: 'CVE-2026-0001', PkgName: 'libc6', InstalledVersion: '2.36-9',
+        FixedVersion: '2.36-10', Severity: 'CRITICAL',
+      }],
+    }] }));
+    const runSummary = (githubActions) => execFileSync(
+      process.execPath,
+      [join(REPO, 'scripts/summarize-trivy.mjs'), reportPath],
+      {
+        cwd: REPO,
+        encoding: 'utf8',
+        env: { ...process.env, GITHUB_ACTIONS: githubActions, GITHUB_STEP_SUMMARY: '', TRIVY_APP: 'api' },
+      },
+    );
+    assert.doesNotMatch(runSummary('false'), /^::(?:warning|notice)/m,
+      'les commandes d’annotation GitHub ne doivent pas être émises hors Actions');
+    assert.match(runSummary('true'), /^::warning title=Trivy api CRITICAL CVE-2026-0001::/m,
+      'les findings doivent être annotés quand le script tourne dans GitHub Actions');
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 
   const security = read('SECURITY.md');
   assert.match(security, /CodeQL[\s\S]*?codeql\.yml/);

@@ -96,7 +96,7 @@ les actions P0 du plan sont **corrigés** par le lot 0 ci-dessous.
 | **L1 — PHASE 1** | **Indexer `organization_id` sur les tables tenant** + gardien + banc + suite | D1 | 1 j | migration 077 appliquée, gardien en CI, banc 5,8×/16,1×, suite `phase78`, 74 entrées + garde RLS rejouées | ✅ livré (`92dd960`) |
 | **L2** | **e2e** : compléter les 2 specs + garde anti-squelette | D2, D3 | 1–2 j | 13/13 collectés sans skip ; gardien CI, seed paie et preuve API 16/16 ; job Chromium `e2e` réussi sur la PR #51 (`36356110967`) | ✅ preuve navigateur CI |
 | **L3** | **Vérité documentaire** : « limites connues » vérifiées contre le code | D4 | 0,5 j | gardien qui échoue si une limite citée n'existe plus | ✅ livré |
-| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | PR #51 : CodeQL et `quality` verts ; Trivy échoue sur les 4 images ; protection encore à confirmer | 🟡 |
+| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | CodeQL/quality verts ; Trivy échoue sur les 4 images ; résumé ajouté au workflow, nouveau run à valider, réglages administrateur à confirmer | 🟡 |
 | **L5** | **UI d'anonymisation** dans `admin-web` (écran directeur) | D7 | 2 j | UI + garde de rôle, API `phase56b` 10/10 ; Chromium a validé le parcours et le rendu de l'échec de purge média (`36357511493`) | ✅ livré, preuve navigateur CI |
 
 **Ordre recommandé** : L0 ✅ → L1 ✅ → L2 ✅ (job Chromium `e2e` réussi sur la PR #51) → L3 ✅ → L4 🟡 (CodeQL et quality verts sur PR #51, Trivy à investiguer, protection administrateur en attente) → L5 ✅ (API `phase56b` et parcours UI avec échec de purge média prouvés).
@@ -282,6 +282,7 @@ déjà : ce lot est **uniquement** de l'UI + un test d'accès par rôle.
 | 2026-09-27 | L4 | PR brouillon #51 : CodeQL + `quality` verts ; build des 4 images OK mais Trivy échoue sur chaque scan, artifacts JSON déposés ; protection/default setup toujours inaccessibles (403) | §14 |
 | 2026-09-27 | L5 | Onglet d'anonymisation `admin-web`, réservé à director/super_admin ; raison, confirmation, résultats structurés | §15 |
 | 2026-09-27 | L5 | Matrice + visibilité **10/10**, mutation détectée, API `phase56b` **10/10** ; E2E média passé sur `2151f77` (`36356961132`), puis revalidé avec toute la suite sur le head `5022050` (`36357511493`) ; typecheck/lint/gardien verts | §12.7, §15 |
+| 2026-09-28 | L4 | Ajout du résumé Trivy dans Job Summary + annotations Checks, conditionnées à `GITHUB_ACTIONS=true` ; contrat 12/12, lint, 14 gardiens et diff check verts ; nouveau run en attente | §14 |
 
 ---
 
@@ -539,7 +540,7 @@ jobs CI réussis.
 
 ## 14. Lot 4 — CodeQL + Trivy
 
-**Configuration livrée ; première validation GitHub observée via le draft PR #51.**
+**Configuration de base validée via le draft PR #51 ; visibilité des findings ajoutée, nouveau run à valider.**
 
 - `.github/workflows/codeql.yml` : JavaScript/TypeScript, `build-mode: none`,
   PR/push vers `main`, planification hebdomadaire et lancement manuel. CodeQL
@@ -551,11 +552,19 @@ jobs CI réussis.
   Trivy v0.36.0 épinglé au SHA
   `ed142fd0673e97e23eac54620cfb913e5ce36c25`, seuil bloquant `CRITICAL,HIGH`,
   puis login/push GHCR sur `main` uniquement après succès du scan. Le rapport
-  JSON est téléversé en `always()` comme artifact de 30 jours, y compris quand
-  le seuil fait échouer Trivy.
+  JSON reste téléversé en `always()` comme artifact de 30 jours. Une nouvelle
+  étape `always()` exécute `scripts/summarize-trivy.mjs` avant l'archivage : elle
+  écrit les compteurs et jusqu'aux 20 principales findings HIGH/CRITICAL dans
+  le résumé du job, et émet jusqu'à 10 annotations `warning` uniquement si
+  `GITHUB_ACTIONS=true`. Si le JSON manque ou est invalide, le résumé dit
+  explicitement que les résultats ne sont pas disponibles ; il ne présente pas
+  un rapport absent comme un scan sans vulnérabilité. Cela n'altère ni le seuil,
+  ni le code de sortie Trivy, ni la publication GHCR.
 - `claims-contract.test.mjs` (déjà exécuté par `quality`) vérifie les triggers
   CodeQL, langue/mode, les quatre images, le seuil, l'artifact et l'ordre
-  build → scan → login → push.
+  build → scan → résumé → archivage → login → push. Il teste aussi le rendu
+  d'exemple et confirme qu'aucune annotation de commande GitHub n'est émise
+  quand `GITHUB_ACTIONS` n'est pas exactement `true`.
 - `SECURITY.md` conserve les constats datés au moment de livraison ; les
   exécutions postérieures au draft PR #51 sont consignées ci-dessous.
 - Le job `quality` a **réussi sur la PR brouillon #51** (run CI `36354609729`),
@@ -569,12 +578,16 @@ jobs CI réussis.
 **Preuves exécutées localement :**
 
 - `node --test tests/tenant-isolation/claims-contract.test.mjs` → **12/12** ;
+  le contrat couvre un rapport d'exemple (compteurs, CVE, annotations) et lance
+  le script dans deux sous-processus : annotation absente avec
+  `GITHUB_ACTIONS=false`, présente avec `GITHUB_ACTIONS=true` ;
 - mutation temporaire `severity: CRITICAL,HIGH` → `CRITICAL` → contrat en échec
   attendu ; restauration puis **12/12** ;
 - `npm run lint` → exit 0 (avertissement Node préexistant sur
   `packages/shared-config/eslint.config.js`) ;
 - `node scripts/check-guards-wired.mjs` → **14/14** gardiens atteignables ;
-- parse YAML de `codeql.yml` et `docker.yml`, plus `git diff --check` → succès.
+- vérification du contrat d'ordre workflow (scan → résumé → artifact → login)
+  et `git diff --check` → succès.
 
 **Résultats GitHub observés sur PR brouillon #51 :**
 
@@ -607,14 +620,22 @@ jobs CI réussis.
   Le téléchargement de l'artifact API via `gh run download` renvoie `EOF` ; le
   contenu des rapports et les CVE restent donc non qualifiés.
 
-Les jobs CI, navigateur, CodeQL et Flutter sont verts sur le head actuel. Le
-seul check workflow rouge est Docker/Trivy ; son diagnostic dépend encore des
-rapports d'artifacts accessibles depuis l'interface GitHub.
+- Head distant alors courant `a0f0266a02ef5a3a696737a3f1e164ffb8f99cc3` :
+  CodeQL `36376367509` et Flutter `36376367506` ont réussi ; dans CI
+  `36376367549`, `e2e`, `quality`, `admin-web`, `support-console`, `security` et
+  `backup-drill` ont réussi, tandis que `database` était encore en cours à la
+  dernière lecture ; Docker `36376367510` a échoué sur les quatre scans. Le
+  résumé/annotations décrit ci-dessus n'était pas dans ce run, qui précède
+  l'ajout ; il devra être validé dans le nouveau run déclenché par cette mise à
+  jour avant de conclure quoi que ce soit sur les CVE.
 
 **Encore non vérifié :** les lectures REST de protection et de Code Scanning
 restent en 403 ; un administrateur doit confirmer que `quality` est requis et
-vérifier le réglage « default setup » CodeQL. Trivy n'est pas vert et ses
-findings ne peuvent pas être qualifiés sans ses rapports. Le lot reste donc
+vérifier le réglage « default setup » CodeQL. Trivy n'est pas vert. Les quatre
+rapports du run `36357511521` sont archivés mais restent illisibles via les
+récupérations tentées ; les CVE ne sont donc pas qualifiées. Le nouveau résumé
+permettra de les examiner dans les Checks/Job Summary après un run avec le
+changement ci-dessus ; ce run n'a pas encore fourni de résultat. Le lot reste
 **🟡** : CodeQL et `quality` validés sur GitHub, Trivy à diagnostiquer,
 protection administrateur en attente.
 
