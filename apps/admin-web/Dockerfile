@@ -2,13 +2,13 @@
 # Admin-web (React + vite) — statique servi par nginx AVEC fallback SPA
 # (react-router : try_files → /index.html, sinon 404 sur routes profondes).
 # docker build -f apps/admin-web/Dockerfile .
-FROM node:22 AS build
+FROM node:22.23.3-trixie AS build
 WORKDIR /app
 COPY . .
 RUN npm ci
 RUN npm run build --workspace @creche/admin-web
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30.5-alpine3.24-slim AS runtime
 COPY --from=build /app/apps/admin-web/dist /usr/share/nginx/html
 RUN printf 'server {\n\
   listen 80;\n\

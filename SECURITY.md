@@ -121,28 +121,28 @@ Corrections appliquées le 2026-08-02 (migration de durcissement) :
 
 - semgrep local (règles maison, hors ligne) : 5 résultats — 1 vrai bug corrigé
   (Math.random pour les OTP), 4 faux positifs documentés (logs sans secret).
-- **CodeQL configuré, exécution GitHub non encore observée à la livraison** :
-  `.github/workflows/codeql.yml` est configuré pour analyser JavaScript/TypeScript
-  sur les PR vers `main`, les pushes sur `main` et chaque lundi à 05:23 UTC ;
-  l'étape `analyze` publiera les résultats dans GitHub Code Scanning lorsqu'elle
-  s'exécutera. Il complète `npm audit` (job `security` de `ci.yml` + audit
-  hebdomadaire `security-audit.yml`). Avant le premier run, un administrateur doit
-  vérifier dans **Settings → Code security and analysis → Code scanning** que la
-  configuration par défaut n'entre pas en conflit avec ce workflow : GitHub
-  refuse les uploads SARIF avancés si le « default setup » reste activé
+- **CodeQL configuré et exécuté** : le run `36377366456` a terminé avec succès
+  l'analyse JavaScript/TypeScript sur la PR #51. Cette réussite ne donne pas à elle
+  seule le nombre de findings. Un administrateur doit toujours vérifier dans
+  **Settings → Code security and analysis → Code scanning** que le « default setup »
+  ne fait pas conflit avec ce workflow : GitHub refuse les uploads SARIF
+  avancés si cette configuration reste activée
   ([documentation GitHub](https://docs.github.com/en/code-security/code-scanning/troubleshooting-sarif-uploads/default-setup-enabled)).
   L'intégration n'a pas pu lire cette configuration (403).
-- **Images conteneur** : le workflow `docker.yml` est configuré pour construire
-  chacune des 4 images, les scanner avec Trivy, puis publier sur GHCR depuis
-  `main` seulement si le scan passe les seuils `CRITICAL,HIGH`. Il téléversera le
-  rapport JSON comme artifact même si le seuil fait échouer le job ; aucune
-  exécution GitHub de cette nouvelle étape n'est encore prouvée.
+- **Images conteneur** : `docker.yml` construit les quatre images et ne publie
+  sur GHCR depuis `main` qu'après des scans Trivy sans `CRITICAL,HIGH`. Le run
+  `36377366392` a bien construit les images et archivé les rapports, mais Trivy
+  échoue encore sur les quatre scans. Le résumé et les annotations Checks
+  exposent les findings ; versions et CVE observées sont documentées dans
+  [`docs/PLAN_REMEDIATION_2026-09-27.md` §14](docs/PLAN_REMEDIATION_2026-09-27.md#14-lot-4--codeql--trivy).
+  Les nouvelles bases runtime sont en revalidation ; L4 n'est pas clos.
 
 ## CI — configuration versionnée (2026-09-27)
 
 Les workflows sont committés ; leurs déclencheurs et étapes sont dans les fichiers
-ci-dessous (`docs/CI-RESTORE.md` est historique). Les nouvelles étapes CodeQL et
-Trivy n'ont pas encore de run GitHub observé à la livraison de ce lot.
+ci-dessous (`docs/CI-RESTORE.md` est historique). CodeQL et Trivy ont désormais
+été exécutés sur la PR #51 ; l'état des runs et les findings sont consignés au §14
+du plan de remédiation.
 
 | Workflow | Contenu |
 |---|---|
@@ -160,8 +160,10 @@ Trivy n'ont pas encore de run GitHub observé à la livraison de ce lot.
 2. **Gate de merge** : le job `quality` reste à ajouter aux checks requis de la
    branch protection `main` (réglage manuel, accès d'administration nécessaire) ;
    conserver aussi `database`.
-3. Maintenir `npm audit --omit=dev --audit-level=high` à 0 et traiter les rapports
-   CodeQL/Trivy ; les seuils Trivy `CRITICAL,HIGH` sont configurés pour bloquer
-   le push GHCR (run à confirmer).
+3. Maintenir `npm audit --omit=dev --audit-level=high` à 0, terminer la mise à
+   jour des bases Node/Nginx et revalider les quatre images jusqu'à zéro finding
+   `CRITICAL,HIGH`. Trivy bloque effectivement le push GHCR ; le run courant a
+   identifié des findings mais les téléchargements complets d'artifacts restent
+   indisponibles (`EOF`).
 4. Headers de sécurité, TLS et rate limiting : configurés dans
    `infrastructure/nginx/nginx.conf` (template, à déployer avec le VPS).

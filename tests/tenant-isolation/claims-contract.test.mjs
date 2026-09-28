@@ -555,6 +555,21 @@ test('sécurité CI — CodeQL sur PR/hebdo et Trivy bloquant avant GHCR', () =>
   assert.deepEqual(matrix[1].split(',').map((app) => app.trim()),
     ['api', 'worker', 'admin-web', 'support-console'],
     'Trivy doit scanner chacune des 4 images construites');
+  for (const app of ['api', 'worker', 'admin-web', 'support-console']) {
+    assert.match(read(`apps/${app}/Dockerfile`), /^FROM node:22\.23\.3-trixie AS build$/m,
+      `${app} doit compiler avec une image Node LTS récente et une base Trixie explicite`);
+  }
+  for (const app of ['api', 'worker']) {
+    const dockerfile = read(`apps/${app}/Dockerfile`);
+    assert.match(dockerfile, /^FROM node:22\.23\.3-trixie-slim AS runtime$/m,
+      `${app} doit exécuter sur la variante Trixie slim correspondante`);
+    assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/,
+      `${app} ne doit pas embarquer npm en production : l'application est lancée directement par node`);
+  }
+  for (const app of ['admin-web', 'support-console']) {
+    assert.match(read(`apps/${app}/Dockerfile`), /^FROM nginx:1\.30\.5-alpine3\.24-slim AS runtime$/m,
+      `${app} doit utiliser l'image Nginx stable sur Alpine 3.24 slim`);
+  }
   assert.match(docker, /load:\s*true/,
     'le build doit charger localement l’image qui sera scannée');
   assert.match(docker, /labels:\s*\$\{\{ steps\.meta\.outputs\.labels \}\}/,

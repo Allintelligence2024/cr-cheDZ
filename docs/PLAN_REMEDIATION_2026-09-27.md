@@ -96,7 +96,7 @@ les actions P0 du plan sont **corrigés** par le lot 0 ci-dessous.
 | **L1 — PHASE 1** | **Indexer `organization_id` sur les tables tenant** + gardien + banc + suite | D1 | 1 j | migration 077 appliquée, gardien en CI, banc 5,8×/16,1×, suite `phase78`, 74 entrées + garde RLS rejouées | ✅ livré (`92dd960`) |
 | **L2** | **e2e** : compléter les 2 specs + garde anti-squelette | D2, D3 | 1–2 j | 13/13 collectés sans skip ; gardien CI, seed paie et preuve API 16/16 ; job Chromium `e2e` réussi sur la PR #51 (`36356110967`) | ✅ preuve navigateur CI |
 | **L3** | **Vérité documentaire** : « limites connues » vérifiées contre le code | D4 | 0,5 j | gardien qui échoue si une limite citée n'existe plus | ✅ livré |
-| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | CodeQL/quality verts ; les annotations du run `36376953373` exposent les findings des 4 images ; JSON complet et réglages administrateur restent à valider | 🟡 |
+| **L4** | **Durcir la CI** : CodeQL + scan d'images + job `quality` requis | D6, P0-4 | 1 j | Findings des 4 images identifiés ; bases runtime actualisées et npm retiré des images Node ; revalidation Trivy et réglages administrateur encore en attente | 🟡 |
 | **L5** | **UI d'anonymisation** dans `admin-web` (écran directeur) | D7 | 2 j | UI + garde de rôle, API `phase56b` 10/10 ; Chromium a validé le parcours et le rendu de l'échec de purge média (`36357511493`) | ✅ livré, preuve navigateur CI |
 
 **Ordre recommandé** : L0 ✅ → L1 ✅ → L2 ✅ (job Chromium `e2e` réussi sur la PR #51) → L3 ✅ → L4 🟡 (CodeQL et `quality` verts ; findings Trivy maintenant identifiés, corrections/revue du JSON complet et protection administrateur encore en attente) → L5 ✅ (API `phase56b` et parcours UI avec échec de purge média prouvés).
@@ -283,6 +283,7 @@ déjà : ce lot est **uniquement** de l'UI + un test d'accès par rôle.
 | 2026-09-27 | L5 | Onglet d'anonymisation `admin-web`, réservé à director/super_admin ; raison, confirmation, résultats structurés | §15 |
 | 2026-09-27 | L5 | Matrice + visibilité **10/10**, mutation détectée, API `phase56b` **10/10** ; E2E média passé sur `2151f77` (`36356961132`), puis revalidé avec toute la suite sur le head `5022050` (`36357511493`) ; typecheck/lint/gardien verts | §12.7, §15 |
 | 2026-09-28 | L4 | Résumé Trivy exécuté sur les 4 images au run `36376953373` ; 10 annotations HIGH/CRITICAL par image récupérées par l'API Checks ; findings documentés, artefacts JSON encore en `EOF` | §14 |
+| 2026-09-28 | L4 | Origine du `brace-expansion@2.0.2` vérifiée dans le npm 10.9.9 fourni avec Node ; bases Node 22.23.3/Trixie et Nginx 1.30.5/Alpine 3.24 préparées, npm/Corepack/Yarn retirés du runtime Node ; revalidation CI pending | §14 |
 
 ---
 
@@ -649,10 +650,34 @@ Les lignes répétées de `ncurses` et OpenSSL sont des annotations par paquet ;
 la liste représente **8 IDs CVE uniques pour `api`/`worker` et 8 pour
 `admin-web`/`support-console`**. L'inspection locale du
 `package-lock.json` ne trouve pas `brace-expansion@2.0.2` (versions lockées
-observées : 2.1.4, 1.1.18 et 5.0.9). La provenance de cette alerte `Node.js`
-n'est donc pas attribuée au lockfile applicatif : vérifier le chemin exact
-dans le JSON/SBOM avant de toucher aux dépendances JS ou de conclure qu'elle
-vient de l'image de base.
+observées : 2.1.4, 1.1.18 et 5.0.9). Pour attribuer l'alerte `Node.js`, la
+publication officielle de Node 22.23.3 a été vérifiée : elle annonce npm 10.9.9 ;
+`npm pack npm@10.9.9` puis lecture de `package/node_modules/brace-expansion/package.json`
+confirment que ce npm embarque `brace-expansion` 2.0.2. La commande a été
+exécutée dans `/tmp/npm-10.9.9`, hors dépôt. La vulnérabilité détectée vient donc
+du gestionnaire npm intégré à l'image Node, pas du lockfile applicatif.
+
+### Correctif automatisé des images — revalidation Trivy en attente
+
+- Builder et runtime API/worker passent à `node:22.23.3-trixie` /
+  `node:22.23.3-trixie-slim`, mêmes versions Node et distribution Trixie pour
+  éviter le mélange de libc entre compilation et exécution. Le runtime retire
+  `npm`, `npx`, Corepack et Yarn : les conteneurs exécutent directement `node`,
+  tandis que la phase de build conserve npm pour `npm ci`.
+- Les deux images web passent à `nginx:1.30.5-alpine3.24-slim` au lieu de
+  `nginx:1.27-alpine`, avec la branche stable et Alpine 3.24 explicites.
+- Le contrat `claims-contract` verrouille ces bases ainsi que le retrait des
+  gestionnaires de paquets dans les deux runtimes Node.
+- Sources officielles consultées : [Node 22.23.3 (npm 10.9.9)]
+  (https://nodejs.org/en/blog/release/v22.23.3), [tags officiels Node]
+  (https://hub.docker.com/_/node), [recommandation Node Docker de retirer npm/Yarn
+  des images finales](https://github.com/nodejs/docker-node/blob/main/docs/BestPractices.md)
+  et [tags officiels Nginx stable / Alpine slim]
+  (https://hub.docker.com/_/nginx).
+- Ce choix vise les origines observées sans imposer un override npm 5
+  potentiellement incompatible avec les consommateurs 1.x/2.x. **Aucun correctif
+  n'est déclaré avant que le prochain build et les quatre scans Trivy passent** ;
+  Docker n'est pas disponible localement.
 
 Les artifacts du run sont présents : API `10951237319`, worker `10951965151`,
 admin-web `10951247192`, support-console `10951231401`. L'étape Job Summary a
@@ -661,8 +686,10 @@ réussi et les annotations sont accessibles par l'API Checks (jobs API
 `108784630974`), mais `gh run view --log-failed` et le téléchargement du rapport
 API via `gh run download` renvoient encore `EOF`. Les annotations livrent les 10
 premières findings par image ; le JSON intégral et tout finding au-delà du
-plafond restent à examiner avant une correction exhaustive. Aucun Dockerfile,
-lockfile ou tag d'image n'a été modifié en réaction à ces constats.
+plafond restent à examiner avant une correction exhaustive. À la date de ce
+run, aucun Dockerfile, lockfile ou tag n'avait encore été modifié ; la tentative
+automatisée suivante, qui n'est pas considérée résolue avant un nouveau scan,
+est décrite ci-dessous.
 
 Sur le même head `58cb5b366dcf0698d8fd1bc18fec15aad27824cc`, CodeQL
 `36376953393` a réussi ; CI `36376953473` et Flutter `36376953487` étaient
