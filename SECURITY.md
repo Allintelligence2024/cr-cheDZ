@@ -1,4 +1,4 @@
-# Sécurité — posture (mise à jour 2026-09-27, remédiation lot 4)
+# Sécurité — posture (mise à jour 2026-09-28, remédiation lot 4)
 
 ## Posture
 
@@ -121,26 +121,25 @@ Corrections appliquées le 2026-08-02 (migration de durcissement) :
 
 - semgrep local (règles maison, hors ligne) : 5 résultats — 1 vrai bug corrigé
   (Math.random pour les OTP), 4 faux positifs documentés (logs sans secret).
-- **CodeQL configuré et exécuté** : le run `36377366456` a terminé avec succès
-  l'analyse JavaScript/TypeScript sur la PR #51. Cette réussite ne donne pas à elle
-  seule le nombre de findings. Un administrateur doit toujours vérifier dans
-  **Settings → Code security and analysis → Code scanning** que le « default setup »
-  ne fait pas conflit avec ce workflow : GitHub refuse les uploads SARIF
-  avancés si cette configuration reste activée
+- **CodeQL configuré et exécuté** : le run `36381541444` a terminé avec succès
+  l'analyse JavaScript/TypeScript sur le code du commit `34fc103` de la PR #51.
+  Cette réussite ne donne pas à elle seule le nombre de findings. Un administrateur doit toujours
+  vérifier dans **Settings → Code security and analysis → Code scanning** que le
+  « default setup » ne fait pas conflit avec ce workflow : GitHub refuse les
+  uploads SARIF avancés si cette configuration reste activée
   ([documentation GitHub](https://docs.github.com/en/code-security/code-scanning/troubleshooting-sarif-uploads/default-setup-enabled)).
   L'intégration n'a pas pu lire cette configuration (403).
 - **Images conteneur** : `docker.yml` construit les quatre images et ne publie
   sur GHCR depuis `main` qu'après des scans Trivy sans `CRITICAL,HIGH`. Le run
-  `36380608074` passe pour admin-web/support-console, mais échoue encore pour
-  API/worker. Les annotations API/worker montrent quatre CVE HIGH du runtime
-  Debian 13.7 (`CVE-2026-76642`, `CVE-2026-54369`, `CVE-2026-16742`,
-  `CVE-2025-69720`) ; elles sont plafonnées à dix par étape et ne prouvent pas
-  l'exhaustivité du JSON. La tentative Trixie a donc un résultat partiel ; le
-  candidat courant passe les runtimes API/worker à Node Alpine 3.24 et doit être
-  rescanné. Les artifacts sont archivés, mais leur téléchargement depuis ce
-  poste échoue (`EOF`/`SSL_ERROR_SYSCALL`). Finding et versions observées sont
-  consignés dans [`docs/PLAN_REMEDIATION_2026-09-27.md` §14](docs/PLAN_REMEDIATION_2026-09-27.md#14-lot-4--codeql--trivy).
-  L4 reste ouvert et aucun finding n'est déclaré résolu avant le scan complet.
+  `36381541319` a construit et scanné les quatre images du commit `34fc103` ; les
+  quatre scans et leurs étapes de résumé réussissent, chacun avec l'annotation
+  « Aucune vulnérabilité CRITICAL/HIGH dans le JSON ». L4 est validé côté Trivy
+  pour ce head. Les CVE HIGH de Debian observées dans l'essai précédent
+  (`36380608074`) sont conservées comme findings historiques, pas comme findings
+  actuels. Les artifacts sont archivés ; leur téléchargement depuis ce poste
+  échoue (`EOF`/`SSL_ERROR_SYSCALL`), mais les résumés ont lu les JSON complets.
+  Détails et provenance figurent dans
+  [`docs/PLAN_REMEDIATION_2026-09-27.md` §14](docs/PLAN_REMEDIATION_2026-09-27.md#14-lot-4--codeql--trivy).
 
 ## CI — configuration versionnée (2026-09-27)
 
@@ -152,7 +151,7 @@ du plan de remédiation.
 | Workflow | Contenu |
 |---|---|
 | `ci.yml` | `database` (PG18 : migrations, seeds, schema-check, garde RLS, suites d'isolation sous rôles de prod), `backup-drill`, `quality` (eslint + contrats + jest), `e2e` (Playwright contre l'API réelle), `admin-web`, `support-console`, `security` (npm audit) |
-| `codeql.yml` | Configuré pour analyser JavaScript/TypeScript en PR vers `main`, push `main` et hebdomadaire ; l'upload Code Scanning interviendra au run |
+| `codeql.yml` | Analyse JavaScript/TypeScript en PR vers `main`, push `main` et hebdomadaire ; le run PR `36381541444` a réussi, réglage « default setup » à confirmer par un administrateur |
 | `docker.yml` | Configure build local + scan Trivy des 4 images ; le push GHCR sur `main` est conditionné au passage de `CRITICAL,HIGH` |
 | `flutter.yml` | `pub get`, `analyze`, tests et compilation des APK release pour les deux apps ; sans secrets de signature, l'APK CI est debug-signé et non publiable |
 | `security-audit.yml` | `npm audit --omit=dev` hebdomadaire, issue auto si vulnérabilité |
@@ -165,11 +164,8 @@ du plan de remédiation.
 2. **Gate de merge** : le job `quality` reste à ajouter aux checks requis de la
    branch protection `main` (réglage manuel, accès d'administration nécessaire) ;
    conserver aussi `database`.
-3. Maintenir `npm audit --omit=dev --audit-level=high` à 0 et revalider les quatre
-   images jusqu'à zéro finding `CRITICAL,HIGH`. Le premier changement de bases a
-   fait passer les images web, mais API/worker restent rouges ; le candidat Node
-   Alpine 3.24 attend son build et ses scans. Trivy bloque effectivement le push
-   GHCR ; ne déclarer aucun finding résolu avant les rapports complets et scans
-   verts.
+3. Maintenir `npm audit --omit=dev --audit-level=high` à 0 et conserver les
+   scans Trivy bloquants avant toute publication GHCR. Les quatre images passent
+   actuellement le seuil `CRITICAL,HIGH` au run `36381541319` (commit `34fc103`).
 4. Headers de sécurité, TLS et rate limiting : configurés dans
    `infrastructure/nginx/nginx.conf` (template, à déployer avec le VPS).

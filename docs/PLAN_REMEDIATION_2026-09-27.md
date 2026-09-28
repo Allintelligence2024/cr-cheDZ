@@ -697,35 +697,44 @@ encore (`gh run view`/`gh run download` : `EOF`, accès direct au stockage :
 l’inventaire exhaustif du JSON API/worker. Le résumé Trivy signale les findings
 observés ; une absence au-delà du plafond n’est pas établie.
 
-#### Candidat suivant — runtimes Node sur Alpine 3.24
+#### Revalidation du candidat Alpine — commit `34fc103`
 
-Le scan confirme que le tag Nginx stable sur Alpine 3.24 passe dans les deux
-images web. Les findings annotés restants des images API/worker proviennent de
-paquets du runtime Debian 13.7 (`util-linux`, `acl`, `systemd`, `ncurses`). Le
-candidat suivant conserve le builder Trixie et remplace **uniquement** les
-runtimes API/worker par `node:22.23.3-alpine3.24`; les deux runtimes web restent
-sur Nginx déjà rescanné sans HIGH/CRITICAL. L’inspection du graphe de dépendances
-`npm --omit=dev` ne trouve pas d’addon natif `.node` dans les chemins de
-paquets runtime API/worker ; le build et le scan GitHub restent nécessaires
-pour valider le changement de libc et l’image finale. Le tag Node Alpine 3.24 est
-listé par l’image officielle Node :
-[Node Docker Hub](https://hub.docker.com/_/node). Les références du premier
-candidat restent [Node 22.23.3 (npm 10.9.9)]
-(https://nodejs.org/en/blog/release/v22.23.3) et les
-[bonnes pratiques Node Docker](https://github.com/nodejs/docker-node/blob/main/docs/BestPractices.md).
+Le commit `34fc103cebeabf2c0577f2bcd7882d41e7e02dcd` a conservé les builders
+`node:22.23.3-trixie`, remplacé uniquement les runtimes API/worker par
+`node:22.23.3-alpine3.24`, et gardé `nginx:1.30.5-alpine3.24-slim` pour les
+SPAs. npm, npx, Corepack et Yarn restent supprimés des runtimes Node.
 
-Le contrat `claims-contract` verrouille maintenant les builders Node Trixie, le
-candidat runtime Alpine 3.24 pour API/worker, le retrait des gestionnaires de
-paquets et Nginx stable Alpine slim. Sur ce candidat, `claims-contract` passe
-12/12, `npm run lint`, les 14 gardiens et `git diff --check` passent ; Docker
-n’est pas disponible localement. **Aucun correctif n’est déclaré tant que le
-nouveau build et les quatre scans Trivy ne passent pas.** Le PR reste en draft.
+- Le run Docker `36381541319` a terminé en succès. Les quatre jobs API, worker,
+  admin-web et support-console ont construit l’image, exécuté Trivy, publié le
+  résumé et archivé le rapport.
+- Pour chacune des quatre images, l’étape Trivy `HIGH/CRITICAL` a réussi et
+  l’annotation Checks correspondante dit explicitement : « Aucune vulnérabilité
+  CRITICAL/HIGH dans le JSON ». Le seuil bloquant est donc satisfait sur les
+  **images construites et scannées** de ce commit ; il ne s’agit pas d’une
+  déduction depuis le statut du workflow. Le workflow PR n’a pas publié les
+  images sur GHCR (publication réservée au push sur `main`).
+- Ce résultat valide le changement de base pour L4 : les quatre images n’ont
+  plus de finding bloquant dans le JSON du scan. Les CVE Debian observées sur
+  `ba3937e` restent documentées comme findings historiques de ce candidat, et
+  ne sont pas présentées comme findings actuels.
+- Contrat local `claims-contract` : **12/12** ; `npm run lint`, 14 gardiens et
+  `git diff --check` réussis. Docker n’est pas disponible localement.
+- CodeQL du commit `34fc103` : run `36381541444` réussi ; Flutter `36381541316`
+  et CI `36381541342` ont également réussi. Le job `database`, avec ses 74 suites
+  d’isolation, a pris 32 min 24 s ; tous les jobs CI de ce head sont verts.
 
-L’administration de la protection de branche (`quality` requis) et de Code
-Scanning « default setup » reste une confirmation manuelle en attente : les API
-REST renvoient 403. Comme demandé, ces vérifications seront refaites après les
-tentatives automatisables. La revue finale du PR attend également les scans
-Trivy et ces confirmations.
+Les artifacts du nouveau run Docker sont archivés. Leur téléchargement depuis
+ce poste reste perturbé (`EOF`/`SSL_ERROR_SYSCALL`), mais l’étape de résumé a
+lu les JSON et exposé directement dans l’API Checks que les quatre rapports ne
+contiennent aucune HIGH/CRITICAL ; les quatre étapes Trivy bloquantes ont
+également réussi.
+
+**L4 côté images/Trivy est validé pour le commit scanné `34fc103`.** Le PR reste
+néanmoins en draft jusqu’à la fin des autres checks automatisables, puis aux
+confirmations manuelles administrateur : `quality` requis dans la protection de
+branche/ruleset et état Code Scanning « default setup » (API REST précédemment
+403). Ces contrôles restent la dernière étape ; la PR ne doit pas être fusionnée
+avant leur résolution.
 
 ## 15. Lot 5 — UI d'anonymisation
 
