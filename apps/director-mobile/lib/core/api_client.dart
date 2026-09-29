@@ -170,6 +170,26 @@ class DirectorApiClient {
   Future<Map<String, dynamic>> staffCheckOut(Map<String, dynamic> body) => _postMap('/staff/attendance/check-out', body);
   Future<Map<String, dynamic>> payInvoice(String id, Map<String, dynamic> body) => _postMap('/billing/invoices/$id/payments', body);
 
+  // Devices — M1 (FCM) : enregistrement du token push (POST /devices).
+  // Contrat : name (2-120), device_fingerprint (>= 8), platform
+  // (android|ios|web), app_version / fcm_token / apns_token optionnels.
+  Future<Map<String, dynamic>> registerDevice({
+    required String name,
+    required String deviceFingerprint,
+    required String platform,
+    String? appVersion,
+    String? fcmToken,
+    String? apnsToken,
+  }) =>
+      _postMap('/devices', {
+        'name': name,
+        'device_fingerprint': deviceFingerprint,
+        'platform': platform,
+        if (appVersion != null) 'app_version': appVersion,
+        if (fcmToken != null) 'fcm_token': fcmToken,
+        if (apnsToken != null) 'apns_token': apnsToken,
+      });
+
   // Helpers
   Future<Map<String, dynamic>> _getMap(String path, {Map<String, dynamic>? query}) => _withErrorMapping(() async {
         final res = await _dio.get<Map<String, dynamic>>(path, queryParameters: query);
