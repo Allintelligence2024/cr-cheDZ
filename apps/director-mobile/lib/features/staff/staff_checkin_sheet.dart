@@ -26,7 +26,7 @@ Future<void> showStaffCheckInSheet(BuildContext context, DirectorApiClient api, 
             Text('Pointage personnel', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: selectedStaffId,
+              initialValue: selectedStaffId,
               decoration: const InputDecoration(labelText: 'Membre', prefixIcon: Icon(Icons.person)),
               items: staff.map((s) {
                 final m = s as Map<String, dynamic>;

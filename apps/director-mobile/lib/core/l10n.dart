@@ -1,5 +1,6 @@
 /// Traductions minimales FR/AR pour l'app direction — miroir partiel de packages/i18n
 /// V2 : brancher le vrai package i18n partagé.
+library;
 
 class L10n {
   static const _fr = {

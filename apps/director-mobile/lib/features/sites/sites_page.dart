@@ -34,8 +34,8 @@ class _SitesPageState extends State<SitesPage> {
       final results = await Future.wait([widget.api.sites(), widget.api.rooms()]);
       if (!mounted) return;
       setState(() {
-        _sites = results[0] as List;
-        _rooms = results[1] as List;
+        _sites = results[0];
+        _rooms = results[1];
         _loading = false;
       });
     } catch (e) {

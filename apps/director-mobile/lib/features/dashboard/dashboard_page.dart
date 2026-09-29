@@ -55,8 +55,8 @@ class _DashboardPageState extends State<DashboardPage> {
         widget.api.dashboard(),
         widget.api.agedBalance().catchError((_) => <String, dynamic>{}),
       ]);
-      final data = results[0] as Map<String, dynamic>;
-      final aged = results[1] as Map<String, dynamic>;
+      final data = results[0];
+      final aged = results[1];
       await widget.cache.save('dashboard', data);
       if (!mounted) return;
       setState(() {

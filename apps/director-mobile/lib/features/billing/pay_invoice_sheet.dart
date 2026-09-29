@@ -23,7 +23,7 @@ Future<void> showPayInvoiceSheet(BuildContext context, DirectorApiClient api, St
             TextField(controller: amountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Montant DZD *', prefixIcon: Icon(Icons.payments))),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: method,
+              initialValue: method,
               decoration: const InputDecoration(labelText: 'Méthode', prefixIcon: Icon(Icons.account_balance_wallet)),
               items: const [
                 DropdownMenuItem(value: 'cash', child: Text('Espèces')),

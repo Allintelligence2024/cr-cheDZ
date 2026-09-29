@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import 'error_state.dart';
 import 'token_store.dart';
@@ -46,6 +47,9 @@ class DirectorApiClient {
   static const _retriedKey = 'director_retried';
 
   final Dio _dio;
+
+  @visibleForTesting
+  Dio get dio => _dio;
   final DirectorTokenStore _store;
   final void Function()? _onSessionExpired;
 

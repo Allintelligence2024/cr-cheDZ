@@ -30,7 +30,7 @@ Future<void> showCreateIncidentSheet(BuildContext context, DirectorApiClient api
             const SizedBox(height: 12),
             if (childId == null)
               DropdownButtonFormField<String>(
-                value: selectedChildId,
+                initialValue: selectedChildId,
                 decoration: const InputDecoration(labelText: 'Enfant', prefixIcon: Icon(Icons.child_care)),
                 items: children.map((c) {
                   final m = c as Map<String, dynamic>;
@@ -40,7 +40,7 @@ Future<void> showCreateIncidentSheet(BuildContext context, DirectorApiClient api
               ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: severity,
+              initialValue: severity,
               decoration: const InputDecoration(labelText: 'Gravité', prefixIcon: Icon(Icons.warning)),
               items: const [
                 DropdownMenuItem(value: 'low', child: Text('Faible')),

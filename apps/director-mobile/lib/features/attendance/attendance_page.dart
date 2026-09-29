@@ -39,8 +39,8 @@ class _AttendancePageState extends State<AttendancePage> {
       ]);
       if (!mounted) return;
       setState(() {
-        _summary = results[0] as Map<String, dynamic>;
-        _ratios = results[1] as Map<String, dynamic>;
+        _summary = results[0];
+        _ratios = results[1];
         _loading = false;
       });
     } catch (e) {

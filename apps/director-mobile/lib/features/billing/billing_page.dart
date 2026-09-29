@@ -184,7 +184,7 @@ class _AgedBalanceCard extends StatelessWidget {
               children: [
                 Icon(Icons.account_balance_wallet, size: 18, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 6),
-                Text('Balance âgée', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Balance âgée', style: TextStyle(fontWeight: FontWeight.bold)),
                 const Spacer(),
                 Text('Total: $total DZD', style: TextStyle(fontWeight: FontWeight.bold, color: palette.danger)),
               ],

@@ -6,7 +6,12 @@ node_modules/
 # Builds
 dist/
 build/
-coverage/
+# Rapports de couverture de tests (racine + apps/packages) — ATTENTION :
+# un pattern `coverage/` non ancré ignorait aussi lib/features/coverage/ des apps
+# Flutter (bug : coverage_page.dart n'a jamais été pushé — corrigé 2026-09-29).
+/coverage/
+apps/*/coverage/
+packages/*/coverage/
 *.tsbuildinfo
 
 # Env & secrets
@@ -50,6 +55,10 @@ tests/load/capacity-report.json
 apps/*/android/key.properties
 *.jks
 *.keystore
+
+# M1 — Firebase : configs d'apps (identifiants projet), jamais commités
+google-services.json
+GoogleService-Info.plist
 
 # Dossier temporaire du test de libellés (supprimé automatiquement ; filet de sécurité)
 packages/design-system/src/.tmp-label-test-*/

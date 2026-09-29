@@ -38,8 +38,8 @@ class _SettingsPageState extends State<SettingsPage> {
       ]);
       if (!mounted) return;
       setState(() {
-        _me = results[0] as Map<String, dynamic>;
-        _org = results[1] as Map<String, dynamic>;
+        _me = results[0];
+        _org = results[1];
         _loading = false;
       });
     } catch (e) {
