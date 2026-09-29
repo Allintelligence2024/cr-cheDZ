@@ -9,6 +9,8 @@ import '../../core/widgets/offline_banner.dart';
 import '../../theme/serenite_theme.dart';
 import 'ratio_card.dart';
 import 'alert_section.dart';
+import 'widgets/attendance_chart.dart';
+import 'widgets/billing_chart.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key, required this.api, required this.cache});
@@ -22,6 +24,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   Map<String, dynamic>? _data;
+  Map<String, dynamic>? _agedForChart;
   Object? _error;
   bool _loading = true;
   bool _isOffline = false;
@@ -48,11 +51,17 @@ class _DashboardPageState extends State<DashboardPage> {
       _error = null;
     });
     try {
-      final data = await widget.api.dashboard();
+      final results = await Future.wait([
+        widget.api.dashboard(),
+        widget.api.agedBalance().catchError((_) => <String, dynamic>{}),
+      ]);
+      final data = results[0] as Map<String, dynamic>;
+      final aged = results[1] as Map<String, dynamic>;
       await widget.cache.save('dashboard', data);
       if (!mounted) return;
       setState(() {
         _data = data;
+        _agedForChart = aged.isNotEmpty ? aged : null;
         _loading = false;
         _isOffline = false;
       });
@@ -133,6 +142,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 return _RoomCard(room: room);
               },
             ),
+          const SizedBox(height: 16),
+          if (rooms.isNotEmpty) AttendanceChart(rooms: rooms),
+          const SizedBox(height: 12),
+          if (data['alerts']?['unpaid_invoices'] != null || _agedForChart != null) BillingChart(aged: _agedForChart ?? {'buckets': {}, 'total': 0}),
           const SizedBox(height: 16),
           AlertSection(alerts: alerts),
           const SizedBox(height: 16),

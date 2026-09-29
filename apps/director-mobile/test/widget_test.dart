@@ -4,6 +4,9 @@ import 'package:director_mobile/core/token_store.dart';
 import 'package:director_mobile/features/auth/login_page.dart';
 import 'package:director_mobile/features/dashboard/dashboard_page.dart';
 import 'package:director_mobile/features/billing/billing_page.dart';
+import 'package:director_mobile/features/attendance/attendance_page.dart';
+import 'package:director_mobile/features/staff/staff_page.dart';
+import 'package:director_mobile/features/more/more_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -48,5 +51,46 @@ void main() {
     );
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('AttendancePage loading state', (tester) async {
+    final store = InMemoryTokenStore();
+    final api = DirectorApiClient('https://api.test/api/v1', store: store);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AttendancePage(api: api),
+      ),
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('StaffPage loading state', (tester) async {
+    final store = InMemoryTokenStore();
+    final api = DirectorApiClient('https://api.test/api/v1', store: store);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StaffPage(api: api),
+      ),
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('MorePage renders grid', (tester) async {
+    final store = InMemoryTokenStore();
+    final api = DirectorApiClient('https://api.test/api/v1', store: store);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MorePage(api: api, onLogout: () async {}),
+      ),
+    );
+
+    expect(find.text('Enfants'), findsOneWidget);
+    expect(find.text('Paramètres'), findsOneWidget);
+    expect(find.textContaining('Direction'), findsWidgets);
   });
 }

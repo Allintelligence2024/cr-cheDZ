@@ -4,6 +4,7 @@ import '../../core/api_client.dart';
 import '../../core/error_state.dart';
 import '../../theme/serenite_theme.dart';
 import 'child_detail_page.dart';
+import 'create_child_sheet.dart';
 
 class ChildrenListPage extends StatefulWidget {
   const ChildrenListPage({super.key, required this.api});
@@ -62,15 +63,23 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
-          child: TextField(
-            controller: _searchCtrl,
-            decoration: InputDecoration(
-              hintText: 'Rechercher enfant...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); _load(); }),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onSubmitted: (_) => _load(),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  decoration: InputDecoration(
+                    hintText: 'Rechercher enfant...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchCtrl.clear(); _load(); }),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onSubmitted: (_) => _load(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(onPressed: () => showCreateChildSheet(context, widget.api, onCreated: _load), icon: const Icon(Icons.add), label: const Text('Nouveau')),
+            ],
           ),
         ),
         Expanded(

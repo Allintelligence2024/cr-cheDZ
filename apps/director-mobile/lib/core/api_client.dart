@@ -151,6 +151,20 @@ class DirectorApiClient {
         if (to != null) 'to': to,
       });
   Future<Map<String, dynamic>> dashboardSummaryWithCache({String? siteId}) => _getMap('/dashboard/summary', query: {if (siteId != null) 'site_id': siteId});
+  Future<List<dynamic>> organizations() => _getList('/organizations');
+  Future<List<dynamic>> videoCameras() => _getList('/video/cameras');
+  Future<List<dynamic>> videoClips({String? cameraId}) => _getList('/video/clips', query: {if (cameraId != null) 'camera_id': cameraId});
+
+  // V2.3 — écritures
+  Future<Map<String, dynamic>> createChild(Map<String, dynamic> body) => _postMap('/children', body);
+  Future<Map<String, dynamic>> updateChildRoom(String childId, String roomId) => _postMap('/children/$childId/room-moves', {'room_id': roomId});
+  Future<Map<String, dynamic>> checkInChild(Map<String, dynamic> body) => _postMap('/attendance/check-in', body);
+  Future<Map<String, dynamic>> checkOutChild(Map<String, dynamic> body) => _postMap('/attendance/check-out', body);
+  Future<Map<String, dynamic>> markAbsent(Map<String, dynamic> body) => _postMap('/attendance/mark-absent', body);
+  Future<Map<String, dynamic>> createJournalEvent(Map<String, dynamic> body) => _postMap('/journal/events', body);
+  Future<Map<String, dynamic>> staffCheckIn(Map<String, dynamic> body) => _postMap('/staff/attendance/check-in', body);
+  Future<Map<String, dynamic>> staffCheckOut(Map<String, dynamic> body) => _postMap('/staff/attendance/check-out', body);
+  Future<Map<String, dynamic>> payInvoice(String id, Map<String, dynamic> body) => _postMap('/billing/invoices/$id/payments', body);
 
   // Helpers
   Future<Map<String, dynamic>> _getMap(String path, {Map<String, dynamic>? query}) => _withErrorMapping(() async {

@@ -44,17 +44,13 @@ void main() {
     client.close();
   });
 
-  test('CacheService save and read', () async {
-    // SharedPreferences needs mock, so we test logic without actual prefs
-    // For unit test, we just verify class exists and methods don't throw when mocked via in-memory
-    // Real test requires flutter_test with SharedPreferences.setMockInitialValues
+  test('CacheService exists', () async {
     expect(CacheService, isNotNull);
   });
 
-  test('DirectorApiClient has all endpoints', () {
+  test('DirectorApiClient has all endpoints V1+V2', () {
     final store = InMemoryTokenStore();
     final client = DirectorApiClient('https://api.test/api/v1', store: store);
-    // Verify methods exist via noSuchMethod check — just call to ensure no compile error
     expect(client.dashboard, isA<Function>());
     expect(client.attendanceSummary, isA<Function>());
     expect(client.attendanceRatios, isA<Function>());
@@ -71,6 +67,19 @@ void main() {
     expect(client.rooms, isA<Function>());
     expect(client.exports, isA<Function>());
     expect(client.orgSettings, isA<Function>());
+    expect(client.organizations, isA<Function>());
+    expect(client.videoCameras, isA<Function>());
+    // V2.3 write
+    expect(client.createChild, isA<Function>());
+    expect(client.updateChildRoom, isA<Function>());
+    expect(client.checkInChild, isA<Function>());
+    expect(client.checkOutChild, isA<Function>());
+    expect(client.markAbsent, isA<Function>());
+    expect(client.createJournalEvent, isA<Function>());
+    expect(client.staffCheckIn, isA<Function>());
+    expect(client.staffCheckOut, isA<Function>());
+    expect(client.payInvoice, isA<Function>());
+    expect(client.generateInvoices, isA<Function>());
     client.close();
   });
 }

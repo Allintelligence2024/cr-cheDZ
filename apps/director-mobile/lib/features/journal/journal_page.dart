@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/error_state.dart';
 import '../../theme/serenite_theme.dart';
+import 'create_incident_sheet.dart';
 
 class JournalPage extends StatefulWidget {
   const JournalPage({super.key, required this.api});
@@ -91,30 +92,36 @@ class _JournalPageState extends State<JournalPage> {
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: _events.isEmpty
-              ? Center(child: Text('Aucun événement', style: TextStyle(color: SereniteStatusColors.of(context).textMuted)))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView.builder(
-                    itemCount: _events.length,
-                    itemBuilder: (context, i) {
-                      final e = _events[i] as Map<String, dynamic>;
-                      final isIncident = e['event_type'] == 'incident';
-                      return Card(
-                        color: isIncident ? SereniteStatusColors.of(context).dangerBg : null,
-                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        child: ListTile(
-                          leading: Icon(_iconFor(e['event_type']?.toString() ?? ''), color: isIncident ? SereniteStatusColors.of(context).danger : Theme.of(context).colorScheme.primary),
-                          title: Text('${e['event_type'] ?? ''} — ${e['first_name_fr'] ?? ''} ${e['last_name_fr'] ?? ''}'.trim()),
-                          subtitle: Text(
-                            '${e['occurred_at']?.toString().substring(11, 16) ?? ''} — ${e['meal_type'] ?? e['activity_type'] ?? e['incident_severity'] ?? e['note_text'] ?? e['description'] ?? ''}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+          child: Stack(
+            children: [
+              _events.isEmpty
+                  ? Center(child: Text('Aucun événement', style: TextStyle(color: SereniteStatusColors.of(context).textMuted)))
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 80),
+                        itemCount: _events.length,
+                        itemBuilder: (context, i) {
+                          final e = _events[i] as Map<String, dynamic>;
+                          final isIncident = e['event_type'] == 'incident';
+                          return Card(
+                            color: isIncident ? SereniteStatusColors.of(context).dangerBg : null,
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            child: ListTile(
+                              leading: Icon(_iconFor(e['event_type']?.toString() ?? ''), color: isIncident ? SereniteStatusColors.of(context).danger : Theme.of(context).colorScheme.primary),
+                              title: Text('${e['event_type'] ?? ''} — ${e['first_name_fr'] ?? ''} ${e['last_name_fr'] ?? ''}'.trim()),
+                              subtitle: Text(
+                                '${e['occurred_at']?.toString().substring(11, 16) ?? ''} — ${e['meal_type'] ?? e['activity_type'] ?? e['incident_severity'] ?? e['note_text'] ?? e['description'] ?? ''}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+              Positioned(bottom: 16, right: 16, child: FloatingActionButton.extended(onPressed: () => showCreateIncidentSheet(context, widget.api, onCreated: _load), icon: const Icon(Icons.warning), label: const Text('Incident'))),
+            ],
+          ),
         ),
       ],
     );

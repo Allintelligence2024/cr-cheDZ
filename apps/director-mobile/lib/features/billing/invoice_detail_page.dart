@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/error_state.dart';
 import '../../theme/serenite_theme.dart';
+import 'pay_invoice_sheet.dart';
 
 class InvoiceDetailPage extends StatefulWidget {
   const InvoiceDetailPage({super.key, required this.api, required this.invoiceId});
@@ -140,6 +141,12 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                 onPressed: () => _showReminderDialog(),
                 icon: const Icon(Icons.email),
                 label: const Text('Relance'),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => showPayInvoiceSheet(context, widget.api, widget.invoiceId, onPaid: _load),
+                icon: const Icon(Icons.payments),
+                label: const Text('Encaisser'),
+                style: ElevatedButton.styleFrom(backgroundColor: palette.success, foregroundColor: palette.onSuccess),
               ),
             ],
           ),

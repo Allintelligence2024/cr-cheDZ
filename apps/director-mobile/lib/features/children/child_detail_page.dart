@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/error_state.dart';
 import '../../theme/serenite_theme.dart';
+import 'change_room_sheet.dart';
+import '../journal/create_incident_sheet.dart';
 
 class ChildDetailPage extends StatefulWidget {
   const ChildDetailPage({super.key, required this.api, required this.childId});
@@ -49,7 +51,15 @@ class _ChildDetailPageState extends State<ChildDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Détail enfant')),
+      appBar: AppBar(
+        title: const Text('Détail enfant'),
+        actions: [
+          if (_child != null)
+            IconButton(icon: const Icon(Icons.swap_horiz), tooltip: 'Changer salle', onPressed: () => showChangeRoomSheet(context, widget.api, widget.childId, _child!['room_id']?.toString() ?? '', onChanged: _load)),
+          if (_child != null)
+            IconButton(icon: const Icon(Icons.warning), tooltip: 'Signaler incident', onPressed: () => showCreateIncidentSheet(context, widget.api, childId: widget.childId)),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null

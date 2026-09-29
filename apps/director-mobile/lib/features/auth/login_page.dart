@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
+import '../../core/biometry_service.dart';
 import '../../core/error_state.dart';
 import '../../theme/serenite_theme.dart';
 
@@ -21,6 +22,19 @@ class _LoginPageState extends State<LoginPage> {
   bool _loading = false;
   String? _error;
   bool _needTotp = false;
+  final _bio = BiometryService();
+  bool _bioAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkBio();
+  }
+
+  Future<void> _checkBio() async {
+    final available = await _bio.isAvailable();
+    if (mounted) setState(() => _bioAvailable = available);
+  }
 
   Future<void> _login() async {
     setState(() {
@@ -33,7 +47,6 @@ class _LoginPageState extends State<LoginPage> {
         _password.text,
         totpCode: _needTotp ? _totp.text.trim() : null,
       );
-      // Si le serveur demande TOTP (code TOTP_REQUIRED)
       if (res['code'] == 'TOTP_REQUIRED' || res['requires_totp'] == true) {
         setState(() {
           _needTotp = true;
@@ -59,6 +72,20 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _error = 'Erreur : $e');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _bioLogin() async {
+    final ok = await _bio.authenticate(reason: 'Connexion rapide direction');
+    if (!ok) {
+      setState(() => _error = 'Biométrie échouée');
+      return;
+    }
+    // Si biométrie OK mais pas de session, on tente restauration auto
+    // (V2 : le refresh token reste en secure storage, biométrie = déverrouillage rapide)
+    if (mounted) {
+      // On ne peut pas bypass login sans token, mais on indique que le device est vérifié
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Biométrie OK — entrez vos identifiants (V2: token restera chiffré)')));
     }
   }
 
@@ -134,6 +161,14 @@ class _LoginPageState extends State<LoginPage> {
                       ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
                       : Text(_needTotp ? 'Vérifier' : 'Se connecter'),
                 ),
+                if (_bioAvailable) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _bioLogin,
+                    icon: const Icon(Icons.fingerprint),
+                    label: const Text('Connexion biométrique (V2)'),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text(
                   'Accès réservé : directrice, adjointe, super_admin.\nLes éducatrices utilisent l\'app Personnel.',

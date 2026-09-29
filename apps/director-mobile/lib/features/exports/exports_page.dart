@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:share_plus/share_plus.dart';
+
 import '../../core/api_client.dart';
 import '../../core/error_state.dart';
 import '../../core/widgets/empty_state.dart';
@@ -68,7 +70,8 @@ class _ExportsPageState extends State<ExportsPage> {
               leading: Icon(status == 'completed' ? Icons.check_circle : Icons.hourglass_top, color: status == 'completed' ? SereniteStatusColors.of(context).success : SereniteStatusColors.of(context).warning),
               title: Text(e['report_type']?.toString() ?? e['type']?.toString() ?? 'Export'),
               subtitle: Text('Statut: $status — ${e['created_at']?.toString().substring(0, 16) ?? ''}\n${e['file_name'] ?? ''}', style: const TextStyle(fontSize: 11)),
-              trailing: status == 'completed' ? const Icon(Icons.download) : null,
+              trailing: status == 'completed' ? const Icon(Icons.share) : null,
+              onTap: status == 'completed' ? () => Share.share('Export ${e['file_name'] ?? ''} — ${e['download_url'] ?? 'URL à récupérer via API'}') : null,
             ),
           );
         },

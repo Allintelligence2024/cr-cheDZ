@@ -3,6 +3,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/api_client.dart';
 import 'core/cache_service.dart';
+import 'core/push_service.dart';
 import 'core/token_store.dart';
 import 'features/attendance/attendance_page.dart';
 import 'features/auth/login_page.dart';
@@ -24,6 +25,7 @@ class DirectorApp extends StatefulWidget {
 class _DirectorAppState extends State<DirectorApp> {
   DirectorApiClient? _api;
   final _cache = CacheService();
+  final _push = PushService();
   bool _authenticated = false;
   bool _checking = true;
   int _epoch = 0;
@@ -32,6 +34,7 @@ class _DirectorAppState extends State<DirectorApp> {
   void initState() {
     super.initState();
     _bootstrap();
+    _push.initialize();
   }
 
   Future<void> _bootstrap() async {

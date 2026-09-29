@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/api_client.dart';
 import '../../core/error_state.dart';
 import '../../theme/serenite_theme.dart';
+import '../../core/widgets/empty_state.dart';
 
 class AttendancePage extends StatefulWidget {
   const AttendancePage({super.key, required this.api});
@@ -51,6 +52,58 @@ class _AttendancePageState extends State<AttendancePage> {
     }
   }
 
+  Future<void> _showCheckSheet() async {
+    final childIdCtrl = TextEditingController();
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 16, right: 16, top: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Pointage rapide', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            TextField(controller: childIdCtrl, decoration: const InputDecoration(labelText: 'ID enfant ou recherche', prefixIcon: Icon(Icons.child_care))),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: FilledButton.icon(onPressed: () => Navigator.pop(context, 'in:${childIdCtrl.text}'), icon: const Icon(Icons.login), label: const Text('Arrivée'))),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.pop(context, 'out:${childIdCtrl.text}'), icon: const Icon(Icons.logout), label: const Text('Départ'))),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton.icon(onPressed: () => Navigator.pop(context, 'abs:${childIdCtrl.text}'), icon: const Icon(Icons.event_busy), label: const Text('Absent'))),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null) return;
+    try {
+      if (result.startsWith('in:')) {
+        final id = result.substring(3).trim();
+        if (id.isEmpty) return;
+        await widget.api.checkInChild({'child_id': id, 'occurred_at': DateTime.now().toUtc().toIso8601String()});
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Arrivée enregistrée'), backgroundColor: SereniteStatusColors.of(context).success));
+      } else if (result.startsWith('out:')) {
+        final id = result.substring(4).trim();
+        await widget.api.checkOutChild({'child_id': id, 'occurred_at': DateTime.now().toUtc().toIso8601String()});
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Départ enregistré'), backgroundColor: SereniteStatusColors.of(context).success));
+      } else if (result.startsWith('abs:')) {
+        final id = result.substring(4).trim();
+        await widget.api.markAbsent({'child_id': id, 'date': _date});
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Absent marqué'), backgroundColor: SereniteStatusColors.of(context).warning));
+      }
+      _load();
+    } catch (e) {
+      final msg = e is DirectorApiException ? (e.message ?? e.kind) : e.toString();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $msg'), backgroundColor: SereniteStatusColors.of(context).danger));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -59,66 +112,76 @@ class _AttendancePageState extends State<AttendancePage> {
     final rooms = (_summary?['rooms'] as List?) ?? (_summary?['data'] as List?) ?? [];
     final ratioRooms = (_ratios?['rooms'] as List?) ?? [];
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Row(
+    return Stack(
+      children: [
+        RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
             children: [
-              Icon(Icons.how_to_reg, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 8),
-              Text('Présences — $_date', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-              const Spacer(),
-              IconButton(icon: const Icon(Icons.calendar_today), onPressed: _pickDate, tooltip: 'Changer date'),
-              IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (ratioRooms.isNotEmpty) ...[
-            Text('Ratios', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            ...ratioRooms.map((r) => Card(
-                  child: ListTile(
-                    title: Text((r as Map)['room_name']?.toString() ?? 'Salle'),
-                    subtitle: Text('Statut: ${r['status']} — ${r['present_children'] ?? 0} enfants / ${r['educator_count'] ?? 0} éduc'),
-                    trailing: _ratioBadge(r['status']?.toString() ?? 'empty'),
-                  ),
-                )),
-            const SizedBox(height: 16),
-          ],
-          Text('Par salle', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          if (rooms.isEmpty)
-            Card(child: Padding(padding: const EdgeInsets.all(24), child: Text('Aucune donnée pour $_date', style: TextStyle(color: SereniteStatusColors.of(context).textMuted))))
-          else
-            ...rooms.map((room) {
-              final m = room as Map<String, dynamic>;
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(m['room_name']?.toString() ?? 'Salle', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(m['site_name']?.toString() ?? '', style: TextStyle(fontSize: 11, color: SereniteStatusColors.of(context).textFaint)),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+              Row(
+                children: [
+                  Icon(Icons.how_to_reg, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Text('Présences — $_date', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  const Spacer(),
+                  IconButton(icon: const Icon(Icons.calendar_today), onPressed: _pickDate, tooltip: 'Changer date'),
+                  IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (ratioRooms.isNotEmpty) ...[
+                Text('Ratios', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...ratioRooms.map((r) => Card(
+                      child: ListTile(
+                        title: Text((r as Map)['room_name']?.toString() ?? 'Salle'),
+                        subtitle: Text('Statut: ${r['status']} — ${r['present_children'] ?? 0} enfants / ${r['educator_count'] ?? 0} éduc'),
+                        trailing: _ratioBadge(r['status']?.toString() ?? 'empty'),
+                      ),
+                    )),
+                const SizedBox(height: 16),
+              ],
+              Text('Par salle', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              if (rooms.isEmpty)
+                EmptyState(icon: Icons.how_to_reg, title: 'Aucune donnée pour $_date', subtitle: 'Vérifiez les pointages')
+              else
+                ...rooms.map((room) {
+                  final m = room as Map<String, dynamic>;
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _stat('Présents', m['present'], SereniteStatusColors.of(context).success),
-                          _stat('Attendus', m['expected'], SereniteStatusColors.of(context).info),
-                          _stat('Partis', m['departed'], SereniteStatusColors.of(context).textFaint),
-                          _stat('Absents', m['absent'], SereniteStatusColors.of(context).danger),
+                          Text(m['room_name']?.toString() ?? 'Salle', style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text(m['site_name']?.toString() ?? '', style: TextStyle(fontSize: 11, color: SereniteStatusColors.of(context).textFaint)),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _stat('Présents', m['present'], SereniteStatusColors.of(context).success),
+                              _stat('Attendus', m['expected'], SereniteStatusColors.of(context).info),
+                              _stat('Partis', m['departed'], SereniteStatusColors.of(context).textFaint),
+                              _stat('Absents', m['absent'], SereniteStatusColors.of(context).danger),
+                            ],
+                          ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-        ],
-      ),
+                    ),
+                  );
+                }),
+              const SizedBox(height: 80),
+            ],
+          ),
+        ),
+        Positioned(
+          bottom: 16,
+          right: 16,
+          child: FloatingActionButton.extended(onPressed: _showCheckSheet, icon: const Icon(Icons.edit), label: const Text('Pointer')),
+        ),
+      ],
     );
   }
 
