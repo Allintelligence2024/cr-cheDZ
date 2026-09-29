@@ -64,6 +64,14 @@ export function canAccess(user: AccessSubject | null | undefined, path: string):
   return role !== null && allowed.includes(role);
 }
 
+/** L'anonymisation détruit irréversiblement des données : directeur ou super-admin seulement. */
+export function canAnonymizeChild(user: AccessSubject | null | undefined): boolean {
+  if (!user) return false;
+  if (user.is_super_admin) return true;
+  const role = currentRole(user);
+  return role === 'director' || role === 'super_admin';
+}
+
 /** Premier écran accessible (cible du renvoi quand une route est refusée). */
 export function homeFor(user: AccessSubject | null | undefined): string {
   if (canAccess(user, '/')) return '/';

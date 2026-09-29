@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1
 # Console support (React + vite) — statique nginx + fallback SPA.
 # docker build -f apps/support-console/Dockerfile .
-FROM node:22 AS build
+FROM node:22.23.3-trixie AS build
 WORKDIR /app
 COPY . .
 RUN npm ci
 RUN npm run build --workspace @creche/support-console
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30.5-alpine3.24-slim AS runtime
 # ⚠️ Le bundle est construit avec `base: '/support/'` (vite.config.ts) : le
 # index.html généré demande /support/assets/*. Le reverse proxy amont fait un
 # `proxy_pass http://support_backend;` SANS slash final, donc le préfixe

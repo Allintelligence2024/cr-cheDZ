@@ -697,3 +697,10 @@ sed -n '/^SUITES=(/,/^)/p' scripts/run-isolation-suites.sh | grep -c test.mjs   
 
 **Fichiers/lignes cités** : voir la colonne « Preuve » du §3 ; toutes les références ont été
 relevées sur le commit `3b8f51b`.
+
+
+## Complément mesuré au 2026-09-27 — lot 1 indexation tenant
+
+**Comptage courant 2026-09-27 — runner : 74 entrées ; suites phaseNN : 72 ; fichiers d’isolation : 90 ; migrations : 77.**
+
+Ces quatre compteurs sont recalculés depuis le dépôt par `tests/tenant-isolation/claims-contract.test.mjs` : le runner compte 72 suites `phaseNN` plus `schema-check` et `rls-behavior-check` ; les 90 fichiers sont les `.mjs` du dossier `tests/tenant-isolation/`. La ligne ci-dessus est le snapshot courant ; les tableaux et journaux datés plus haut conservent les mesures de leur époque (71/89/73 avant l’ajout de `phase78`).

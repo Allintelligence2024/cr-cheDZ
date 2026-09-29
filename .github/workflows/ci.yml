@@ -70,8 +70,9 @@ jobs:
       - name: admin-web — matrice d'accès UI par rôle (F3)
         run: npm run test:unit --workspace @creche/admin-web
       # Nom corrigé (lot 1) : 75 migrations sur disque (001 → 075), pas 063.
-      # Complété au lot L4 : 076 ajoutée → 76 migrations (001 → 076).
-      - name: Migrations (reset + status 001→076)
+      # Complété au lot L4, puis 077 au lot 1 de la remédiation du 2026-09-27
+      # (indexation tenant) : 77 migrations (001 → 077).
+      - name: Migrations (reset + status 001→077)
         run: |
           node scripts/migrate.mjs --reset
           node scripts/migrate.mjs
@@ -86,17 +87,26 @@ jobs:
         run: node tests/tenant-isolation/schema-check.mjs --verbose
       - name: rls-behavior-check (rôle NOBYPASSRLS)
         run: node tests/tenant-isolation/rls-behavior-check.mjs
+      # LOT 1 (remédiation 2026-09-27, défaut D1) : toute table tenant (RLS)
+      # doit porter un index dont organization_id est la TÊTE. Sans lui, chaque
+      # requête balaie la table entière — le coût de service d'une crèche croît
+      # avec le nombre de crèches hébergées (mesuré 5,8× à 40 organisations,
+      # 16,1× à 100). Ce gardien lit pg_class/pg_index : il exige une base et
+      # refuse de rendre un vert sans catalogue (code 2), d'où sa place dans ce
+      # job et non dans `quality`.
+      - name: Indexation tenant (organization_id en tête d’index)
+        run: node scripts/check-tenant-index.mjs --verbose
       - name: Build api + worker
         run: |
           npm run build --workspace @creche/api
           npm run build --workspace @creche/worker
       # Nom corrigé (plan de réparation 2026-09-24, lot 1) : l'étape rejouait
-      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase77 (73 entrées
+      # « phase3 → phase24 » ; elle va en réalité jusqu'à phase78 (74 entrées
       # dans SUITES, plus le garde anti-bypass RLS en tête).
       # (nom entre guillemets : un « : » non échappé dans une valeur YAML la
       # transformerait en mapping imbriqué — le workflow deviendrait invalide
       # et la CI s'arrêterait de tourner sans que le diff le montre)
-      - name: "Suites d'isolation (garde RLS anti-bypass + 73 suites — isolation, phase3 → phase77)"
+      - name: "Suites d'isolation (garde RLS anti-bypass + 74 suites — isolation, phase3 → phase78)"
         run: bash scripts/run-isolation-suites.sh
 
   backup-drill:
@@ -212,9 +222,23 @@ jobs:
       # la documentation mentait, et rien ne pouvait le signaler. Ce contrat
       # confronte les affirmations au DISQUE (implémentations, healthchecks des
       # composes, migrations, suites, ADR, runbooks, routes, chemins OpenAPI) et
-      # refuse les phrases bannies non corrigées. Aucune base, aucun Docker.
+      # désormais les « Limites connues » de SECURITY.md aux sources + tests
+      # exécutables, ainsi que les garde-fous CodeQL/Trivy (périmètre, seuil,
+      # ordre scan→publication). Il refuse les phrases bannies non corrigées.
+      # Aucune base, aucun Docker.
       - name: Contrat de vérité documentaire (affirmations vs disque)
         run: node --test tests/tenant-isolation/claims-contract.test.mjs
+      # LOT 2 (remédiation 2026-09-27) : deux specs Playwright étaient livrées
+      # ENTIÈREMENT skippées — et, en les ouvrant, on a découvert qu'elles
+      # décrivaient une API inexistante (`mark-overdue`, `PATCH /payroll/entries/:id`,
+      # code `PAYROLL_RUN_LOCKED`). Une spec skippée ne manque donc pas seulement
+      # à la couverture : elle peut énoncer des contre-vérités que rien n'exécute
+      # pour les démentir. Ce gardien refuse les squelettes et compare les codes
+      # d'erreur, les couples méthode+chemin aux décorateurs NestJS, et les
+      # libellés aux sources UI. Aucune base, aucun navigateur : il lit les
+      # fichiers, ce qui le place dans `quality`.
+      - name: Specs e2e (aucun squelette, codes et endpoints réels)
+        run: node scripts/check-e2e-skeletons.mjs
       # L2C (F5, volet client) : le presign d'écriture est MORT en production
       # depuis le lot 2B (UPLOAD_VIA_API_REQUIRED). Ce contrat interdit de
       # câbler un écran sur l'ancien chemin sans rebrancher, et exige que

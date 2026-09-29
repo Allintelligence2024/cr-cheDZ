@@ -8,23 +8,27 @@
  * alors que TOUTES les suites passaient au vert. Aucun test de code ne pouvait
  * attraper cela : le code était sain, la documentation mentait.
  *
- * Ce contrat verrouille cinq choses :
+ * Ce contrat verrouille sept choses :
  *  1. « Quartz » — aucune implémentation dans le dépôt, et aucune mention de
  *     documentation qui ne soit pas une mise en garde (jamais une revendication) ;
  *  2. healthcheck Docker — la réalité mesurée (postgres partout ; api et worker
  *     en prod/staging depuis le lot 6.1 ; 0 `HEALTHCHECK` dans les Dockerfiles,
- *     les sondes étant des scripts Node appelés par Compose — l'image
- *     `node:22-slim` n'a ni curl ni wget) ne peut pas être contredite par une
+ *     les sondes étant des scripts Node appelés par Compose, sans dépendre
+ *     d'outils HTTP ajoutés à l'image) ne peut pas être contredite par une
  *     phrase de documentation non qualifiée, ni par un décompte périmé ;
  *  3. compteurs revendiqués (migrations, entrées d'isolation, suites, fichiers du
  *     dossier d'isolation, ADR, runbooks, routes HTTP, chemins OpenAPI) —
  *     confrontés au DISQUE à chaque exécution ;
- *  4. workflows CI (ajout du 25/09/2026) : les quatre workflows sont versionnés
- *     sous `.github/workflows/`, plus rien n'attend dans `ci-templates/`, et
- *     aucun document de référence ne peut les présenter comme « non poussés »
- *     (épisode historique de la permission `workflows`) ;
+ *  4. workflows CI : les cinq workflows sont versionnés sous
+ *     `.github/workflows/`, plus rien n'attend dans `ci-templates/`, et aucun
+ *     document de référence ne peut les présenter comme « non poussés » ;
  *  5. phrases bannies : les deux affirmations fausses nommées par l'audit ne
- *     peuvent réapparaître que corrigées sur la même ligne.
+ *     peuvent réapparaître que corrigées sur la même ligne ;
+ *  6. « Limites connues » de SECURITY.md : chaque capacité retirée est
+ *     confrontée au code et à son test, et les deux limites encore ouvertes
+ *     restent étayées par des sources et des preuves exécutables ;
+ *  7. sécurité CI : CodeQL (PR + hebdo) et Trivy (4 images, seuil HIGH/CRITICAL
+ *     bloquant avant push GHCR) restent réellement câblés.
  *
  * Conventions assumées (et pourquoi) :
  *  - TOUTE la documentation est scannée (y compris les rapports datés) : un
@@ -44,9 +48,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { summarizeTrivyReport } from '../../scripts/summarize-trivy.mjs';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', 'out']);
@@ -288,8 +294,13 @@ test('compteurs — migrations : les recettes courantes ne mentent pas', () => {
     sites: [
       // Libellé du job CI (« Migrations (reset + status 001→075) »).
       { file: '.github/workflows/ci.yml', regex: /001→(\d{3})/g },
-      // Recette locale : toute mention « N migrations » doit dire la vérité.
-      { file: 'docs/LOCAL-RUN.md', regex: /(\d+)\s+migrations/g },
+      // Recettes locales COURANTES : leurs compteurs doivent correspondre au disque.
+      // Le bloc « État de validation (2026-09-21) » reste un relevé historique
+      // (76 migrations réellement exécutées ce jour-là) et ne doit pas être
+      // réécrit pour refléter le présent.
+      { file: 'docs/LOCAL-RUN.md', regex: /migrate \((\d+) migrations/g },
+      { file: 'docs/LOCAL-RUN.md', regex: /node scripts\/migrate\.mjs\s+#\s*(\d+) migrations/g },
+      { file: 'docs/LOCAL-RUN.md', regex: /PG18 : (\d+) migrations/g },
     ],
   });
 });
@@ -300,21 +311,27 @@ test('compteurs — batterie d’isolation : entrées, suites, fichiers', () => 
     actual: RUNNER_ENTRIES,
     sites: [
       { file: '.github/workflows/ci.yml', regex: /anti-bypass \+ (\d+) suites/g },
-      { file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /\*\*(\d+)\*\* entrées/g },
+      // Le rapport daté conserve ses mesures historiques ; seul son marqueur
+      // « comptage courant » est comparé au disque.
+      { file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /Comptage courant 2026-09-27[^\n]*runner : (\d+) entrées/g },
       { file: 'docs/ANALYSE_PILIERS_MANQUANTS.md', regex: /(\d+) entrées/g },
-      { file: 'docs/HANDOFF.md', regex: /(\d+) entrées/g },
-      { file: 'docs/LOCAL-RUN.md', regex: /\*\*(\d+)\s*\n?\s*entrées\*\*/g },
+      // HANDOFF et LOCAL-RUN contiennent des relevés datés, exacts à leur date.
+      // Seul le marqueur actuel est une revendication d'état présent.
+      { file: 'docs/HANDOFF.md', regex: /État courant 2026-09-27[^\n]*runner : (\d+) entrées/g },
+      { file: 'docs/LOCAL-RUN.md', regex: /État courant du runner au 2026-09-27[^\n]*\*\*(\d+) entrées\*\*/g },
     ],
   });
   assertClaim({
     label: 'suites phaseNN',
     actual: PHASE_SUITES,
-    sites: [{ file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /\*\*(\d+)\*\* suites `phaseNN`/g }],
+    // Les anciennes mesures datées restent dans le rapport ; vérifier uniquement
+    // son marqueur courant, mis à jour avec chaque lot de la remédiation.
+    sites: [{ file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /Comptage courant 2026-09-27[^\n]*suites phaseNN : (\d+)/g }],
   });
   assertClaim({
     label: 'fichiers du dossier d’isolation',
     actual: ISOLATION_FILES,
-    sites: [{ file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /\*\*(\d+)\*\* fichiers dans/g }],
+    sites: [{ file: 'docs/VERIFICATION_ANALYSE_2026-09-24.md', regex: /Comptage courant 2026-09-27[^\n]*fichiers d’isolation : (\d+)/g }],
   });
 });
 
@@ -348,11 +365,11 @@ test('compteurs — routes HTTP et chemins OpenAPI', () => {
 //
 // Épisode historique : la GitHub App de poussée n'avait pas la permission
 // `workflows` — les workflows vivaient dans `ci-templates/` et la doc disait
-// « NON poussés ». La restriction est levée depuis : les 4 workflows sont sous
-// `.github/workflows/` et tournent à chaque push. Ce contrôle mesure la réalité
-// et interdit le retour de l'état périmé dans les documents de référence.
+// « NON poussés ». La restriction est levée depuis : les cinq workflows sont
+// versionnés et leurs déclencheurs sont définis dans chaque fichier. Ce contrôle
+// interdit le retour de l'état périmé dans les documents de référence.
 test('workflows CI : versionnés sur disque + revendication « non poussés » bannie', () => {
-  const WORKFLOWS = ['ci.yml', 'docker.yml', 'flutter.yml', 'security-audit.yml'];
+  const WORKFLOWS = ['ci.yml', 'codeql.yml', 'docker.yml', 'flutter.yml', 'security-audit.yml'];
   for (const wf of WORKFLOWS) {
     const abs = join(REPO, '.github', 'workflows', wf);
     assert.ok(existsSync(abs), `workflow absent du disque : .github/workflows/${wf}`);
@@ -372,7 +389,7 @@ test('workflows CI : versionnés sur disque + revendication « non poussés » b
   const bad = offenders(REFERENCE_DOCS, stale, [historic]);
   assert.deepEqual(
     bad, [],
-    `revendication périmée sur les workflows CI (la CI tourne : ci/docker/flutter/security-audit) :\n  ${bad.join('\n  ')}`,
+    `revendication périmée sur les workflows CI (ci/codeql/docker/flutter/security-audit) :\n  ${bad.join('\n  ')}`,
   );
 });
 
@@ -395,4 +412,234 @@ test('les affirmations fausses de l’audit ne peuvent revenir que corrigées su
     });
   }
   assert.deepEqual(bad, [], `affirmation fausse non corrigée :\n  ${bad.join('\n  ')}`);
+});
+
+// ── 7. SECURITY.md : chaque limite connue est rapprochée d’une preuve ───────
+test('SECURITY.md — « Limites connues » reflète le code et les preuves exécutables', () => {
+  const security = read('SECURITY.md');
+  const start = security.indexOf('**Limites connues**');
+  const end = security.indexOf('\n- **Webhook**', start);
+  assert.ok(start >= 0 && end > start, 'section « Limites connues » introuvable ou non délimitée');
+  const section = security.slice(start, end);
+
+  // Les deux anciennes limites doivent rester explicitement closes : une
+  // phrase historique conservée sans statut deviendrait à nouveau une fausse
+  // alerte pour l’opérateur.
+  assert.match(section, /~~le client `staff-mobile` appelle encore le presign~~\s*→\s*\*\*CORRIGÉ\*\*/);
+  assert.match(section, /~~la photo hors ligne crée un asset sans transférer les octets~~\s*→\s*\*\*RETIRÉ\*\*/);
+
+  const openAt = section.indexOf('**Reste réellement ouvert**');
+  assert.ok(openAt >= 0, 'la section ne distingue plus les limites encore ouvertes');
+  const open = section.slice(openAt);
+  const bulletOffsets = [...open.matchAll(/^ {4}- /gm)].map((m) => m.index);
+  assert.equal(bulletOffsets.length, 2,
+    `2 limites ouvertes sont attendues (upload vidéo API, retrait EXIF) ; trouvées : ${bulletOffsets.length}`);
+  const bullets = bulletOffsets.map((offset, i) => open.slice(offset, bulletOffsets[i + 1] ?? open.length));
+  const videoClaim = bullets.find((b) => /clips vidéo/i.test(b)) ?? '';
+  const exifClaim = bullets.find((b) => /EXIF/i.test(b)) ?? '';
+  assert.ok(videoClaim, 'limite « téléversement des clips vidéo par l’API » disparue sans réévaluation');
+  assert.ok(exifClaim, 'limite du retrait EXIF disparue sans réévaluation');
+  assert.match(videoClaim, /par l['’]API[\s\S]*?pas implémenté/i);
+  assert.match(videoClaim, /peut toutefois émettre\s+un PUT en production si `S3_PUBLIC_ENDPOINT` est configuré/);
+  assert.match(videoClaim, /sans cette\s+variable, il échoue explicitement en 503 `UPLOAD_VIA_API_REQUIRED`/);
+  assert.match(videoClaim, /phase21-video-surveillance\.api\.test\.mjs/);
+  assert.match(exifClaim, /aucun retrait EXIF n'est effectué par l'uploader `staff-mobile` ni par\s+l'upload API/i);
+  assert.match(exifClaim, /transmet les octets sans les transformer/);
+  assert.match(exifClaim, /le serveur conserve les octets reçus/);
+  assert.match(exifClaim, /n['’]envoie pas `exif_stripped`/i);
+  assert.match(exifClaim, /enregistre `false` par défaut/);
+  assert.match(exifClaim, /phase67-media-upload\.api\.test\.mjs/);
+
+  // Sources sans commentaires : un mot cité dans un commentaire ou une
+  // documentation ne constitue pas une preuve du comportement du programme.
+  const codeOnly = (source) => source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+  // Les deux défauts historiques corrigés restent corrigés dans les sources.
+  const mobilePath = 'apps/staff-mobile/lib/core/media/media_uploader.dart';
+  const mobileUploader = codeOnly(read(mobilePath));
+  assert.match(mobileUploader, /_api\.upload[\s\S]{0,160}['"]\/media\/upload['"]/,
+    `${mobilePath} doit envoyer les octets à POST /media/upload`);
+  assert.doesNotMatch(mobileUploader, /\/media\/presign-upload/,
+    `${mobilePath} a réintroduit un appel au presign d’écriture`);
+
+  const syncService = codeOnly(read('apps/api/src/modules/sync/sync.service.ts'));
+  const offlinePhoto = syncService.match(/case 'add_photo':([\s\S]*?)\n\s*default:/);
+  assert.ok(offlinePhoto, 'branche serveur `add_photo` introuvable');
+  assert.match(offlinePhoto[1], /OFFLINE_PHOTO_UNSUPPORTED/);
+  assert.doesNotMatch(offlinePhoto[1], /INSERT INTO media_assets|registerFromSync/,
+    'la commande hors ligne écrirait à nouveau un asset sans octets');
+  const offlineProof = read('tests/tenant-isolation/phase77-sync-payload-guard.api.test.mjs');
+  assert.match(offlineProof, /OFFLINE_PHOTO_UNSUPPORTED/);
+  assert.match(offlineProof, /aucune ligne media_assets créée/);
+
+  // La voie POST /media/upload partage une liste blanche photo/PDF. Aucune
+  // route du module vidéo ne reçoit de fichier : le POST /video/clips existant
+  // enregistre des métadonnées, tandis que le presign PUT n’est utilisable en
+  // production que si un endpoint public est configuré.
+  const mediaDto = read('apps/api/src/modules/media/dto/media.dto.ts');
+  const mimeList = mediaDto.match(/export const MEDIA_MIME_TYPES\s*=\s*\[([^\]]*)\]\s*as const;/);
+  assert.ok(mimeList, 'liste MEDIA_MIME_TYPES introuvable');
+  const mimes = [...mimeList[1].matchAll(/['"]([^'"]+)['"]/g)].map((m) => m[1]);
+  assert.ok(mimes.length > 0 && !mimes.some((mime) => mime.startsWith('video/')),
+    `MEDIA_MIME_TYPES accepte maintenant la vidéo : ${mimes.join(', ')} — réévaluer la limite`);
+  const mediaController = codeOnly(read('apps/api/src/modules/media/media.controller.ts'));
+  assert.match(mediaController, /@Post\('upload'\)[\s\S]*?FileInterceptor\('file'/,
+    'le flux multipart photo de l’API ne correspond plus à la preuve documentée');
+
+  const videoController = codeOnly(read('apps/api/src/modules/video/video.controller.ts'));
+  const videoPostRoutes = [...videoController.matchAll(/@Post\('([^']+)'\)/g)].map((m) => m[1]);
+  const videoUploadRoutes = videoPostRoutes.filter((path) => /upload/i.test(path));
+  assert.deepEqual(videoUploadRoutes, ['clips/presign-upload'],
+    `route binaire d’upload vidéo ajoutée/supprimée : ${videoUploadRoutes.join(', ')}`);
+  assert.doesNotMatch(videoController, /FileInterceptor|UploadedFile/,
+    'le contrôleur vidéo reçoit désormais des octets : réévaluer la limite');
+  const videoService = codeOnly(read('apps/api/src/modules/video/video.service.ts'));
+  assert.doesNotMatch(videoService, /^\s*(?:private\s+|protected\s+)?async\s+(?:upload|uploadClip|uploadVideo|ingestClip)\s*\(/m,
+    'un chemin d’ingestion de clips par l’API est apparu : réévaluer la limite');
+  assert.match(videoService, /this\.storage\.presignPut\(/,
+    'le chemin de presign vidéo a changé : réévaluer la note sur S3_PUBLIC_ENDPOINT');
+
+  const storageService = codeOnly(read('apps/api/src/modules/media/storage.service.ts'));
+  assert.match(storageService,
+    /if\s*\(\s*this\.config\.get<string>\('NODE_ENV'\)\s*===\s*'production'\s*&&\s*!publicEndpoint\s*\)/,
+    'la portée du refus de presign en production a changé');
+  const storageProof = read('apps/api/src/modules/media/storage.service.spec.ts');
+  assert.match(storageProof, /production sans S3_PUBLIC_ENDPOINT[\s\S]*?503 UPLOAD_VIA_API_REQUIRED/);
+  assert.match(storageProof, /production AVEC origine publique[\s\S]*?URL signée émise/,
+    'la preuve doit aussi couvrir la branche où le presign est autorisé');
+  const suiteRunner = read('scripts/run-isolation-suites.sh');
+  assert.match(suiteRunner, /phase21-video-surveillance\.api\.test\.mjs/);
+  assert.match(suiteRunner, /phase77-sync-payload-guard\.api\.test\.mjs/);
+
+  // EXIF : vérifier le chemin de données, pas seulement l’absence d’un mot.
+  // L’uploader transmet exactement l’argument bytes à MultipartFile ; l’API
+  // écrit file.buffer tel quel et conserve false par défaut. Les tests Dart et
+  // PostgreSQL couvrent respectivement le champ multipart et les octets en base.
+  assert.match(mobileUploader, /buildForm\([\s\S]{0,180}bytes:\s*bytes/,
+    'l’uploader transforme désormais les octets sans mettre à jour la limite EXIF');
+  assert.doesNotMatch(mobileUploader, /exif_stripped/,
+    'l’uploader déclare une suppression EXIF sans mise à jour documentaire');
+  const mobileProof = read('apps/staff-mobile/test/media_uploader_phase4_test.dart');
+  assert.match(mobileProof, /fields\.map\(\(f\) => f\.key\), isNot\(contains\('exif_stripped'\)\)/);
+
+  const mediaService = codeOnly(read('apps/api/src/modules/media/media.service.ts'));
+  assert.match(mediaService, /await this\.storage\.put\(storageKey, file\.buffer, file\.mimetype\)/,
+    'l’API ne conserve plus les octets reçus tels quels');
+  assert.match(mediaService, /exifStripped:\s*dto\.exif_stripped\s*\?\?\s*false/,
+    'la valeur EXIF par défaut n’est plus false — réévaluer la limite');
+  const mediaProof = read('tests/tenant-isolation/phase67-media-upload.api.test.mjs');
+  assert.match(mediaProof, /readFileSync\(onDisk\)\.equals\(jpeg\)/,
+    'la preuve API ne compare plus les octets stockés aux octets reçus');
+  assert.match(mediaProof, /nominalRow\?\.exif_stripped === false/);
+  assert.match(suiteRunner, /phase67-media-upload\.api\.test\.mjs/);
+});
+
+// ── 7. L4 : CodeQL et Trivy sont présents, et l’image est scannée avant push ─
+test('sécurité CI — CodeQL sur PR/hebdo et Trivy bloquant avant GHCR', () => {
+  const codeql = read('.github/workflows/codeql.yml');
+  assert.match(codeql, /^name: codeql$/m);
+  assert.match(codeql, /^  push:\n    branches: \[main\]/m);
+  assert.match(codeql, /^  pull_request:\n    branches: \[main\]/m);
+  assert.match(codeql, /schedule:[\s\S]*?cron: ['"]\d+ \d+ \* \* \d+['"]/);
+  assert.match(codeql, /security-events:\s*write/);
+  assert.match(codeql, /github\/codeql-action\/init@[0-9a-f]{40}\s+#\s*v4\.38\.2/);
+  assert.match(codeql, /languages:\s*javascript-typescript/);
+  assert.match(codeql, /build-mode:\s*none/);
+  assert.match(codeql, /github\/codeql-action\/analyze@[0-9a-f]{40}\s+#\s*v4\.38\.2/);
+
+  const docker = read('.github/workflows/docker.yml');
+  const matrix = docker.match(/matrix:\s*app:\s*\[([^\]]+)\]/);
+  assert.ok(matrix, 'matrice Docker des applications introuvable');
+  assert.deepEqual(matrix[1].split(',').map((app) => app.trim()),
+    ['api', 'worker', 'admin-web', 'support-console'],
+    'Trivy doit scanner chacune des 4 images construites');
+  for (const app of ['api', 'worker', 'admin-web', 'support-console']) {
+    assert.match(read(`apps/${app}/Dockerfile`), /^FROM node:22\.23\.3-trixie AS build$/m,
+      `${app} doit compiler avec une image Node LTS récente et une base Trixie explicite`);
+  }
+  for (const app of ['api', 'worker']) {
+    const dockerfile = read(`apps/${app}/Dockerfile`);
+    assert.match(dockerfile, /^FROM node:22\.23\.3-alpine3\.24 AS runtime$/m,
+      `${app} doit exécuter sur une base Node Alpine 3.24 explicite`);
+    assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules\/npm/,
+      `${app} ne doit pas embarquer npm en production : l'application est lancée directement par node`);
+  }
+  for (const app of ['admin-web', 'support-console']) {
+    assert.match(read(`apps/${app}/Dockerfile`), /^FROM nginx:1\.30\.5-alpine3\.24-slim AS runtime$/m,
+      `${app} doit utiliser l'image Nginx stable sur Alpine 3.24 slim`);
+  }
+  assert.match(docker, /load:\s*true/,
+    'le build doit charger localement l’image qui sera scannée');
+  assert.match(docker, /labels:\s*\$\{\{ steps\.meta\.outputs\.labels \}\}/,
+    'les labels OCI de metadata-action doivent être conservés sur l’image publiée');
+  assert.match(docker, /image-ref:\s*local\/creche-saas-\$\{\{ matrix\.app \}\}:\$\{\{ github\.sha \}\}/);
+  assert.match(docker, /uses:\s+aquasecurity\/trivy-action@[0-9a-f]{40}\s+#\s*v0\.36\.0/);
+  assert.match(docker, /severity:\s*CRITICAL,HIGH/);
+  assert.match(docker, /exit-code:\s*'1'/,
+    'une vulnérabilité HIGH/CRITICAL doit bloquer la publication');
+  assert.match(docker, /output:\s*trivy-results\.json/);
+  assert.doesNotMatch(docker, /^\s*push:\s*(?:true|\$\{\{)/m,
+    'build-push-action ne doit pas publier avant la réussite de Trivy');
+  const buildAt = docker.indexOf("name: Construire l'image localement");
+  const scanAt = docker.indexOf('uses: aquasecurity/trivy-action@');
+  const loginAt = docker.indexOf('name: Login GHCR');
+  const pushAt = docker.indexOf('docker push "$target"');
+  assert.ok(buildAt >= 0 && scanAt > buildAt && loginAt > scanAt && pushAt > loginAt,
+    'l’ordre exigé est build local → scan Trivy → login → push GHCR');
+  assert.match(docker, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'[\s\S]*?docker push/,
+    'aucune publication GHCR ne doit avoir lieu hors du push sur main');
+  assert.match(docker, /if: always\(\)[\s\S]*?actions\/upload-artifact@[0-9a-f]{40}[\s\S]*?trivy-results\.json/,
+    'le rapport Trivy doit rester téléchargeable quand un scan échoue');
+  const summaryAt = docker.indexOf('name: Résumé Trivy (résultats visibles dans le job)');
+  const archiveAt = docker.indexOf('name: Archiver le rapport Trivy');
+  assert.match(docker, /if: always\(\)[\s\S]*?node scripts\/summarize-trivy\.mjs trivy-results\.json/,
+    'les constats Trivy doivent rester visibles dans le run même si l’artifact est inaccessible');
+  assert.ok(scanAt < summaryAt && summaryAt < archiveAt && archiveAt < loginAt,
+    'le résumé doit s’exécuter après le scan et avant l’archivage/publication');
+
+  const sample = summarizeTrivyReport({ Results: [{
+    Target: 'node:22-slim',
+    Vulnerabilities: [
+      { VulnerabilityID: 'CVE-2026-0001', PkgName: 'libc6', InstalledVersion: '2.36-9', FixedVersion: '2.36-10', Severity: 'CRITICAL' },
+      { VulnerabilityID: 'CVE-2026-0002', PkgName: 'express', InstalledVersion: '4.0.0', FixedVersion: '4.0.1', Severity: 'HIGH' },
+    ],
+  }] }, 'api');
+  assert.deepEqual(sample.counts, { CRITICAL: 1, HIGH: 1, MEDIUM: 0, LOW: 0, UNKNOWN: 0 });
+  assert.match(sample.markdown, /CVE-2026-0001/);
+  assert.equal(sample.annotations.length, 2);
+
+  const tempDir = mkdtempSync(join(tmpdir(), 'trivy-summary-'));
+  try {
+    const reportPath = join(tempDir, 'report.json');
+    writeFileSync(reportPath, JSON.stringify({ Results: [{
+      Target: 'node:22-slim',
+      Vulnerabilities: [{
+        VulnerabilityID: 'CVE-2026-0001', PkgName: 'libc6', InstalledVersion: '2.36-9',
+        FixedVersion: '2.36-10', Severity: 'CRITICAL',
+      }],
+    }] }));
+    const runSummary = (githubActions) => execFileSync(
+      process.execPath,
+      [join(REPO, 'scripts/summarize-trivy.mjs'), reportPath],
+      {
+        cwd: REPO,
+        encoding: 'utf8',
+        env: { ...process.env, GITHUB_ACTIONS: githubActions, GITHUB_STEP_SUMMARY: '', TRIVY_APP: 'api' },
+      },
+    );
+    assert.doesNotMatch(runSummary('false'), /^::(?:warning|notice)/m,
+      'les commandes d’annotation GitHub ne doivent pas être émises hors Actions');
+    assert.match(runSummary('true'), /^::warning title=Trivy api CRITICAL CVE-2026-0001::/m,
+      'les findings doivent être annotés quand le script tourne dans GitHub Actions');
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+
+  const security = read('SECURITY.md');
+  assert.match(security, /CodeQL[\s\S]*?codeql\.yml/);
+  assert.match(security, /default setup[\s\S]*?403/i,
+    'le conflit éventuel avec Code Scanning default setup et la permission API limitée doivent rester déclarés');
+  assert.match(security, /Trivy[\s\S]*?CRITICAL,HIGH/);
 });

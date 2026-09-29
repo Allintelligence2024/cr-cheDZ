@@ -28,15 +28,16 @@
 
 **Effort** : 3 jours.
 
-**Pré-requis côté humain** :
-- VPN vers le VPS de staging (ou la cible pilote configurée)
-- Navigateur Chromium installé : `npx playwright install --with-deps chromium`
-- Variables d'environnement (jamais commitées) :
-  ```bash
-  E2E_DIRECTOR_EMAIL=pilot-01.directrice@pilote.dz
-  E2E_DIRECTOR_PASSWORD=<depuis vault — voir docs/OPERATIONS-SECRETS.md>
-  E2E_BASE_URL=https://staging-admin.example.dz
-  ```
+**Pré-requis** :
+- Une base PostgreSQL 18 **jetable et isolée**. Le job CI exécute `migrate.mjs --reset` :
+  ne jamais pointer ces tests vers la base pilote, la production ni un staging partagé.
+- Node 22, `npm ci` et Chromium Playwright installable.
+- Variables du job `e2e` (`DATABASE_URL`, `NODE_ENV=test`, `RATE_LIMIT_DISABLED=true`,
+  `STORAGE_BACKEND=local`, `JWT_SECRET`, `STORAGE_LOCAL_DIR`). Aucun compte pilote,
+  VPN ni `E2E_BASE_URL` : les specs utilisent le compte synthétique créé par
+  `tests/tenant-isolation/seed-e2e.mjs` et `playwright.config.ts` démarre API,
+  worker et Vite localement. Les identifiants de ce compte sont des secrets de test
+  connus ; ne pas réutiliser ce seed en production ou sur un staging partagé.
 
 **Specs existantes** (`apps/admin-web/e2e/`) — déjà commitées, à exécuter :
 1. `login.spec.ts` — login directeur
@@ -45,25 +46,59 @@
 4. `export-download.spec.ts` — export PDF (worker)
 5. `invitation-flow.spec.ts` — invitation + acceptation
 
-**Specs squelette commitées** (à compléter + activer) :
-6. `billing-overdue-flow.spec.ts` — facture → partiel → overdue (R15/R19)
-7. `payroll-finalize-lock.spec.ts` — run → finalize → blocage (R15)
+**Specs billing et paie complétées** (lot 2, 2026-09-27) :
+6. `billing-overdue-flow.spec.ts` — 4 scénarios actifs : facture, paiement partiel,
+   bascule `overdue` à la lecture de la balance âgée, refus des opérations invalides.
+7. `payroll-finalize-lock.spec.ts` — 3 scénarios actifs : run, ajout de ligne,
+   finalisation et verrou serveur `PAYROLL_FINALIZED`.
 
-**Procédure d'exécution** :
+Le seed CI `tests/tenant-isolation/seed-e2e.mjs` crée aussi un employé rémunéré :
+sans celui-ci la paie répondait `422 PAYROLL_NO_STAFF`. Les deux specs sont
+maintenant typées avec `e2e/` inclus dans le `tsconfig`; 22 assertions HTTP ont
+été exécutées sur l'API réelle et PostgreSQL 18 propre. La preuve est rejouable
+avec `node scripts/prove-e2e-http.mjs` après le seed e2e et le démarrage de l'API
+(voir `docs/PLAN_REMEDIATION_2026-09-27.md` §12.4).
+
+**Statut honnête** : `npx playwright test --list` a collecté **13 tests dans 7 fichiers** ;
+le typecheck et le build passent, mais aucun navigateur n'a été lancé. L'installation
+Chromium a échoué dans la sandbox (téléchargement refusé). Le garde
+`node scripts/check-e2e-skeletons.mjs` confirme **0 spec entièrement skippée,
+0 `test.skip(true)` et 7 fichiers actifs**. Le critère navigateur **reste non prouvé**.
+
+**Procédure d'exécution locale/CI (base jetable uniquement)** :
 ```bash
-cd apps/admin-web
-npm run e2e                                # toutes les specs
-npm run e2e -- billing-overdue-flow.spec  # une spec précise
+# Depuis la racine du dépôt. Exemple PG18 embarqué ; toute base pointée ici sera réinitialisée.
+node run_pg.mjs &
+export DATABASE_URL=postgres://postgres:postgres@localhost:54329/creche_test
+export NODE_ENV=test RATE_LIMIT_DISABLED=true STORAGE_BACKEND=local
+export STORAGE_LOCAL_DIR=/tmp/creche-storage-e2e
+export JWT_SECRET=e2e_jwt_secret_32_caracteres_minimum_ok
+
+npm ci
+node scripts/migrate.mjs --reset
+node scripts/migrate.mjs
+node scripts/seed.mjs
+node tests/tenant-isolation/seed-e2e.mjs
+npm run build --workspace @creche/api
+npm run build --workspace @creche/worker
+npx playwright install --with-deps chromium
+npx playwright test --config apps/admin-web/playwright.config.ts
+
+# Une spec ciblée :
+npx playwright test --config apps/admin-web/playwright.config.ts \\
+  apps/admin-web/e2e/billing-overdue-flow.spec.ts
 ```
 
-**Critère de validation** : 7/7 specs vertes. Les specs 6 et 7 sont
-actuellement `.skip(true, ...)` — il faut retirer le skip une fois le
-scénario implémenté (TODO dans chaque test).
+**Critère de validation** : exécuter les 13 tests dans une base jetable, sans
+skip, et obtenir un résultat vert. Ne pas les lancer contre la cible pilote ni
+sur un staging partagé ; adapter d'abord les fixtures et les identifiants dans
+un environnement de recette isolé.
 
-**Ce qui peut rester en TODO** : si une spec bloque le go-live, créer un
-ticket et continuer — l'invariant DB est déjà testé par
-`tests/tenant-isolation/phase62-payroll-finalized-lock.pg.test.mjs` et la
-spécification UI sert surtout à valider le feedback utilisateur.
+Ne pas confondre le contrat API backend (dont
+`tests/tenant-isolation/phase62-payroll-finalized-lock.pg.test.mjs`), les 22
+requêtes HTTP directes, le typecheck, et les tests navigateur : chacun prouve
+une couche différente. Les specs Playwright 6 et 7 ont maintenant un vrai
+scénario ; leur feedback UI reste à observer en exécutant Chromium.
 
 ---
 
@@ -156,7 +191,7 @@ oncall@creche.example.dz si le drill n'a pas eu lieu depuis 30 jours.
 
 | ID | Statut | À faire |
 |---|---|---|
-| S1 — E2E UI | Squelette commité | Exécuter les 7 specs sur staging |
+| S1 — E2E UI | 13 tests collectés, API prouvée (22/22, preuve rejouable), navigateur non exécuté ici | Installer Chromium et exécuter sur base PG18 jetable/isolée |
 | S2 — Flutter pin | ✅ Auto | — |
 | S3 — Alerting SMTP | Doc seulement | Configurer + tester une alerte |
 | S4 — k6 sanity | ✅ Auto | (Exécution réelle : VPS, pas sandbox) |

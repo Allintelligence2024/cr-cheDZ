@@ -35,6 +35,8 @@ export default defineConfig({
         APP_PORT: '3000',
         NODE_ENV: 'development',
         EMAIL_PROVIDER: 'none',
+        // No MinIO is part of the E2E stack: make the failed-purge path deterministic.
+        S3_ENDPOINT: 'http://127.0.0.1:9',
       } as Record<string, string>,
     },
     {
