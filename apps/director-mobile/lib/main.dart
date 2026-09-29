@@ -4,11 +4,13 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import 'core/api_client.dart';
 import 'core/cache_service.dart';
+import 'core/observability.dart';
 import 'core/push_service.dart';
 import 'core/token_store.dart';
 import 'features/attendance/attendance_page.dart';
@@ -28,7 +30,17 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('Firebase non initialisé (config absente) : $e');
   }
-  runApp(const DirectorApp());
+  // M7 — Sentry : actif uniquement quand un DSN est fourni au build
+  // (`--dart-define SENTRY_DSN=…`). Sans DSN (dev, CI, tests widget), on
+  // lance l'app directement : Sentry n'émet aucun appel réseau.
+  if (sentryDsn.isEmpty) {
+    runApp(const DirectorApp());
+    return;
+  }
+  await SentryFlutter.init(
+    applySentryOptions,
+    appRunner: () => runApp(const DirectorApp()),
+  );
 }
 
 class DirectorApp extends StatefulWidget {

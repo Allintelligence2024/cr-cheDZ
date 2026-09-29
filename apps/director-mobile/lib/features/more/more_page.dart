@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
 import '../../core/biometry_service.dart';
+import '../../core/observability.dart';
 import '../attestations/attestations_page.dart';
 import '../children/children_list_page.dart';
 import '../coverage/coverage_page.dart';
@@ -113,6 +114,26 @@ class _MorePageState extends State<MorePage> {
             ),
           ),
         ),
+        // M7 — entrée de vérification Sentry, visible UNIQUEMENT au build
+        // `--dart-define SENTRY_TEST_CRASH=true` (build de test interne,
+        // jamais dans un APK publié) : lève une exception contrôlée que Sentry
+        // doit faire remonter au projet `director-mobile` en < 1 min.
+        if (sentryTestCrashEnabled) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.bug_report, color: Colors.red),
+              title: const Text('Tester Sentry (crash contrôlé)'),
+              subtitle: const Text(
+                'Build --dart-define SENTRY_TEST_CRASH=true uniquement',
+                style: TextStyle(fontSize: 11),
+              ),
+              onTap: () => Future<void>.error(
+                StateError('Sentry test — director-mobile crash contrôlé'),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         Card(
           child: Padding(
