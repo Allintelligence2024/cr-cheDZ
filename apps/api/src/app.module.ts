@@ -9,6 +9,7 @@ import { RateLimitService } from './shared/guards/rate-limit.service';
 import { RolesGuard } from './shared/guards/roles.guard';
 import { HealthController } from './health.controller';
 import { AttendanceModule } from './modules/attendance/attendance.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AttestationsModule } from './modules/attestations/attestations.module';
 import { EnrollmentModule } from './modules/enrollment/enrollment.module';
 import { BillingModule } from './modules/billing/billing.module';
@@ -45,6 +46,7 @@ import { VideoModule } from './modules/video/video.module';
     StaffModule,
     ChildrenModule,
     AttendanceModule,
+    AnalyticsModule,
     BillingModule,
     AttestationsModule,
     EnrollmentModule,

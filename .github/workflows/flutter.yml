@@ -114,6 +114,14 @@ jobs:
       - name: staff-mobile — tests
         working-directory: apps/staff-mobile
         run: bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" staff-test.log "staff-mobile tests" flutter test
+      - name: director-mobile — pub get + analyze
+        working-directory: apps/director-mobile
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" director-pub-get.log "director-mobile pub get" flutter pub get -v
+          bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" director-analyze.log "director-mobile analyze" flutter analyze -v
+      - name: director-mobile — tests
+        working-directory: apps/director-mobile
+        run: bash "$GITHUB_WORKSPACE/scripts/ci-run.sh" director-test.log "director-mobile tests" flutter test
       # ── P1-2 : compilation réelle des APK ──────────────────────────────────
       - uses: actions/setup-java@v4
         with:
@@ -167,6 +175,22 @@ jobs:
             grep -aE "FAILURE|What went wrong|rror:|Exception|P1-2" -A2 parent-build.log | grep -av '^--$' | head -12 | while IFS= read -r l; do echo "::error title=parent-mobile build::${l:0:400}"; done
             exit 1
           fi
+      - name: director-mobile — build apk (release)
+        working-directory: apps/director-mobile
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ALLOW_DEBUG_SIGNING: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
+        run: |
+          set -o pipefail
+          if ! flutter build apk --release 2>&1 | tee director-build.log; then
+            echo "## director-mobile — échec du build" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"; grep -aE "FAILURE|What went wrong|rror|Exception|P1-2" -A4 director-build.log | head -80 >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+            grep -aE "FAILURE|What went wrong|rror:|Exception|P1-2" -A2 director-build.log | grep -av '^--$' | head -12 | while IFS= read -r l; do echo "::error title=director-mobile build::${l:0:400}"; done
+            exit 1
+          fi
       - name: App bundles Play Store (uniquement si signés)
         if: steps.keystore.outputs.signed == 'true'
         env:
@@ -177,10 +201,11 @@ jobs:
         run: |
           (cd apps/staff-mobile && flutter build appbundle --release)
           (cd apps/parent-mobile && flutter build appbundle --release)
+          (cd apps/director-mobile && flutter build appbundle --release)
       - name: Vérification des artefacts (APK présents, signature attendue)
         run: |
           set -e
-          for app in staff-mobile parent-mobile; do
+          for app in staff-mobile parent-mobile director-mobile; do
             apk="apps/$app/build/app/outputs/flutter-apk/app-release.apk"
             if [ ! -s "$apk" ]; then
               echo "::error::APK manquant : $apk"
@@ -197,6 +222,7 @@ jobs:
           path: |
             apps/staff-mobile/build/app/outputs/flutter-apk/app-release.apk
             apps/parent-mobile/build/app/outputs/flutter-apk/app-release.apk
+            apps/director-mobile/build/app/outputs/flutter-apk/app-release.apk
             apps/*/build/app/outputs/bundle/release/*.aab
           if-no-files-found: ignore
       - name: Upload staff-mobile logs
@@ -210,3 +236,7 @@ jobs:
             apps/staff-mobile/staff-test.log
             apps/staff-mobile/staff-build.log
             apps/parent-mobile/parent-build.log
+            apps/director-mobile/director-pub-get.log
+            apps/director-mobile/director-analyze.log
+            apps/director-mobile/director-test.log
+            apps/director-mobile/director-build.log
