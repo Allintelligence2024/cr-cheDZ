@@ -12,10 +12,6 @@ import { requireTenant } from '../../shared/database/tenant-utils';
 export class AnalyticsService {
   constructor(private readonly tenantContext: TenantContextService) {}
 
-  private dateOrDefault(date: string | undefined, def: string): string {
-    return date ?? def;
-  }
-
   async overview(): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
