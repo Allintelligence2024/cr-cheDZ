@@ -14,6 +14,7 @@ import { StaffPage } from './pages/StaffPage';
 
 // Chargement différé des écrans Phase 9 (bundle < 250 Ko gzip, critère perf).
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })));
 const AttendancePage = lazy(() => import('./pages/AttendancePage').then((m) => ({ default: m.AttendancePage })));
 const JournalPage = lazy(() => import('./pages/JournalPage').then((m) => ({ default: m.JournalPage })));
 const MediaPage = lazy(() => import('./pages/MediaPage').then((m) => ({ default: m.MediaPage })));
@@ -50,6 +51,7 @@ function Layout({ children }: { children: React.ReactNode }): React.JSX.Element 
 
   const navItems = [
     { to: '/', label: t('nav.dashboard') },
+    { to: '/analytics', label: '📊 Analytics' },
     { to: '/attendance', label: t('nav.attendance') },
     { to: '/journal', label: t('nav.journal') },
     { to: '/media', label: t('nav.media') },
@@ -162,6 +164,7 @@ export function AppRoutes(): React.JSX.Element {
     <Layout>
       <Routes>
         <Route path="/" element={<RequireRole path="/"><DashboardPage /></RequireRole>} />
+        <Route path="/analytics" element={<RequireRole path="/analytics"><AnalyticsPage /></RequireRole>} />
         <Route path="/attendance" element={<RequireRole path="/attendance"><AttendancePage /></RequireRole>} />
         <Route path="/journal" element={<RequireRole path="/journal"><JournalPage /></RequireRole>} />
         <Route path="/media" element={<RequireRole path="/media"><MediaPage /></RequireRole>} />

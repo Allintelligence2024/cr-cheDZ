@@ -20,6 +20,7 @@ const ALL_STAFF = ['super_admin', 'director', 'educator', 'receptionist', 'accou
 /** Rôles (slug) autorisés à VOIR chaque écran. Une route absente = tout le personnel. */
 export const ROUTE_ROLES: Readonly<Record<string, readonly string[]>> = {
   '/': ALL_STAFF,               // dashboard.controller STAFF_ROLES
+  '/analytics': FINANCE,        // analytics.controller DIRECTOR_ROLES (director, accountant, super_admin)
   '/attendance': CARE,          // attendance.controller STAFF_ROLES
   '/journal': CARE,             // journal.controller STAFF_ROLES
   '/media': CARE,               // media.controller STAFF_ROLES
