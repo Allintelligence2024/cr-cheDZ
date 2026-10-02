@@ -118,6 +118,10 @@ SUITES=(
   # La suite fige la requête par défaut, les variantes groupBy/site_id, les
   # cinq autres endpoints et le refus 403 des rôles non-direction.
   phase79-analytics-director.api.test.mjs
+  # Analyse 2026-10-02 : entrée invalide (UUID malformé, date au calendrier
+  # inexistant, corps non validé) → 400, jamais 500 (ParseUUIDPipe,
+  # IsStrictIsoDate, DTO role_id).
+  phase80-input-validation.api.test.mjs
 )
 
 FILTER="${1:-}"

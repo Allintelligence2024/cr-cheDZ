@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
@@ -24,7 +24,7 @@ export class AttestationsController {
 
   @Get()
   @Roles('director', 'accountant')
-  list(@Query('child_id') childId?: string) {
+  list(@Query('child_id', new ParseUUIDPipe({ optional: true })) childId?: string) {
     return this.attestations.list(childId);
   }
 

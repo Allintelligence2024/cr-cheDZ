@@ -1,18 +1,11 @@
 import { Transform } from 'class-transformer';
 import {
-  IsArray,
-  IsBoolean,
-  IsDateString,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Matches,
-  MaxLength,
-  Min,
-  MinLength,
+  IsArray, IsBoolean, IsIn,
+  IsInt, IsOptional, IsString,
+  IsUUID, Matches, MaxLength,
+  Min, MinLength,
 } from 'class-validator';
+import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
 
 /**
  * Types MIME acceptés pour les médias (photos + documents PDF).
@@ -64,7 +57,7 @@ export class UploadMediaDto {
   children_in_photo?: string[];
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   taken_at?: string;
 
   /** SHA-256 hexadécimal des octets (le client staff-mobile l'envoie déjà). */
@@ -103,7 +96,7 @@ export class PresignUploadDto {
   children_in_photo?: string[];
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   taken_at?: string;
 
   @IsOptional()
@@ -141,7 +134,7 @@ export class RegisterMediaDto {
   children_in_photo?: string[];
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   taken_at?: string;
 
   @IsOptional()

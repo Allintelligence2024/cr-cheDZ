@@ -173,7 +173,7 @@ npm run db:reset                        # migrate --reset && migrate && seed
 
 ## Compteur courant du runner — 2026-09-27
 
-**État courant du runner au 2026-09-27** : **75 entrées** (73 suites `phaseNN` +
+**État courant du runner au 2026-09-27** : **76 entrées** (74 suites `phaseNN` +
 `schema-check` + `rls-behavior-check`). Les mentions de 73 entrées et 71 suites dans le
 relevé daté du 2026-09-21 ci-dessus sont conservées comme historiques ; elles ne
 remplacent pas la mesure courante. Source rejouable : la liste `SUITES` dans

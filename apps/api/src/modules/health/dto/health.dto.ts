@@ -1,4 +1,9 @@
-import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import {
+  IsBoolean, IsIn, IsInt,
+  IsOptional, IsString, IsUUID,
+  MaxLength, Min,
+} from 'class-validator';
+import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
 
 export class UpsertHealthRecordDto {
   @IsOptional() @IsString() @MaxLength(20) blood_type?: string;
@@ -17,7 +22,7 @@ export class CreateAllergyDto {
   @IsOptional() @IsString() @MaxLength(500) treatment?: string;
   @IsOptional() @IsString() @MaxLength(500) emergency_protocol?: string;
   @IsOptional() @IsBoolean() confirmed_by_doctor?: boolean;
-  @IsOptional() @IsDateString() diagnosed_date?: string;
+  @IsOptional() @IsStrictIsoDate() diagnosed_date?: string;
   @IsOptional() @IsString() @MaxLength(1000) notes?: string;
 }
 
@@ -31,14 +36,14 @@ export class UpdateAllergyDto {
 export class CreateVaccinationDto {
   @IsString() @MaxLength(120) vaccine_name!: string;
   @IsOptional() @IsInt() @Min(1) dose_number?: number;
-  @IsOptional() @IsDateString() administered_date?: string;
-  @IsOptional() @IsDateString() next_dose_date?: string;
+  @IsOptional() @IsStrictIsoDate() administered_date?: string;
+  @IsOptional() @IsStrictIsoDate() next_dose_date?: string;
   @IsOptional() @IsString() @MaxLength(120) administered_by?: string;
   @IsOptional() @IsString() @MaxLength(80) lot_number?: string;
 }
 
 export class UpdateVaccinationDto {
-  @IsOptional() @IsDateString() next_dose_date?: string;
+  @IsOptional() @IsStrictIsoDate() next_dose_date?: string;
   @IsOptional() @IsBoolean() verified?: boolean;
 }
 
@@ -48,14 +53,14 @@ export class CreateMedicationAuthorizationDto {
   @IsString() @MaxLength(120) dosage!: string;
   @IsString() @MaxLength(200) frequency!: string;
   @IsOptional() @IsString({ each: true }) administration_times?: string[];
-  @IsDateString() start_date!: string;
-  @IsOptional() @IsDateString() end_date?: string;
+  @IsStrictIsoDate() start_date!: string;
+  @IsOptional() @IsStrictIsoDate() end_date?: string;
   @IsOptional() @IsString() @MaxLength(1000) special_instructions?: string;
 }
 
 export class RecordMedicationAdministrationDto {
   @IsUUID() authorization_id!: string;
-  @IsDateString() administered_at!: string;
+  @IsStrictIsoDate() administered_at!: string;
   @IsString() @MaxLength(120) dose_given!: string;
   @IsOptional() @IsString() @MaxLength(500) observations?: string;
 }

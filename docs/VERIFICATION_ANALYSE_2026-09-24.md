@@ -701,6 +701,6 @@ relevées sur le commit `3b8f51b`.
 
 ## Complément mesuré au 2026-09-27 — lot 1 indexation tenant
 
-**Comptage courant 2026-09-27 — runner : 75 entrées ; suites phaseNN : 73 ; fichiers d’isolation : 91 ; migrations : 77.**
+**Comptage courant 2026-09-27 — runner : 76 entrées ; suites phaseNN : 74 ; fichiers d’isolation : 92 ; migrations : 77.**
 
 Ces quatre compteurs sont recalculés depuis le dépôt par `tests/tenant-isolation/claims-contract.test.mjs` : le runner compte 72 suites `phaseNN` plus `schema-check` et `rls-behavior-check` ; les 90 fichiers sont les `.mjs` du dossier `tests/tenant-isolation/`. La ligne ci-dessus est le snapshot courant ; les tableaux et journaux datés plus haut conservent les mesures de leur époque (71/89/73 avant l’ajout de `phase78`).

@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { AnalyticsService } from './analytics.service';
-import { AnalyticsQueryDto, RevenueQueryDto } from './dto/analytics.dto';
+import { AnalyticsQueryDto, RatiosQueryDto, RevenueQueryDto } from './dto/analytics.dto';
 
 const DIRECTOR_ROLES = ['super_admin', 'director', 'accountant'] as const;
 
@@ -41,7 +41,7 @@ export class AnalyticsController {
 
   @Get('ratios')
   @Roles(...DIRECTOR_ROLES)
-  ratios(@Query('date') date?: string) {
-    return this.analytics.ratiosHistory(date);
+  ratios(@Query() q: RatiosQueryDto) {
+    return this.analytics.ratiosHistory(q.date);
   }
 }
