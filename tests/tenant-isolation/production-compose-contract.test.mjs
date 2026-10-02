@@ -34,7 +34,10 @@ for (const stage of ['prod', 'staging']) {
   test(`${stage} : migrateur dédié, dépendances versionnées et contrôleur de schéma monté`, () => {
     const block = service(text, 'migrate');
     assert.match(block, /MIGRATION_DATABASE_URL: \$\{MIGRATION_DATABASE_URL/);
-    assert.match(block, /image: ghcr\.io\/creche-saas\/api:/);
+    // Correctif audit 2026-10-02 : le chemin GHCR réellement publié par
+    // .github/workflows/docker.yml (l'ancien `ghcr.io/creche-saas/…`
+    // n'existait pas et faisait échouer `docker compose pull`).
+    assert.match(block, /image: ghcr\.io\/allintelligence2024\/creche-saas-api:\$\{VERSION:-latest\}/);
     assert.doesNotMatch(block, /npm install/);
     assert.match(block, /\.\.\/\.\.\/tests:\/app\/tests:ro/);
     assert.match(block, /node tests\/tenant-isolation\/schema-check\.mjs/);
@@ -48,6 +51,55 @@ for (const stage of ['prod', 'staging']) {
     assert.match(block, /scripts\/bootstrap-roles\.mjs/);
   });
 }
+
+/**
+ * Correctif audit 2026-10-02 — images applicatives alignées sur la CI.
+ *
+ * `.github/workflows/docker.yml` publie UNIQUEMENT
+ * `ghcr.io/allintelligence2024/creche-saas-{api,worker,admin-web,support-console}`
+ * avec les tags `latest` et `sha-<sha>` (push sur main, après scan Trivy
+ * bloquant). Les composes pointaient vers `ghcr.io/creche-saas/<app>` (autre
+ * organisation, inexistante) et, pour staging, un tag `:staging` qu'aucun
+ * workflow ne publie — `docker compose pull` échouait donc au déploiement.
+ */
+/** Retire les commentaires YAML : les verrous portent sur la config effective. */
+const stripComments = (text) => text.replace(/^\s*#.*$/gm, '');
+
+for (const stage of ['prod', 'staging']) {
+  test(`${stage} : images applicatives = dépôt GHCR publié par docker.yml`, () => {
+    const text = stripComments(readFileSync(join(directory, `docker-compose.${stage}.yml`), 'utf8'));
+    const appImages = [...text.matchAll(/^ {4}image: (ghcr\.io\/[^:\s]+):(\S+)\s*$/gm)].map((m) => [m[1], m[2]]);
+    assert.ok(appImages.length >= 2, 'aucune image GHCR applicative trouvée');
+    for (const [repo, tag] of appImages) {
+      assert.match(repo, /^ghcr\.io\/allintelligence2024\/creche-saas-(api|worker|admin-web|support-console)$/,
+        `dépôt GHCR non publié par docker.yml : ${repo}`);
+      assert.equal(tag, '${VERSION:-latest}', `tag non publié (attendu : ${'${VERSION:-latest}'}) : ${tag}`);
+    }
+    assert.doesNotMatch(text, /ghcr\.io\/creche-saas\//,
+      'ancienne organisation `creche-saas` (jamais publiée) encore référencée');
+  });
+}
+
+test('prod : le service backup réutilise le script audité (échec pg_dump visible)', () => {
+  const text = stripComments(readFileSync(join(directory, 'docker-compose.prod.yml'), 'utf8'));
+  const block = service(text, 'backup');
+  assert.match(block, /\.\.\/\.\.\/scripts:\/app\/scripts:ro/, 'script backup.sh non monté');
+  assert.match(block, /bash \/app\/scripts\/backup\.sh/, 'le service backup doit exécuter scripts/backup.sh');
+  // L'ancien entrypoint inline `pg_dump | gzip | gpg`, sans `set -e`/pipefail,
+  // journalisait « écrit » même quand pg_dump échouait. Plus de pipeline inline.
+  assert.doesNotMatch(block, /\| gzip/, 'pipeline inline sans pipefail de retour dans le service backup');
+  const script = readFileSync(join(directory, '..', '..', 'scripts', 'backup.sh'), 'utf8');
+  assert.match(script, /^set -euo pipefail$/m, 'scripts/backup.sh doit rester fail-fast');
+});
+
+test('prod : VERSION pointe un tag réellement publié (plus de `staging` fantôme)', () => {
+  const example = readFileSync(join(directory, '..', '..', '.env.prod.example'), 'utf8');
+  const match = example.match(/^VERSION=(.+)$/m);
+  assert.ok(match, 'VERSION absent de .env.prod.example');
+  const version = match[1].trim();
+  assert.notEqual(version, 'staging', '`staging` n’est publié par aucun workflow');
+  assert.ok(version === 'latest' || version.startsWith('sha-'), `VERSION=${version}`);
+});
 
 /**
  * MinIO : image CONSTRUITE localement (release officielle vérifiée par SHA-256),

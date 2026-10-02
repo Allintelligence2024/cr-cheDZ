@@ -28,6 +28,12 @@
  *     est bien interprété (sinon la publication aux parents serait impossible),
  *     publication sans consentement → 422 CONSENT_REQUIRED, avec consentement
  *     → visible puis lisible par le parent ;
+ *  6bis. R10 étendu (audit 2026-10-02) : une éducatrice restreinte à sa salle
+ *     ne LIT pas (`download`/`content` → 404) et ne CRÉE pas
+ *     (`upload` → 403 MEDIA_OUT_OF_SCOPE) de média pour un enfant d'une autre
+ *     salle — le filtre de `GET /media` ne peut plus être contourné par un
+ *     accès direct à l'id ; contrôles inverses (sa salle → 200/201, direction
+ *     → 200) pour prouver que la garde n'est pas un mur ;
  *  7. verrou statique : aucun `presignGet(`, et la signature d'upload
  *     (`getSignedUrl` PUT) est REFUSÉE en production sans `S3_PUBLIC_ENDPOINT`
  *     — plus aucune URL injoignable ne peut sortir vers un client.
@@ -359,6 +365,87 @@ async function main() {
     const anonUpload = await upload(null, { bytes: jpegBytes('anon') });
     ok('Sans jeton → 401 (aucune écriture anonyme dans le stockage)',
       anonUpload.status === 401, `${anonUpload.status}`);
+
+    // ── 5bis. Cloisonnement par salle : lecture ET écriture (R10 étendu) ────
+    // Avant le correctif (audit 2026-10-02), seuls `GET /media` filtrait par
+    // salle : une éducatrice lisait/écrivait les médias d'une autre salle en
+    // connaissant l'id. Ce bloc échoue sur l'ancien code (download → 200,
+    // upload → 201) et passe sur le code corrigé (404 / 403).
+    console.log('\n5bis) Éducatrice restreinte à sa salle : lecture ET écriture cloisonnées');
+    const educatorRole = (await admin.query(`SELECT id FROM roles WHERE slug='educator'`)).rows[0].id;
+    const roomA = (await admin.query(
+      `INSERT INTO rooms(organization_id,site_id,name_fr,max_capacity) VALUES($1,$2,'Salle A',12) RETURNING id`,
+      [A.org, A.site],
+    )).rows[0].id;
+    const roomB = (await admin.query(
+      `INSERT INTO rooms(organization_id,site_id,name_fr,max_capacity) VALUES($1,$2,'Salle B',12) RETURNING id`,
+      [A.org, A.site],
+    )).rows[0].id;
+    const mkChildInRoom = async (roomId, suffix) => (await admin.query(
+      `INSERT INTO children(organization_id,site_id,room_id,reference_number,first_name_fr,last_name_fr,date_of_birth,created_by)
+       VALUES($1,$2,$3,$4,'Nour','Salle','2024-04-04',$5) RETURNING id`,
+      [A.org, A.site, roomId, `${tag}-${suffix}`, A.director],
+    )).rows[0].id;
+    const childRoomA = await mkChildInRoom(roomA, 'ra');
+    const childRoomB = await mkChildInRoom(roomB, 'rb');
+    const educatorEmail = `${tag}-edu@test.dz`;
+    const educatorUser = (await admin.query(
+      `INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'E','T',$2,'active') RETURNING id`,
+      [educatorEmail, hash],
+    )).rows[0].id;
+    await admin.query(
+      `INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at,room_ids)
+       VALUES($1,$2,$3,true,NOW(),$4::uuid[])`,
+      [A.org, educatorUser, educatorRole, [roomA]],
+    );
+    const tokenEdu = await connect(educatorEmail);
+
+    const photoB = jpegBytes(`${tag}-roomB`);
+    const upB = await upload(tokenA, { bytes: photoB, fields: { child_id: childRoomB } });
+    const photoA = jpegBytes(`${tag}-roomA`);
+    const upA = await upload(tokenA, { bytes: photoA, fields: { child_id: childRoomA } });
+    ok('Prérequis : la direction téléverse un média dans CHAQUE salle',
+      upB.status === 201 && upA.status === 201, `${upB.status}/${upA.status}`);
+
+    const dlB = await api('GET', `/media/${upB.body?.id}/download`, tokenEdu);
+    ok('Éducatrice : lien d’un média d’une AUTRE salle → 404 (plus de contournement de la liste)',
+      dlB.status === 404, `status=${dlB.status}`);
+    const contentB = await raw(`/api/v1/media/${upB.body?.id}/content`, tokenEdu);
+    ok('Éducatrice : contenu d’une AUTRE salle → 404 SANS octets',
+      contentB.res.status === 404 && contentB.bytes.length < 400,
+      `status=${contentB.res.status} octets=${contentB.bytes.length}`);
+
+    const dlA = await api('GET', `/media/${upA.body?.id}/download`, tokenEdu);
+    ok('Contrôle inverse : média de SA salle → 200 (la garde n’est pas un mur)',
+      dlA.status === 200, `status=${dlA.status}`);
+    const contentA = await raw(`/api/v1/media/${upA.body?.id}/content`, tokenEdu);
+    ok('Éducatrice : contenu de SA salle → 200 et octets identiques',
+      contentA.res.status === 200 && contentA.bytes.equals(photoA),
+      `status=${contentA.res.status} octets=${contentA.bytes.length}/${photoA.length}`);
+
+    const listEdu = await api('GET', '/media', tokenEdu);
+    const idsEdu = (listEdu.body?.items ?? []).map((m) => m.id);
+    ok('Liste : le média de l’autre salle est absent, celui de sa salle est présent',
+      !idsEdu.includes(upB.body?.id) && idsEdu.includes(upA.body?.id),
+      `ids=${idsEdu.length}`);
+
+    const writeB = await upload(tokenEdu, { bytes: jpegBytes(`${tag}-writeB`), fields: { child_id: childRoomB } });
+    ok('Écriture pour un enfant d’une AUTRE salle → 403 MEDIA_OUT_OF_SCOPE (aucun média créé)',
+      writeB.status === 403 && writeB.body?.code === 'MEDIA_OUT_OF_SCOPE',
+      `${writeB.status} ${writeB.body?.code}`);
+    const writeA = await upload(tokenEdu, { bytes: jpegBytes(`${tag}-writeA`), fields: { child_id: childRoomA } });
+    ok('Contrôle inverse : écriture dans SA salle → 201',
+      writeA.status === 201, `${writeA.status} ${writeA.body?.code ?? ''}`);
+    const writeMixed = await upload(tokenEdu, {
+      bytes: jpegBytes(`${tag}-writeMix`),
+      fields: { child_id: childRoomA, children_in_photo: [childRoomB] },
+    });
+    ok('Écriture avec un enfant d’une AUTRE salle dans `children_in_photo` → 403',
+      writeMixed.status === 403 && writeMixed.body?.code === 'MEDIA_OUT_OF_SCOPE',
+      `${writeMixed.status} ${writeMixed.body?.code}`);
+    const dirReadB = await api('GET', `/media/${upB.body?.id}/download`, tokenA);
+    ok('La direction (director) lit toujours le média de la salle B (pas de mur global)',
+      dirReadB.status === 200, `status=${dirReadB.status}`);
 
     // ── 6. Consentement de bout en bout (enfants déclarés en multipart) ────
     console.log('\n6) `children_in_photo` en multipart : publication aux parents');
