@@ -31,6 +31,10 @@ const env = {
   CORS_ORIGINS: 'https://staging-test.invalid', WORKER_SCHEDULER_ENABLED: 'false',
   // H1 : un MIROIR d'exploitation (chemin historique) — pas un secret, et vide par défaut.
   MINIO_IMAGE: process.env.MINIO_IMAGE ?? '',
+  // Tag applicatif : même valeur pour le build local (plus bas) et pour
+  // l'interpolation compose `:${VERSION:-latest}` — jamais de décalage entre
+  // l'image construite et celle que la stack tire (Correctif audit 2026-10-02).
+  VERSION: process.env.VERSION ?? 'latest',
 };
 if (dev) {
   Object.assign(env, {
@@ -64,7 +68,7 @@ async function until(fn, label) {
 const sql = (query) => compose(['exec', '-T', 'postgres', 'psql', '-U', 'postgres', '-d', env.POSTGRES_DB, '-v', 'ON_ERROR_STOP=1', '-Atc', query], { quiet: true, timeout: 10000 });
 try {
   if (dev) compose(['build', 'api', 'worker', 'admin-web']);
-  else for (const target of ['api', 'worker']) docker(['build', '-f', `apps/${target}/Dockerfile`, '-t', `ghcr.io/creche-saas/${target}:staging`, '.']);
+  else for (const target of ['api', 'worker']) docker(['build', '-f', `apps/${target}/Dockerfile`, '-t', `ghcr.io/allintelligence2024/creche-saas-${target}:${env.VERSION}`, '.']);
   const config = JSON.parse(compose(['config', '--format', 'json'], { quiet: true }));
   process.stdout.write(await pullRegistryImage(config.services.postgres.image, { env }));
   // MinIO (H1, 25/09/2026) : plus AUCUN registre public ne sert cette image

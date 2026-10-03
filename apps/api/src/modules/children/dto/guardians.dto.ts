@@ -1,16 +1,10 @@
 import {
-  IsBoolean,
-  IsDateString,
-  IsEmail,
-  IsInt,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  MaxLength,
-  Min,
+  IsBoolean, IsEmail, IsInt,
+  IsOptional, IsString, IsUUID,
+  Max, MaxLength, Min,
   MinLength,
 } from 'class-validator';
+import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
 
 export class CreateGuardianDto {
   @IsString()
@@ -224,11 +218,11 @@ export class CreatePickupDto {
   national_id?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   valid_from?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   valid_until?: string;
 }
 

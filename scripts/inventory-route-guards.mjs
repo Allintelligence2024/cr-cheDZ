@@ -48,18 +48,33 @@ for (const mod of readdirSync(MODULES)) {
       }
     }
     for (const cls of controllers) {
+      // Garde de CLASSE (@Roles/@Public posés sur le contrôleur) : RolesGuard
+      // lit `handler ?? class` — une route sans décorateur de méthode hérite
+      // donc de la garde de classe (`organizations`, `enrollment`,
+      // `attestations`). Ne compter que les méthodes de méthode classait ces
+      // routes en « NONE » à tort (faux positifs de l'audit C1).
+      const classDecorators = (ts.getDecorators(cls) ?? []).map((d) => decoratorName(d));
+      const classGuard = classDecorators.includes('Public')
+        ? 'PUBLIC'
+        : classDecorators.includes('Roles')
+          ? 'ROLES'
+          : null;
       for (const member of cls.members) {
         if (!ts.isMethodDeclaration(member) || !member.name) continue;
         const decorators = (ts.getDecorators(member) ?? []).map((d) => decoratorName(d));
         const http = decorators.find((n) => HTTP_METHODS.has(n));
         if (!http) continue;
-        const hasGuard = decorators.some((n) => GUARDS.has(n));
+        const methodGuard = decorators.includes('Public')
+          ? 'PUBLIC'
+          : decorators.includes('Roles')
+            ? 'ROLES'
+            : null;
         const routeArg = (ts.getDecorators(member) ?? [])
           .map((d) => decoratorArgs(d))
           .find(({ name }) => HTTP_METHODS.has(name))?.arg;
         const route = routeArg ? `@${http}('${routeArg}')` : `@${http}()`;
         rows.push({
-          guard: hasGuard ? (decorators.includes('Public') ? 'PUBLIC' : 'ROLES') : 'NONE',
+          guard: methodGuard ?? classGuard ?? 'NONE',
           file: `${mod}/${f}`,
           route,
           method: member.name.text,

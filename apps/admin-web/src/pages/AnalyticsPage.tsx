@@ -169,9 +169,9 @@ export function AnalyticsPage(): React.JSX.Element {
     setError(null);
     Promise.all([
       http.get<OverviewResponse>('/analytics/overview'),
-      http.get<{ data: TrendPoint[] }>('/analytics/attendance?groupBy=day').then((r) => (r as any).data ?? (r as any).data ?? []),
-      http.get<{ data: TrendPoint[] }>('/analytics/billing').then((r) => (r as any).data ?? []),
-      http.get<{ data: TrendPoint[] }>('/analytics/revenue').then((r) => (r as any).data ?? []),
+      http.get<{ data: TrendPoint[] }>('/analytics/attendance?groupBy=day').then((r) => r.data ?? []),
+      http.get<{ data: TrendPoint[] }>('/analytics/billing').then((r) => r.data ?? []),
+      http.get<{ data: TrendPoint[] }>('/analytics/revenue').then((r) => r.data ?? []),
       http.get<OccupancyResponse>('/analytics/occupancy'),
     ])
       .then(([ov, att, bill, rev, occ]) => {

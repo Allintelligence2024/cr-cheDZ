@@ -1,12 +1,8 @@
 import {
-  IsDateString,
-  IsIn,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-  MinLength,
+  IsIn, IsOptional, IsString,
+  IsUUID, MaxLength, MinLength,
 } from 'class-validator';
+import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
 
 export class CheckInDto {
   @IsUUID()
@@ -18,7 +14,7 @@ export class CheckInDto {
 
   /** Heure constatée (appareil) — optionnelle en HTTP, le serveur fait foi. */
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   occurred_at?: string;
 }
 
@@ -34,7 +30,7 @@ export class MarkAbsentDto {
   reason?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   occurred_at?: string;
 }
 
@@ -51,7 +47,7 @@ export class CorrectAttendanceDto {
   reason!: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   occurred_at?: string;
 }
 
@@ -61,7 +57,7 @@ export class AttendanceSummaryQuery {
   room_id?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   date?: string;
 }
 

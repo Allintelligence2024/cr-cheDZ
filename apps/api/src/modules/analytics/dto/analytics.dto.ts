@@ -1,12 +1,15 @@
-import { IsDateString, IsIn, IsOptional } from 'class-validator';
+import {
+  IsIn, IsOptional, IsUUID,
+} from 'class-validator';
+import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
 
 export class AnalyticsQueryDto {
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   from?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   to?: string;
 
   @IsOptional()
@@ -14,15 +17,22 @@ export class AnalyticsQueryDto {
   groupBy?: 'day' | 'week' | 'month' = 'day';
 
   @IsOptional()
+  @IsUUID()
   site_id?: string;
+}
+
+export class RatiosQueryDto {
+  @IsOptional()
+  @IsStrictIsoDate()
+  date?: string;
 }
 
 export class RevenueQueryDto {
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   from?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   to?: string;
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { IsUUID } from 'class-validator';
 import { Errors } from '../../shared/errors';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
@@ -7,6 +7,12 @@ import { UsersService } from './users.service';
 
 class AssignmentIdParam {
   @IsUUID() id!: string;
+}
+
+/** Corps validé : `role_id` doit être un UUID (sans DTO, la valeur brute
+ *  atteignait la requête et faisait échouer le cast uuid en 500). */
+class AddRoleDto {
+  @IsUUID() role_id!: string;
 }
 
 @Controller()
@@ -24,7 +30,7 @@ export class UsersController {
   /** Rôles additionnels d'un membre de l'organisation (directeur). */
   @Get('members/:userId/roles')
   @Roles('director', 'super_admin')
-  memberRoles(@Param('userId') userId: string, @CurrentUser() u: CurrentUserPayload): Promise<Array<Record<string, unknown>>> {
+  memberRoles(@Param('userId', ParseUUIDPipe) userId: string, @CurrentUser() u: CurrentUserPayload): Promise<Array<Record<string, unknown>>> {
     if (!u.organizationId) throw Errors.forbidden();
     return this.usersService.listRoleAssignments(userId, u.organizationId);
   }
@@ -32,7 +38,7 @@ export class UsersController {
   /** Assigne un rôle additionnel (directeur). */
   @Post('members/:userId/roles')
   @Roles('director', 'super_admin')
-  addRole(@Param('userId') userId: string, @Body() dto: { role_id: string }, @CurrentUser() u: CurrentUserPayload): Promise<Record<string, unknown>> {
+  addRole(@Param('userId', ParseUUIDPipe) userId: string, @Body() dto: AddRoleDto, @CurrentUser() u: CurrentUserPayload): Promise<Record<string, unknown>> {
     if (!u.organizationId) throw Errors.forbidden();
     return this.usersService.addRoleAssignment(u.sub, u.organizationId, { user_id: userId, role_id: dto.role_id });
   }

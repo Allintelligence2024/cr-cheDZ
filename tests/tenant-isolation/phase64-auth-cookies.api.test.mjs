@@ -20,10 +20,15 @@
  *      même si aucun body envoyé.
  *   5. refresh SANS cookie ni body → 401 (le client web n'a pas son
  *      cookie = session expirée ; on n'invente pas de fallback).
+ *   6. production (correctif audit 2026-10-02) : le préfixe `__Host-` exige
+ *      `Path=/` — le cookie de refresh était posé avec `Path=/api/v1/auth`,
+ *      donc REJETÉ par les navigateurs conformes (session web impossible à
+ *      rafraîchir). Sonde hors process : imports du module compilé avec
+ *      NODE_ENV=production, vérification du nom, de Secure et de Path=/.
  *
  * Prérequis : PG18 réel, API compilée (dist/), DATABASE_URL.
  */
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -70,14 +75,18 @@ const main = async () => {
   const tag = `auth-${randomUUID().slice(0, 8)}`;
   const password = 'Password123!';
   const hash = await bcrypt.hash(password, 12);
+  // Déclarés AVANT le try : le nettoyage du finally ne doit pas jeter un
+  // `userId is not defined` (le fixture fuyait à chaque échec).
+  let orgId = null;
+  let userId = null;
 
   try {
     // Préparer un utilisateur de test (director).
     const roles = Object.fromEntries(
       (await db.query(`SELECT slug, id FROM roles WHERE slug IN ('director')`)).rows.map((r) => [r.slug, r.id]),
     );
-    const orgId = (await db.query(`INSERT INTO organizations(slug,name_fr,wilaya) VALUES($1,'R','31') RETURNING id`, [`${tag}-org`])).rows[0].id;
-    const userId = (await db.query(`INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'U','T',$2,'active') RETURNING id`, [`${tag}@x.dz`, hash])).rows[0].id;
+    orgId = (await db.query(`INSERT INTO organizations(slug,name_fr,wilaya) VALUES($1,'R','31') RETURNING id`, [`${tag}-org`])).rows[0].id;
+    userId = (await db.query(`INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'U','T',$2,'active') RETURNING id`, [`${tag}@x.dz`, hash])).rows[0].id;
     await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [orgId, userId, roles.director]);
 
     // ── Cas 1 : login web_client=true → cookie httpOnly posé
@@ -143,6 +152,34 @@ const main = async () => {
       body: JSON.stringify({}),
     });
     ok('refresh sans cookie → 401', r5.status === 401, `status=${r5.status}`);
+
+    // ── Cas 6 : production — `__Host-` impose Path=/ (correctif 2026-10-02) ──
+    // Le module compile est importé dans un process NODE_ENV=production : on
+    // capture les options réellement passées à `res.cookie`/`res.clearCookie`.
+    console.log('\n6) production : `__Host-creche_refresh` + Path=/ + Secure');
+    const moduleUrl = pathToFileURL(join(repo, 'apps/api/dist/shared/auth/auth-cookies.js')).href;
+    const probeScript = [
+      `const m = await import(${JSON.stringify(moduleUrl)});`,
+      'const calls = [];',
+      'const res = { cookie: (...a) => calls.push(a), clearCookie: (...a) => calls.push(a) };',
+      "m.setRefreshCookie(res, 'tok');",
+      'm.clearRefreshCookie(res);',
+      'console.log(JSON.stringify({ name: m.REFRESH_COOKIE_NAME, path: m.REFRESH_COOKIE_PATH, calls }));',
+    ].join('\n');
+    const probe = JSON.parse(execFileSync('node', ['--input-type=module', '-e', probeScript], {
+      cwd: repo,
+      env: { ...process.env, NODE_ENV: 'production' },
+    }).toString());
+    ok('Nom préfixé `__Host-` en production', String(probe.name).startsWith('__Host-'), probe.name);
+    ok('Chemin exporté = `/` (exigé par le préfixe `__Host-`)', probe.path === '/', probe.path);
+    // `cookie(name, value, options)` vs `clearCookie(name, options)` : les
+    // options sont toujours le DERNIER argument.
+    const optionsOf = (call) => call[call.length - 1];
+    ok('setRefreshCookie ET clearRefreshCookie utilisent Path=/',
+      probe.calls.length === 2 && probe.calls.every((call) => optionsOf(call).path === '/'),
+      JSON.stringify(probe.calls));
+    ok('Cookie Secure en production',
+      probe.calls.every((call) => optionsOf(call).secure === true), JSON.stringify(probe.calls));
   } finally {
     try {
       await db.query(`DELETE FROM audit_logs WHERE user_id=$1`, [userId]);

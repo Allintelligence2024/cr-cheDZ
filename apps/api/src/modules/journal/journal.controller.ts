@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { CreateJournalEventDto, GroupJournalEventDto, JournalListQuery, UpdateJournalVisibilityDto } from './dto/journal.dto';
@@ -50,7 +50,7 @@ export class JournalController {
   @Patch('events/:id/visibility')
   @Roles('super_admin', 'director')
   async setVisibility(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateJournalVisibilityDto,
   ): Promise<Record<string, unknown>> {
     return this.journalService.setVisibility(id, dto.visible_to_parents);

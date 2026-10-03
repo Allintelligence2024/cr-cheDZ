@@ -1,18 +1,11 @@
 import { Type } from 'class-transformer';
 import {
-  IsArray,
-  IsBoolean,
-  IsDateString,
-  IsIn,
-  IsNumber,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  MaxLength,
-  Min,
-  ValidateNested,
+  IsArray, IsBoolean, IsIn,
+  IsNumber, IsOptional, IsString,
+  IsUUID, Max, MaxLength,
+  Min, ValidateNested,
 } from 'class-validator';
+import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
 
 export const JOURNAL_EVENT_TYPES = [
   'meal', 'nap_start', 'nap_end', 'diaper', 'activity',
@@ -33,7 +26,7 @@ export class CreateJournalEventDto {
   event_type!: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   occurred_at?: string;
 
   // Repas
@@ -52,11 +45,11 @@ export class CreateJournalEventDto {
 
   // Sieste
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   nap_start_at?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   nap_end_at?: string;
 
   @IsOptional()
@@ -163,7 +156,7 @@ export class GroupJournalEventDto {
   activity_name?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   occurred_at?: string;
 }
 
@@ -172,7 +165,7 @@ export class JournalListQuery {
   child_id!: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   date?: string;
 }
 

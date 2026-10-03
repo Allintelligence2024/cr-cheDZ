@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -178,8 +179,8 @@ export class StaffController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(...WRITE_ROLES)
   async endAssignment(
-    @Param('id') id: string,
-    @Param('aid') aid: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('aid', ParseUUIDPipe) aid: string,
     @CurrentUser() user: CurrentUserPayload,
   ): Promise<void> {
     await this.staffService.endAssignment(id, aid, user.sub);

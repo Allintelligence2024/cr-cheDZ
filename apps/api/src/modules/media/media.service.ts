@@ -15,6 +15,20 @@ import { StorageService } from './storage.service';
 /** Plafond produit d'un média téléversé (photo compressée, PDF). */
 export const MEDIA_MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
+/**
+ * Rôles qui voient TOUS les médias du tenant (direction, finance, ops
+ * plateforme) — aucune restriction d'aire.
+ */
+const MEDIA_SEES_ALL_ROLES = new Set(['director', 'super_admin', 'accountant']);
+
+/**
+ * Rôles parent : ils n'appartiennent à aucune salle (`memberships.room_ids`
+ * est NULL) car leur lecture passe par `ParentsService` (filiation + visibilité
+ * parent + consentement photo re-vérifiés à CHAQUE appel). Le cloisonnement par
+ * salle ne s'applique donc jamais à eux — le leur est plus strict.
+ */
+const MEDIA_PARENT_ROLES = new Set(['parent_primary', 'parent_secondary']);
+
 /** Signatures binaires des types acceptés (le Content-Type d'un client se ment). */
 const MAGIC_BYTES: Record<string, (b: Buffer) => boolean> = {
   'image/jpeg': (b) => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
@@ -49,6 +63,12 @@ export function mediaContentPath(mediaId: string): string {
  * - Chaque téléchargement est journalisé (media_access_logs, loi 25-11).
  * - C3 (audit 2026-09) : la clé de stockage DOIT être préfixée par le tenant
  *   courant — le client ne choisit pas le périmètre de ses objets.
+ * - R10 étendu (audit 2026-10-02) : le cloisonnement par salle
+ *   (`memberships.room_ids`) s'applique à TOUTES les voies — liste, lecture
+ *   (`downloadUrl`/`streamContent`) ET écriture (`upload`/`register`) — et plus
+ *   seulement à la liste. Hors aire : 404 en lecture, 403 MEDIA_OUT_OF_SCOPE
+ *   en écriture ; direction/finance/ops plateforme voient tout ; les parents
+ *   gardent leur chemin dédié (filiation + consentement).
  */
 
 @Injectable()
@@ -213,6 +233,14 @@ export class MediaService {
           await this.childOfTenant(client, cid);
         }
       }
+      // R10 étendu (audit 2026-10-02) : l'écriture est cloisonnée elle aussi —
+      // `upload`/`register` ne vérifiaient que le tenant, donc une éducatrice
+      // créait des médias pour des enfants d'une autre salle. Tous les enfants
+      // référencés (principal + `children_in_photo`) doivent appartenir à une
+      // salle qui lui est assignée. Un document sans enfant reste accepté
+      // (rien à cloisonner ; il sera de toute façon invisible à la liste des
+      // rôles restreints).
+      await this.assertMediaScope(client, userId, [input.childId, ...(input.childrenInPhoto ?? [])], 'write');
       const res = await client.query(
         `INSERT INTO media_assets
            (organization_id, child_id, log_event_id, uploaded_by, media_type,
@@ -311,29 +339,19 @@ export class MediaService {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       // 1. Récupérer le rôle + room_ids de l'utilisateur pour ce tenant.
-      const m = await client.query(
-        `SELECT m.room_ids, r.slug AS role_slug
-         FROM memberships m
-         JOIN roles r ON r.id = m.role_id
-         WHERE m.user_id = $1 AND m.organization_id = $2 AND m.is_active = true`,
-        [userId, tenantId],
-      );
-      if (m.rows.length === 0) {
+      const scope = await this.staffScope(client, userId);
+      if (!scope) {
         // Pas de membership actif → 0 média (defense-in-depth ; le guard a
         // normalement déjà refusé).
         return [];
       }
-      const { role_slug: roleSlug, room_ids: roomIds } = m.rows[0] as {
-        role_slug: string;
-        room_ids: string[] | null;
-      };
+      const { roomIds } = scope;
 
       // 2. Rôles qui voient TOUT (direction + finance + ops plateforme).
-      const SEES_ALL = new Set(['director', 'super_admin', 'accountant']);
       const params: unknown[] = [tenantId];
       let extraWhere = '';
 
-      if (!SEES_ALL.has(roleSlug)) {
+      if (!scope.seesAll) {
         // Staff « terrain » : filtrer par room_id des enfants via la table
         // children. memberships.room_ids peut être NULL (= aucune salle :
         // ne voit rien) ou vide. Si room_ids = NULL, l'utilisateur n'a
@@ -386,10 +404,16 @@ export class MediaService {
     const tenantId = requireTenant(this.tenantContext);
     const media = await this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
-        `SELECT id, storage_key, child_id FROM media_assets WHERE id = $1 AND deleted_at IS NULL`,
+        `SELECT id, storage_key, child_id, children_in_photo
+         FROM media_assets WHERE id = $1 AND deleted_at IS NULL`,
         [mediaId],
       );
       if (res.rows.length === 0) throw Errors.notFound();
+      // R10 étendu (audit 2026-10-02) : le cloisonnement par salle ne vaut pas
+      // que pour `list()`. Sans ce contrôle, une éducatrice contournait le
+      // filtre en appelant directement `/media/:id/download`. Hors aire → média
+      // INEXISTANT (404), jamais 200.
+      await this.assertMediaScope(client, userId, [res.rows[0].child_id, ...(res.rows[0].children_in_photo ?? [])], 'read');
       return res.rows[0];
     });
     await this.logView(tenantId, userId, mediaId, media.child_id, ipAddress);
@@ -411,11 +435,15 @@ export class MediaService {
     const tenantId = requireTenant(this.tenantContext);
     const media = await this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
-        `SELECT id, storage_key, mime_type, original_filename, child_id
+        `SELECT id, storage_key, mime_type, original_filename, child_id, children_in_photo
          FROM media_assets WHERE id = $1 AND deleted_at IS NULL`,
         [mediaId],
       );
       if (res.rows.length === 0) throw Errors.notFound();
+      // R10 étendu (audit 2026-10-02) : même garde que `downloadUrl` — les
+      // octets ne sortent pas sans vérification de l'aire du membre du
+      // personnel (les parents passent par ParentsService, cf. staffScope).
+      await this.assertMediaScope(client, userId, [res.rows[0].child_id, ...(res.rows[0].children_in_photo ?? [])], 'read');
       return res.rows[0];
     });
     // C3 : le client ne choisit pas le périmètre de ses objets — la clé doit
@@ -501,6 +529,91 @@ export class MediaService {
       );
       return res.rows;
     });
+  }
+
+  // ── Cloisonnement par salle (R10, étendu audit 2026-10-02) ───────────────
+
+  /**
+   * Aire d'un membre du personnel : rôle + salles assignées.
+   *
+   * `null` quand le membership est inactif/absent (le guard a normalement déjà
+   * refusé) ; `seesAll` pour direction/finance/ops plateforme ; `parent` pour
+   * les rôles parent dont la lecture est gardée par `ParentsService`.
+   */
+  private async staffScope(
+    client: PoolClient,
+    userId: string,
+  ): Promise<{ seesAll: boolean; parent: boolean; roomIds: string[] | null } | null> {
+    const tenantId = requireTenant(this.tenantContext);
+    const m = await client.query(
+      `SELECT m.room_ids, r.slug AS role_slug
+       FROM memberships m
+       JOIN roles r ON r.id = m.role_id
+       WHERE m.user_id = $1 AND m.organization_id = $2 AND m.is_active = true`,
+      [userId, tenantId],
+    );
+    if (m.rows.length === 0) return null;
+    const { role_slug: roleSlug, room_ids: roomIds } = m.rows[0] as {
+      role_slug: string;
+      room_ids: string[] | null;
+    };
+    return {
+      seesAll: MEDIA_SEES_ALL_ROLES.has(roleSlug),
+      parent: MEDIA_PARENT_ROLES.has(roleSlug),
+      roomIds,
+    };
+  }
+
+  /**
+   * R10 étendu (audit 2026-10-02) — la restriction d'aire ne valait que pour
+   * `list()` : `download`/`content` (lecture) et `upload`/`register` (écriture)
+   * ne contrôlaient que le tenant, si bien qu'une éducatrice lisait — et
+   * créait — les médias d'enfants d'une AUTRE salle en connaissant l'id.
+   *
+   *  - lecture : même sémantique que `list()` — au moins un enfant référencé
+   *    (`child_id` ou `children_in_photo`) appartient à une salle du membre ;
+   *    sinon le média est INEXISTANT pour lui (404 — pas de fuite d'existence) ;
+   *  - écriture : TOUS les enfants référencés doivent être dans l'aire (403
+   *    `MEDIA_OUT_OF_SCOPE`) — on n'attache pas une photo à un enfant dont on
+   *    n'a pas la charge ; un document sans enfant reste accepté ;
+   *  - direction/finance/ops plateforme : aucune restriction ;
+   *  - rôles parent : garde plus stricte ailleurs (filiation + consentement),
+   *    on ne la double pas ici.
+   */
+  private async assertMediaScope(
+    client: PoolClient,
+    userId: string,
+    childIds: ReadonlyArray<string | null | undefined>,
+    mode: 'read' | 'write',
+  ): Promise<void> {
+    const ids = [...new Set(childIds.filter((v): v is string => typeof v === 'string' && v.length > 0))];
+    if (ids.length === 0) {
+      if (mode === 'read') throw Errors.notFound();
+      return; // document sans enfant : rien à cloisonner
+    }
+
+    const scope = await this.staffScope(client, userId);
+    let allowed = false;
+    if (scope && (scope.seesAll || (scope.parent && mode === 'read'))) {
+      allowed = true;
+    } else if (scope?.roomIds && scope.roomIds.length > 0) {
+      const res = await client.query(
+        `SELECT id FROM children
+         WHERE id = ANY($1::uuid[]) AND room_id = ANY($2::uuid[]) AND deleted_at IS NULL`,
+        [ids, scope.roomIds],
+      );
+      const inScope = new Set(res.rows.map((row) => row.id as string));
+      allowed = mode === 'read' ? ids.some((id) => inScope.has(id)) : ids.every((id) => inScope.has(id));
+    }
+
+    if (allowed) return;
+    if (mode === 'read') throw Errors.notFound();
+    throw new AppError(
+      'MEDIA_OUT_OF_SCOPE',
+      'Enfant hors de votre périmètre : média réservé aux salles qui vous sont assignées',
+      'الطفل خارج نطاق صلاحيتك : هذا الوسيط محجوز للقاعات المسندة إليك',
+      403,
+    );
   }
 
   /**

@@ -865,7 +865,7 @@ excellence.
 
 ## État courant vérifié — 2026-09-27 (après les lots 1 et 2)
 
-**État courant 2026-09-27 — runner : 74 entrées ; suites phaseNN : 72 ; fichiers d’isolation : 90 ; migrations : 77.**
+**État courant 2026-09-27 — runner : 76 entrées ; suites phaseNN : 74 ; fichiers d’isolation : 92 ; migrations : 77.**
 
 - Lot 1 : migration `077` appliquée sans drift (`31d9dcbc`), gardien index vert, `phase78` 12/12 ; les 5 échecs résiduels sur 75 exécutions ont été reproduits sans index (ils sont Gate D/environnementaux, pas une régression d’index).
 - Lot 2 : les deux specs Playwright ne sont plus des squelettes ; le seed e2e est réjouable et ajoute un employé rémunéré ; `check-e2e-skeletons.mjs` est câblé dans `quality` et ses 6 mutations sont détectées. Le navigateur Chromium ne s’est pas installé (téléchargement refusé) : les specs navigateur ne sont donc pas déclarées vertes. À la place, 22 assertions HTTP API ont été exécutées sur PostgreSQL 18 vierge, avec 0 échec ; `scripts/prove-e2e-http.mjs` permet de rejouer cette preuve.

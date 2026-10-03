@@ -21,6 +21,18 @@ import type { Response } from 'express';
 /** Nom du cookie (préfixé `__Host-` en prod : aucun Domain, Path=/, Secure). */
 export const REFRESH_COOKIE_NAME = process.env.NODE_ENV === 'production' ? '__Host-creche_refresh' : 'creche_refresh';
 
+/**
+ * Chemin du cookie.
+ *
+ * Correctif (audit 2026-10-02) : le préfixe `__Host-` (RFC 6265bis §4.1.3)
+ * EXIGE `Path=/` en plus de `Secure` et de l'absence de `Domain`. Poser
+ * `__Host-creche_refresh` avec `Path=/api/v1/auth` faisait REJETER le cookie
+ * par tout navigateur conforme : en production, le refresh token n'était
+ * jamais stocké et la session web expirait à la première rotation.
+ * En dev (nom sans préfixe), on conserve le chemin minimal `/api/v1/auth`.
+ */
+export const REFRESH_COOKIE_PATH = process.env.NODE_ENV === 'production' ? '/' : '/api/v1/auth';
+
 export interface SetRefreshCookieOptions {
   /** Durée de vie du cookie en secondes (par défaut 7 jours, alignée refresh_token). */
   maxAgeSeconds?: number;
@@ -39,7 +51,9 @@ export function setRefreshCookie(res: Response, refreshToken: string, opts: SetR
     httpOnly: true,
     secure: isProd,
     sameSite: 'lax',
-    path: '/api/v1/auth', // cookie limité aux endpoints d'auth — surface minimale
+    // Prod : `Path=/` imposé par le préfixe `__Host-` (cf. REFRESH_COOKIE_PATH).
+    // Dev : cookie limité aux endpoints d'auth — surface minimale.
+    path: REFRESH_COOKIE_PATH,
     maxAge: maxAge * 1000,
   });
 }
@@ -60,6 +74,8 @@ export function clearRefreshCookie(res: Response): void {
     httpOnly: true,
     secure: isProd,
     sameSite: 'lax',
-    path: '/api/v1/auth',
+    // DOIT être identique au chemin de pose, sinon le navigateur ne supprime
+    // pas le cookie (et `__Host-` exige `Path=/`, cf. REFRESH_COOKIE_PATH).
+    path: REFRESH_COOKIE_PATH,
   });
 }
