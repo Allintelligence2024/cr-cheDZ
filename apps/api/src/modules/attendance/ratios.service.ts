@@ -75,11 +75,17 @@ export class RatiosService {
     const q: unknown[] = [tenantId, today];
     let roomClause = '';
     if (roomId) { q.push(roomId); roomClause = ` AND r.id=$3`; }
+    // 3.7.3 : les enfants sont comptés selon la salle OÙ ILS SONT POINTÉS,
+    // pas leur salle d'affectation statique. Un enfant affecté à la salle A
+    // mais pointé présent sur le site B (accueil ponctuel, changement de
+    // salle) gonflait le ratio de A et dégonflait celui de B. La salle de
+    // pointage est la réalité du jour — la seule qui compte pour le ratio
+    // encadrant/encadrés et la capacité maximale de la salle.
     const rows = (await client.query(
       `SELECT r.id AS room_id, r.name_fr AS room_name, s.name_fr AS site_name, r.max_capacity,
               (SELECT COUNT(*)::int FROM attendance_sessions a
                  WHERE a.organization_id=$1 AND a.session_date=$2 AND a.status='present'
-                   AND a.child_id IN (SELECT c.id FROM children c WHERE c.room_id=r.id AND c.deleted_at IS NULL)) AS children_present,
+                   AND a.room_id=r.id) AS children_present,
               (SELECT COUNT(DISTINCT sa.staff_id)::int FROM staff_assignments sa JOIN staff_profiles sp ON sp.id=sa.staff_id
                  WHERE sa.organization_id=$1 AND sa.room_id=r.id AND sa.is_active
                    AND sa.start_date <= $2 AND (sa.end_date IS NULL OR sa.end_date >= $2)
@@ -128,25 +134,53 @@ export class RatiosService {
    * Trace d'un franchissement au moment d'un check-in : ligne compliance_checks
    * (RATIO_EDUC, fail) — une seule par salle et par jour tant que la situation
    * n'est pas revenue à la normale (pas de spam), dans la transaction appelante.
+   *
+   * 3.7.2 (remédiation 2026-10-04) : `CAPACITY_EXCEEDED` n'était JAMAIS tracé
+   * — un dépassement de capacité de la salle restait invisible dans le
+   * registre de conformité (loi 25-11 / décret 19-253). Désormais chaque
+   * raison de franchissement est recherchée parmi les règles actives et
+   * tracée, indépendamment de RATIO_EDUC.
    */
   async recordBreach(client: PoolClient, ratio: RoomRatio): Promise<boolean> {
     if (ratio.status !== 'breach' || ratio.basis === 'unconfigured') return false;
     const tenantId = requireTenant(this.tenantContext);
-    const rule = (await client.query(
-      `SELECT cr.id FROM compliance_rules cr JOIN compliance_rule_sets rs ON rs.id=cr.rule_set_id
-       WHERE cr.code='RATIO_EDUC' AND cr.is_active AND rs.status='active' LIMIT 1`,
-    )).rows[0];
-    if (!rule) return false;
-    const dup = await client.query(
-      `SELECT 1 FROM compliance_checks WHERE organization_id=$1 AND rule_id=$2 AND checked_by='realtime' AND result='fail'
-         AND details->>'room_id'=$3 AND (checked_at AT TIME ZONE 'Africa/Algiers')::date=(NOW() AT TIME ZONE 'Africa/Algiers')::date LIMIT 1`,
-      [tenantId, rule.id, ratio.room_id],
-    );
-    if (dup.rowCount) return false;
-    await client.query(
-      `INSERT INTO compliance_checks (organization_id, rule_id, result, details, checked_by) VALUES ($1,$2,'fail',$3,'realtime')`,
-      [tenantId, rule.id, JSON.stringify({ room_id: ratio.room_id, room: ratio.room_name, children_present: ratio.children_present, educators: ratio.educators_counted, basis: ratio.basis, reasons: ratio.reasons, source: 'check_in' })],
-    );
-    return true;
+    // Règles actives indexées par code (RATIO_EDUC, CAPACITY_EXCEEDED, …).
+    const rules = (await client.query(
+      `SELECT cr.id, cr.code FROM compliance_rules cr JOIN compliance_rule_sets rs ON rs.id=cr.rule_set_id
+       WHERE cr.is_active AND rs.status='active'`,
+    )).rows as { id: string; code: string }[];
+    if (!rules.length) return false;
+    const ruleByCode = new Map(rules.map((r) => [r.code, r.id]));
+
+    // 3.7.2 : chaque raison trouve sa règle. Une raison sans règle active
+    // configurée est silencieusement ignorée (jamais d'échec du check-in).
+    const toLog: Array<{ ruleId: string; reason: string }> = [];
+    for (const reason of ratio.reasons) {
+      const ruleId = ruleByCode.get(reason);
+      if (ruleId) toLog.push({ ruleId, reason });
+    }
+    // RATIO_EXCEEDED est une raison métier du service mais la règle tracée
+    // reste RATIO_EDUC (même règle, deux seuils).
+    if (ratio.reasons.includes('RATIO_EXCEEDED')) {
+      const ruleId = ruleByCode.get('RATIO_EDUC');
+      if (ruleId && !toLog.some((x) => x.ruleId === ruleId)) toLog.push({ ruleId, reason: 'RATIO_EXCEEDED' });
+    }
+    if (!toLog.length) return false;
+
+    let logged = false;
+    for (const { ruleId } of toLog) {
+      const dup = await client.query(
+        `SELECT 1 FROM compliance_checks WHERE organization_id=$1 AND rule_id=$2 AND checked_by='realtime' AND result='fail'
+           AND details->>'room_id'=$3 AND (checked_at AT TIME ZONE 'Africa/Algiers')::date=(NOW() AT TIME ZONE 'Africa/Algiers')::date LIMIT 1`,
+        [tenantId, ruleId, ratio.room_id],
+      );
+      if (dup.rowCount) continue;
+      await client.query(
+        `INSERT INTO compliance_checks (organization_id, rule_id, result, details, checked_by) VALUES ($1,$2,'fail',$3,'realtime')`,
+        [tenantId, ruleId, JSON.stringify({ room_id: ratio.room_id, room: ratio.room_name, children_present: ratio.children_present, educators: ratio.educators_counted, basis: ratio.basis, reasons: ratio.reasons, source: 'check_in' })],
+      );
+      logged = true;
+    }
+    return logged;
   }
 }

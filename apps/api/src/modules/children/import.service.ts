@@ -4,6 +4,7 @@ import { TenantContextService } from '../../shared/database/tenant-context.servi
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AuditService } from '../privacy/audit.service';
 import { AppError } from '../../shared/errors';
+import { ageMonths, AGE_CRECHE_MIN_MONTHS, AGE_CRECHE_MAX_MONTHS } from '../../shared/compliance/age-creche';
 import { ImportChildRowDto, type ImportError, type ImportResult } from './dto/import.dto';
 
 const VALID_GENDERS = new Set(['M', 'F']);
@@ -138,6 +139,17 @@ export class ImportService {
         out.push({ field: 'date_of_birth', message_fr: 'Date de naissance invalide (YYYY-MM-DD)', message_ar: 'تاريخ ميلاد غير صالح' });
       } else if (d > new Date()) {
         out.push({ field: 'date_of_birth', message_fr: 'Date de naissance dans le futur', message_ar: 'تاريخ الميلاد في المستقبل' });
+      } else {
+        // AGE_CRECHE (2.6) : l'import ne bloquait pas non plus — on marque la
+        // ligne en erreur (la feuille d'import le signale à l'utilisatrice).
+        const months = ageMonths(d);
+        if (months < AGE_CRECHE_MIN_MONTHS || months >= AGE_CRECHE_MAX_MONTHS) {
+          out.push({
+            field: 'date_of_birth',
+            message_fr: `Hors tranche d'âge crèche (3 mois à 3 ans, décret 19-253) : ${months} mois`,
+            message_ar: `خارج الفئة العمرية للحضانة (3 أشهر إلى 3 سنوات، مرسوم 19-253): ${months} شهرًا`,
+          });
+        }
       }
     }
     if (row.gender && !VALID_GENDERS.has(row.gender)) {

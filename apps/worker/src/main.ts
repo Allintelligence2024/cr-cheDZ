@@ -56,6 +56,125 @@ async function withTenant<T>(orgId: string, fn: (client: PoolClient) => Promise<
   }
 }
 
+// ── 2.3 : surveillance des deadlines réglementaires (loi 25-11) ────────────
+
+/**
+ * compliance_deadlines : signale les échéances réglementaires dépassées.
+ *
+ * Loi 25-11 : 5 jours pour notifier l'ANPDP d'une violation de données,
+ * 30 jours pour répondre à une demande de droits, et les DPIA doivent être
+ * revues annuellement (review_date). Ces délais sont enregistrés en base mais
+ * rien ne signalait leur dépassement — on enfile une notification au DPO
+ * (rôle `dpo`, migration 083) de l'organisation pour chacun.
+ *
+ * Idempotent : la notification porte `data.deadline_key` unique par couple
+ * (cible, date), et on ne notifie que les délais pas encore signalés
+ * (notification_queue.data->>'deadline_key' absent).
+ *
+ * NOTA : l'idempotence repose sur ON CONFLICT DO NOTHING — sans contrainte
+ * unique sur (data->>'deadline_key'), deux exécutions quotidiennes créent
+ * deux notifications. La contrainte est posée par la migration 086.
+ */
+async function complianceDeadlines(): Promise<void> {
+  // Détection via la fonction SECURITY DEFINER compliance_deadlines_overdue()
+  // (migration 089) : les 3 tables privacy_* sont FORCE RLS (migration 029),
+  // un pool.query brut hors tenant renverrait 0 ligne — la loi 25-11 ne
+  // serait jamais signalée. Les INSERT, eux, restent sous withTenant().
+  const { rows: overdue } = await pool.query<{
+    source: 'violation' | 'request' | 'dpia';
+    record_id: string; organization_id: string; deadline: Date;
+  }>(`SELECT source, record_id, organization_id, deadline FROM compliance_deadlines_overdue()`);
+  const violations = overdue.filter((r) => r.source === 'violation');
+  const requests = overdue.filter((r) => r.source === 'request');
+  const dpias = overdue.filter((r) => r.source === 'dpia');
+
+  let queued = 0;
+  for (const v of violations) {
+    const key = `anpdp-overdue:${v.record_id}`;
+    queued += await withTenant(v.organization_id, async (client) => {
+      const r = await client.query(
+        `INSERT INTO notification_queue
+           (organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data, scheduled_at)
+         SELECT $1, u.id, 'in_app',
+           'Échéance ANPDP dépassée',
+           'تجاوز الموعد النهائي لإبلاغ ANPDP',
+           'La notification de violation à l''ANPDP devait être envoyée avant le ' || $2 || '. Loi 25-11 : délai de 5 jours.',
+           'كان يجب إرسال إخطار الانتهاك إلى ANPDP قبل ' || $2 || '. القانون 25-11: مهلة 5 أيام.',
+           jsonb_build_object('deadline_key', $3, 'violation_id', $4), NOW()
+         FROM users u
+         JOIN role_assignments ra ON ra.user_id = u.id
+         JOIN roles r ON r.id = ra.role_id
+         WHERE ra.organization_id = $1 AND r.slug = 'dpo'
+         ON CONFLICT DO NOTHING`,
+        [v.organization_id, v.deadline.toISOString(), key, v.record_id],
+      );
+      return r.rowCount ?? 0;
+    });
+  }
+  for (const req of requests) {
+    const key = `rights-overdue:${req.record_id}`;
+    queued += await withTenant(req.organization_id, async (client) => {
+      const r = await client.query(
+        `INSERT INTO notification_queue
+           (organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data, scheduled_at)
+         SELECT $1, u.id, 'in_app',
+           'Demande de droits en retard',
+           'طلب الحقوق متأخر',
+           'Une demande d''accès/rectification est en attente depuis le ' || $2 || '. Loi 25-11 : délai de 30 jours.',
+           'طلب الوصول/التصحيح معلق منذ ' || $2 || '. القانون 25-11: مهلة 30 يومًا.',
+           jsonb_build_object('deadline_key', $3, 'request_id', $4), NOW()
+         FROM users u
+         JOIN role_assignments ra ON ra.user_id = u.id
+         JOIN roles r ON r.id = ra.role_id
+         WHERE ra.organization_id = $1 AND r.slug = 'dpo'
+         ON CONFLICT DO NOTHING`,
+        [req.organization_id, req.deadline.toISOString(), key, req.record_id],
+      );
+      return r.rowCount ?? 0;
+    });
+  }
+  for (const d of dpias) {
+    const key = `dpia-overdue:${d.record_id}`;
+    queued += await withTenant(d.organization_id, async (client) => {
+      const r = await client.query(
+        `INSERT INTO notification_queue
+           (organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data, scheduled_at)
+         SELECT $1, u.id, 'in_app',
+           'DPIA à revoir',
+           'يجب مراجعة تحليل الأثر',
+           'L''analyse d''impact (DPIA) devait être revue le ' || $2 || '. Loi 25-11 : revue annuelle.',
+           'كان يجب مراجعة تحليل الأثر في ' || $2 || '. القانون 25-11: مراجعة سنوية.',
+           jsonb_build_object('deadline_key', $3, 'dpia_id', $4), NOW()
+         FROM users u
+         JOIN role_assignments ra ON ra.user_id = u.id
+         JOIN roles r ON r.id = ra.role_id
+         WHERE ra.organization_id = $1 AND r.slug = 'dpo'
+         ON CONFLICT DO NOTHING`,
+        [d.organization_id, d.deadline.toISOString(), key, d.record_id],
+      );
+      return r.rowCount ?? 0;
+    });
+  }
+  console.log(`[worker] compliance_deadlines : ${violations.length} violation(s), ${requests.length} demande(s), ${dpias.length} DPIA(s) en retard — ${queued} notification(s) au DPO`);
+}
+
+// ── i18n des notifications (2.5) ───────────────────────────────────────────
+
+/** users.locale = 'ar' → envoyer title_ar/body_ar au lieu de title_fr/body_fr.
+ *  Lecture en dehors d'un tenant (les users sont globaux, la locale n'est pas
+ *  une donnée tenant). Échec → français (valeur sûre, ne casse pas la file). */
+async function isArabic(userId: string, client: PoolClient): Promise<boolean> {
+  try {
+    const r = await client.query<{ locale: string | null }>(
+      'SELECT locale FROM users WHERE id = $1',
+      [userId],
+    );
+    return r.rows[0]?.locale === 'ar';
+  } catch {
+    return false;
+  }
+}
+
 // ── Jobs métier ─────────────────────────────────────────────────────────────
 
 /** generate_invoice_pdf : PDF réel → stockage (local/S3) → invoices.pdf_url. */
@@ -173,16 +292,20 @@ async function videoClipsPurge(): Promise<void> {
     const failures: string[] = [];
     for (const clip of expired.rows) {
       try {
+        // 3.6.2 : la LIGNE est supprimée avant l'objet stockage. Si le crash
+        // intervient entre les deux, la base reste cohérente (aucune ligne
+        // orpheline pointant vers un storage_key) et l'objet storage devient
+        // un résidu récupérable par le GC du bucket — c'est l'ordre inverse
+        // (storage d'abord) qui laissait des storage_key orphelins avec une
+        // ligne persistante en base.
+        await pool.query('SELECT video_clips_delete_purged($1::uuid[])', [[clip.id]]);
         await deleteFile(clip.storage_key, clip.storage_backend);
         purgedIds.push(clip.id);
       } catch (error) {
         failures.push(`${clip.id}:${error instanceof Error ? error.message : String(error)}`.slice(0, 160));
       }
     }
-    if (purgedIds.length > 0) {
-      const r = await pool.query<{ n: number }>(`SELECT video_clips_delete_purged($1::uuid[]) AS n`, [purgedIds]);
-      console.log(`[worker] video_clips_purge : ${r.rows[0].n} clip(s) purgé(s) (> 30 j)`);
-    }
+    console.log(`[worker] video_clips_purge : ${purgedIds.length} clip(s) purgé(s) (> 30 j)`);
     if (failures.length > 0) {
       throw new Error(`VIDEO_PURGE_PARTIAL(${failures.length} échec(s) stockage): ${failures.join(' | ')}`);
     }
@@ -202,6 +325,22 @@ async function paymentsExpire(): Promise<void> {
     const r = await pool.query<{ n: number }>('SELECT payments_expire_pending() AS n');
     console.log(`[worker] payments_expire : ${r.rows[0].n} paiement(s) pending SATIM expiré(s) (> 72 h)`);
     if (r.rows[0].n < 500) return;
+  }
+}
+
+/** sync_purge : purge du sync_changelog au-delà de la marge de curseur de
+ *  toutes les sync_operations de chaque org (075). sync_changelog grandit
+ *  d'une ligne par écriture métier — sans purge, la table devient la plus
+ *  grosse de la base et le pull se dégrade. La fonction est SECURITY
+ *  DEFINER et cursor-aware : un événement n'est supprimé que si AUCUN
+ *  device ne peut encore le réclamer (curseur + marge). Idempotente. */
+async function syncPurge(): Promise<void> {
+  const r = await pool.query<{ table_name: string; deleted_count: string }>(
+    'SELECT table_name, deleted_count FROM sync_retention_purge($1)',
+    [Number(process.env.SYNC_PURGE_MARGIN ?? 1000)],
+  );
+  for (const row of r.rows) {
+    console.log(`[worker] sync_purge : ${row.table_name} — ${row.deleted_count} ligne(s) purgée(s)`);
   }
 }
 
@@ -311,6 +450,17 @@ const JOB_HANDLERS: JobHandlers = {
   retention_purge: () => retentionPurge(),
   video_clips_purge: () => videoClipsPurge(),
   payments_expire: () => paymentsExpire(),
+  // 3.5.1 : sync_changelog (1 ligne par écriture métier) croissait sans
+  // borne — sync_retention_purge() (075) existait mais n'était jamais
+  // appelée. Maintenant planifiée quotidiennement (migration 092).
+  // La fonction ne supprime QUE les événements au-delà de la marge de
+  // curseur de toutes les sync_operations de l'org (jamais d'événement
+  // non consommé) et est idempotente.
+  sync_purge: () => syncPurge(),
+  // 2.3 (loi 25-11) : surveillance quotidienne des deadlines réglementaires.
+  // 5 j ANPDP (violation) / 30 j (demande de droits) / 365 j (DPIA) — les
+  // délais sont enregistrés mais rien ne signalait leur dépassement.
+  compliance_deadlines: () => complianceDeadlines(),
   // O1 (audit 2026-09-19) : « send_parent_notification » supprimé — la
   // livraison parent passe par notification_queue (drainNotificationQueue) :
   // push/in-app avec failure_reason explicite (PUSH_NOT_CONFIGURED_OR_NO_DEVICE)
@@ -431,27 +581,30 @@ async function drainNotificationQueue(): Promise<void> {
     // laissait la ligne 'processing' pour toujours (claim ne reprend que les
     // 'pending' — la file n'avait pas d'équivalent de jobs_reap_stale).
     await client.query(`SELECT notif_queue_reclaim($1::interval)`, [`${NOTIF_RECLAIM_TIMEOUT_MS} milliseconds`]);
-    const claimed = await client.query(`SELECT id, organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data FROM notif_queue_claim(25)`);
+    const claimed = await client.query(`SELECT id, organization_id, user_id, channel, title_fr, title_ar, body_fr, body_ar, data, claimed_at FROM notif_queue_claim(25)`);
     for (const n of claimed.rows) {
       // Recheck current rights under tenant RLS, after claim and before any provider call.
       try {
         const allowed = await withTenant(n.organization_id, c => notificationAllowed(c, n.organization_id, n.user_id, n.data, n.channel));
         if (!allowed) {
           // E3: sent means consumed, not delivered. Preserve why nothing was sent; no retry.
-          await client.query('SELECT notif_queue_finish($1, true, $2)', [n.id, NOTIFICATION_DENIED_REASON]);
+          await client.query('SELECT notif_queue_finish($1, true, $2, $3)', [n.id, NOTIFICATION_DENIED_REASON, n.claimed_at]);
           continue;
         }
       } catch (error) {
-        await client.query('SELECT notif_queue_finish($1, false, $2)', [n.id, String((error as Error).message).slice(0, 500)]);
+        await client.query('SELECT notif_queue_finish($1, false, $2, $3)', [n.id, String((error as Error).message).slice(0, 500), n.claimed_at]);
         continue;
       }
       // Canal WhatsApp : droits, téléphone et flag revalidés ci-dessus.
       if (n.channel === 'whatsapp') {
         try {
-          await whatsappSend(n.body_fr, n.data);
-          await client.query(`SELECT notif_queue_finish($1, true)`, [n.id]);
+          // 2.5 : title_ar/body_ar sont stockés mais ignorés à l'envoi.
+          // On envoie dans la langue de l'utilisateur (users.locale).
+          const ar = await isArabic(n.user_id, client);
+          await whatsappSend(ar && n.body_ar ? n.body_ar : n.body_fr, n.data);
+          await client.query(`SELECT notif_queue_finish($1, true, NULL, $2)`, [n.id, n.claimed_at]);
         } catch (error) {
-          await client.query(`SELECT notif_queue_finish($1, false, $2)`, [n.id, String((error as Error).message).slice(0, 500)]);
+          await client.query(`SELECT notif_queue_finish($1, false, $2, $3)`, [n.id, String((error as Error).message).slice(0, 500), n.claimed_at]);
         }
         continue;
       }
@@ -471,6 +624,13 @@ async function drainNotificationQueue(): Promise<void> {
           body: n.body_fr,
           data: Object.fromEntries(Object.entries(n.data ?? {}).map(([k, v]) => [k, String(v)])),
         };
+        // 2.5 : envoyer dans la langue de l'utilisateur quand l'arabe est
+        // disponible (title_ar/body_ar calculés à l'insertion, pas envoyés).
+        const ar = await isArabic(n.user_id, client);
+        if (ar && n.title_ar && n.body_ar) {
+          message.title = n.title_ar;
+          message.body = n.body_ar;
+        }
         let delivered = false;
         for (const d of devices.rows) {
           if (d.fcm_token && googleAuth) { await fcmSend(d.fcm_token, message); delivered = true; }
@@ -479,9 +639,9 @@ async function drainNotificationQueue(): Promise<void> {
         // Sans jeton/configuration, l'inbox reste la voie fiable ; ne jamais
         // perdre le motif de non-envoi, ni journaliser de token. 'sent' désigne
         // le traitement de la queue, pas un accusé de livraison (décision E3).
-        await client.query(`SELECT notif_queue_finish($1, true, $2)`, [n.id, delivered ? null : 'PUSH_NOT_CONFIGURED_OR_NO_DEVICE']);
+        await client.query(`SELECT notif_queue_finish($1, true, $2, $3)`, [n.id, delivered ? null : 'PUSH_NOT_CONFIGURED_OR_NO_DEVICE', n.claimed_at]);
       } catch (error) {
-        await client.query(`SELECT notif_queue_finish($1, false, $2)`, [n.id, String((error as Error).message).slice(0, 500)]);
+        await client.query(`SELECT notif_queue_finish($1, false, $2, $3)`, [n.id, String((error as Error).message).slice(0, 500), n.claimed_at]);
       }
     }
   } finally {
@@ -506,7 +666,19 @@ async function run(): Promise<void> {
   // F2 (audit 2026-09-24) : marqueur de vivacité lu par le HEALTHCHECK Docker.
   // Démarré APRÈS les gardes de boot (un conteneur mal configuré ne doit pas
   // paraître sain) et arrêté sur SIGTERM/SIGINT avec le worker.
-  const stopLiveness = await startLiveness();
+  // 3.8.3 : la sonde est `SELECT 1` sur le pool — un pool DB mort ne rafraîchit
+  // plus le marqueur et Docker redémarre le conteneur au lieu de laisser un
+  // worker « vivant » qui ne traite plus aucun job.
+  const stopLiveness = await startLiveness(process.env, async () => {
+    try {
+      // rls-guard: allow sonde de vivacité SELECT 1 (aucune table lue —
+      // uniquement un round-trip pool pour prouver que la base répond).
+      await pool.query('SELECT 1');
+      return true;
+    } catch {
+      return false;
+    }
+  });
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.once(signal, () => void stopLiveness());
   }

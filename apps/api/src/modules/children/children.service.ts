@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
+import { assertCrecheAge } from '../../shared/compliance/age-creche';
 import { AuditService } from '../privacy/audit.service';
 import { CreateChildDto, MoveRoomDto, UpdateChildDto } from './dto/children.dto';
 
@@ -119,6 +120,9 @@ export class ChildrenService {
   async create(dto: CreateChildDto, actorId: string): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
+      // AGE_CRECHE (décret 19-253) : une crèche accueille de 3 mois à 3 ans.
+      // Jamais enforced à la saisie (rapport 2026-10, finding 2.6) → refus ici.
+      assertCrecheAge(dto.date_of_birth);
       // Capacité maximale (organizations.max_children, décret 19-253) — 409 si atteinte.
       await this.assertCapacity(client, tenantId);
       // Le site doit appartenir au tenant (RLS) — sinon 404.

@@ -66,7 +66,9 @@ class _AttestationsPageState extends State<AttestationsPage> {
             child: ListTile(
               leading: Icon(Icons.description, color: Theme.of(context).colorScheme.primary),
               title: Text(a['attestation_number']?.toString() ?? 'ATT-${a['id']}'.substring(0, 12)),
-              subtitle: Text('${a['first_name_fr'] ?? ''} ${a['last_name_fr'] ?? ''} — ${a['year'] ?? ''}\nTotal payé: ${a['total_paid'] ?? '?'} / ${a['total_invoiced'] ?? '?'} DZD', style: const TextStyle(fontSize: 11)),
+              // 3.2.8 : clés API = child_first_name/child_last_name
+              // (attestations.service.ts:80,92) — l'UI lisait first_name_fr.
+              subtitle: Text('${a['child_first_name'] ?? a['first_name_fr'] ?? ''} ${a['child_last_name'] ?? a['last_name_fr'] ?? ''} — ${a['year'] ?? ''}\nTotal payé: ${a['total_paid'] ?? '?'} / ${a['total_invoiced'] ?? '?'} DZD', style: const TextStyle(fontSize: 11)),
               trailing: const Icon(Icons.picture_as_pdf),
               onTap: () => _showDetail(a),
             ),
@@ -77,6 +79,6 @@ class _AttestationsPageState extends State<AttestationsPage> {
   }
 
   void _showDetail(Map<String, dynamic> att) {
-    showModalBottomSheet(context: context, builder: (context) => Padding(padding: const EdgeInsets.all(16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [Text(att['attestation_number']?.toString() ?? 'Attestation', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), const SizedBox(height: 8), Text('Enfant: ${att['first_name_fr'] ?? ''} ${att['last_name_fr'] ?? ''}'), Text('Année: ${att['year'] ?? ''}'), Text('Période: ${att['period_start'] ?? ''} → ${att['period_end'] ?? ''}'), Text('Facturé: ${att['total_invoiced'] ?? ''} DZD — Payé: ${att['total_paid'] ?? ''} DZD'), const SizedBox(height: 12), Text('PDF disponible via /attestations/:id/pdf (admin-web pour impression)', style: TextStyle(fontSize: 11, color: SereniteStatusColors.of(context).textMuted))])) );
+    showModalBottomSheet(context: context, builder: (context) => Padding(padding: const EdgeInsets.all(16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [Text(att['attestation_number']?.toString() ?? 'Attestation', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), const SizedBox(height: 8), Text('Enfant: ${att['child_first_name'] ?? att['first_name_fr'] ?? ''} ${att['child_last_name'] ?? att['last_name_fr'] ?? ''}'), Text('Année: ${att['year'] ?? ''}'), Text('Période: ${att['period_start'] ?? ''} → ${att['period_end'] ?? ''}'), Text('Facturé: ${att['total_invoiced'] ?? ''} DZD — Payé: ${att['total_paid'] ?? ''} DZD'), const SizedBox(height: 12), Text('PDF disponible via /attestations/:id/pdf (admin-web pour impression)', style: TextStyle(fontSize: 11, color: SereniteStatusColors.of(context).textMuted))])) );
   }
 }

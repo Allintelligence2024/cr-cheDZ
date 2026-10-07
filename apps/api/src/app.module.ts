@@ -7,6 +7,7 @@ import { JwtAuthGuard } from './shared/guards/jwt-auth.guard';
 import { RateLimitGuard } from './shared/guards/rate-limit.guard';
 import { RateLimitService } from './shared/guards/rate-limit.service';
 import { RolesGuard } from './shared/guards/roles.guard';
+import { PermissionsGuard } from './shared/guards/permissions.guard';
 import { HealthController } from './health.controller';
 import { AttendanceModule } from './modules/attendance/attendance.module';
 import { AttestationsModule } from './modules/attestations/attestations.module';
@@ -65,9 +66,10 @@ import { VideoModule } from './modules/video/video.module';
   controllers: [HealthController],
   providers: [
     RateLimitService,
-    // Ordre des guards : JWT → rôles → rate limit
+    // Ordre des guards : JWT → rôles → permissions RBAC → rate limit
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
     { provide: APP_GUARD, useClass: RateLimitGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
   ],

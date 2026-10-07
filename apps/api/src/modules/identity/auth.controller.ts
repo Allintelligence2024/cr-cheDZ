@@ -1,10 +1,11 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
+import { Roles } from '../../shared/decorators/roles.decorator';
 import { Public } from '../../shared/decorators/public.decorator';
 import { RateLimit } from '../../shared/decorators/rate-limit.decorator';
 import { AuthService, type LoginResult } from './auth.service';
-import { AcceptInvitationDto, ChangePasswordDto, LoginDto, ParentOtpRequestDto, ParentOtpVerifyDto, ParentPinDto, ParentPinLoginDto, RefreshDto, TotpDto } from './dto/auth.dto';
+import { AcceptInvitationDto, ChangePasswordDto, LoginDto, ParentOtpRequestDto, ParentOtpVerifyDto, ParentPinDto, ParentPinLoginDto, RefreshDto, SwitchOrgDto, TotpDto } from './dto/auth.dto';
 import { setRefreshCookie, readRefreshCookie, clearRefreshCookie } from '../../shared/auth/auth-cookies';
 
 @Controller('auth')
@@ -94,6 +95,29 @@ export class AuthController {
     if (readRefreshCookie(req.cookies as Record<string, string | undefined> | undefined)) {
       setRefreshCookie(res, result.refresh_token);
     }
+    return result;
+  }
+
+  @Post('switch-org')
+  @HttpCode(HttpStatus.OK)
+  @RateLimit(10, 60_000)
+  @Roles('director', 'accountant', 'educator', 'receptionist', 'super_admin')
+  async switchOrg(
+    @Body() dto: SwitchOrgDto,
+    @CurrentUser() user: CurrentUserPayload,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResult> {
+    // 3.2.11 : org switch = nouvelle paire de tokens (cf. auth.service).
+    const refreshToken = dto.refresh_token || readRefreshCookie(req.cookies as Record<string, string | undefined> | undefined);
+    const result = await this.authService.switchOrganization(
+      user.sub,
+      dto.organization_id,
+      refreshToken ?? '',
+      { deviceId: dto.device_id, ipAddress: req.ip, userAgent: req.headers['user-agent'] },
+    );
+    // R14 : le client web reçoit le nouveau refresh en cookie httpOnly.
+    setRefreshCookie(res, result.refresh_token);
     return result;
   }
 

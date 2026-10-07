@@ -13,6 +13,12 @@ export default tseslint.config(
       '**/dist/**',
       '**/node_modules/**',
       '**/coverage/**',
+      // Phase 1 (2026-10-03) : .kilo/worktrees est un CHECKOUT DUPLIQUÉ (agent
+      // worktree), pas du code source. Sans cet ignore, ESLint y trouve un
+      // second jeu de tsconfig → "multiple candidate TSConfigRootDirs" et les
+      // 477 erreurs no-tsconfigRootDir font échouer le job quality, quel que
+      // soit le contenu du code.
+      '.kilo/**',
       '**/*.mjs', // scripts de validation et suites .api.test.mjs : code d'outillage Node pur
       'apps/parent-mobile/**',
       'apps/staff-mobile/**',

@@ -1,0 +1,44 @@
+# Politique de fin de ligne — phase 0 du PLAN-MAITRE-REMEDIATION.md
+#
+# Cause racine : le repo dépendait de core.autocrlf=true (config locale de
+# chaque clone). Sous Windows les fichiers arrivent en CRLF ; les générateurs
+# (generate-sync-contract) et les regexes de tests (claims-contract) écrivent
+# en LF → mismatch permanent, gardes rouges ou inopérants (cf. bug B9).
+#
+# eol=lf rend la génération et les tests déterministes sur toute plateforme.
+# Les fichiers binaires sont exclus explicitement.
+
+* text=auto eol=lf
+
+# Sources, configs, docs et tests : LF partout.
+*.md       text eol=lf
+*.mjs      text eol=lf
+*.js       text eol=lf
+*.ts       text eol=lf
+*.tsx      text eol=lf
+*.json     text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.dart     text eol=lf
+*.sql      text eol=lf
+*.html     text eol=lf
+*.css      text eol=lf
+*.sh       text eol=lf
+*.env*     text eol=lf
+Dockerfile* text eol=lf
+
+# Fichiers générés : LF obligatoire (les générateurs produisent du LF).
+apps/api/src/modules/sync/generated/*.ts        text eol=lf
+apps/staff-mobile/lib/core/network/generated/*.dart text eol=lf
+
+# Binaire : jamais de conversion.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.woff binary
+*.woff2 binary

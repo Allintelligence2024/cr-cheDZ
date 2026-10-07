@@ -280,8 +280,9 @@ phase3.api.test.mjs (base fraîche)       → ✓ Phase 3 validée
 npm run test:unit   → 13 suites, 95 tests, 0 échec
 npm run lint        → exit 0 (0 erreur, 0 warning)   npm run typecheck → exit 0 (4 workspaces)
 npm run test:unit --workspace @creche/admin-web → 7 tests, 0 échec
-node scripts/inventory-route-guards.mjs → 198 routes (195 + 2 `/content` + 1 `/media/upload`) — 50 « sans
-  @Roles ni @Public » (49 + la route parent, dont le périmètre est la filiation, pas un rôle)
+node scripts/inventory-route-guards.mjs → 199 routes (196 + 2 `/content` + 1 `/media/upload`) — 41 « sans
+  @Roles ni @Public » (40 + la route parent, dont le périmètre est la filiation, pas un rôle —
+  3.11.2 : décorateurs au niveau classe enfin reconnus, 9 faux positifs en moins)
 
 # Deux suites NON rejouables dans ce bac à sable (prérequis Gate D) :
 phase22-audit-fixes.api / phase49-storage-selection → échec AU DÉMARRAGE du process de production
@@ -597,7 +598,7 @@ restaurations                             rc=0  échecs=0
 # Gardiens du job `quality` rejoués localement (tous verts) :
 node scripts/check-env-example.mjs        → ✓ 5 variables (+14 côté .env.prod.example)
 node scripts/check-android-manifest.mjs   → « Un build release aura bien l'accès réseau. »
-node scripts/inventory-route-guards.mjs   → 198 routes HTTP inventoriées — 50 sans @Roles ni @Public
+node scripts/inventory-route-guards.mjs   → 199 routes HTTP inventoriées — 41 sans @Roles ni @Public
 node scripts/verify-load-tests.mjs        → seuils p95 des scripts de charge OK
 node scripts/check-spa-static-paths.mjs   → ✅ chemins statiques cohérents
 node --test …/claims-contract.test.mjs    → 8/8

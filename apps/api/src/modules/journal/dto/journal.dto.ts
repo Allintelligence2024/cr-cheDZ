@@ -174,6 +174,12 @@ export class JournalListQuery {
   @IsOptional()
   @IsDateString()
   date?: string;
+
+  /** 3.2.5 : filtre par type d'événement (meal, nap, diaper, activity…). */
+  @IsOptional()
+  @IsString()
+  @IsIn(['meal', 'nap', 'diaper', 'activity', 'note', 'incident', 'health', 'mood', 'bottle', 'temperature', 'sign_out_note'])
+  event_type?: string;
 }
 
 export class UpdateJournalVisibilityDto {

@@ -41,7 +41,7 @@
     "check:worker-monitoring": "node scripts/check-worker-monitoring.mjs",
     "check:env-example": "node scripts/check-env-example.mjs",
     "preview:api": "node scripts/dev-preview-api.mjs",
-    "preview:web": "API_PROXY_TARGET=http://127.0.0.1:3100 npm run dev --workspace @creche/admin-web"
+    "preview:web": "API_PROXY_TARGET=http://127.0.0.1:3100 VITE_PREVIEW_DEMO=1 npm run dev --workspace @creche/admin-web"
   },
   "engines": {
     "node": ">=20"

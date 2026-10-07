@@ -20,6 +20,14 @@ import type { Response } from 'express';
 
 /** Nom du cookie (préfixé `__Host-` en prod : aucun Domain, Path=/, Secure). */
 export const REFRESH_COOKIE_NAME = process.env.NODE_ENV === 'production' ? '__Host-creche_refresh' : 'creche_refresh';
+/**
+ * Path du cookie. `__Host-` exige OBLIGATOIREMENT `Path=/` (RFC 6265
+ * §4.1.3.1) : avec tout autre path, le navigateur jette le Set-Cookie.
+ * Un path `/api/v1/auth` semblait réduire la surface, mais il casse
+ * purement et simplement l'installation du cookie en production →
+ * toute la rotation de session web était morte.
+ */
+export const REFRESH_COOKIE_PATH = '/';
 
 export interface SetRefreshCookieOptions {
   /** Durée de vie du cookie en secondes (par défaut 7 jours, alignée refresh_token). */
@@ -39,7 +47,7 @@ export function setRefreshCookie(res: Response, refreshToken: string, opts: SetR
     httpOnly: true,
     secure: isProd,
     sameSite: 'lax',
-    path: '/api/v1/auth', // cookie limité aux endpoints d'auth — surface minimale
+    path: REFRESH_COOKIE_PATH,
     maxAge: maxAge * 1000,
   });
 }
@@ -60,6 +68,6 @@ export function clearRefreshCookie(res: Response): void {
     httpOnly: true,
     secure: isProd,
     sameSite: 'lax',
-    path: '/api/v1/auth',
+    path: REFRESH_COOKIE_PATH,
   });
 }

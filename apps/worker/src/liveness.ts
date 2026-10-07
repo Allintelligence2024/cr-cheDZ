@@ -57,14 +57,33 @@ export async function livenessAgeMs(file: string): Promise<number> {
  */
 export async function startLiveness(
   env: NodeJS.ProcessEnv = process.env,
+  /**
+   * 3.8.3 (remédiation 2026-10-04) — preuve de vie base de données. Sans
+   * elle, le marqueur restait frais même avec un pool DB mort (connexion
+   * perdue, credentials tournés) : le worker « vivant » ne traitait plus
+   * aucun job et Docker ne le redémarrait jamais. La sonde doit être
+   * `SELECT 1` sur le pool — pas une simple écriture fichier.
+   */
+  probe: () => Promise<boolean> = async () => true,
 ): Promise<() => Promise<void>> {
   const file = livenessFile(env);
   const intervalMs = livenessIntervalMs(env);
+  let dbOk = true;
   await touchLiveness(file);
   const timer = setInterval(() => {
-    // Une erreur d'écriture (disque plein) ne doit jamais tuer le worker ;
-    // la sonde Docker s'en apercevra par le marqueur périmé.
-    void touchLiveness(file).catch(() => undefined);
+    // Le marqueur n'est rafraîchi QUE si la sonde base réussit. Une erreur
+    // d'écriture disque ne doit jamais tuer le worker ; un pool DB mort, lui,
+    // doit laisser le marqueur périmer → Docker redémarre le conteneur.
+    void probe()
+      .then(async (ok) => {
+        dbOk = ok;
+        if (ok) await touchLiveness(file);
+        else console.error('[worker] liveness : sonde base de données ÉCHOUÉE — marqueur NON rafraîchi');
+      })
+      .catch((error) => {
+        if (dbOk) console.error('[worker] liveness : sonde base de données en erreur :', error instanceof Error ? error.message : String(error));
+        dbOk = false;
+      });
   }, intervalMs);
   timer.unref();
   return async () => {

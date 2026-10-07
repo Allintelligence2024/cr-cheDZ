@@ -338,15 +338,23 @@ services:
     entrypoint: |
       /bin/sh -c "
       apk add --no-cache gnupg >/dev/null 2>&1
+      FAILS=0
       while true; do
         STAMP=\$$(date +%F)
-        pg_dump -h postgres -U \$$POSTGRES_USER \$$POSTGRES_DB \
+        if pg_dump -h postgres -U \$$POSTGRES_USER \$$POSTGRES_DB 2>/tmp/pgdump.err \
           | gzip -9 \
           | gpg --batch --yes --symmetric --cipher-algo AES256 \
                 --passphrase \$$BACKUP_PASSPHRASE \
-                -o /backups/creche-\$$STAMP.sql.gz.gpg
-        find /backups -name 'creche-*.sql.gz.gpg' -mtime +\$$KEEP_DAYS -delete
-        echo \"[backup] \$$STAMP écrit\"
+                -o /backups/creche-\$$STAMP.sql.gz.gpg; then
+          FAILS=0
+          echo \"[backup] \$$STAMP écrit\"
+          find /backups -name 'creche-*.sql.gz.gpg' -mtime +\$$KEEP_DAYS -delete
+        else
+          FAILS=\$$((FAILS + 1))
+          rm -f /backups/creche-\$$STAMP.sql.gz.gpg
+          echo \"[backup] \$$STAMP ÉCHEC (\$$FAILS tentatives consécutives): \$$(cat /tmp/pgdump.err | tail -3 | tr '\n' ' ')\"
+          exit 1
+        fi
         sleep 86400
       done
       "

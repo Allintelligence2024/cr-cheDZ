@@ -36,8 +36,8 @@
 
 - L'accountant lit `staff` (liste + détail sans champs sensibles) : confirmé par alignement sur
   payroll — à revalider avec le métier.
-- Les 44 routes sans garde explicite (inventaire) : revue module par module + justification
-  écrite pour chaque route self-service conservée sans `@Roles`.
+- Les 41 routes sans garde explicite (inventaire `npm run check:routes-inventory`, 3.11.2 : décorateurs au niveau classe enfin reconnus — 9 faux positifs en moins) : revue module
+  par module + justification écrite pour chaque route self-service conservée sans `@Roles`.
 - `staff_documents.storage_key` (création) : préfixe tenant C3 appliqué dans H2h ;
   existence/contenu des objets et anciennes références non qualifiés.
 

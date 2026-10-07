@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { CreateJournalEventDto, GroupJournalEventDto, JournalListQuery, UpdateJournalVisibilityDto } from './dto/journal.dto';
@@ -34,7 +34,19 @@ export class JournalController {
   async list(
     @Query() query: JournalListQuery,
   ): Promise<{ items: Array<Record<string, unknown>> }> {
-    return { items: await this.journalService.listForChild(query.child_id, query.date) };
+    // 3.2.5 : child_id obligatoire — sans enfant, un director voit le journal
+    // de TOUS les enfants de l'org (rupture de confidentialité parentale).
+    if (!query.child_id) {
+      throw new BadRequestException('child_id est obligatoire pour le journal');
+    }
+    // 3.2.5 : event_type était ignoré — le filtre UI ne filtrait rien.
+    return {
+      items: await this.journalService.listForChild(
+        query.child_id,
+        query.date,
+        query.event_type,
+      ),
+    };
   }
 
   /** Fil visible parents (prévisualisation personnel ; accès parent sécurisé Phase 7). */

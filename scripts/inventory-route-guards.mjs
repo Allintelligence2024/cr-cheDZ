@@ -48,18 +48,28 @@ for (const mod of readdirSync(MODULES)) {
       }
     }
     for (const cls of controllers) {
+      // 3.11.2 : les décorateurs au NIVEAU CLASSE s'appliquent à toutes les
+      // routes (NestJS les fusionne avec ceux de la méthode). Les ignorer
+      // produisait 49 faux positifs — des contrôleurs entiers protégés par
+      // un @Roles(@Controller) étaient listés « sans garde ».
+      const classDecorators = (ts.getDecorators(cls) ?? []).map((d) => decoratorName(d));
+      const classGuard = classDecorators.some((n) => GUARDS.has(n));
+      const classIsPublic = classDecorators.includes('Public');
       for (const member of cls.members) {
         if (!ts.isMethodDeclaration(member) || !member.name) continue;
         const decorators = (ts.getDecorators(member) ?? []).map((d) => decoratorName(d));
         const http = decorators.find((n) => HTTP_METHODS.has(n));
         if (!http) continue;
-        const hasGuard = decorators.some((n) => GUARDS.has(n));
+        const hasGuard = decorators.some((n) => GUARDS.has(n)) || classGuard;
+        // Une @Public() de méthode l'emporte sur un @Roles() de classe
+        // (ordre NestJS : le décorateur le plus proche de la méthode gagne).
+        const isPublic = decorators.includes('Public') || (!decorators.includes('Roles') && classIsPublic);
         const routeArg = (ts.getDecorators(member) ?? [])
           .map((d) => decoratorArgs(d))
           .find(({ name }) => HTTP_METHODS.has(name))?.arg;
         const route = routeArg ? `@${http}('${routeArg}')` : `@${http}()`;
         rows.push({
-          guard: hasGuard ? (decorators.includes('Public') ? 'PUBLIC' : 'ROLES') : 'NONE',
+          guard: hasGuard ? (isPublic ? 'PUBLIC' : 'ROLES') : 'NONE',
           file: `${mod}/${f}`,
           route,
           method: member.name.text,

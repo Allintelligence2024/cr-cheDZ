@@ -382,8 +382,12 @@ export class MediaService {
    * (avec son JWT) : `GET /media/:id/content`. Le journal d'accès reste
    * inchangé (l'URL n'est plus qu'un chemin, la lecture réelle re-journalise).
    */
-  async downloadUrl(userId: string, mediaId: string, ipAddress?: string): Promise<{ url: string; key: string }> {
-    const tenantId = requireTenant(this.tenantContext);
+  async downloadUrl(_userId: string, mediaId: string, _ipAddress?: string): Promise<{ url: string; key: string }> {
+    // 3.1.6 (H2) : PAS de journalisation ici. Renvoyer un chemin n'est pas
+    // lire le fichier — le client peut ne jamais l'appeler (page fermée,
+    // thumbnail annulé). La journalisation a lieu dans streamContent(), au
+    // moment où les octets sont réellement lus. L'ancien comportement
+    // créait un accès fantôme par photo listée mais jamais consultée.
     const media = await this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
         `SELECT id, storage_key, child_id FROM media_assets WHERE id = $1 AND deleted_at IS NULL`,
@@ -392,7 +396,6 @@ export class MediaService {
       if (res.rows.length === 0) throw Errors.notFound();
       return res.rows[0];
     });
-    await this.logView(tenantId, userId, mediaId, media.child_id, ipAddress);
     return { url: mediaContentPath(mediaId), key: media.storage_key };
   }
 
@@ -411,11 +414,30 @@ export class MediaService {
     const tenantId = requireTenant(this.tenantContext);
     const media = await this.tenantContext.withTenantConnection(async (client) => {
       const res = await client.query(
-        `SELECT id, storage_key, mime_type, original_filename, child_id
+        `SELECT id, storage_key, mime_type, original_filename, child_id,
+                children_in_photo, all_consents_checked, is_visible_to_parents
          FROM media_assets WHERE id = $1 AND deleted_at IS NULL`,
         [mediaId],
       );
       if (res.rows.length === 0) throw Errors.notFound();
+      // H1 (remédiation 2026-10-05) : ce chemin sert AUSSI le portail parent
+      // (photoContent) — les gardes du parent sont posées en amont
+      // (assertPhotoAllowed), mais un appel direct au staff `/media/:id/content`
+      // ne vérifiait RIEN : un staff pouvait lire une photo d'enfants dont le
+      // consentement avait été retiré (loi 25-11). Refus fermé uniquement
+      // quand le média représente des enfants identifiés (children_in_photo) —
+      // un document ou une photo de salle sans enfant n'est pas soumis au
+      // consentement photo.
+      if (res.rows[0].children_in_photo?.length) {
+        if (!await photoConsentsAllowed(client, tenantId, res.rows[0])) {
+          throw new AppError(
+            'CONSENT_REVOKED',
+            'Le consentement photo a été retiré',
+            'تم سحب الموافقة على الصورة',
+            422,
+          );
+        }
+      }
       return res.rows[0];
     });
     // C3 : le client ne choisit pas le périmètre de ses objets — la clé doit

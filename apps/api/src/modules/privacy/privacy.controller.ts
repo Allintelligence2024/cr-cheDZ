@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsArray, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { Permissions } from '../../shared/decorators/permissions.decorator';
 import { PrivacyService } from './privacy.service';
 
 class CreatePrivacyRequestDto {
@@ -100,20 +101,24 @@ export class PrivacyController {
 
   @Get('privacy/registry')
   @Roles(...STAFF_ROLES)
+  @Permissions('privacy:manage')
   registry() { return this.privacy.registry(); }
 
   @Get('privacy/dpias')
   @Roles(...STAFF_ROLES)
+  @Permissions('privacy:manage')
   dpias() { return this.privacy.listDpias(); }
 
   @Post('privacy/dpias')
   @Roles('director', 'super_admin')
+  @Permissions('privacy:manage')
   createDpia(@Body() dto: CreateDpiaDto, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.createDpia(u.sub, dto);
   }
 
   @Post('privacy/dpias/:id/approve')
   @Roles('director', 'super_admin')
+  @Permissions('privacy:manage')
   approveDpia(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.approveDpia(p.id, u.sub);
   }
@@ -142,6 +147,7 @@ export class PrivacyController {
 
   @Post('privacy/requests/:id/resolve')
   @Roles('director', 'super_admin')
+  @Permissions('privacy:manage')
   resolveRequest(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.resolveRequest(p.id, u.sub);
   }
@@ -150,6 +156,7 @@ export class PrivacyController {
 
   @Post('privacy/children/:id/anonymize')
   @Roles('director', 'super_admin')
+  @Permissions('privacy:manage')
   anonymizeChild(@Param() p: IdParam, @Body() dto: AnonymizeChildDto, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.anonymizeChild(p.id, u.sub, dto.reason, dto.request_id);
   }
@@ -168,8 +175,9 @@ export class PrivacyController {
 
   @Post('privacy/violations/:id/anpdp-notify')
   @Roles('director', 'super_admin')
-  notifyAnpdp(@Param() p: IdParam) {
-    return this.privacy.notifyAnpdp(p.id);
+  @Permissions('privacy:manage')
+  notifyAnpdp(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload) {
+    return this.privacy.notifyAnpdp(p.id, u.sub);
   }
 
   // ── Console support (super_admin uniquement) ──────────────────────────────

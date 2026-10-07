@@ -37,6 +37,15 @@ import pg from 'pg';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const API_SRC = join(ROOT, 'apps/api/src');
+/**
+ * 3.1.3 (remédiation 2026-10-04) — le garde n'auditait QUE apps/api/src.
+ * apps/worker/src y échappait totalement : un pool.query brut worker sur une
+ * table tenant (violation découverte en phase 2.3, corrigée par la migration
+ * 089) n'était détecté par AUCUN garde. Le worker tourne NOBYPASSRLS, ce
+ * qui rend ce contrôle AU MOINS aussi critique que pour l'API.
+ */
+const WORKER_SRC = join(ROOT, 'apps/worker/src');
+const SCAN_ROOTS = [API_SRC, WORKER_SRC];
 
 /**
  * Fonctions SECURITY DEFINER (documentation + fallback sans base). EN MODE
@@ -64,6 +73,9 @@ const FROZEN_SECURITY_DEFINER_FUNCTIONS = new Set([
   'retention_purge_messaging',
   // 040 multi-rôles
   'auth_user_roles',
+  // 084 PermissionsGuard (phase 2.2) — résout les permissions effectives
+  // contre role_permissions, SECURITY DEFINER.
+  'auth_user_permissions',
   // 042 drain notifications
   'notif_queue_claim', 'notif_queue_finish',
   // 046 garde DPIA
@@ -75,6 +87,20 @@ const FROZEN_SECURITY_DEFINER_FUNCTIONS = new Set([
   // 051 expiration paiements pending SATIM (worker, job global)
   // 052 (CREATE OR REPLACE de 024/039 : billing_webhook_apply inchangée de nom)
   'payments_expire_pending',
+  // 047 purge vidéo (worker, jobs globaux organization_id NULL)
+  'video_clips_expired', 'video_clips_delete_purged',
+  // 075 purge sync (worker, job global planifié par 092) — cursor-aware :
+  // ne supprime que les événements au-delà de la marge de curseur de toutes
+  // les sync_operations de l'org.
+  'sync_retention_purge',
+  // 056 scheduler interne (worker) — déjà SECURITY DEFINER ; emploi direct.
+  // 089 (phase 2.3/3.1.3) : détection globale des échéances loi 25-11 par
+  // le worker (les 3 tables privacy_* sont FORCE RLS — lecture directe
+  // interdite hors tenant).
+  'compliance_deadlines_overdue',
+  // 090 (phase 3.3.1) : validation d'un device_id avant association à une
+  // session (lecture devices, table tenant).
+  'auth_device_validate',
 ]);
 
 /**
@@ -99,13 +125,22 @@ const FROZEN_SYSTEM_TABLES = new Set([
   'schema_migrations',
 ]);
 
-/** Extrait le littéral SQL (backtick) qui suit un appel pool.query(. */
+/** Extrait le littéral SQL (backtick OU simple quote) qui suit un appel pool.query(. */
 function extractSql(source, fromIndex) {
   const tick = source.indexOf('`', fromIndex);
-  if (tick === -1) return null;
-  const end = source.indexOf('`', tick + 1);
+  const quote = source.indexOf("'", fromIndex);
+  // Retient le premier délimiteur rencontré (backtick ou simple quote) ;
+  // un pool.query n'utilise jamais l'autre style dans le même appel.
+  let end = -1;
+  if (tick === -1 && quote === -1) return null;
+  if (tick !== -1 && (quote === -1 || tick < quote)) {
+    end = source.indexOf('`', tick + 1);
+    if (end === -1) return null;
+    return source.slice(tick + 1, end);
+  }
+  end = source.indexOf("'", quote + 1);
   if (end === -1) return null;
-  return source.slice(tick + 1, end);
+  return source.slice(quote + 1, end);
 }
 
 /** Identifiants de tables/fonctions référencés par le SQL. */
@@ -243,7 +278,8 @@ const main = async () => {
   const violations = [];
   const reviewed = [];
 
-  for (const file of walk(API_SRC)) {
+  for (const scanRoot of SCAN_ROOTS) {
+  for (const file of walk(scanRoot)) {
     const rel = relative(ROOT, file);
     const source = readFileSync(file, 'utf8');
     const poolRe = /(?:this\.)?pool\.query\s*(?:<[^>(]*>)?\s*\(/g;
@@ -284,6 +320,7 @@ const main = async () => {
         );
       }
     }
+  }
   }
 
   if (verbose) {

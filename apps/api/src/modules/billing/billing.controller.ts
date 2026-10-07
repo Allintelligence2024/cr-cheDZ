@@ -60,8 +60,19 @@ export class BillingController {
 
   @Get('invoices')
   @Roles('director', 'accountant')
-  invoices(@Query('child_id') childId?: string) {
-    return this.billing.listInvoices(childId);
+  invoices(
+    @Query('child_id') childId?: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    // 3.2.4 : status/page/limit ne sont plus ignorés (cf. billing.service).
+    return this.billing.listInvoices(
+      childId,
+      status,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 20,
+    );
   }
 
   /** P2-3 : journal des impayés (balance âgée) — transition overdue appliquée à la lecture. */

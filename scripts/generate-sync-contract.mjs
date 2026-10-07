@@ -6,16 +6,20 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = p => readFileSync(resolve(root, p), 'utf8');
-const schemaText = read('packages/sync-contract/sync.schema.json');
-const protocolText = read('packages/sync-contract/protocol.json');
+// Le checkout est CRLF sous Windows (core.autocrlf=true) : les sources ET les
+// sorties doivent être normalisées en LF pour que la génération soit
+// déterminique sur toute plateforme (le hash est calculé sur les entrées LF).
+const readLF = p => read(p).replace(/\r\n/g, '\n');
+const schemaText = readLF('packages/sync-contract/sync.schema.json');
+const protocolText = readLF('packages/sync-contract/protocol.json');
 const schema = JSON.parse(schemaText), protocol = JSON.parse(protocolText);
-const template = read('packages/sync-contract/templates/client.dart.txt');
+const template = readLF('packages/sync-contract/templates/client.dart.txt');
 const supported = new Set(['$ref', 'type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'format', 'pattern', 'minLength', 'maxLength', 'minimum']);
 function check(s) {
   for (const [key, value] of Object.entries(s)) {
     if (!supported.has(key)) throw new Error(`Extend Dart validator before using schema keyword: ${key}`);
     if (key === 'format' && !['uuid', 'sync-cursor'].includes(value)) throw new Error(`Unsupported format ${value}`);
-    if (key === 'type' && (Array.isArray(value) ? value : [value]).some(t => !['null', 'string', 'integer', 'object', 'array'].includes(t))) throw new Error(`Unsupported type ${value}`);
+    if (key === 'type' && (Array.isArray(value) ? value : [value]).some(t => !['null', 'string', 'integer', 'boolean', 'object', 'array'].includes(t))) throw new Error(`Unsupported type ${value}`);
     if (key === 'additionalProperties' && typeof value !== 'boolean') throw new Error('Schema-valued additionalProperties unsupported');
     if (key === 'properties') Object.values(value).forEach(check);
     if (key === 'items') check(value);
@@ -47,7 +51,7 @@ const outputs = {
 };
 for (const [path, content] of Object.entries(outputs)) {
   if (process.argv.includes('--check')) {
-    if (read(path) !== content) throw new Error(`${path} is stale; run node scripts/generate-sync-contract.mjs`);
+    if (readLF(path) !== content) throw new Error(`${path} is stale; run node scripts/generate-sync-contract.mjs`);
   } else {
     mkdirSync(dirname(resolve(root, path)), { recursive: true });
     writeFileSync(resolve(root, path), content);

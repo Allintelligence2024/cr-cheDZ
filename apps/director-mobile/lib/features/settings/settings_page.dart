@@ -34,7 +34,10 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final results = await Future.wait([
         widget.api.me(),
-        widget.api.orgDetails().catchError((_) => <String, dynamic>{}),
+        // P0 (phase 1.8) — /organizations/me n'existe pas (404 permanent).
+        // /me contient déjà memberships[].organization_name et
+        // current_organization_id (users.service.ts:155-167).
+        widget.api.me().catchError((_) => <String, dynamic>{}),
       ]);
       if (!mounted) return;
       setState(() {

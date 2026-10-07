@@ -247,13 +247,9 @@ export class AuthService {
       if (row) await this.pool.query(`UPDATE otp_codes SET attempts=attempts+1 WHERE id=$1 AND used_at IS NULL AND attempts<5`, [row.id]);
       throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     }
-    const consumed = await this.pool.query(
-      `UPDATE otp_codes SET used_at=NOW()
-       WHERE id=$1 AND used_at IS NULL AND attempts<5 AND expires_at>NOW() RETURNING id`, [row.id],
-    );
-    if (consumed.rowCount !== 1) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
-    // Bootstrap RLS : guardians est une table tenant ; la fonction SECURITY
-    // DEFINER (migration 025) fait la recherche hors contexte tenant.
+    // Résolution de l'utilisateur AVANT la consommation : le gate TOTP et
+    // l'issueTokenPair en ont besoin, et un TOTP erroné ne doit pas brûler
+    // l'OTP (le code reste réutilisable jusqu'au succès du second facteur).
     const found = await this.pool.query<UserRow>(
       `SELECT * FROM auth_parent_lookup_by_phone($1)`,
       [target],
@@ -261,9 +257,16 @@ export class AuthService {
     const user = found.rows[0];
     if (!user?.id) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     // G5 : l'OTP prouve le téléphone ; il ne remplace PAS le second facteur
-    // d'un compte MFA. L'OTP est déjà consommé ici (usage unique), aucun
-    // accès n'est émis sans le code TOTP valide et frais.
+    // d'un compte MFA. Le gate est vérifié AVANT la consommation : sinon un
+    // second facteur erroné brûle l'OTP valide (l'utilisateur doit redemander
+    // un code SMS à chaque tentative TOTP — aussi un contournement du lockout
+    // par épuisement d'OTP sur un compte attaqué).
     await this.requireTotpGate(user.id, totpCode);
+    const consumed = await this.pool.query(
+      `UPDATE otp_codes SET used_at=NOW()
+       WHERE id=$1 AND used_at IS NULL AND attempts<5 AND expires_at>NOW() RETURNING id`, [row.id],
+    );
+    if (consumed.rowCount !== 1) throw new AppError('OTP_INVALID', 'Code de vérification incorrect ou expiré', 'رمز التحقق غير صحيح أو منتهي', 401);
     return this.issueTokenPair(user, ctx);
   }
 
@@ -298,7 +301,7 @@ export class AuthService {
 
   async refresh(
     refreshToken: string,
-    deviceId: string | undefined,
+    deviceIdRaw: string | undefined,
     ipAddress?: string,
     userAgent?: string,
   ): Promise<LoginResult> {
@@ -336,10 +339,14 @@ export class AuthService {
           `UPDATE sessions SET revoked_at=NOW(), revoked_reason='rotated' WHERE id=$1`, [row.session_id],
         );
         const membership = await this.membershipFor(user, client);
+        // 3.3.1 : device_id de la requête validé ; à défaut, on retombe sur
+        // celui de la session rotée (déjà validé à sa création).
+        const deviceId = (await this.resolveDeviceId(deviceIdRaw, user.id, client))
+          ?? (deviceIdRaw ? null : (row.device_id ?? null));
         const session = await this.sessions.createSession({
           userId: user.id,
           organizationId: membership?.organization_id ?? null,
-          deviceId: deviceId ?? row.device_id,
+          deviceId,
           ipAddress,
           userAgent,
         }, client);
@@ -375,6 +382,104 @@ export class AuthService {
       resourceLabel: 'reuse_detected',
     });
     throw Errors.sessionReuseDetected();
+  }
+
+  // ── 3.2.11 : changement d'organisation active (multi-org directeur) ──────
+
+  /**
+   * Émet une NOUVELLE paire de tokens liée à `targetOrgId`.
+   *
+   * L'org switch est un changement de *tokén*, pas un simple header : le JWT
+   * contient l'organization_id + le role_slug (signAccessToken), et toutes les
+   * requêtes descendantes (tenantContext) le lisent dans le token. L'ancienne
+   * session est révoquée (rotation) — même politique que le refresh.
+   *
+   * Garde-fous :
+   *  - `targetOrgId` DOIT être une des orgs où l'utilisateur a un membership
+   *    actif (auth_get_memberships) — sinon 403, jamais de token forge.
+   *  - super_admin : pas de membership, switch interdit via cette voie
+   *    (il n'a pas de org "personnelle" à choisir).
+   *  - Compte must be active + non locked (assertLoginAllowed).
+   */
+  async switchOrganization(
+    userId: string,
+    targetOrgId: string,
+    refreshToken: string,
+    ctx: { deviceId?: string; ipAddress?: string; userAgent?: string },
+  ): Promise<LoginResult> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const user = (await client.query<UserRow>(
+        `SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [userId],
+      )).rows[0];
+      if (!user) throw Errors.invalidCredentials();
+      this.assertLoginAllowed(user);
+
+      // Le membership CIBLE doit exister et être actif. auth_get_memberships
+      // filtre déjà is_active=true + org active ; on sélectionne l'org cible.
+      // SELECT * expose les colonnes de la fonction (organization_id, role_slug…).
+      const target = (await client.query<MembershipRow>(
+        `SELECT * FROM auth_get_memberships($1) WHERE organization_id=$2`,
+        [user.id, targetOrgId],
+      )).rows[0];
+      if (!target) {
+        throw Errors.forbidden();
+      }
+
+      // Révoque la session courante (rotation, même politique que refresh).
+      // Un refresh invalide → on refuse le switch (ne pas accepter un jeton
+      // mort pour produire un jeton neuf).
+      const hash = SessionsService.hashRefreshToken(refreshToken);
+      const cur = (await client.query(
+        `SELECT s.id FROM auth_refresh_lookup($1) r JOIN sessions s ON s.id=r.session_id WHERE r.user_id=$2`,
+        [hash, user.id],
+      )).rows[0];
+      if (cur) {
+        await client.query(
+          `UPDATE sessions SET revoked_at=NOW(), revoked_reason='org_switch' WHERE id=$1`, [cur.id],
+        );
+      }
+
+      const deviceId = await this.resolveDeviceId(ctx.deviceId, user.id, client);
+      const session = await this.sessions.createSession({
+        userId: user.id,
+        organizationId: target.organization_id,
+        deviceId,
+        ipAddress: ctx.ipAddress,
+        userAgent: ctx.userAgent,
+      }, client);
+      const accessToken = await this.signAccessToken(user, target, client);
+      await client.query('COMMIT');
+
+      await this.audit.log({
+        organizationId: target.organization_id,
+        userId: user.id,
+        action: 'switch_org',
+        resourceType: 'organization',
+        resourceLabel: target.organization_id,
+      }).catch(() => undefined);
+
+      return {
+        access_token: accessToken,
+        refresh_token: session.refreshToken,
+        expires_in: 15 * 60,
+        user: {
+          id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+          organization_id: target.organization_id,
+          role: target.role_slug,
+          is_super_admin: user.is_super_admin,
+        },
+      };
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async logout(refreshToken: string, userId: string, ipAddress?: string, userAgent?: string): Promise<void> {
@@ -484,7 +589,9 @@ export class AuthService {
       )).rows[0];
       if (!membership) throw invalid();
       const session = await this.sessions.createSession({
-        userId: user.id, organizationId: payload.orgId, deviceId: ctx.deviceId,
+        userId: user.id, organizationId: payload.orgId,
+        // 3.3.1 : device_id validé (existant, actif, propriétaire) — sinon null.
+        deviceId: await this.resolveDeviceId(ctx.deviceId, user.id, client),
         ipAddress: ctx.ipAddress, userAgent: ctx.userAgent,
       }, client);
       const accessToken = await this.signAccessToken(activated, membership, client);
@@ -506,6 +613,28 @@ export class AuthService {
     } finally { client.release(); }
   }
 
+  /**
+   * 3.3.1 (remédiation 2026-10-04) — valide un device_id avant de l'associer
+   * à une session. Échec fermé discret : un device inexistant / révoqué /
+   * appartenant à un autre utilisateur est ignoré (session créée SANS
+   * device), jamais rejeté — sinon un client qui envoie un device_id périmé
+   * (device supprimé, réinstallé) se fermerait la porte au login. La session
+   * reste attribuée à rien plutôt qu'à un device mensonger.
+   */
+  private async resolveDeviceId(
+    deviceId: string | undefined,
+    userId: string,
+    client: Pick<PoolClient, 'query'> = this.pool,
+  ): Promise<string | null> {
+    if (!deviceId) return null;
+    const res = await client.query<{ is_valid: boolean; reason: string }>(
+      `SELECT is_valid, reason FROM auth_device_validate($1::uuid, $2::uuid)`,
+      [deviceId, userId],
+    );
+    if (!res.rows[0]?.is_valid) return null;
+    return deviceId;
+  }
+
   /** Construit une session complète (access + refresh) pour un utilisateur. */
   private async issueTokenPair(
     user: UserRow,
@@ -521,10 +650,12 @@ export class AuthService {
     this.assertLoginAllowed(user);
     const membership = await this.membershipFor(user);
     await this.pool.query(`UPDATE users SET failed_attempts=0, locked_until=NULL WHERE id=$1`, [user.id]);
+    // 3.3.1 : device_id validé (existant, actif, propriétaire) — sinon null.
+    const deviceId = await this.resolveDeviceId(ctx.deviceId, user.id);
     const session = await this.sessions.createSession({
       userId: user.id,
       organizationId: membership?.organization_id ?? null,
-      deviceId: ctx.deviceId,
+      deviceId,
       ipAddress: ctx.ipAddress,
       userAgent: ctx.userAgent,
     });
@@ -622,7 +753,13 @@ export class AuthService {
     if (outcome === 'not_enabled') return;
     if (outcome === 'missing') throw Errors.totpRequired();
     if (outcome === 'unreadable') throw Errors.mfaSecretUnreadable();
-    if (outcome !== 'ok') throw Errors.totpInvalid();
+    // 3.3.3 : un échec du second facteur compte dans le lockout du compte.
+    // Sans cela, TOTP peut être attaqué à l'infini (6 chiffres, pas de
+    // fenêtre de blocage) alors que l'échec du facteur principal verrouille.
+    if (outcome !== 'ok') {
+      await this.recordFailedAttempt(userId, '');
+      throw Errors.totpInvalid();
+    }
   }
 
   /**
@@ -746,8 +883,16 @@ export class AuthService {
     // courante) — les bumps déclencheurs intervenus pendant la requête (ex.
     // acceptation d'invitation qui met à jour users ET memberships) sont
     // reflétés, jamais l'ancienne valeur de la ligne chargée en amont.
+    //
+    // 3.3.2 (remédiation 2026-10-04) : TOCTOU. Sans verrou, la séquence
+    //   T1 BEGIN → SELECT token_epoch (=0) ────────────── UPDATE users SET ... (bump →1) COMMIT
+    //   T2                  ───────────────────────────── COMMIT (token signé avec epoch=0)
+    // produisait un token immédiatement mort : le garde relit epoch=1 sur un
+    // autre connexion et rejette. Le verrou FOR UPDATE sur la ligne utilisateur
+    // sérialise la signature avec tout bump concurrent — le token porte
+    // toujours l'époque effectivement commitée.
     const epochRes = await client.query<{ token_epoch: string | number | null }>(
-      'SELECT token_epoch FROM users WHERE id = $1',
+      'SELECT token_epoch FROM users WHERE id = $1 FOR UPDATE',
       [user.id],
     );
     const epoch = Number(epochRes.rows[0]?.token_epoch ?? 0);
