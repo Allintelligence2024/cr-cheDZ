@@ -333,7 +333,35 @@ apps/director-mobile/
 
 **V2 estimé 6-7 semaines → livré en 2 jours (sauf deps externes Firebase/Apple qui sont par nature externes).**
 
-## 8. Dépendances externes restantes (aucun code)
+## 8. Analytics Dashboard Premium (Directrice) — ✅ livré
+
+### Backend
+- Module `analytics` : `overview`, `attendance?groupBy=day|week|month`, `billing`, `revenue` (payment_allocations), `occupancy` (sites/rooms vs capacité), `ratios`
+- Rôles : `director`, `accountant`, `super_admin` uniquement (RLS tenant forcée, fuseau Alger)
+- Requêtes : enfants actifs, capacité totale, occupancy_rate, attendance_today, billing_month, aged_balance (0-30/31-60/61-90/90+), staff active, incidents 7j, trends 30j/90j
+
+### Web — `AnalyticsPage.tsx` (directeur seulement)
+- Route `/analytics` + `ROUTE_ROLES['/analytics']=FINANCE` + lazy load
+- Design premium :
+  - Header gradient teal + titre 📊 Analytics Direction
+  - KPI grid 2-3 colonnes avec icônes, gradients, sub + trend
+  - BarChart custom (présences 30j) + LineChart SVG (facturation mensuelle invoiced/paid/balance) + BarChart revenus 90j
+  - Pie via conic-gradient (balance âgée 0-30/31-60/61-90/90+)
+  - OccupancyBar avec LinearProgressIndicator + couleur selon % (vert <75, orange 75-90, rouge >90) + décret 19-253 150 enfants + 151e refusé
+  - Cards avec `tokens` Sérénité, responsive grid
+  - Pas de lib externe (pure SVG + div) pour garder bundle <250 Ko gzip
+
+### Mobile — `analytics_page.dart`
+- Onglet bottom nav Analytics (📊)
+- Même KPIs que web mais cards avec gradients + icônes
+- BarChart fl_chart présences (present vs absent) + LineChart billing (invoiced/paid/balance) + BarChart revenus 90j + PieChart aged
+- Occupancy avec LinearProgressIndicator
+- Pull-to-refresh + EmptyState + offline handling
+- Design : header gradient, KpiCard avec icon + trend, SectionCard, legend
+
+**Directors love analytics** : tout est en temps réel, beau, lisible en 30s, réservé directeur.
+
+## 9. Dépendances externes restantes (aucun code)
 
 | Dépendance | Pourquoi externe | Fichier |
 |------------|------------------|---------|

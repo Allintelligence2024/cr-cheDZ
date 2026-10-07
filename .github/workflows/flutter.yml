@@ -191,6 +191,7 @@ jobs:
         run: |
           set -o pipefail
           if ! flutter build apk --release --dart-define=SENTRY_DSN="$SENTRY_DSN" --dart-define=SENTRY_ENVIRONMENT="$SENTRY_ENVIRONMENT" 2>&1 | tee director-build.log; then
+          if ! flutter build apk --release --dart-define=SENTRY_DSN="$SENTRY_DSN" --dart-define=SENTRY_ENVIRONMENT="$SENTRY_ENVIRONMENT" 2>&1 | tee director-build.log; then
             echo "## director-mobile — échec du build" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"; grep -aE "FAILURE|What went wrong|rror|Exception|P1-2" -A4 director-build.log | head -80 >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
             grep -aE "FAILURE|What went wrong|rror:|Exception|P1-2" -A2 director-build.log | grep -av '^--$' | head -12 | while IFS= read -r l; do echo "::error title=director-mobile build::${l:0:400}"; done

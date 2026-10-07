@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:director_mobile/core/api_client.dart';
 import 'package:director_mobile/core/cache_service.dart';
 import 'package:director_mobile/core/token_store.dart';
+import 'package:director_mobile/features/analytics/analytics_page.dart';
 import 'package:director_mobile/features/auth/login_page.dart';
 import 'package:director_mobile/features/dashboard/dashboard_page.dart';
 import 'package:director_mobile/features/billing/billing_page.dart';
@@ -121,7 +122,7 @@ void main() {
   testWidgets('MorePage renders grid', (tester) async {
     final api = _offlineApi();
     addTearDown(api.close);
-    // La grille 3 colonnes fait 4 rangées (11 entrées) : la fenêtre de test
+    // La grille 3 colonnes fait 4 rangées (12 entrées) : la fenêtre de test
     // par défaut (800x600) ne construit pas les derniers items.
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -136,8 +137,17 @@ void main() {
 
     expect(find.text('Enfants'), findsOneWidget);
     expect(find.text('Couverture'), findsOneWidget);
+    expect(find.text('Personnel'), findsOneWidget);
     expect(find.text('Paramètres'), findsOneWidget);
     expect(find.textContaining('Direction'), findsWidgets);
   });
-}
 
+  testWidgets('AnalyticsPage loading state', (tester) async {
+    final api = _offlineApi();
+    addTearDown(api.close);
+
+    await _pumpPage(tester, AnalyticsPage(api: api));
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+}

@@ -21,12 +21,13 @@ dependencies:
   share_plus: ^10.0.2
   path_provider: ^2.1.4
   path: ^1.9.0
+  uuid: ^4.4.0
+  crypto: ^3.0.3
   # 3.2.12 : drift + sqlite3 supprimés — le cache offline Drift
   # (DirectorCacheDb) n'était jamais instancié ; l'app utilise
   # SharedPreferences (app_database.dart / CacheService). 861 lignes
-  # de code généré mort supprimées.
-  uuid: ^4.4.0
-  crypto: ^3.0.3
+  # de code généré mort supprimées. Conserve après fusion analytics
+  # (qui utilise CacheService, pas Drift).
   # M1 — FCM réel (V2.1)
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
@@ -36,7 +37,6 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
-  # 3.2.12 : drift_dev supprimé avec drift (plus de code généré).
   build_runner: ^2.4.11
 
 flutter:

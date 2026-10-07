@@ -13,6 +13,7 @@ import 'core/cache_service.dart';
 import 'core/observability.dart';
 import 'core/push_service.dart';
 import 'core/token_store.dart';
+import 'features/analytics/analytics_page.dart';
 import 'features/attendance/attendance_page.dart';
 import 'features/auth/login_page.dart';
 import 'features/billing/billing_page.dart';
@@ -231,6 +232,7 @@ class _DirectorHomeState extends State<DirectorHome> {
   @override
   Widget build(BuildContext context) {
     final pages = [
+      AnalyticsPage(api: widget.api),
       DashboardPage(api: widget.api, cache: widget.cache),
       AttendancePage(api: widget.api),
       BillingPage(api: widget.api),
@@ -238,13 +240,13 @@ class _DirectorHomeState extends State<DirectorHome> {
       MorePage(api: widget.api, onLogout: widget.onLogout),
     ];
 
-    final titles = ['Tableau de bord', 'Présences', 'Facturation', 'Personnel', 'Plus'];
+    final titles = ['📊 Analytics', 'Tableau de bord', 'Présences', 'Facturation', 'Personnel', 'Plus'];
 
     return Scaffold(
       appBar: AppBar(
         title: Text(titles[_index]),
         actions: [
-          if (_index != 4)
+          if (_index != 5)
             IconButton(
               icon: const Icon(Icons.logout),
               onPressed: () => widget.onLogout(),
@@ -257,9 +259,10 @@ class _DirectorHomeState extends State<DirectorHome> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() {
           _index = i;
-          if (i == 4) _unread = 0; // badge remis à zéro à l'ouverture de « Plus »
+          if (i == 5) _unread = 0; // badge remis à zéro à l'ouverture de « Plus »
         }),
         destinations: [
+          const NavigationDestination(icon: Icon(Icons.analytics_outlined), selectedIcon: Icon(Icons.analytics), label: 'Analytics'),
           const NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
           const NavigationDestination(icon: Icon(Icons.how_to_reg_outlined), selectedIcon: Icon(Icons.how_to_reg), label: 'Présences'),
           const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Factures'),

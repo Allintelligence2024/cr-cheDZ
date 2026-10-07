@@ -136,7 +136,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                 // migration 068). L'endpoint /mark-overdue n'existe pas →
                 // ce bouton renvoyait un 404 permanent à chaque tap.
                 // L'état réel reste visible via agedBalance (billing_page).
-                SizedBox.shrink(),
+                const SizedBox.shrink(),
               ElevatedButton.icon(
                 onPressed: () => _showReminderDialog(),
                 icon: const Icon(Icons.email),

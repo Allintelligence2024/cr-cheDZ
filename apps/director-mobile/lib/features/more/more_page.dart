@@ -13,6 +13,7 @@ import '../org_switch/org_switch_page.dart';
 import '../payroll/payroll_page.dart';
 import '../settings/settings_page.dart';
 import '../sites/sites_page.dart';
+import '../staff/staff_page.dart';
 import '../video/video_page.dart';
 import '../../theme/serenite_theme.dart';
 
@@ -51,6 +52,7 @@ class _MorePageState extends State<MorePage> {
   Widget build(BuildContext context) {
     final items = [
       {'icon': Icons.child_care, 'label': 'Enfants', 'color': Colors.teal, 'page': ChildrenListPage(api: widget.api)},
+      {'icon': Icons.groups, 'label': 'Personnel', 'color': Colors.blueGrey, 'page': StaffPage(api: widget.api)},
       {'icon': Icons.groups, 'label': 'Couverture', 'color': Colors.orange, 'page': CoveragePage(api: widget.api)},
       {'icon': Icons.menu_book, 'label': 'Journal', 'color': Colors.blue, 'page': JournalPage(api: widget.api)},
       {'icon': Icons.payments, 'label': 'Paie', 'color': Colors.green, 'page': PayrollPage(api: widget.api)},

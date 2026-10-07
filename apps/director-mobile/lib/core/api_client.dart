@@ -179,6 +179,19 @@ class DirectorApiClient {
   Future<List<dynamic>> videoCameras() => _getList('/video/cameras');
   Future<List<dynamic>> videoClips({String? cameraId}) => _getList('/video/clips', query: {if (cameraId != null) 'camera_id': cameraId});
 
+  // Analytics — directeur seulement
+  Future<Map<String, dynamic>> analyticsOverview() => _getMap('/analytics/overview');
+  Future<Map<String, dynamic>> analyticsAttendance({String? from, String? to, String groupBy = 'day', String? siteId}) => _getMap('/analytics/attendance', query: {
+        if (from != null) 'from': from,
+        if (to != null) 'to': to,
+        'groupBy': groupBy,
+        if (siteId != null) 'site_id': siteId,
+      });
+  Future<Map<String, dynamic>> analyticsBilling({String? from, String? to}) => _getMap('/analytics/billing', query: {if (from != null) 'from': from, if (to != null) 'to': to});
+  Future<Map<String, dynamic>> analyticsRevenue({String? from, String? to}) => _getMap('/analytics/revenue', query: {if (from != null) 'from': from, if (to != null) 'to': to});
+  Future<Map<String, dynamic>> analyticsOccupancy() => _getMap('/analytics/occupancy');
+  Future<Map<String, dynamic>> analyticsRatios({String? date}) => _getMap('/analytics/ratios', query: {if (date != null) 'date': date});
+
   // V2.3 — écritures
   // P0 (phase 1.8) — CreateChildDto exige site_id + date_of_birth (children.dto.ts).
   // L'app envoyait birth_date et omettait site_id → 400 systématique.
@@ -201,10 +214,6 @@ class DirectorApiClient {
   // POST /billing/payments/online (billing.controller.ts:122,128).
   Future<Map<String, dynamic>> payInvoiceCash(Map<String, dynamic> body) => _postMap('/billing/payments/cash', body);
   Future<Map<String, dynamic>> payInvoiceOnline(Map<String, dynamic> body) => _postMap('/billing/payments/online', body);
-  // P0 (phase 1.8) — POST /billing/invoices/generate : le DTO exige
-  // contract_id + period_year + period_month + due_date (GenerateInvoicesDto),
-  // pas {month:'YYYY-MM'} → 400. L'app doit construire le payload complet.
-  Future<Map<String, dynamic>> generateInvoices(Map<String, dynamic> body) => _postMap('/billing/invoices/generate', body);
 
   // Devices — M1 (FCM) : enregistrement du token push (POST /devices).
   // Contrat : name (2-120), device_fingerprint (>= 8), platform

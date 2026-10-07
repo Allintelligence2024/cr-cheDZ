@@ -45,10 +45,8 @@ class _BillingPageState extends State<BillingPage> {
       if (!mounted) return;
       setState(() {
         _aged = aged;
-        // 3.2.4 : l'API renvoie maintenant {items, total, page, limit}.
-        _invoices = (invoices is Map && invoices['items'] is List)
-            ? invoices['items'] as List<dynamic>
-            : (invoices is List ? invoices : <dynamic>[]);
+        // 3.2.4 : l'API renvoie une liste (invoices() -> _getList).
+        _invoices = invoices;
         _loading = false;
         _isOffline = false;
       });
