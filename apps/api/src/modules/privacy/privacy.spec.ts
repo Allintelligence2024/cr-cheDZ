@@ -118,6 +118,26 @@ describe('AuditService (atomique vs non-bloquant)', () => {
     expect(executed.some((s) => s.startsWith('INSERT INTO data_access_logs'))).toBe(true);
   });
 
+  test('logDataAccess() porte organization_id (policy RLS 088 : INSERT sans GUC tenant)', async () => {
+    // AuditService écrit via this.pool, pas le client tenant : la GUC
+    // app.tenant_id n'est PAS posée. La policy data_access_logs_insert_any
+    // (migration 088) accepte donc organization_id IS NULL, mais refuse un
+    // organization_id étranger. Ce test verrouille le contrat : le caller
+    // DOIT passer organizationId (requireTenant) — sinon l'audit est rejeté.
+    const { AuditService } = await import('../privacy/audit.service');
+    let capturedParams: unknown[] = [];
+    const pool = {
+      query: async (_sql: string, params: unknown[]) => { capturedParams = params; return { rows: [], rowCount: 1 }; },
+    } as unknown as import('pg').Pool;
+    const org = randomUUID();
+    const svc = new AuditService(pool);
+    await svc.logDataAccess({
+      organizationId: org, userId: randomUUID(), dataType: 'health_record',
+      dataSubjectId: randomUUID(), dataSubjectType: 'child', accessType: 'read',
+    });
+    expect(capturedParams[0]).toBe(org);
+  });
+
   test('les old/new values sont masquées avant insertion', async () => {
     const { AuditService } = await import('../privacy/audit.service');
     let capturedParams: unknown[] = [];

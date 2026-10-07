@@ -64,7 +64,10 @@ CREATE POLICY audit_logs_tenant ON audit_logs
 DROP POLICY IF EXISTS audit_logs_insert_any ON audit_logs;
 CREATE POLICY audit_logs_insert_any ON audit_logs
   FOR INSERT
-  WITH CHECK (true);
+  -- organization_id IS NULL : trace des échecs d'auth avant résolution du
+  -- tenant (organizationId ?? null côté API). organization_id = app_tenant_id()
+  -- : un tenant ne peut tracer QUE pour lui-même — jamais pour un autre.
+  WITH CHECK (organization_id IS NULL OR organization_id = app_tenant_id());
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON audit_logs TO creche_app;
 
@@ -79,6 +82,10 @@ CREATE POLICY data_access_logs_tenant ON data_access_logs
 DROP POLICY IF EXISTS data_access_logs_insert_any ON data_access_logs;
 CREATE POLICY data_access_logs_insert_any ON data_access_logs
   FOR INSERT
-  WITH CHECK (true);
+  -- AuditService.logDataAccess écrit via this.pool (connexion hors contexte
+  -- tenant, GUC non posée) en passant organizationId explicitement
+  -- (requireTenant) — d'où la branche NULL. Un tenant ne peut écrire QUE
+  -- pour lui-même : jamais un organization_id étranger.
+  WITH CHECK (organization_id IS NULL OR organization_id = app_tenant_id());
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON data_access_logs TO creche_app;

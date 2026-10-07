@@ -7,7 +7,7 @@ COPY . .
 RUN npm ci
 RUN npm run build --workspace @creche/support-console
 
-FROM nginx:1.30.5-alpine3.24-slim AS runtime
+FROM nginx:mainline-alpine3.24-slim AS runtime
 # ⚠️ Le bundle est construit avec `base: '/support/'` (vite.config.ts) : le
 # index.html généré demande /support/assets/*. Le reverse proxy amont fait un
 # `proxy_pass http://support_backend;` SANS slash final, donc le préfixe

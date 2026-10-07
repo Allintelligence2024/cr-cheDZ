@@ -8,7 +8,7 @@ COPY . .
 RUN npm ci
 RUN npm run build --workspace @creche/admin-web
 
-FROM nginx:1.30.5-alpine3.24-slim AS runtime
+FROM nginx:mainline-alpine3.24-slim AS runtime
 COPY --from=build /app/apps/admin-web/dist /usr/share/nginx/html
 RUN printf 'server {\n\
   listen 80;\n\
