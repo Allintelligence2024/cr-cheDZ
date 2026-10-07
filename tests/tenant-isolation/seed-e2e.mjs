@@ -84,7 +84,12 @@ try {
   const educator = await client.query(
     `INSERT INTO users (email, first_name, last_name, password_hash, status)
      VALUES ($1, 'E2E', 'Educator', $2, 'active')
-     ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email RETURNING id`,
+     -- Migration 095 : users.email n'est plus une contrainte UNIQUE absolue
+     -- mais un index PARTIEL (WHERE deleted_at IS NULL). ON CONFLICT (email)
+     -- nu doit cibler cet index explicitement, sinon 42P10. L'upsert ne
+     -- concerne que des comptes vivants (le seed ne pose pas deleted_at).
+     ON CONFLICT (email) WHERE deleted_at IS NULL
+     DO UPDATE SET email = EXCLUDED.email RETURNING id`,
     [staffEmail, await bcrypt.hash('Password123!', 12)],
   );
   const educatorRole = await client.query(`SELECT id FROM roles WHERE slug = 'educator'`);

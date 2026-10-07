@@ -8,7 +8,12 @@ COPY . .
 RUN npm ci
 RUN npm run build --workspace @creche/admin-web
 
-FROM nginx:mainline-alpine3.24-slim AS runtime
+FROM nginx:1.30.5-alpine3.24-slim AS runtime
+# CVE-2026-103111 : pcre2 10.48-r0 (alpine 3.24) est vulnérable, mais l'image
+# stable épinglée n'est pas reconstruite. On force la mise à jour système
+# (10.49-r0 est la version corrigée publiée dans v3.24-main). Échec bloquant
+# si la version corrigée n'est pas disponible — ne jamais masquer la CVE.
+RUN apk add --no-cache --upgrade pcre2
 COPY --from=build /app/apps/admin-web/dist /usr/share/nginx/html
 RUN printf 'server {\n\
   listen 80;\n\

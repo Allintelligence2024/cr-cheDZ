@@ -97,9 +97,11 @@ export async function ensureAppRole(admin) {
   await admin.query('GRANT EXECUTE ON FUNCTION anonymize_child(uuid, uuid, text) TO creche_app_test');
   // Roadmap v2 (migration 040) : multi-rôles — liste des rôles effectifs
   await admin.query('GRANT EXECUTE ON FUNCTION auth_user_roles(uuid) TO creche_app_test');
-  // Roadmap v2 (migration 042) : drain notification_queue sous NOBYPASSRLS
+  // Roadmap v2 (migration 042) : drain notification_queue sous NOBYPASSRLS.
+  // Migration 080 : signature 4 args (p_claimed_at fencing) — l'ancienne
+  // (uuid, boolean, text) est DROPée.
   await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_claim(integer) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_finish(uuid, boolean, text) TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_finish(uuid, boolean, text, timestamptz) TO creche_app_test');
   // Roadmap v2 (migration 046) : garde-fou DPIA vidéosurveillance
   await admin.query('GRANT EXECUTE ON FUNCTION privacy_approved_dpia_exists(uuid, text) TO creche_app_test');
   // Roadmap v2 (migration 047) : purge des clips vidéo à 30 jours

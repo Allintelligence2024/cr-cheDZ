@@ -71,9 +71,12 @@ async function withTenant<T>(orgId: string, fn: (client: PoolClient) => Promise<
  * (cible, date), et on ne notifie que les délais pas encore signalés
  * (notification_queue.data->>'deadline_key' absent).
  *
- * NOTA : l'idempotence repose sur ON CONFLICT DO NOTHING — sans contrainte
- * unique sur (data->>'deadline_key'), deux exécutions quotidiennes créent
- * deux notifications. La contrainte est posée par la migration 086.
+ * NOTA : l'idempotence repose sur l'index unique PARTIEL
+ * uq_notification_deadline_key (migration 086) sur
+ * (organization_id, data->>'deadline_key') WHERE data ? 'deadline_key'.
+ * Un index partiel n'est PAS inférable par un `ON CONFLICT DO NOTHING` nu —
+ * il faut cibler l'index explicitement, sinon deux exécutions quotidiennes
+ * créent deux notifications pour la même échéance.
  */
 async function complianceDeadlines(): Promise<void> {
   // Détection via la fonction SECURITY DEFINER compliance_deadlines_overdue()
@@ -105,7 +108,7 @@ async function complianceDeadlines(): Promise<void> {
          JOIN role_assignments ra ON ra.user_id = u.id
          JOIN roles r ON r.id = ra.role_id
          WHERE ra.organization_id = $1 AND r.slug = 'dpo'
-         ON CONFLICT DO NOTHING`,
+         ON CONFLICT (organization_id, (data->>'deadline_key')) WHERE data ? 'deadline_key' DO NOTHING`,
         [v.organization_id, v.deadline.toISOString(), key, v.record_id],
       );
       return r.rowCount ?? 0;
@@ -127,7 +130,7 @@ async function complianceDeadlines(): Promise<void> {
          JOIN role_assignments ra ON ra.user_id = u.id
          JOIN roles r ON r.id = ra.role_id
          WHERE ra.organization_id = $1 AND r.slug = 'dpo'
-         ON CONFLICT DO NOTHING`,
+         ON CONFLICT (organization_id, (data->>'deadline_key')) WHERE data ? 'deadline_key' DO NOTHING`,
         [req.organization_id, req.deadline.toISOString(), key, req.record_id],
       );
       return r.rowCount ?? 0;
@@ -149,7 +152,7 @@ async function complianceDeadlines(): Promise<void> {
          JOIN role_assignments ra ON ra.user_id = u.id
          JOIN roles r ON r.id = ra.role_id
          WHERE ra.organization_id = $1 AND r.slug = 'dpo'
-         ON CONFLICT DO NOTHING`,
+         ON CONFLICT (organization_id, (data->>'deadline_key')) WHERE data ? 'deadline_key' DO NOTHING`,
         [d.organization_id, d.deadline.toISOString(), key, d.record_id],
       );
       return r.rowCount ?? 0;
