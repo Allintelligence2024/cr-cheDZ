@@ -1,6 +1,7 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import { Pool } from 'pg';
+import { PG_POOL } from '../database/database.provider';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import type { CurrentUserPayload } from '../decorators/current-user.decorator';
 import { Errors } from '../errors';
@@ -24,7 +25,7 @@ import { Errors } from '../errors';
  */
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  constructor(private readonly pool: Pool) {}
+  constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const permissions =
