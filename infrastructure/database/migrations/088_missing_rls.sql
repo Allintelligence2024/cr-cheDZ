@@ -24,26 +24,18 @@ DO $$ BEGIN
 END $$;
 
 -- ------------------------------------------------------------------ 013
-ALTER TABLE compliance_rule_sets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE compliance_rule_sets FORCE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS compliance_rule_sets_tenant ON compliance_rule_sets;
-CREATE POLICY compliance_rule_sets_tenant ON compliance_rule_sets
-  FOR ALL
-  USING (organization_id = app_tenant_id())
-  WITH CHECK (organization_id = app_tenant_id());
-
-ALTER TABLE compliance_rules ENABLE ROW LEVEL SECURITY;
-ALTER TABLE compliance_rules FORCE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS compliance_rules_tenant ON compliance_rules;
-CREATE POLICY compliance_rules_tenant ON compliance_rules
-  FOR ALL
-  USING (rule_set_id IN (SELECT id FROM compliance_rule_sets))
-  WITH CHECK (rule_set_id IN (SELECT id FROM compliance_rule_sets));
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON compliance_rule_sets TO creche_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON compliance_rules TO creche_app;
+-- NOTE (2026-10-07) : compliance_rule_sets / compliance_rules sont des tables
+-- de RÉFÉRENCE réglementaires globales (catalogue national — décret 19-253),
+-- lues SANS filtre tenant par ComplianceService.runChecks
+-- (`WHERE rs.status = 'active' AND cr.is_active = true`, pas de organization_id
+-- dans le WHERE). Elles n'ont PAS de colonne organization_id (migration 013) —
+-- les mettre sous RLS tenant cassait à la fois la migration (column does not
+-- exist) et le service (aucune règle visible). La fuite d'une org à l'autre
+-- dénoncée par l'audit n'existe pas ici : ces données sont identiques pour
+-- tous les tenants par conception. Seul compliance_checks (résultats) porte
+-- organization_id + RLS (déjà en place en 013). Aucune RLS ici.
+GRANT SELECT ON compliance_rule_sets TO creche_app;
+GRANT SELECT ON compliance_rules TO creche_app;
 
 -- ------------------------------------------------------------------ 003 (sessions)
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;

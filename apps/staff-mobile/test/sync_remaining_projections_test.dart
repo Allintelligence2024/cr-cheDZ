@@ -19,7 +19,7 @@ void main() {
   test('mixed page persists all four produced types and advances cursor atomically', () async {
     final h = f2.Harness(); addTearDown(h.close); h.online = true;
     final events = [children.childEvent('1'), f2.attendance('2'), journal('3'), media('4')];
-    h.api.handlePull = (q) async => {'events': q['cursor'] == '0' ? events : [], 'next_cursor': '4'};
+    h.api.handlePull = (q) async => {'events': q['cursor'] == '0' ? events : [], 'next_cursor': '4', 'resync_required': false};
     await h.engine.sync();
     expect(h.engine.currentStatus, SyncStatus.idle);
     expect((await h.db.syncState())['cursor'], '4');
@@ -64,7 +64,7 @@ void main() {
       if (defect == 'scope') bad['payload']['organization_id'] = f2.user;
       if (defect == 'unknown type') bad['type'] = 'future_projection';
       h.online = true;
-      h.api.handlePull = (_) async => {'events': [children.childEvent('1'), f2.attendance('2'), journal('3'), media('4'), bad], 'next_cursor': '5'};
+      h.api.handlePull = (_) async => {'events': [children.childEvent('1'), f2.attendance('2'), journal('3'), media('4'), bad], 'next_cursor': '5', 'resync_required': false};
       await h.engine.sync();
       expect(h.engine.currentStatus, SyncStatus.contractError);
       expect((await h.db.syncState())['cursor'], '0');
