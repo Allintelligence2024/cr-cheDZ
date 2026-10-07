@@ -1,17 +1,11 @@
 import { Type } from 'class-transformer';
 import {
-  IsBoolean,
-  IsDateString,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  MaxLength,
-  Min,
+  IsBoolean, IsIn, IsInt,
+  IsOptional, IsString, IsUUID,
+  Max, MaxLength, Min,
   MinLength,
 } from 'class-validator';
+import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
 
 const CHILD_STATUS = ['pre_registered', 'active', 'on_leave', 'departed'] as const;
 const SCHEDULE_TYPES = ['full_time', 'half_time', 'daily', 'custom'] as const;
@@ -44,7 +38,7 @@ export class CreateChildDto {
   @MaxLength(100)
   last_name_ar?: string;
 
-  @IsDateString({}, { message: 'date_of_birth invalide (YYYY-MM-DD)' })
+  @IsStrictIsoDate({}, { message: 'date_of_birth invalide (YYYY-MM-DD)' })
   date_of_birth!: string;
 
   @IsOptional()
@@ -56,7 +50,7 @@ export class CreateChildDto {
   status?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   enrollment_date?: string;
 
   @IsOptional()
@@ -116,11 +110,11 @@ export class UpdateChildDto {
   status?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   enrollment_date?: string;
 
   @IsOptional()
-  @IsDateString()
+  @IsStrictIsoDate()
   departure_date?: string;
 
   @IsOptional()

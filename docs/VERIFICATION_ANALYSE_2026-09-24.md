@@ -654,8 +654,8 @@ SDK : voir `docs/PLAN_REPARATION_2026-09-24.md` §2 (L3) et §6 (D4).
   `NOTIFICATION_RETENTION_DAYS`/`MESSAGES_RETENTION_DAYS`, suite `phase76`). Reste **hors
   périmètre** : `notification_inbox` et les fichiers joints (`media_assets`) — décisions
   séparées du DPO.
-- OpenAPI : 13 chemins écrits à la main sur 199 routes — assumé et testé comme tel.
-- 15 ADR / 33 runbooks / 701 fichiers (mesure `git ls-files` au 2026-09-24, ADR-014 ajouté en remédiation 3.1.7) : corriger les chiffres du rapport.
+- OpenAPI : 13 chemins écrits à la main sur 205 routes — assumé et testé comme tel.
+- 15 ADR / 33 runbooks / 701 fichiers (mesure `git ls-files` au 2026-09-24) : corriger les chiffres du rapport.
 
 ### 🟢 À préserver (ne pas régresser)
 RLS `FORCE` + rôles séparés + `default privileges` · TOTP scellé AES-256-GCM à AAD · révocation
@@ -701,6 +701,6 @@ relevées sur le commit `3b8f51b`.
 
 ## Complément mesuré au 2026-09-27 — lot 1 indexation tenant
 
-**Comptage courant 2026-09-27 — runner : 74 entrées ; suites phaseNN : 72 ; fichiers d’isolation : 91 ; migrations : 95.**
+**Comptage courant 2026-09-27 — runner : 76 entrées ; suites phaseNN : 74 ; fichiers d’isolation : 93 ; migrations : 77.**
 
-Ces quatre compteurs sont recalculés depuis le dépôt par `tests/tenant-isolation/claims-contract.test.mjs` : le runner compte 72 suites `phaseNN` plus `schema-check` et `rls-behavior-check` ; les 91 fichiers sont les `.mjs` du dossier `tests/tenant-isolation/`. La ligne ci-dessus est le snapshot courant ; les tableaux et journaux datés plus haut conservent les mesures de leur époque (71/89/73 avant l’ajout de `phase78`).
+Ces quatre compteurs sont recalculés depuis le dépôt par `tests/tenant-isolation/claims-contract.test.mjs` : le runner compte 72 suites `phaseNN` plus `schema-check` et `rls-behavior-check` ; les 90 fichiers sont les `.mjs` du dossier `tests/tenant-isolation/`. La ligne ci-dessus est le snapshot courant ; les tableaux et journaux datés plus haut conservent les mesures de leur époque (71/89/73 avant l’ajout de `phase78`).

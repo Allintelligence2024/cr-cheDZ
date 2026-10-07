@@ -112,6 +112,16 @@ SUITES=(
   # élargir le périmètre des lignes rendues (isolation A/B + 0 ligne sans
   # tenant), et la migration 077 est réapplicable sans drift.
   phase78-tenant-index.pg.test.mjs
+  # Correctif audit 2026-10-02 : l'écran Analytics (requête par défaut
+  # `GET /analytics/attendance?groupBy=day`) échouait en 500 « 42P18 could not
+  # determine data type of parameter $2 » (null fantôme dans les bindings).
+  # La suite fige la requête par défaut, les variantes groupBy/site_id, les
+  # cinq autres endpoints et le refus 403 des rôles non-direction.
+  phase79-analytics-director.api.test.mjs
+  # Analyse 2026-10-02 : entrée invalide (UUID malformé, date au calendrier
+  # inexistant, corps non validé) → 400, jamais 500 (ParseUUIDPipe,
+  # IsStrictIsoDate, DTO role_id).
+  phase80-input-validation.api.test.mjs
 )
 
 FILTER="${1:-}"

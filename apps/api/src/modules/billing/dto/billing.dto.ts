@@ -1,4 +1,11 @@
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import {
+  ArrayMaxSize, ArrayMinSize, ArrayUnique,
+  IsArray, IsBoolean, IsIn,
+  IsInt, IsNumber, IsOptional,
+  IsString, IsUUID, Max,
+  MaxLength, Min,
+} from 'class-validator';
+import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
 export class CreateContractDto {
  @IsUUID() child_id!: string;
  // P2-2 : optionnel si daily_rate + annual_weeks sont fournis (lissage calculé).
@@ -10,8 +17,8 @@ export class CreateContractDto {
  @IsOptional() @IsNumber() @Min(0) daily_rate?: number;
  @IsOptional() @IsBoolean() absence_deduction?: boolean;
  @IsOptional() @IsNumber() @Min(0) extra_day_rate?: number;
- @IsDateString() start_date!: string;
- @IsOptional() @IsDateString() end_date?: string;
+ @IsStrictIsoDate() start_date!: string;
+ @IsOptional() @IsStrictIsoDate() end_date?: string;
  // C8 : valeurs alignées sur la définition de contracts.schedule_type
  // (010_billing : full_time, half_time, daily, custom) — erreur 400 claire
  // au lieu d'une donnée libre silencieusement acceptée.
@@ -24,7 +31,7 @@ export class GenerateInvoiceDto {
  // d'encoder des données corrompues sans rejet).
  @IsInt() @Min(2020) @Max(2100) period_year!: number;
  @IsInt() @Min(1) @Max(12) period_month!: number;
- @IsDateString() due_date!: string;
+ @IsStrictIsoDate() due_date!: string;
 }
 export class RecordCashPaymentDto {
  @IsUUID() invoice_id!: string;

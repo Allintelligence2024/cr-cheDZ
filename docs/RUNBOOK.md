@@ -18,7 +18,8 @@
    node scripts/migrate.mjs --check   # drift detection (dev == prod)
    ```
 2. Build des images : `docker build` (workflow `.github/workflows/docker.yml`,
-   images `ghcr.io/creche-saas/{api,worker,admin-web}`).
+   images `ghcr.io/allintelligence2024/creche-saas-{api,worker,admin-web,support-console}`,
+   tags `latest` + `sha-<sha>` — épingler `VERSION=sha-<sha>` en production).
 3. Déploiement des conteneurs (API + worker d'abord, puis admin-web).
 4. Vérification : `GET /api/v1/health` → `{"status":"ok"}` ; `GET /api/v1/metrics`
    → contient `creche_jobs_pending`.

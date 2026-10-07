@@ -48,28 +48,33 @@ for (const mod of readdirSync(MODULES)) {
       }
     }
     for (const cls of controllers) {
-      // 3.11.2 : les décorateurs au NIVEAU CLASSE s'appliquent à toutes les
-      // routes (NestJS les fusionne avec ceux de la méthode). Les ignorer
-      // produisait 49 faux positifs — des contrôleurs entiers protégés par
-      // un @Roles(@Controller) étaient listés « sans garde ».
+      // Garde de CLASSE (@Roles/@Public posés sur le contrôleur) : RolesGuard
+      // lit `handler ?? class` — une route sans décorateur de méthode hérite
+      // donc de la garde de classe (`organizations`, `enrollment`,
+      // `attestations`). Ne compter que les méthodes de méthode classait ces
+      // routes en « NONE » à tort (faux positifs de l'audit C1).
       const classDecorators = (ts.getDecorators(cls) ?? []).map((d) => decoratorName(d));
-      const classGuard = classDecorators.some((n) => GUARDS.has(n));
-      const classIsPublic = classDecorators.includes('Public');
+      const classGuard = classDecorators.includes('Public')
+        ? 'PUBLIC'
+        : classDecorators.includes('Roles')
+          ? 'ROLES'
+          : null;
       for (const member of cls.members) {
         if (!ts.isMethodDeclaration(member) || !member.name) continue;
         const decorators = (ts.getDecorators(member) ?? []).map((d) => decoratorName(d));
         const http = decorators.find((n) => HTTP_METHODS.has(n));
         if (!http) continue;
-        const hasGuard = decorators.some((n) => GUARDS.has(n)) || classGuard;
-        // Une @Public() de méthode l'emporte sur un @Roles() de classe
-        // (ordre NestJS : le décorateur le plus proche de la méthode gagne).
-        const isPublic = decorators.includes('Public') || (!decorators.includes('Roles') && classIsPublic);
+        const methodGuard = decorators.includes('Public')
+          ? 'PUBLIC'
+          : decorators.includes('Roles')
+            ? 'ROLES'
+            : null;
         const routeArg = (ts.getDecorators(member) ?? [])
           .map((d) => decoratorArgs(d))
           .find(({ name }) => HTTP_METHODS.has(name))?.arg;
         const route = routeArg ? `@${http}('${routeArg}')` : `@${http}()`;
         rows.push({
-          guard: hasGuard ? (isPublic ? 'PUBLIC' : 'ROLES') : 'NONE',
+          guard: methodGuard ?? classGuard ?? 'NONE',
           file: `${mod}/${f}`,
           route,
           method: member.name.text,

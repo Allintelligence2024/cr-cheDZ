@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { RateLimit } from '../../shared/decorators/rate-limit.decorator';
 import { DevicesService } from './devices.service';
@@ -33,7 +33,7 @@ export class DevicesController {
   @Post(':id/revoke')
   @HttpCode(HttpStatus.NO_CONTENT)
   async revoke(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: CurrentUserPayload,
   ): Promise<void> {
     await this.devicesService.revoke(id, user.sub);

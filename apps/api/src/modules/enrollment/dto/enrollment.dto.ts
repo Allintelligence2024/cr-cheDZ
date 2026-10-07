@@ -1,14 +1,20 @@
-import { IsBoolean, IsDateString, IsEmail, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, MaxLength, Min } from 'class-validator';
+import {
+  IsBoolean, IsEmail, IsIn,
+  IsInt, IsOptional, IsString,
+  IsUUID, Matches, MaxLength,
+  Min,
+} from 'class-validator';
+import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
 
 export class CreateEnrollmentRequestDto {
   @IsUUID() site_id!: string;
   @IsString() @MaxLength(80) child_first_name!: string;
   @IsString() @MaxLength(80) child_last_name!: string;
-  @IsDateString() child_date_of_birth!: string;
+  @IsStrictIsoDate() child_date_of_birth!: string;
   @IsString() @MaxLength(120) guardian_name!: string;
   @Matches(/^\+?[0-9]{8,15}$/) guardian_phone!: string;
   @IsOptional() @IsEmail() guardian_email?: string;
-  @IsDateString() desired_start_date!: string;
+  @IsStrictIsoDate() desired_start_date!: string;
   @IsOptional() @IsIn(['full_time', 'half_time', 'daily', 'custom']) schedule_type?: string;
   @IsOptional() @IsBoolean() has_sibling?: boolean;
   @IsOptional() @IsBoolean() is_staff_child?: boolean;

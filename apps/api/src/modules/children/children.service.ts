@@ -54,7 +54,7 @@ export class ChildrenService {
       const where = conditions.join(' AND ');
 
       const totalRes = await client.query(
-        `SELECT COUNT(*)::int AS total FROM children c WHERE c.organization_id = $1 AND ${where.replace(/c\./g, 'c.')}`,
+        `SELECT COUNT(*)::int AS total FROM children c WHERE c.organization_id = $1 AND ${where}`,
         params,
       );
       params.push(limit, offset);

@@ -1,10 +1,11 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Public } from '../../shared/decorators/public.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
 import { AppError } from '../../shared/errors';
+import { isStrictIsoDate } from '../../shared/validation/iso-date';
 import { sendStorageObject } from '../../shared/storage/object-stream';
 import {
   AllocatePaymentDto, CloseCashRegisterDto, ContractIdParam, CreateContractDto,
@@ -40,7 +41,7 @@ export class BillingController {
 
   @Get('contracts')
   @Roles('director', 'accountant')
-  contracts(@Query('child_id') childId?: string) {
+  contracts(@Query('child_id', new ParseUUIDPipe({ optional: true })) childId?: string) {
     return this.billing.listContracts(childId);
   }
 
@@ -61,12 +62,13 @@ export class BillingController {
   @Get('invoices')
   @Roles('director', 'accountant')
   invoices(
-    @Query('child_id') childId?: string,
+    @Query('child_id', new ParseUUIDPipe({ optional: true })) childId?: string,
     @Query('status') status?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     // 3.2.4 : status/page/limit ne sont plus ignorés (cf. billing.service).
+    // PR #53 : child_id validé (UUID) — 22P02 → 400 au lieu de 500.
     return this.billing.listInvoices(
       childId,
       status,
@@ -144,7 +146,7 @@ export class BillingController {
 
   @Get('payments')
   @Roles('director', 'accountant')
-  payments(@Query('child_id') childId?: string) {
+  payments(@Query('child_id', new ParseUUIDPipe({ optional: true })) childId?: string) {
     return this.billing.listPayments(childId);
   }
 
@@ -154,7 +156,9 @@ export class BillingController {
   onlineReconciliation(@Query('stale_minutes') stale?: string, @Query('from') from?: string, @Query('to') to?: string) {
     const minutes = stale ? Number(stale) : 30;
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) throw new AppError('VALIDATION_ERROR', 'stale_minutes : entier entre 1 et 10080', 'stale_minutes : عدد صحيح بين 1 و 10080', 400);
-    if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to && !/^\d{4}-\d{2}-\d{2}$/.test(to))) throw new AppError('VALIDATION_ERROR', 'from/to : format YYYY-MM-DD', 'from/to : الصيغة YYYY-MM-DD', 400);
+    // `isStrictIsoDate` (et non une simple regex) : « 2026-02-31 » passait la
+    // regex puis faisait échouer le cast PostgreSQL `::date` en 500.
+    if ((from && !isStrictIsoDate(from)) || (to && !isStrictIsoDate(to))) throw new AppError('VALIDATION_ERROR', 'from/to : date ISO valide (AAAA-MM-JJ)', 'from/to : تاريخ ISO صالح (AAAA-MM-JJ)', 400);
     return this.billing.onlineReconciliation(minutes, from, to);
   }
 
@@ -186,7 +190,7 @@ export class BillingController {
 
   @Get('cash-registers')
   @Roles('director', 'accountant')
-  cashRegisters(@Query('site_id') siteId?: string) {
+  cashRegisters(@Query('site_id', new ParseUUIDPipe({ optional: true })) siteId?: string) {
     return this.billing.listCashRegisters(siteId);
   }
 

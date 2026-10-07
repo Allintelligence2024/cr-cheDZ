@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -178,8 +179,8 @@ export class ChildrenController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(...WRITE_ROLES)
   async unlinkGuardian(
-    @Param('id') id: string,
-    @Param('gid') gid: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('gid', ParseUUIDPipe) gid: string,
     @CurrentUser() user: CurrentUserPayload,
   ): Promise<void> {
     await this.guardiansService.unlinkGuardian(id, gid, user.sub);
@@ -207,8 +208,8 @@ export class ChildrenController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(...WRITE_ROLES)
   async deleteEmergencyContact(
-    @Param('id') id: string,
-    @Param('cid') cid: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('cid', ParseUUIDPipe) cid: string,
     @CurrentUser() user: CurrentUserPayload,
   ): Promise<void> {
     await this.guardiansService.deleteEmergencyContact(id, cid, user.sub);
@@ -235,8 +236,8 @@ export class ChildrenController {
   @Patch(':id/pickups/:pid')
   @Roles(...WRITE_ROLES)
   async updatePickup(
-    @Param('id') id: string,
-    @Param('pid') pid: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('pid', ParseUUIDPipe) pid: string,
     @Body() dto: UpdatePickupDto,
     @CurrentUser() user: CurrentUserPayload,
   ): Promise<Record<string, unknown>> {

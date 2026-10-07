@@ -3,7 +3,15 @@
 #
 # Prérequis :
 #   cp .env.prod.example .env && <remplir les secrets>
-#   VERSION=staging docker compose -f infrastructure/docker/docker-compose.prod.yml up -d
+#   docker compose -f infrastructure/docker/docker-compose.prod.yml up -d
+#
+# Images applicatives : publiées par .github/workflows/docker.yml sur
+#   ghcr.io/allintelligence2024/creche-saas-{api,worker,admin-web,support-console}
+# avec les tags `latest` et `sha-<sha>` (push sur main). `VERSION` DOIT être un
+# de ces tags (défaut : `latest`) — correctif audit 2026-10-02 : les références
+# pointaient vers `ghcr.io/creche-saas/*` (organisation inexistante) et un tag
+# `staging` jamais publié, donc `docker compose pull` échouait au déploiement.
+# Pour un déploiement reproductible, épingler le sha : VERSION=sha-<sha>.
 #
 # Toutes les variables sensibles viennent de l'environnement (.env) — jamais
 # codées en dur. Les migrations sont appliquées par le service « migrate ».
@@ -76,7 +84,7 @@ services:
 
   # Bootstrap reproductible, pas seulement à la création du volume PostgreSQL.
   bootstrap-roles:
-    image: ghcr.io/creche-saas/api:${VERSION}
+    image: ghcr.io/allintelligence2024/creche-saas-api:${VERSION:-latest}
     working_dir: /app
     volumes:
       - ../../scripts:/app/scripts:ro
@@ -93,7 +101,7 @@ services:
   migrate:
     # Même image versionnée que l'API : pg vient du npm ci du build.
     # Aucun npm install réseau/non reproductible au déploiement.
-    image: ghcr.io/creche-saas/api:${VERSION}
+    image: ghcr.io/allintelligence2024/creche-saas-api:${VERSION:-latest}
     working_dir: /app
     volumes:
       - ../../scripts:/app/scripts:ro
@@ -110,7 +118,7 @@ services:
         condition: service_completed_successfully
 
   api:
-    image: ghcr.io/creche-saas/api:${VERSION}
+    image: ghcr.io/allintelligence2024/creche-saas-api:${VERSION:-latest}
     environment:
       NODE_ENV: production
       APP_PORT: "3000"
@@ -171,7 +179,7 @@ services:
           memory: 512M
 
   worker:
-    image: ghcr.io/creche-saas/worker:${VERSION}
+    image: ghcr.io/allintelligence2024/creche-saas-worker:${VERSION:-latest}
     # Le worker termine son travail en 45 s max ; Docker laisse 60 s avant SIGKILL.
     stop_grace_period: 60s
     environment:
@@ -236,11 +244,11 @@ services:
           memory: 256M
 
   admin-web:
-    image: ghcr.io/creche-saas/admin-web:${VERSION}
+    image: ghcr.io/allintelligence2024/creche-saas-admin-web:${VERSION:-latest}
     restart: unless-stopped
 
   support-console:
-    image: ghcr.io/creche-saas/support-console:${VERSION}
+    image: ghcr.io/allintelligence2024/creche-saas-support-console:${VERSION:-latest}
     restart: unless-stopped
 
   prometheus:
@@ -271,7 +279,7 @@ services:
     restart: unless-stopped
 
   alert-relay:
-    image: ghcr.io/creche-saas/api:${VERSION}
+    image: ghcr.io/allintelligence2024/creche-saas-api:${VERSION:-latest}
     # Même UID que le lecteur du secret Alertmanager ; volume préinitialisé (runbook).
     user: "65534:65534"
     command: ['node', 'apps/api/operations/alert-relay.mjs']
@@ -328,33 +336,26 @@ services:
   backup:
     image: postgres:18-alpine
     environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD}
+      # URL complète plutôt que PGPASSWORD + champs séparés : le script audité
+      # scripts/backup.sh (set -euo pipefail) est LA référence — le drill de
+      # restauration (scripts/restore-drill.mjs) exerce le même chemin.
+      # Correctif audit 2026-10-02 : l'ancien entrypoint inline
+      # `pg_dump | gzip | gpg` n'avait ni `set -e` ni `pipefail` — le statut de
+      # la pipeline était celui de gpg, et `echo « écrit »` s'exécutait même
+      # quand pg_dump échouait : un conteneur « OK » avec des sauvegardes
+      # absentes/partielles.
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB requis}
+      BACKUP_DIR: /backups
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE requis (GPG symétrique)}
-      POSTGRES_USER: postgres
-      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB requis}
       KEEP_DAYS: "7"
     volumes:
       - backup_data:/backups
+      - ../../scripts:/app/scripts:ro
     entrypoint: |
       /bin/sh -c "
-      apk add --no-cache gnupg >/dev/null 2>&1
-      FAILS=0
+      apk add --no-cache gnupg bash >/dev/null 2>&1 || exit 1
       while true; do
-        STAMP=\$$(date +%F)
-        if pg_dump -h postgres -U \$$POSTGRES_USER \$$POSTGRES_DB 2>/tmp/pgdump.err \
-          | gzip -9 \
-          | gpg --batch --yes --symmetric --cipher-algo AES256 \
-                --passphrase \$$BACKUP_PASSPHRASE \
-                -o /backups/creche-\$$STAMP.sql.gz.gpg; then
-          FAILS=0
-          echo \"[backup] \$$STAMP écrit\"
-          find /backups -name 'creche-*.sql.gz.gpg' -mtime +\$$KEEP_DAYS -delete
-        else
-          FAILS=\$$((FAILS + 1))
-          rm -f /backups/creche-\$$STAMP.sql.gz.gpg
-          echo \"[backup] \$$STAMP ÉCHEC (\$$FAILS tentatives consécutives): \$$(cat /tmp/pgdump.err | tail -3 | tr '\n' ' ')\"
-          exit 1
-        fi
+        bash /app/scripts/backup.sh || exit 1
         sleep 86400
       done
       "

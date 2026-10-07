@@ -1,6 +1,14 @@
 # ============================================================================
 # docker-compose.staging.yml — Environnement de staging
 # Données ANONYMISÉES uniquement (jamais de données réelles).
+#
+# Images applicatives : mêmes références GHCR que la production
+# (ghcr.io/allintelligence2024/creche-saas-{api,worker}, tags `latest` /
+# `sha-<sha>` publiés par .github/workflows/docker.yml). Correctif audit
+# 2026-10-02 : le tag `:staging` n'était publié par AUCUN workflow — la
+# qualification H1 ne passait que parce que scripts/test-staging-stack.mjs
+# construisait ces tags localement ; un vrai déploiement staging ne pouvait
+# pas tirer les images. `VERSION` surcharge le tag (défaut : `latest`).
 # ============================================================================
 version: '3.9'
 
@@ -42,7 +50,7 @@ services:
 
   # Bootstrap reproductible, pas seulement à la création du volume PostgreSQL.
   bootstrap-roles:
-    image: ghcr.io/creche-saas/api:staging
+    image: ghcr.io/allintelligence2024/creche-saas-api:${VERSION:-latest}
     working_dir: /app
     volumes:
       - ../../scripts:/app/scripts:ro
@@ -59,7 +67,7 @@ services:
   migrate:
     # Même image versionnée que l'API : pg vient du npm ci du build.
     # Aucun npm install réseau/non reproductible au déploiement.
-    image: ghcr.io/creche-saas/api:staging
+    image: ghcr.io/allintelligence2024/creche-saas-api:${VERSION:-latest}
     working_dir: /app
     volumes:
       - ../../scripts:/app/scripts:ro
@@ -76,7 +84,7 @@ services:
         condition: service_completed_successfully
 
   api:
-    image: ghcr.io/creche-saas/api:staging
+    image: ghcr.io/allintelligence2024/creche-saas-api:${VERSION:-latest}
     environment:
       NODE_ENV: staging
       # F2 : le port est explicite — la sonde du conteneur interroge ce même port
@@ -109,7 +117,7 @@ services:
         condition: service_completed_successfully
 
   worker:
-    image: ghcr.io/creche-saas/worker:staging
+    image: ghcr.io/allintelligence2024/creche-saas-worker:${VERSION:-latest}
     # Le worker termine son travail en 45 s max ; Docker laisse 60 s avant SIGKILL.
     stop_grace_period: 60s
     environment:
