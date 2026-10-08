@@ -47,7 +47,13 @@ test('director : recherche un enfant sorti, confirme l’action et voit son rés
         site_id: site.rows[0].site_id,
         first_name_fr: searchName,
         last_name_fr: 'Test',
-        date_of_birth: '2021-01-10',
+        // Migration remédiation : AGE_CRECHE_OUT_OF_RANGE (409) bloque à la
+        // saisie les enfants hors 3 mois–3 ans (décret 19-253). Un enfant
+        // « sorti » a par construction DEPASSÉ l'âge crèche, mais le contrôle
+        // s'applique aussi à la création synthétique de l'e2e — on prend donc
+        // une date dans la tranche (un enfant de ~2,5 ans, parti par déménagement)
+        // pour que le dossier de test passe la garde et reste anonymisable.
+        date_of_birth: '2024-03-15',
         status: 'departed',
       },
     });
