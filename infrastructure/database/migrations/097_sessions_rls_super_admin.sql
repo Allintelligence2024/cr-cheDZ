@@ -28,10 +28,9 @@
 
 DROP POLICY IF EXISTS sessions_super_admin_no_org ON sessions;
 
--- Doit être créée AVANT sessions_tenant pour l'ordre d'évaluation et la
--- documentation ; PERMISSIVE donc l'ordre n'affecte pas le résultat (OR).
+-- Les politiques PERMISSIVE sont le défaut (PostgreSQL 15+) ; pas de mot-clé
+-- `AS` (syntax error). Elles s'OR-ifient avec sessions_tenant (restrictive).
 CREATE POLICY sessions_super_admin_no_org ON sessions
   FOR ALL
-  AS PERMISSIVE
   USING (organization_id IS NULL)
   WITH CHECK (organization_id IS NULL);
