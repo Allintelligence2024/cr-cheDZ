@@ -52,11 +52,14 @@ export class SessionsService {
     // amont, pas encore du token), puis on RESET pour ne pas fuiter le tenant
     // dans la pool partagée. Sur le refresh, l'appelant fournit un client dont
     // app.tenant_id est déjà posé à la même valeur → idempotent.
+    // NOTE : is_local=false (SESSION, pas TRANSACTION) — le login n'ouvre pas
+    // de BEGIN explicite, donc chaque statement est sa propre transaction
+    // implicite et un set_local serait ÉPHÉMÈRE : abandonné avant l'INSERT.
+    // RESET app.tenant_id ci-dessous évite la fuite du tenant dans la pool.
     // NOTE : un super-admin sans organization (organization_id NULL) reste
-    // bloqué par sessions_tenant car NULL = NULL est NULL en SQL — à traiter
-    // par une politique permissive dédiée si la connexion super-admin est
-    // nécessaire (hors scope CI actuel).
-    await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+    // bloqué par sessions_tenant car NULL = NULL est NULL en SQL — couvert par
+    // la politique permissive 097 (sessions_super_admin_no_org).
+    await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [
       params.organizationId ?? null,
     ]);
     const result = await client.query(
@@ -75,7 +78,18 @@ export class SessionsService {
       ],
     );
     // Ne pas fuiter app.tenant_id dans la pool partagée (login hors transaction).
-    await client.query(`RESET app.tenant_id`).catch(() => undefined);
+    // RESTORE (pas RESET brut) : sur le chemin refresh l'appelant est DANS une
+    // transaction qui peut encore écrire sous RLS après createSession — on
+    // rétablit donc la valeur pré-existante plutôt que de vider le setting.
+    // current_setting(..., true) → '' si absent, et set_config('',''…) via
+    // NULLIF ci-dessous restore l'absence de setting sans erreur.
+    const prev = (await client.query(`SELECT current_setting('app.tenant_id', true) AS v`)).rows[0].v as string | null;
+    const hadSetting = prev !== null && prev !== '';
+    if (hadSetting) {
+      await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [prev]);
+    } else {
+      await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [null]);
+    }
 
     return { sessionId: result.rows[0].id, refreshToken };
   }
