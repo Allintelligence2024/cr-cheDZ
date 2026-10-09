@@ -109,12 +109,38 @@ try {
     [org.rows[0].id, educator.rows[0].id],
   );
 
+  // DPO e2e (remédiation 2.1/2.2 + fix e2e 2026-10-08) : les endpoints
+  // privacy sont protégés par @Permissions('privacy:manage'), que le seed
+  // 003_attribue EXPLICITEMENT au dpo et non au director (séparation loi
+  // 25-11). privacy-anonymization.spec.ts fait le parcours anonymisation
+  // avec ce compte. On crée un utilisateur dédié plutôt qu'un
+  // role_assignments sur le director existant : le JWT porte les rôles
+  // effectifs (auth_user_roles lit role_assignments), mais le frontend
+  // routeAccess.currentRole() lit memberships[] (rôle principal) — un
+  // director+nouveau-rôle-dpo afficherait l'onglet Anonymisation via
+  // canAnonymizeChild, mais un utilisateur dont le rôle PRINCIPAL est dpo
+  // est le reflet exact de la séparation réglementaire voulue.
+  const dpoEmail = 'e2e.dpo@test.dz';
+  const dpoUser = await client.query(
+    `INSERT INTO users (email, first_name, last_name, password_hash, status)
+     VALUES ($1, 'E2E', 'Dpo', $2, 'active')
+     ON CONFLICT (email) WHERE deleted_at IS NULL
+     DO UPDATE SET email = EXCLUDED.email RETURNING id`,
+    [dpoEmail, await bcrypt.hash('Password123!', 12)],
+  );
+  const dpoRole = await client.query(`SELECT id FROM roles WHERE slug = 'dpo'`);
+  await client.query(
+    `INSERT INTO memberships (organization_id, user_id, role_id, is_active, joined_at)
+     VALUES ($1, $2, $3, true, NOW()) ON CONFLICT DO NOTHING`,
+    [org.rows[0].id, dpoUser.rows[0].id, dpoRole.rows[0].id],
+  );
+
   const staffCount = (await client.query(
     `SELECT count(*)::int AS n FROM staff_profiles WHERE organization_id = $1 AND base_salary > 0`, [org.rows[0].id],
   )).rows[0].n;
   console.log(
     fresh ? 'Compte e2e créé :' : 'Compte e2e complété :',
-    email, `(site, salle, enfant, contrat, ${staffCount} employé(s) rémunéré(s))`,
+    email, `(site, salle, enfant, contrat, ${staffCount} employé(s) rémunéré(s), dpo ${dpoEmail})`,
   );
   if (staffCount === 0) {
     console.error('✗ aucun employé rémunéré : /payroll/generate répondra 422 PAYROLL_NO_STAFF');

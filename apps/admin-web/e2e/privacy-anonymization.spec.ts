@@ -6,8 +6,15 @@ import pg from 'pg';
  * UI E2E lot 5 — le parcours director est exercé dans Chromium contre l'API
  * et PostgreSQL du job CI. L'enfant et son média sont synthétiques, uniques à
  * l'essai ; l'endpoint réel doit remonter la clé dont la purge S3 échoue.
+ *
+ * Compte : le rôle directeur est REFUSÉ par @Permissions('privacy:manage')
+ * (remédiation 2.1/2.2 — séparation DPO de la loi 25-11 : le seed 003
+ * attribue privacy:manage au dpo, jamais au director). On utilise donc le
+ * compte DPO créé par seed-e2e.mjs. La recherche d'enfant et l'anonymisation
+ * sont des actions privacy:manage ; les autres parcours e2e (director-flow)
+ * utilisent le compte director pour les actions métier.
  */
-const EMAIL = 'e2e.director@test.dz';
+const EMAIL = 'e2e.dpo@test.dz';
 const PASSWORD = 'Password123!';
 
 async function loginUi(page: import('@playwright/test').Page): Promise<void> {
@@ -29,7 +36,7 @@ test('director : recherche un enfant sorti, confirme l’action et voit son rés
   await db.connect();
   try {
     const site = await db.query(
-      `SELECT s.id AS site_id, s.organization_id, u.id AS director_id
+      `SELECT s.id AS site_id, s.organization_id, u.id AS actor_id
          FROM sites s
          JOIN organizations o ON o.id = s.organization_id
          JOIN users u ON u.email = $2
@@ -63,7 +70,7 @@ test('director : recherche un enfant sorti, confirme l’action et voit son rés
     await db.query(
       `INSERT INTO media_assets (organization_id, child_id, uploaded_by, media_type, storage_key, mime_type)
        VALUES ($1, $2, $3, 'photo', $4, 'image/jpeg')`,
-      [site.rows[0].organization_id, childId, site.rows[0].director_id, storageKey],
+      [site.rows[0].organization_id, childId, site.rows[0].actor_id, storageKey],
     );
 
     await loginUi(page);
