@@ -135,7 +135,7 @@ test.describe('billing — facture → envoi → encaissement → retard', () =>
     // base resetée : un doublon n'est pas « absorbé » par un catch, il doit
     // faire rougir le test plutôt que masquer une contamination de fixture.
     const listRes = await request.get('/api/v1/billing/invoices', {
-      headers: { authorization: *** ${token}` },
+      headers: { authorization: `Bearer ${token}` },
     });
     expect(listRes.ok()).toBeTruthy();
     // 3.2.4 : la liste est une RÉPONSE PAGINÉE { items, total, page, limit }.
