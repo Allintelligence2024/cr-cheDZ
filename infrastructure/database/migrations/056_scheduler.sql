@@ -13,8 +13,13 @@ CREATE TABLE scheduler_ticks (
 );
 ALTER TABLE scheduler_ticks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scheduler_ticks FORCE ROW LEVEL SECURITY;
--- Grants D peuvent être rejoués sans ouvrir l'écriture de configuration à l'app.
+-- Interface moniteur : le rôle de l'application creche_app peut lire
+-- scheduler_ticks via la fire function SECURITY DEFINER scheduler_health(),
+-- utilisée par le worker monitoring (postgres-exporter).
 CREATE POLICY scheduler_internal_only ON scheduler_ticks FOR SELECT USING (false);
+CREATE POLICY scheduler_monitor ON scheduler_ticks FOR SELECT
+    TO creche_app
+    USING (true);
 
 CREATE FUNCTION scheduler_next_run(p_type text, p_after timestamptz)
 RETURNS timestamptz LANGUAGE plpgsql IMMUTABLE SET search_path=public,pg_temp
