@@ -47,6 +47,12 @@ const run=(name,image,args,extra=[])=>{
   execFileSync('docker',['run','-d','--name',n,'--network','host','--user',`${process.getuid()}:${process.getgid()}`,
     '-v',`${dir}:/etc/e2:ro`,...extra,image,...args],{stdio:['ignore','pipe','pipe']});
 };
+// GitHub runner : les pulls d'images consomment le budget `until` (cold start
+// Prometheus ~60-80s). On pré-tire hors chrono pour que les 90s ne mesurent
+// que le démarrage des conteneurs, pas le téléchargement.
+for(const image of ['prometheuscommunity/postgres-exporter:v0.15.0','prom/alertmanager:v0.27.0','prom/prometheus:v2.53.0']){
+  execFileSync('docker',['pull',image],{stdio:['ignore','pipe','pipe']});
+}
 async function until(check,label,ms=90000){const deadline=Date.now()+ms;while(Date.now()<deadline){try{if(await check())return;}catch{/* démarrage réseau */}await delay(300);}throw new Error(`Timeout: ${label}`);}
 async function journal(){return (await readFile(join(f.dir,'alerts.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);}
 try {
