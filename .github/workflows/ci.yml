@@ -89,6 +89,19 @@ jobs:
       # + 098 (sync_resync_required cursor 0) + 099 (audit/data_access insert permissive) → 98
       # migrations (001 → 099,
       # 083 fut fusionné dans le seed 003 — le compte de fichiers est donc 98, pas 099).
+      - name: Générer secrets de bootstrap
+        id: gen-passwords
+        run: |
+          echo "app_password=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")" >> "$GITHUB_OUTPUT"
+          echo "migrator_password=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")" >> "$GITHUB_OUTPUT"
+      - name: Bootstrap des rôles (Phase D)
+        run: |
+          node scripts/bootstrap-roles.mjs
+        env:
+          BOOTSTRAP_DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_test
+          APP_DATABASE_PASSWORD: ${{ steps.gen-passwords.outputs.app_password }}
+          MIGRATOR_DATABASE_PASSWORD: ${{ steps.gen-passwords.outputs.migrator_password }}
+
       - name: Migrations (reset + status 001→099, 98 fichiers)
         run: |
           node scripts/migrate.mjs --reset
