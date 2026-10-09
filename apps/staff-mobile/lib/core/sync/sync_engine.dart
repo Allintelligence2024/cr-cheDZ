@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 import '../network/sync_client.dart';
@@ -125,9 +126,17 @@ class SyncEngine {
       _ensureRunning(); _backoffSeconds = 2; _setStatus(SyncStatus.idle);
     } on _Stopped { return;
     } on _DeviceRevoked { _block(SyncStatus.deviceRevoked);
-    } on FormatException { _block(SyncStatus.contractError);
-    } on TypeError { _block(SyncStatus.contractError);
-    } on StateError { _block(SyncStatus.contractError);
+    } on FormatException catch (error, stack) {
+      // Diagnostic F4 (2026-10-09) : ce bloc avalait la cause exacte et ne
+      // laissait que contractError. On la journalise avant de bloquer.
+      debugPrint('sync contractError (FormatException): ${error.message}\n$stack');
+      _block(SyncStatus.contractError);
+    } on TypeError catch (error, stack) {
+      debugPrint('sync contractError (TypeError): $error\n$stack');
+      _block(SyncStatus.contractError);
+    } on StateError catch (error, stack) {
+      debugPrint('sync contractError (StateError): ${error.message}\n$stack');
+      _block(SyncStatus.contractError);
     } on DioException catch (error) {
       if (_stopped) return;
       final code = error.response?.statusCode;
