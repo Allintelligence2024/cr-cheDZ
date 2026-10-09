@@ -71,8 +71,38 @@ jobs:
         run: npm run test:unit --workspace @creche/admin-web
       # Nom corrigé (lot 1) : 75 migrations sur disque (001 → 075), pas 063.
       # Complété au lot L4, puis 077 au lot 1 de la remédiation du 2026-09-27
-      # (indexation tenant) : 77 migrations (001 → 077).
-      - name: Migrations (reset + status 001→077)
+      # (indexation tenant) : 77 migrations (001 → 077). Phases 1.2/1.3/1.4/1.6
+      # de la remédiation 2026-10-03 : 082 (webhook tenant guard), 078
+      # (parent lookup tenant guard), 080/081 (notif queue fencing + lease),
+      # 079 (unicité administration médicament) → 82 migrations (001 → 082).
+      # Phase 2 de la remédiation 2026-10-04 (obligations réglementaires) :
+      # 084 (auth_user_permissions / PermissionsGuard), 085 (trace ANPDP
+      # auteur), 086 (idempotence deadlines loi 25-11) → 85 migrations
+      # (001 → 085, la 083 a été fusionnée dans le seed 003).
+      # Phase 3 de la remédiation 2026-10-04 (10 tâches P2 intégrité) :
+      # 087 (RLS safe tenant helper), 088 (RLS tables manquantes),
+      # 089 (compliance_deadlines_overdue SECURITY DEFINER),
+      # 090 (auth_device_validate), 091 (payroll_lines immuable),
+      # 092 (sync_retention_purge planifiée), 093 (sync_resync_required),
+      # 094 (scheduler advisory lock) + 095 (users unique partiel) + 096 (payments
+      # external_reference tenant-scoped) + 097 (sessions RLS super-admin)
+      # + 098 (sync_resync_required cursor 0) + 099 (audit/data_access insert permissive) → 98
+      # migrations (001 → 099,
+      # 083 fut fusionné dans le seed 003 — le compte de fichiers est donc 98, pas 099).
+      - name: Générer secrets de bootstrap
+        id: gen-passwords
+        run: |
+          echo "app_password=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")" >> "$GITHUB_OUTPUT"
+          echo "migrator_password=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")" >> "$GITHUB_OUTPUT"
+      - name: Bootstrap des rôles (Phase D)
+        run: |
+          node scripts/bootstrap-roles.mjs
+        env:
+          BOOTSTRAP_DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_test
+          APP_DATABASE_PASSWORD: ${{ steps.gen-passwords.outputs.app_password }}
+          MIGRATOR_DATABASE_PASSWORD: ${{ steps.gen-passwords.outputs.migrator_password }}
+
+      - name: Migrations (reset + status 001→099, 98 fichiers)
         run: |
           node scripts/migrate.mjs --reset
           node scripts/migrate.mjs
@@ -108,6 +138,25 @@ jobs:
       # et la CI s'arrêterait de tourner sans que le diff le montre)
       - name: "Suites d'isolation (garde RLS anti-bypass + 76 suites — isolation, phase3 → phase80)"
         run: bash scripts/run-isolation-suites.sh
+      # Phase 0 (2026-10-03) : check-preview-roles était un GARDIEN ORPHELIN —
+      # écrit, vert en local (5 rôles démo + rejets + refresh + SPA), mais
+      # appelé par AUCUN workflow (check-guards-wired exit 1 → job quality
+      # rouge). C'est un test live : il lance l'API + le proxy Vite, connecte
+      # chaque compte démo et vérifie rôle + rotation cookie. Ce job a déjà la
+      # base, les seeds et le build : il ne manque que les deux serveurs.
+      - name: Aperçu multi-rôles (login → /me par rôle, refresh, SPA)
+        run: |
+          npm run preview:api &  API_PID=$!
+          npm run preview:web &  WEB_PID=$!
+          # attendre que le proxy Vite réponde (timeout 60 s)
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:4000/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          node scripts/check-preview-roles.mjs
+          RV=$?
+          kill $API_PID $WEB_PID 2>/dev/null
+          exit $RV
 
   backup-drill:
     # P0-2 (audit continu 2026-09) : « une sauvegarde non restaurée n'est
@@ -198,7 +247,7 @@ jobs:
         run: node scripts/check-env-example.mjs
       - name: Garde manifest Android (INTERNET en release)
         run: node scripts/check-android-manifest.mjs
-      - name: Inventaire des gardes de route (204 routes × @Roles/@Public)
+      - name: Inventaire des gardes de route (205 routes × @Roles/@Public)
         run: node scripts/inventory-route-guards.mjs
       - name: Sanity check des scripts de charge (seuils p95)
         run: node scripts/verify-load-tests.mjs
@@ -252,6 +301,10 @@ jobs:
       # joués par le job `flutter` (aucune base, aucun Docker ici).
       - name: Contrat session parent (refresh single-flight + erreurs)
         run: node --test tests/tenant-isolation/parent-session-contract.test.mjs
+      # 3.5.2 : le contrat sync doit garder resync_required (booléen requis) —
+      # un serveur qui l'omet brise silencieusement la resync client.
+      - name: Contrat sync — resync_required (3.5.2)
+        run: node --test tests/tenant-isolation/sync-resync-contract.spec.mjs
       # Design system : contraste WCAG AA des deux thèmes + parité des
       # couleurs Sérénité entre theme.css (web) et serenite_theme.dart
       # (les 2 apps Flutter, qui ne peuvent pas importer le CSS).

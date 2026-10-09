@@ -183,9 +183,14 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ALLOW_DEBUG_SIGNING: ${{ steps.keystore.outputs.signed == 'false' && 'true' || 'false' }}
+          # M7 — Sentry : DSN jamais dans le repo, uniquement en secret CI.
+          # Secret absent → --dart-define vide → Sentry non initialisé (build
+          # de vérification). Présent → erreurs remontées au projet `director-mobile`.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
         run: |
           set -o pipefail
-          if ! flutter build apk --release 2>&1 | tee director-build.log; then
+          if ! flutter build apk --release --dart-define=SENTRY_DSN="$SENTRY_DSN" --dart-define=SENTRY_ENVIRONMENT="$SENTRY_ENVIRONMENT" 2>&1 | tee director-build.log; then
             echo "## director-mobile — échec du build" >> "$GITHUB_STEP_SUMMARY"
             echo '```' >> "$GITHUB_STEP_SUMMARY"; grep -aE "FAILURE|What went wrong|rror|Exception|P1-2" -A4 director-build.log | head -80 >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
             grep -aE "FAILURE|What went wrong|rror:|Exception|P1-2" -A2 director-build.log | grep -av '^--$' | head -12 | while IFS= read -r l; do echo "::error title=director-mobile build::${l:0:400}"; done
@@ -198,10 +203,13 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
         run: |
           (cd apps/staff-mobile && flutter build appbundle --release)
           (cd apps/parent-mobile && flutter build appbundle --release)
-          (cd apps/director-mobile && flutter build appbundle --release)
+          # M7 — le bundle publiable embarque aussi le DSN (secret, jamais le repo).
+          (cd apps/director-mobile && flutter build appbundle --release --dart-define=SENTRY_DSN="$SENTRY_DSN" --dart-define=SENTRY_ENVIRONMENT="$SENTRY_ENVIRONMENT")
       - name: Vérification des artefacts (APK présents, signature attendue)
         run: |
           set -e

@@ -41,7 +41,7 @@
     "check:worker-monitoring": "node scripts/check-worker-monitoring.mjs",
     "check:env-example": "node scripts/check-env-example.mjs",
     "preview:api": "node scripts/dev-preview-api.mjs",
-    "preview:web": "API_PROXY_TARGET=http://127.0.0.1:3100 npm run dev --workspace @creche/admin-web"
+    "preview:web": "API_PROXY_TARGET=http://127.0.0.1:3100 VITE_PREVIEW_DEMO=1 npm run dev --workspace @creche/admin-web"
   },
   "engines": {
     "node": ">=20"
@@ -65,12 +65,14 @@
   },
   "overrides": {
     "lodash": "4.18.1",
+    "proxy-addr": "2.0.8",
     "@nestjs/platform-express": {
       "body-parser": "1.20.8",
       "multer": "2.4.0"
     },
     "express": {
-      "body-parser": "1.20.8"
+      "body-parser": "1.20.8",
+      "proxy-addr": "2.0.8"
     },
     "uuid": "^11.1.1"
   }

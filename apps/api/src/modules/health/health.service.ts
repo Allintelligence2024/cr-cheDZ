@@ -3,6 +3,7 @@ import { TenantContextService } from '../../shared/database/tenant-context.servi
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
 import { AuditService } from '../privacy/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateAllergyDto,
   CreateMedicationAuthorizationDto,
@@ -30,6 +31,7 @@ export class HealthService {
   constructor(
     private readonly tenantContext: TenantContextService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── Lecture du dossier (journalisée) ─────────────────────────────────────
@@ -243,13 +245,35 @@ export class HealthService {
       if (day < fmt(auth.start_date) || (auth.end_date && day > fmt(auth.end_date))) {
         throw new AppError('MEDICATION_OUTSIDE_AUTH', 'Administration hors de la période autorisée', 'الإعطاء خارج الفترة المصرح بها', 422);
       }
+      // P0 (phase 1.6) — une seule administration par (autorisation, jour).
+      // L'index unique uq_medication_admin_per_day (migration 079) verrouille
+      // la double saisie (double device, HTTP + sync offline, retry) au niveau
+      // base ; on renvoie un 409 métier clair plutôt qu'une 500 SQL.
       const r = await client.query(
         `INSERT INTO medication_administrations (organization_id, authorization_id, child_id,
            administered_at, administered_by, dose_given, observations)
          VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (authorization_id, ((administered_at AT TIME ZONE 'UTC')::date))
+         DO NOTHING
          RETURNING id, administered_at, dose_given, confirmed_by, parent_notified`,
         [tenantId, dto.authorization_id, childId, dto.administered_at, actorId, dto.dose_given, dto.observations ?? null],
       );
+      if (r.rows.length === 0) {
+        throw new AppError(
+          'MEDICATION_ALREADY_ADMINISTERED',
+          'Ce médicament a déjà été administré à cet enfant pour cette journée',
+          'تم إعطاء هذا الدواء لهذا الطفل بالفعل اليوم',
+          409,
+        );
+      }
+      // P0 (phase 1.7) — notification parent + flag parent_notified.
+      // Avant : la colonne NOT NULL DEFAULT false n'était JAMAIS écrite et
+      // aucun push n'était envoyé → le parent n'apprenait jamais qu'un
+      // médicament avait été administré à son enfant.
+      await this.notifications.notifyGuardiansOfMedication(
+        client, tenantId, childId, String(r.rows[0].id), auth.medication_name, dto.dose_given,
+      );
+      await client.query(`UPDATE medication_administrations SET parent_notified = true WHERE id = $1`, [r.rows[0].id]);
       return r.rows[0];
     });
   }

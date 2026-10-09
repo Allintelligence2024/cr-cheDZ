@@ -26,7 +26,7 @@ Future<void> showChangeRoomSheet(BuildContext context, DirectorApiClient api, St
             Text('Changer de salle', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: selectedRoomId,
+              initialValue: selectedRoomId,
               decoration: const InputDecoration(labelText: 'Nouvelle salle', prefixIcon: Icon(Icons.meeting_room)),
               items: rooms.map((r) {
                 final m = r as Map<String, dynamic>;

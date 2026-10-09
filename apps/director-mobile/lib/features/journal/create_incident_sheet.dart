@@ -6,7 +6,7 @@ import '../../theme/serenite_theme.dart';
 
 Future<void> showCreateIncidentSheet(BuildContext context, DirectorApiClient api, {String? childId, VoidCallback? onCreated}) async {
   final descCtrl = TextEditingController();
-  String severity = 'low';
+  String severity = 'minor';
   String? selectedChildId = childId;
   List<dynamic> children = [];
 
@@ -30,7 +30,7 @@ Future<void> showCreateIncidentSheet(BuildContext context, DirectorApiClient api
             const SizedBox(height: 12),
             if (childId == null)
               DropdownButtonFormField<String>(
-                value: selectedChildId,
+                initialValue: selectedChildId,
                 decoration: const InputDecoration(labelText: 'Enfant', prefixIcon: Icon(Icons.child_care)),
                 items: children.map((c) {
                   final m = c as Map<String, dynamic>;
@@ -40,15 +40,18 @@ Future<void> showCreateIncidentSheet(BuildContext context, DirectorApiClient api
               ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: severity,
+              initialValue: severity,
               decoration: const InputDecoration(labelText: 'Gravité', prefixIcon: Icon(Icons.warning)),
+              // P0 (phase 1.8) — la whitelist serveur est
+              // minor/moderate/serious (journal.dto.ts:26). L'UI envoyait
+              // low/medium/high/critical → 400, création d'incident
+              // entièrement non fonctionnelle.
               items: const [
-                DropdownMenuItem(value: 'low', child: Text('Faible')),
-                DropdownMenuItem(value: 'medium', child: Text('Moyenne')),
-                DropdownMenuItem(value: 'high', child: Text('Élevée')),
-                DropdownMenuItem(value: 'critical', child: Text('Critique')),
+                DropdownMenuItem(value: 'minor', child: Text('Mineur')),
+                DropdownMenuItem(value: 'moderate', child: Text('Modéré')),
+                DropdownMenuItem(value: 'serious', child: Text('Grave')),
               ],
-              onChanged: (v) => setState(() => severity = v ?? 'low'),
+              onChanged: (v) => setState(() => severity = v ?? 'minor'),
             ),
             const SizedBox(height: 8),
             TextField(controller: descCtrl, decoration: const InputDecoration(labelText: 'Description *', prefixIcon: Icon(Icons.description)), maxLines: 3),

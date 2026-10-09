@@ -38,6 +38,7 @@ bool _typeMatches(String type, Object? value) {
     case 'null': return value == null;
     case 'string': return value is String;
     case 'integer': return value is int || (value is double && value.isFinite && value == value.truncateToDouble());
+    case 'boolean': return value is bool;
     case 'object': return value is Map<String, dynamic>;
     case 'array': return value is List;
     default: throw StateError('Unsupported schema type: $type');

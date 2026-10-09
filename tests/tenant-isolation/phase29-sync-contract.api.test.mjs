@@ -57,6 +57,15 @@ try {
     const r = await req('POST', '/sync/push', { device_id: device, operations: [] });
     assert.equal(r.status, 200); assert.equal(r.body.next_cursor, '0');
   });
+  // Régression F4 (2026-10-09) : sync_resync_required(t, 0) renvoyait TRUE au
+  // premier sync, car EXISTS(... sync_seq <= 0) est toujours FALSE (séquences
+  // débutent à 1). Le client relisait tout puis break (1 resync/cycle) sans
+  // appliquer → miroir local vide. Un curseur jamais synchronisé (< 1) ne peut
+  // rien avoir vu purger : la fonction doit renvoyer FALSE.
+  await check('premier sync (cursor 0) : jamais resync_required', async () => {
+    assert.equal((await db.query('SELECT sync_resync_required($1, 0) AS r', [org])).rows[0].r, false);
+    const r = await pull('0'); assert.equal(r.status, 200); assert.equal(r.body.resync_required, false);
+  });
   for (const cursor of ['-1', '00', '01', '+1', '1.0', '1e3', ' 1', '1\n', '', 'NaN', '9223372036854775808', '999999999999999999999999999999999999']) {
     await check(`curseur non canonique/hors int64 ${JSON.stringify(cursor)} : 400`, async () => assert.equal((await pull(cursor)).status, 400));
   }
@@ -66,6 +75,12 @@ try {
     const site = (await db.query("INSERT INTO sites(organization_id,name_fr) VALUES($1,'F1 Site') RETURNING id", [org])).rows[0].id;
     const child = await req('POST', '/children', { site_id: site, first_name_fr: 'F1', last_name_fr: 'Test', date_of_birth: '2024-01-01', status: 'active' });
     assert.equal(child.status, 201);
+    // Régression audit (2026-10-09, migration 099) : audit_logs FORCE RLS +
+    // AuditService.log() écrit via la pool directe (pas de GUC tenant). La policy
+    // 088 rejetait tout INSERT avec organization_id non NULL — le journal était
+    // silencieusement vide (non-conformité loi 18-07/25-11).
+    const auditCount = (await db.query('SELECT COUNT(*)::int AS c FROM audit_logs WHERE organization_id=$1', [org])).rows[0].c;
+    assert.ok(auditCount >= 1, `audit_logs doit tracer la création de l'enfant (organization_id=${org}), trouvé ${auditCount}`);
     const second = (await req('POST', '/devices', { name: 'F1 second', device_fingerprint: randomUUID(), platform: 'android' })).body.device_id;
     const op = { event_id: randomUUID(), client_sequence: 1, schema_version: 1, command: 'check_in', entity_type: 'attendance',
       payload: { child_id: child.body.id, site_id: site }, occurred_at_device: new Date().toISOString() };

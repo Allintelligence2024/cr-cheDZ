@@ -77,7 +77,10 @@ export function validateProductionConfig(env: EnvLike = process.env): string[] {
     }
   } else if (storageBackend === 'local') {
     const dir = env.STORAGE_LOCAL_DIR;
-    if (!dir?.trim() || dir.trim() !== dir || !isAbsolute(dir) || resolve(dir) === DEV_STORAGE_LOCAL_DIR) {
+    // résoudre aussi le défaut de développement : sous Windows,
+    // resolve('/tmp/creche-pdf') → 'C:\tmp\creche-pdf' et la comparaison
+    // avec le littéral brut rate systématiquement le blocage.
+    if (!dir?.trim() || dir.trim() !== dir || !isAbsolute(dir) || resolve(dir) === resolve(DEV_STORAGE_LOCAL_DIR)) {
       problems.push(`STORAGE_BACKEND=local: STORAGE_LOCAL_DIR doit être absolu, non vide et différent du défaut de développement ${DEV_STORAGE_LOCAL_DIR}`);
     }
   }

@@ -92,11 +92,27 @@ export class JournalService {
   }
 
   /** Liste des événements d'un enfant (vue personnel) pour une date. */
-  async listForChild(childId: string, date?: string): Promise<Array<Record<string, unknown>>> {
+  async listForChild(
+    childId: string,
+    date?: string,
+    eventType?: string | undefined,
+  ): Promise<Array<Record<string, unknown>>> {
     requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       await this.childOfTenant(client, childId);
       const day = date ?? (await this.todayAlgiers(client));
+      // 3.2.5 : filtre event_type applicatif. Liste blanche plutôt que
+      // injection de SQL — un type inconnu renvoie tout.
+      const KNOWN_EVENT_TYPES = [
+        'meal', 'nap', 'diaper', 'activity', 'note', 'incident',
+        'health', 'mood', 'bottle', 'temperature', 'sign_out_note',
+      ];
+      const params: unknown[] = [childId, day];
+      let typeClause = '';
+      if (eventType && KNOWN_EVENT_TYPES.includes(eventType)) {
+        params.push(eventType);
+        typeClause = ` AND event_type=$3`;
+      }
       const res = await client.query(
         `SELECT id, event_type, event_date, occurred_at, recorded_by,
                 meal_type, meal_quantity, meal_notes,
@@ -107,9 +123,9 @@ export class JournalService {
                 is_correction, corrects_event_id, correction_reason,
                 visible_to_parents, parent_notified
          FROM daily_log_events
-         WHERE child_id = $1 AND event_date = $2
+         WHERE child_id = $1 AND event_date = $2${typeClause}
          ORDER BY occurred_at ASC`,
-        [childId, day],
+        params,
       );
       return res.rows;
     });
@@ -190,7 +206,7 @@ export class JournalService {
     const visible = input.visibleToParents ?? true;
     const isPrivateNote = f.note_is_private === true;
 
-    const day = await this.todayAlgiers(client);
+    const day = await this.eventDateFor(input.occurredAt, client);
     const res = await client.query(
       `INSERT INTO daily_log_events
          (organization_id, child_id, room_id, event_date, event_type, occurred_at,
@@ -238,6 +254,11 @@ export class JournalService {
     // Notification parent pour les événements visibles notifiables.
     if (!isPrivateNote && visible && JOURNAL_NOTIFICATION_TYPES.has(input.eventType)) {
       await this.notifications.notifyGuardiansOfEvent(client, tenantId, input.childId, input.eventType, evt.id);
+      // P0 (phase 1.7) — le flag incident_notified n'était JAMAIS écrit
+      // (NOT NULL DEFAULT false) même quand la notification partait.
+      if (input.eventType === 'incident') {
+        await client.query(`UPDATE daily_log_events SET incident_notified = true WHERE id = $1`, [evt.id]);
+      }
     }
 
     return evt;
@@ -256,5 +277,28 @@ export class JournalService {
   private async todayAlgiers(client: PoolClient): Promise<string> {
     const res = await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date::text AS d`);
     return res.rows[0].d as string;
+  }
+
+  /**
+   * 3.7.1 — date du jour de l'ÉVÉNEMENT, pas du serveur.
+   *
+   * Un éducateur en mode offline saisit à 20 h un événement de la matinée ;
+   * `occurred_at` transporte la vraie heure (horloge device). Forcer la date
+   * serveur rangeait l'événement au mauvais jour, décalant les comptages de
+   * présence et le carnet de la journée affichée aux parents. En offline,
+   * l'horloge device peut dériver — on plafonne à la date serveur ± 1 jour
+   * pour rester dans la journée de saisie.
+   */
+  private async eventDateFor(occurredAt: Date, client: PoolClient): Promise<string> {
+    const res = await client.query(
+      `SELECT ($1 AT TIME ZONE 'Africa/Algiers')::date::text AS d,
+              (($1 AT TIME ZONE 'Africa/Algiers')::date - (NOW() AT TIME ZONE 'Africa/Algiers')::date) AS drift`,
+      [occurredAt],
+    );
+    const row = res.rows[0];
+    // Dérive device > 1 jour (horloge cassée) : on retombe sur la date
+    // serveur, jamais sur une journée entière fantôme.
+    if (!row || Math.abs(Number(row.drift)) > 1) return this.todayAlgiers(client);
+    return row.d as string;
   }
 }

@@ -61,8 +61,20 @@ export class BillingController {
 
   @Get('invoices')
   @Roles('director', 'accountant')
-  invoices(@Query('child_id', new ParseUUIDPipe({ optional: true })) childId?: string) {
-    return this.billing.listInvoices(childId);
+  invoices(
+    @Query('child_id', new ParseUUIDPipe({ optional: true })) childId?: string,
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    // 3.2.4 : status/page/limit ne sont plus ignorés (cf. billing.service).
+    // PR #53 : child_id validé (UUID) — 22P02 → 400 au lieu de 500.
+    return this.billing.listInvoices(
+      childId,
+      status,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 20,
+    );
   }
 
   /** P2-3 : journal des impayés (balance âgée) — transition overdue appliquée à la lecture. */

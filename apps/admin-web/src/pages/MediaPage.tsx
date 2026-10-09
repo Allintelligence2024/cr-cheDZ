@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
 import { apiOpenBlob, http } from '../api/client';
 import { useI18n } from '../i18n';
+import { canDestruct } from '../hooks/usePermissions';
 
 interface MediaItem {
   id: string;
@@ -85,7 +86,7 @@ export function MediaPage(): React.JSX.Element {
         {message && <p style={{ color: tokens.colors.success }}>{message}</p>}
         {items.length === 0 && <p style={{ color: tokens.colors.textMuted }}>{t('media.noMedia')}</p>}
         <Table
-          headers={['Fichier', 'Type', 'Taille', t('media.visible'), t('common.actions')]}
+          headers={['Fichier', 'Type', 'Taille', t('media.visible'), t('media.consent'), t('common.actions')]}
           rows={items.map((item) => [
             item.original_filename ?? item.id.slice(0, 8),
             item.media_type,
@@ -93,11 +94,24 @@ export function MediaPage(): React.JSX.Element {
             <span key="v" style={{ color: item.is_visible_to_parents ? tokens.colors.success : tokens.colors.textMuted }}>
               {item.is_visible_to_parents ? t('media.visible') : t('media.pending')}
             </span>,
+            // 3.9.3 : l'opérateur validait à l'aveugle la publication d'un
+            // média contenant un enfant sans consentement photo. La colonne
+            // est ROUGE quand le consentement manque — le bouton « Approuver »
+            // est de toute façon bloqué côté API (photoConsentsAllowed).
+            <span key="c" style={{ color: item.all_consents_checked ? tokens.colors.success : tokens.colors.danger, fontWeight: item.all_consents_checked ? 400 : 700 }}>
+              {item.all_consents_checked ? t('media.consentOk') : t('media.consentMissing')}
+            </span>,
             <div key="a" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {!item.is_visible_to_parents ? (
-                <Button disabled={busy === item.id} onClick={() => void setVisibility(item.id, true)}>{t('media.approve')}</Button>
-              ) : (
-                <Button variant="ghost" disabled={busy === item.id} onClick={() => void setVisibility(item.id, false)}>{t('media.hide')}</Button>
+              {/* 3.9.1 : la publication/dépublication d'un média est une
+               * action de direction — un educator/receptionist voyait les
+               * boutons et obtenait un 403 au clic. L'API reste l'autorité
+               * (@Roles director/super_admin) ; l'UI masque juste l'action. */}
+              {canDestruct() && (
+                !item.is_visible_to_parents ? (
+                  <Button disabled={busy === item.id} onClick={() => void setVisibility(item.id, true)}>{t('media.approve')}</Button>
+                ) : (
+                  <Button variant="ghost" disabled={busy === item.id} onClick={() => void setVisibility(item.id, false)}>{t('media.hide')}</Button>
+                )
               )}
               <Button variant="ghost" disabled={busy === item.id} onClick={() => void download(item.id)}>{t('media.download')}</Button>
             </div>,

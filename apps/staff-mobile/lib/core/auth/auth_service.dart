@@ -40,6 +40,39 @@ class AuthService {
     return res['user'] as Map<String, dynamic>;
   }
 
+  /// 3.10.2 : rotation access token via le refresh token.
+  ///
+  /// L'access token expire (15 min) — sans refresh, l'app se bloquait
+  /// DÉFINITIVEMENT en 401 : l'intercepteur du ApiClient voit 401, n'a pas de
+  /// `_onRefresh` branché, et laissait l'erreur remonter. La seule issue était
+  /// une reconnexion manuelle. Désormais l'intercepteur appelle cette
+  /// méthode : on POST /auth/refresh avec le refresh token stocké, on
+  /// persiste la nouvelle paire, et on alimente le retry.
+  /// Retourne false (session morte) si le refresh est expiré/révoqué —
+  /// l'app remonte alors vers le login.
+  Future<bool> refresh() async {
+    final refresh = await _storage.read(key: _refreshKey);
+    if (refresh == null) return false;
+    try {
+      final res = await _api.post<Map<String, dynamic>>(
+        '/auth/refresh',
+        {'refresh_token': refresh},
+      );
+      final access = res['access_token'] as String?;
+      final newRefresh = res['refresh_token'] as String?;
+      if (access == null || newRefresh == null) return false;
+      _accessToken = access;
+      _api.accessToken = access;
+      await _storage.write(key: _accessKey, value: access);
+      await _storage.write(key: _refreshKey, value: newRefresh);
+      return true;
+    } catch (_) {
+      // Refresh invalide/révoqué : la session est morte, on purge.
+      await logout();
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     _accessToken = null;
     _api.accessToken = null;

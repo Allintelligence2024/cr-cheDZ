@@ -34,11 +34,21 @@ export interface DataAccessEntry {
 
 /**
  * Journal d'audit (loi 18-07 modifiée par 25-11).
- * Utilise la pool DIRECTEMENT (pas le contexte tenant) : l'audit doit
- * toujours fonctionner ; audit_logs/data_access_logs sont des tables
- * système sans RLS, accès DPO/super_admin uniquement.
- * Exception explicite : logInTransaction utilise le client du métier et propage
- * les erreurs (DPIA), pour rendre mutation et audit atomiques.
+ *
+ * Écrit via un client emprunté à la pool — pas le contexte tenant — car
+ * l'audit doit tracer même avant résolution du tenant (échecs d'auth, où
+ * organizationId est NULL). Mais audit_logs/data_access_logs sont FORCE RLS
+ * (migration 088) avec `WITH CHECK (organization_id IS NULL OR
+ * organization_id = app_tenant_id())` : si on écrit sans poser le GUC,
+ * `organization_id = NULL` est NULL (jamais TRUE), donc TOUT INSERT tenant est
+ * rejeté silencieusement → journal vide (correctif 2026-10-09, 099).
+ *
+ * On pose donc app.tenant_id sur le client quand on connaît l'organization,
+ * puis on RESTORE la valeur précédente (jamais un RESET brut : la pool est
+ * partagée et la connexion retourne à d'autres requêtes).
+ * Exception explicite : logInTransaction utilise le client du métier (GUC
+ * déjà posé par withTenantConnection) et propage les erreurs (DPIA), pour
+ * rendre mutation et audit atomiques.
  * Les valeurs sont masquées (ADR-010) : aucune PII dans old/new_values.
  */
 @Injectable()
@@ -49,10 +59,39 @@ export class AuditService {
 
   async log(entry: AuditEntry): Promise<void> {
     try {
-      await this.writeEntry(this.pool, entry);
+      // organizationId NULL : échec d'auth avant résolution du tenant — la
+      // branche NULL de la policy couvre ce cas, pas besoin de GUC.
+      if (!entry.organizationId) {
+        await this.writeEntry(this.pool, entry);
+        return;
+      }
+      await this.writeWithTenantContext(entry);
     } catch (error) {
       // L'audit ne doit jamais faire échouer l'action métier.
       this.logger.error(`Échec écriture audit: ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Emprunte un client, pose app.tenant_id le temps de l'INSERT, puis RESTORE
+   * la valeur précédente (pool partagée — un RESET bruiterait les autres
+   * requêtes ; un client libéré sans restore pourrait fuiter le tenant).
+   */
+  private async writeWithTenantContext(entry: AuditEntry): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      const prev = (
+        await client.query(`SELECT current_setting('app.tenant_id', true) AS v`)
+      ).rows[0].v as string | null;
+      await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [entry.organizationId]);
+      try {
+        await this.writeEntry(client, entry);
+      } finally {
+        // is_local=false → la pool voit la valeur restaurée.
+        await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [prev ?? '']);
+      }
+    } finally {
+      client.release();
     }
   }
 
@@ -91,24 +130,40 @@ export class AuditService {
   /** Carnet d'accès aux données sensibles (dossier médical, photos…). */
   async logDataAccess(entry: DataAccessEntry): Promise<void> {
     try {
-      await this.pool.query(
-        `INSERT INTO data_access_logs
+      // organizationId est required (requireTenant côté appelant), donc pose
+      // toujours le GUC — data_access_logs est FORCE RLS, sans lui l'INSERT
+      // est rejeté (organization_id = NULL → NULL, jamais TRUE).
+      const client = await this.pool.connect();
+      try {
+        const prev = (
+          await client.query(`SELECT current_setting('app.tenant_id', true) AS v`)
+        ).rows[0].v as string | null;
+        await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [entry.organizationId]);
+        try {
+          await client.query(
+            `INSERT INTO data_access_logs
            (organization_id, user_id, device_id, data_type,
             data_subject_id, data_subject_type, access_type,
             justification, ip_address)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          entry.organizationId,
-          entry.userId,
-          entry.deviceId ?? null,
-          entry.dataType,
-          entry.dataSubjectId,
-          entry.dataSubjectType,
-          entry.accessType,
-          entry.justification ?? null,
-          entry.ipAddress ?? null,
-        ],
-      );
+            [
+              entry.organizationId,
+              entry.userId,
+              entry.deviceId ?? null,
+              entry.dataType,
+              entry.dataSubjectId,
+              entry.dataSubjectType,
+              entry.accessType,
+              entry.justification ?? null,
+              entry.ipAddress ?? null,
+            ],
+          );
+        } finally {
+          await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [prev ?? '']);
+        }
+      } finally {
+        client.release();
+      }
     } catch (error) {
       this.logger.error(`Échec écriture data_access_logs: ${(error as Error).message}`);
     }

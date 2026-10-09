@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsIn,
   IsInt,
   IsObject,
   IsOptional,
@@ -11,6 +12,12 @@ import {
   ValidateBy,
 } from 'class-validator';
 import { isSyncCursor } from '../generated/sync-contract';
+
+/** Types d'entité mutables offline — fixés par l'app mobile (4.2). */
+export const SYNC_ENTITY_TYPES = [
+  'attendance_session',
+  'daily_log',
+] as const;
 
 /** Commandes offline supportées (enum sync_command). */
 export const SYNC_COMMANDS = [
@@ -42,9 +49,11 @@ export class SyncOperationDto {
   schema_version!: number;
 
   @IsString()
+  @IsIn(SYNC_COMMANDS, { message: 'commande sync inconnue' })
   command!: string;
 
   @IsString()
+  @IsIn(SYNC_ENTITY_TYPES, { message: 'type d\'entité sync inconnu' })
   entity_type!: string;
 
   @IsOptional()

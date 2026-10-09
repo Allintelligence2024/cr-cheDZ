@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Put, Req } from '@nestjs/com
 import type { Request } from 'express';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { Permissions } from '../../shared/decorators/permissions.decorator';
 import {
   AllergyIdParam, ChildIdParam, CreateAllergyDto, CreateMedicationAuthorizationDto,
   CreateVaccinationDto, MedAdminIdParam, MedAuthIdParam, RecordMedicationAdministrationDto,
@@ -18,12 +19,14 @@ export class HealthController {
 
   @Get(':childId')
   @Roles(...STAFF_ROLES)
+  @Permissions('health:read')
   record(@Param() p: ChildIdParam, @CurrentUser() u: CurrentUserPayload, @Req() req: Request) {
     return this.health.getRecord(p.childId, u.sub, req.ip);
   }
 
   @Put(':childId')
   @Roles(...CARE_ROLES)
+  @Permissions('health:update')
   upsert(@Param() p: ChildIdParam, @Body() dto: UpsertHealthRecordDto, @CurrentUser() u: CurrentUserPayload) {
     return this.health.upsertRecord(p.childId, dto, u.sub);
   }
@@ -66,6 +69,7 @@ export class HealthController {
 
   @Post(':childId/medication-administrations')
   @Roles(...CARE_ROLES)
+  @Permissions('health:medicate')
   administration(@Param() p: ChildIdParam, @Body() dto: RecordMedicationAdministrationDto, @CurrentUser() u: CurrentUserPayload) {
     return this.health.recordAdministration(p.childId, dto, u.sub);
   }

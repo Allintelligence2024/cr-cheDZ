@@ -344,7 +344,7 @@ export class SyncService {
 
   // ── Pull ─────────────────────────────────────────────────────────────────
 
-  async pull(cursor: string, deviceId: string): Promise<{ events: Array<Record<string, unknown>>; next_cursor: string }> {
+  async pull(cursor: string, deviceId: string): Promise<{ events: Array<Record<string, unknown>>; next_cursor: string; resync_required: boolean }> {
     const tenantId = this.tenantContext.getTenantId();
     return this.tenantContext.withTenantConnection(async (client) => {
       const dev = await client.query(
@@ -353,6 +353,23 @@ export class SyncService {
       );
       if (dev.rows.length === 0) {
         throw new AppError('DEVICE_REVOKED', 'Appareil révoqué ou inconnu', 'تم إلغاء الجهاز', 403);
+      }
+
+      // 3.5.2 : détection de purge. sync_retention_purge (075) supprime les
+      // lignes sous MIN(cursor_value) - marge. Un device dont la ligne
+      // sync_cursors a disparu, ou en retard d'une rotation complète, obtient
+      // une page vide et AVANCE son curseur — perte silencieuse. Ici on
+      // compare son curseur au plus petit sync_seq existant : s'il est
+      // inférieur, le début du changelog a été purgé après ce curseur et le
+      // client doit resync (re-lecture de l'état actuel) au lieu d'avancer.
+      const cursorNum = Number(cursor);
+      let resyncRequired = false;
+      if (Number.isSafeInteger(cursorNum) && cursorNum >= 0) {
+        const rr = await client.query<{ sync_resync_required: boolean }>(
+          `SELECT sync_resync_required($1, $2) AS sync_resync_required`,
+          [tenantId, cursorNum],
+        );
+        resyncRequired = rr.rows[0]?.sync_resync_required ?? false;
       }
 
       const res = await client.query(
@@ -373,7 +390,7 @@ export class SyncService {
            cursor_value = EXCLUDED.cursor_value, last_sync_at = NOW()`,
         [deviceId, tenantId, nextCursor],
       );
-      return { events, next_cursor: nextCursor };
+      return { events, next_cursor: nextCursor, resync_required: resyncRequired };
     });
   }
 

@@ -109,10 +109,13 @@ export class ComplianceService {
       }
 
       // AGE_CRECHE
+      // 2.6 : la saisie est désormais bloquée à l'API (assertCrecheAge, 409)
+      // et à l'import. Tout enfant hors tranche en base est donc un reliquat
+      // d'avant la correction — un `fail`, plus un `warning` silencieux.
       const isCreche = org.establishment_type === 'creche';
       if (isCreche) {
         const outOfRange = children.filter((c) => Number(c.age_days) < 90 || Number(c.age_days) > 36 * 30);
-        await add(ruleByCode.get('AGE_CRECHE'), outOfRange.length === 0 ? 'pass' : 'warning', {
+        await add(ruleByCode.get('AGE_CRECHE'), outOfRange.length === 0 ? 'pass' : 'fail', {
           out_of_range: outOfRange.length,
           total: children.length,
         });

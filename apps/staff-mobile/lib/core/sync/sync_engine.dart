@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 import '../network/sync_client.dart';
@@ -13,6 +14,9 @@ enum SyncStatus { idle, syncing, error, offline, authenticationRequired, contrac
 class _DeviceRevoked implements Exception {}
 class _RetryableSync implements Exception {}
 class _Stopped implements Exception {}
+// 3.5.2 : des événements ont été purgé sous le curseur client (migration 093).
+// Le moteur relit tout depuis 0 — cf. _pullPage.
+class _ResyncRequired implements Exception {}
 
 /// One engine + one database + one immutable API session per tenant/user scope.
 class SyncEngine {
@@ -105,21 +109,50 @@ class SyncEngine {
       }
       // Bounded cycles keep the UI responsive; periodic sync drains the rest.
       for (var n = 0; n < 10; n++) { if (!await _pushPending(device)) break; }
-      for (var n = 0; n < 20; n++) { if (!await _pullPage(device)) break; }
+      // 3.5.2 : un resync (purge serveur) réinitialise le curseur et relit
+      // tout — borné à 1 resync par cycle pour éviter une boucle infinie
+      // si le serveur signale systématiquement (cursor 0 ne peut pas être
+      // purgé, donc au plus 1 par cycle).
+      var resynced = false;
+      for (var n = 0; n < 20; n++) {
+        try {
+          if (!await _pullPage(device)) break;
+        } on _ResyncRequired {
+          if (resynced) break;
+          resynced = true;
+          // Le curseur est déjà remis à 0 par _pullPage ; on continue la boucle.
+        }
+      }
       _ensureRunning(); _backoffSeconds = 2; _setStatus(SyncStatus.idle);
     } on _Stopped { return;
     } on _DeviceRevoked { _block(SyncStatus.deviceRevoked);
-    } on FormatException { _block(SyncStatus.contractError);
-    } on TypeError { _block(SyncStatus.contractError);
-    } on StateError { _block(SyncStatus.contractError);
+    } on FormatException catch (error, stack) {
+      // Diagnostic F4 (2026-10-09) : ce bloc avalait la cause exacte et ne
+      // laissait que contractError. On la journalise avant de bloquer.
+      debugPrint('sync contractError (FormatException): ${error.message}\n$stack');
+      _block(SyncStatus.contractError);
+    } on TypeError catch (error, stack) {
+      debugPrint('sync contractError (TypeError): $error\n$stack');
+      _block(SyncStatus.contractError);
+    } on StateError catch (error, stack) {
+      debugPrint('sync contractError (StateError): ${error.message}\n$stack');
+      _block(SyncStatus.contractError);
     } on DioException catch (error) {
       if (_stopped) return;
       final code = error.response?.statusCode;
+      // Diagnostic F4 (2026-10-09) : un 4xx non-2xx arrivait ici sans laisser
+      // de trace. On logge le code + le corps de la réponse pour le CI.
+      if (code != null && code >= 400 && code < 500 && code != 429 && code != 408) {
+        debugPrint('sync contractError (DioException $code): ${error.response?.data}');
+      }
       if (code == 401) { _block(SyncStatus.authenticationRequired); }
       else if (code == 403) { _block(SyncStatus.deviceRevoked); }
       else if (code != null && code >= 400 && code < 500 && code != 429 && code != 408) { _block(SyncStatus.contractError); }
       else { _retry(); }
-    } catch (_) { if (!_stopped) _retry(); }
+    } catch (error, stack) {
+      debugPrint('sync retry (unexpected): $error\n$stack');
+      if (!_stopped) _retry();
+    }
   }
 
   void _block(SyncStatus status) {
@@ -178,6 +211,19 @@ class SyncEngine {
     final cursor = syncCursor((await _db.syncState())['cursor']);
     final page = await _client.pull(cursor, deviceId: device);
     _ensureRunning();
+    // 3.5.2 : le serveur signale que des événements ont été purgés sous ce
+    // curseur (sync_resync_required, migration 093). Avancer silencieusement
+    // ferait perdre ces événements à jamais. On remet le curseur à 0 et on
+    // relit tout : les payloads sont des deltas idempotents (upserts Drift),
+    // donc un rejeu n'est que du travail refait, jamais une corruption.
+    if (page['resync_required'] == true) {
+      await _db.transaction(() async {
+        _ensureRunning();
+        await _db.saveCursor('0');
+        _ensureRunning();
+      });
+      throw _ResyncRequired();
+    }
     final next = syncCursor(page['next_cursor']);
     final events = (page['events'] as List).cast<Map<String, dynamic>>();
     var previous = BigInt.parse(cursor);

@@ -45,6 +45,7 @@ class _BillingPageState extends State<BillingPage> {
       if (!mounted) return;
       setState(() {
         _aged = aged;
+        // 3.2.4 : l'API renvoie une liste (invoices() -> _getList).
         _invoices = invoices;
         _loading = false;
         _isOffline = false;
@@ -184,7 +185,7 @@ class _AgedBalanceCard extends StatelessWidget {
               children: [
                 Icon(Icons.account_balance_wallet, size: 18, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 6),
-                Text('Balance âgée', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const Text('Balance âgée', style: TextStyle(fontWeight: FontWeight.bold)),
                 const Spacer(),
                 Text('Total: $total DZD', style: TextStyle(fontWeight: FontWeight.bold, color: palette.danger)),
               ],
@@ -192,10 +193,13 @@ class _AgedBalanceCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                bucket('0-30j', buckets['0-30'] ?? buckets['current'] ?? buckets['0_30'], palette.success),
-                bucket('31-60j', buckets['31-60'] ?? buckets['31_60'], Colors.orange),
-                bucket('61-90j', buckets['61-90'] ?? buckets['61_90'], Colors.deepOrange),
-                bucket('90j+', buckets['90+'] ?? buckets['90_plus'] ?? buckets['over_90'], palette.danger),
+                // 3.2.7 : clés côté API = d0_30/d31_60/d61_90/d90_plus
+                // (billing.service.ts:302). Les anciennes clés restent lues
+                // en repli pour ne pas casser un cache offline ancien format.
+                bucket('0-30j', buckets['d0_30'] ?? buckets['0-30'] ?? buckets['current'] ?? buckets['0_30'], palette.success),
+                bucket('31-60j', buckets['d31_60'] ?? buckets['31-60'] ?? buckets['31_60'], Colors.orange),
+                bucket('61-90j', buckets['d61_90'] ?? buckets['61-90'] ?? buckets['61_90'], Colors.deepOrange),
+                bucket('90j+', buckets['d90_plus'] ?? buckets['90+'] ?? buckets['90_plus'] ?? buckets['over_90'], palette.danger),
               ],
             ),
           ],

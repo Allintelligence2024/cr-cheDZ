@@ -17,6 +17,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'login.submit': 'Se connecter',
     'login.error': 'Email ou mot de passe incorrect',
     'login.invalid': 'Veuillez remplir tous les champs',
+    'login.demoTitle': 'Comptes de démonstration (aperçu)',
+    'login.demoHint': 'Choisissez un rôle — n’importe quel mot de passe est accepté.',
     'dashboard.welcome': 'Bienvenue',
     'dashboard.role': 'Rôle',
     'dashboard.org': 'Organisation',
@@ -173,6 +175,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'media.noMedia': 'Aucune photo',
     'media.pending': 'En attente',
     'media.visible': 'Visible aux parents',
+    // 3.9.3 (remédiation 2026-10-04) — colonne consentement photo.
+    'media.consent': 'Consentement',
+    'media.consentOk': 'OK',
+    'media.consentMissing': 'Manquant',
     // Phase 9 — facturation
     'bill.title': 'Facturation',
     'bill.contracts': 'Contrats',
@@ -401,6 +407,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'login.submit': 'دخول',
     'login.error': 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
     'login.invalid': 'يرجى ملء جميع الحقول',
+    'login.demoTitle': 'حسابات تجريبية (معاينة)',
+    'login.demoHint': 'اختر دورًا — أي كلمة مرور مقبولة.',
     'dashboard.welcome': 'مرحباً',
     'dashboard.role': 'الدور',
     'dashboard.org': 'المؤسسة',
@@ -557,6 +565,10 @@ export const messages: Record<Locale, Record<string, string>> = {
     'media.noMedia': 'لا توجد صور',
     'media.pending': 'قيد الانتظار',
     'media.visible': 'ظاهرة للوالدين',
+    // 3.9.3 (remédiation 2026-10-04) — colonne consentement photo.
+    'media.consent': 'الموافقة',
+    'media.consentOk': 'موافق',
+    'media.consentMissing': 'مفقودة',
     // Phase 9 — facturation
     'bill.title': 'الفواتير',
     'bill.contracts': 'العقود',

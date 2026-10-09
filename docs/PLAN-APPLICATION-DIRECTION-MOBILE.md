@@ -351,8 +351,8 @@ apps/director-mobile/
   - Cards avec `tokens` Sérénité, responsive grid
   - Pas de lib externe (pure SVG + div) pour garder bundle <250 Ko gzip
 
-### Mobile — `analytics_page.dart` (premier onglet)
-- Premier onglet bottom nav = Analytics (📊)
+### Mobile — `analytics_page.dart`
+- Onglet bottom nav Analytics (📊)
 - Même KPIs que web mais cards avec gradients + icônes
 - BarChart fl_chart présences (present vs absent) + LineChart billing (invoiced/paid/balance) + BarChart revenus 90j + PieChart aged
 - Occupancy avec LinearProgressIndicator

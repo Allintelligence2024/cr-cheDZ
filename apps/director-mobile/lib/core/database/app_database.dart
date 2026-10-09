@@ -2,12 +2,12 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Cache offline léger pour director-mobile V2.4
-/// V1 utilise CacheService (TTL 5 min). V2.4 prévoit Drift (tables typées) — ce wrapper
-/// expose la même API que le futur Drift pour ne pas casser les call sites.
+/// Cache offline léger pour director-mobile (SharedPreferences).
 ///
-/// NOTE: La version Drift complète est en `app_database_drift.dart` (générée via build_runner).
-/// Ici, on garde SharedPreferences pour que `flutter analyze` passe sans génération.
+/// 3.2.12 (remédiation 2026-10-04) : la variante Drift/SQLite
+/// (`app_database_drift.dart`, `DirectorCacheDb`) a été supprimée — elle
+/// n'était jamais instanciée (aucun call site, 861 lignes de code généré
+/// mort). Ce wrapper SharedPreferences est l'unique cache offline.
 
 class DirectorDatabase {
   static const _prefix = 'director_db_';

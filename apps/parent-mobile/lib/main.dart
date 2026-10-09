@@ -36,6 +36,25 @@ class _ParentAppState extends State<ParentApp> {
     onSessionExpired: _handleSessionExpired,
   );
   bool _authenticated = false;
+  bool _restoring = true; // 3.10.1 : écran de démarrage pendant la restauration
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreSession();
+  }
+
+  // 3.10.1 : restauration de session au démarrage — avant, l'app s'ouvrait
+  // TOUJOURS sur le login OTP, même avec des jetons valides. On tente une
+  // requête authentifiée : si elle passe, on passe à l'accueil directement.
+  Future<void> _restoreSession() async {
+    final ok = await _api.restoreSession();
+    if (!mounted) return;
+    setState(() {
+      _authenticated = ok;
+      _restoring = false;
+    });
+  }
 
   void _handleSessionExpired() {
     if (mounted && _authenticated) {
@@ -58,12 +77,14 @@ class _ParentAppState extends State<ParentApp> {
       theme: SereniteTheme.light,
       darkTheme: SereniteTheme.dark,
       themeMode: ThemeMode.system,
-      home: _authenticated
-          ? ParentHome(api: _api)
-          : OtpLoginPage(
-              api: _api,
-              onAuthenticated: () => setState(() => _authenticated = true),
-            ),
+      home: _restoring
+          ? const _Splash() // 3.10.1 : restauration en cours (pas de flash login)
+          : _authenticated
+              ? ParentHome(api: _api)
+              : OtpLoginPage(
+                  api: _api,
+                  onAuthenticated: () => setState(() => _authenticated = true),
+                ),
     );
   }
 }
@@ -202,5 +223,16 @@ class _ParentHomeState extends State<ParentHome> {
         );
       },
     );
+  }
+}
+
+// 3.10.1 : écran neutre pendant la restauration de session. Évite le flash
+// de l'écran de login puis de l'accueil à chaque démarrage à froid.
+class _Splash extends StatelessWidget {
+  const _Splash();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

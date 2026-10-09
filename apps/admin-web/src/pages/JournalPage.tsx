@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
 import { http } from '../api/client';
 import { useI18n } from '../i18n';
+import { canDestruct } from '../hooks/usePermissions';
 
 interface JournalEvent {
   id: string;
@@ -100,9 +101,15 @@ export function JournalPage(): React.JSX.Element {
             <span key="v" style={{ color: item.visible_to_parents ? tokens.colors.success : tokens.colors.textMuted }}>
               {item.visible_to_parents ? t('journal.visible') : t('journal.hidden')}
             </span>,
-            <Button key="b" variant="ghost" disabled={Boolean(item.note_is_private)} onClick={() => void toggle(item)}>
-              {item.visible_to_parents ? t('journal.hide') : t('journal.show')}
-            </Button>,
+            // 3.9.1 : la modération de visibilité parent (journal) est une
+            // action de direction — masquée aux educator/receptionist
+            // (l'API reste l'autorité : PATCH /journal/events/:id/visibility
+            // est @Roles('super_admin','director')).
+            canDestruct() && (
+              <Button key="b" variant="ghost" disabled={Boolean(item.note_is_private)} onClick={() => void toggle(item)}>
+                {item.visible_to_parents ? t('journal.hide') : t('journal.show')}
+              </Button>
+            ),
           ])}
         />
       </Card>

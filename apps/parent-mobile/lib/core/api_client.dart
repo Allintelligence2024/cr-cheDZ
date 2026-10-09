@@ -92,6 +92,23 @@ class ParentApiClient {
 
   Future<void> clearSession() => _store.clear();
 
+  /// 3.10.1 : restauration de session au démarrage.
+  ///
+  /// `_authenticated = false` en dur dans main.dart fermait l'app sur l'écran
+  /// de login à chaque froid, même avec des jetons valides en stockage
+  /// sécurisé. On tente une requête authentifiée légère : 200 → session
+  /// restaurée ; 401 même après refresh → session expirée (login normal).
+  /// Jamais d'exception propagée : un échec réseau transient laisse l'écran
+  /// de login (safe par défaut).
+  Future<bool> restoreSession() async {
+    try {
+      await _guard(() => _dio.get<Map<String, dynamic>>('/parent/children'));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>> requestOtp(String phone) async {
     final res = await _guard(
       () => _dio.post<Map<String, dynamic>>(

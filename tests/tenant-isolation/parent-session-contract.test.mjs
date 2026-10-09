@@ -66,7 +66,9 @@ test('un seul point d’entrée de refresh dans toute l’application', () => {
       .split('\n')
       .map((line, index) => ({ file, line: index + 1, text: line }))
       .filter(({ text }) => text.includes("'/auth/refresh'"))
-      .map(({ file, line }) => `${file.slice(REPO.length + 1)}:${line}`),
+      // normaliser en '/' : sous Windows le séparateur '\' casserait les
+      // assertions `includes('core/api_client.dart')`.
+      .map(({ file, line }) => `${file.slice(REPO.length + 1).replaceAll('\\', '/')}:${line}`),
   );
   assert.equal(routeRefs.length, 1, `la route de refresh doit être écrite UNE fois : ${routeRefs.join(', ')}`);
   assert.ok(routeRefs[0].endsWith('core/api_client.dart:1') || routeRefs[0].includes('core/api_client.dart'), routeRefs[0]);

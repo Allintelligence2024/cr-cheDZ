@@ -44,7 +44,7 @@ Future<void> showCreateChildSheet(BuildContext context, DirectorApiClient api, {
                 const LinearProgressIndicator()
               else
                 DropdownButtonFormField<String>(
-                  value: selectedRoomId,
+                  initialValue: selectedRoomId,
                   decoration: const InputDecoration(labelText: 'Salle (optionnel)', prefixIcon: Icon(Icons.meeting_room)),
                   items: rooms.map((r) {
                     final m = r as Map<String, dynamic>;

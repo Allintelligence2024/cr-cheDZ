@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import 'error_state.dart';
 import 'token_store.dart';
@@ -46,6 +47,9 @@ class DirectorApiClient {
   static const _retriedKey = 'director_retried';
 
   final Dio _dio;
+
+  @visibleForTesting
+  Dio get dio => _dio;
   final DirectorTokenStore _store;
   final void Function()? _onSessionExpired;
 
@@ -63,6 +67,9 @@ class DirectorApiClient {
   }
 
   Future<void> clearSession() => _store.clear();
+
+  /// 3.2.11 : refresh token courant (pour /auth/switch-org).
+  Future<String?> currentRefreshToken() => _store.readRefresh();
 
   Future<T> _withErrorMapping<T>(Future<T> Function() fn) async {
     try {
@@ -99,7 +106,7 @@ class DirectorApiClient {
   }
 
   // Core API
-  Future<Map<String, dynamic>> me() => _getMap('/auth/me');
+  Future<Map<String, dynamic>> me() => _getMap('/me');
   Future<Map<String, dynamic>> dashboard() => _getMap('/dashboard/summary');
   Future<Map<String, dynamic>> attendanceSummary({String? date}) => _getMap('/attendance/summary', query: {if (date != null) 'date': date});
   Future<Map<String, dynamic>> attendanceRatios() => _getMap('/attendance/ratios');
@@ -111,14 +118,18 @@ class DirectorApiClient {
       });
   Future<Map<String, dynamic>> invoiceDetail(String id) => _getMap('/billing/invoices/$id');
   Future<Map<String, dynamic>> sendInvoice(String id) => _postMap('/billing/invoices/$id/send', {});
-  Future<Map<String, dynamic>> markOverdue(String id) => _postMap('/billing/invoices/$id/mark-overdue', {});
+  // 3.11.3 : markOverdue supprimé (code mort) — la transition overdue est
+  // AUTOMATIQUE côté serveur (job worker de relance, migration 068) ; aucun
+  // endpoint mark-overdue n'existe et aucun appelant non plus.
   Future<Map<String, dynamic>> addReminder(String id, Map<String, dynamic> body) => _postMap('/billing/invoices/$id/reminders', body);
   Future<List<dynamic>> children({String? search, String? roomId}) => _getList('/children', query: {
         if (search != null && search.isNotEmpty) 'search': search,
         if (roomId != null) 'room_id': roomId,
       });
   Future<Map<String, dynamic>> childDetail(String id) => _getMap('/children/$id');
-  Future<List<dynamic>> staffProfiles() => _getList('/staff/profiles');
+  // P0 (phase 1.8) — la route est GET /staff (staff.controller.ts:61), pas
+  // /staff/profiles (404 permanent à chaque ouverture de l'onglet Personnel).
+  Future<List<dynamic>> staffProfiles() => _getList('/staff');
   Future<List<dynamic>> staffDocumentsExpiring() => _getList('/staff/documents/expiring', query: {'days': 30});
   Future<Map<String, dynamic>> staffCoverage({required String date}) => _getMap('/staff/schedule/coverage', query: {'date': date});
   Future<List<dynamic>> staffSchedule({required String from, required String to, String? siteId}) => _getList('/staff/schedule', query: {
@@ -137,8 +148,10 @@ class DirectorApiClient {
   Future<List<dynamic>> attestations() => _getList('/attestations');
   Future<List<dynamic>> sites() => _getList('/sites');
   Future<List<dynamic>> rooms() => _getList('/rooms');
-  Future<Map<String, dynamic>> orgSettings() => _getMap('/organizations/me/settings');
-  Future<Map<String, dynamic>> orgDetails() => _getMap('/organizations/me');
+  // 3.11.3 : orgSettings/orgDetails supprimes (code mort) — /organizations/me
+  // et /organizations/me/settings n EXISTENT PAS. Zero appelant : app utilise
+  // organizationsById(id) avec org_id lu dans /me.
+  Future<Map<String, dynamic>> organizationsById(String id) => _getMap('/organizations/$id');
   Future<List<dynamic>> exports() => _getList('/exports');
   Future<Map<String, dynamic>> exportDetail(String id) => _getMap('/exports/$id');
   Future<Map<String, dynamic>> payrollRunDetailFull(String id) => _getMap('/payroll/runs/$id');
@@ -152,6 +165,17 @@ class DirectorApiClient {
       });
   Future<Map<String, dynamic>> dashboardSummaryWithCache({String? siteId}) => _getMap('/dashboard/summary', query: {if (siteId != null) 'site_id': siteId});
   Future<List<dynamic>> organizations() => _getList('/organizations');
+  // 3.2.11 : switch d'org active — nouvelle paire de tokens (POST /auth/switch-org).
+  // La réponse est une session complète : on la persiste avant de la rendre.
+  Future<Map<String, dynamic>> switchOrg(String orgId, String refreshToken) => _withErrorMapping(() async {
+        final res = await _dio.post<Map<String, dynamic>>('/auth/switch-org', data: {
+          'organization_id': orgId,
+          'refresh_token': refreshToken,
+        });
+        final data = res.data ?? {};
+        if (data['access_token'] != null) await saveSession(data);
+        return data;
+      });
   Future<List<dynamic>> videoCameras() => _getList('/video/cameras');
   Future<List<dynamic>> videoClips({String? cameraId}) => _getList('/video/clips', query: {if (cameraId != null) 'camera_id': cameraId});
 
@@ -169,15 +193,47 @@ class DirectorApiClient {
   Future<Map<String, dynamic>> analyticsRatios({String? date}) => _getMap('/analytics/ratios', query: {if (date != null) 'date': date});
 
   // V2.3 — écritures
+  // P0 (phase 1.8) — CreateChildDto exige site_id + date_of_birth (children.dto.ts).
+  // L'app envoyait birth_date et omettait site_id → 400 systématique.
   Future<Map<String, dynamic>> createChild(Map<String, dynamic> body) => _postMap('/children', body);
-  Future<Map<String, dynamic>> updateChildRoom(String childId, String roomId) => _postMap('/children/$childId/room-moves', {'room_id': roomId});
+  // P0 (phase 1.8) — la route serveur est POST /children/:id/move-room
+  // (children.controller.ts), pas /room-moves → 404 à chaque changement de salle.
+  Future<Map<String, dynamic>> updateChildRoom(String childId, String roomId) => _postMap('/children/$childId/move-room', {'room_id': roomId});
   Future<Map<String, dynamic>> checkInChild(Map<String, dynamic> body) => _postMap('/attendance/check-in', body);
   Future<Map<String, dynamic>> checkOutChild(Map<String, dynamic> body) => _postMap('/attendance/check-out', body);
+  // P0 (phase 1.8) — MarkAbsentDto n'accepte PAS 'date' (autre signature) → 400.
+  // Le DTO réel est { child_id, reason, ... } ; la date est celle du serveur.
   Future<Map<String, dynamic>> markAbsent(Map<String, dynamic> body) => _postMap('/attendance/mark-absent', body);
   Future<Map<String, dynamic>> createJournalEvent(Map<String, dynamic> body) => _postMap('/journal/events', body);
-  Future<Map<String, dynamic>> staffCheckIn(Map<String, dynamic> body) => _postMap('/staff/attendance/check-in', body);
-  Future<Map<String, dynamic>> staffCheckOut(Map<String, dynamic> body) => _postMap('/staff/attendance/check-out', body);
-  Future<Map<String, dynamic>> payInvoice(String id, Map<String, dynamic> body) => _postMap('/billing/invoices/$id/payments', body);
+  // P0 (phase 1.8) — les routes staff sont POST /staff/:id/attendance
+  // (staff.controller.ts), pas /staff/attendance/check-in|check-out → 404.
+  Future<Map<String, dynamic>> staffCheckIn(String staffId, Map<String, dynamic> body) => _postMap('/staff/$staffId/attendance', body);
+  Future<Map<String, dynamic>> staffCheckOut(String staffId, Map<String, dynamic> body) => _postMap('/staff/$staffId/attendance', body);
+  // P0 (phase 1.8) — POST /billing/invoices/:id/payments N'EXISTE PAS.
+  // Les routes réelles sont POST /billing/payments/cash et
+  // POST /billing/payments/online (billing.controller.ts:122,128).
+  Future<Map<String, dynamic>> payInvoiceCash(Map<String, dynamic> body) => _postMap('/billing/payments/cash', body);
+  Future<Map<String, dynamic>> payInvoiceOnline(Map<String, dynamic> body) => _postMap('/billing/payments/online', body);
+
+  // Devices — M1 (FCM) : enregistrement du token push (POST /devices).
+  // Contrat : name (2-120), device_fingerprint (>= 8), platform
+  // (android|ios|web), app_version / fcm_token / apns_token optionnels.
+  Future<Map<String, dynamic>> registerDevice({
+    required String name,
+    required String deviceFingerprint,
+    required String platform,
+    String? appVersion,
+    String? fcmToken,
+    String? apnsToken,
+  }) =>
+      _postMap('/devices', {
+        'name': name,
+        'device_fingerprint': deviceFingerprint,
+        'platform': platform,
+        if (appVersion != null) 'app_version': appVersion,
+        if (fcmToken != null) 'fcm_token': fcmToken,
+        if (apnsToken != null) 'apns_token': apnsToken,
+      });
 
   // Helpers
   Future<Map<String, dynamic>> _getMap(String path, {Map<String, dynamic>? query}) => _withErrorMapping(() async {

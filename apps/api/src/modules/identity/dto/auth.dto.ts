@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class LoginDto {
   @IsEmail({}, { message: 'email invalide' })
@@ -37,6 +37,21 @@ export class RefreshDto {
    * Au moins UNE des deux sources DOIT être fournie : le contrôleur vérifie
    * après la validation DTO.
    */
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  refresh_token?: string;
+
+  @IsOptional()
+  @IsString()
+  device_id?: string;
+}
+
+export class SwitchOrgDto {
+  /** Organisation cible (membership actif obligatoire). */
+  @IsUUID()
+  organization_id!: string;
+
   @IsOptional()
   @IsString()
   @MinLength(16)

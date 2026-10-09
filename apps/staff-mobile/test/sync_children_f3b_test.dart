@@ -29,7 +29,7 @@ void main() {
     h.api.handlePost = (path, data) async => path == '/devices'
       ? {'device_id': f2.device}
       : {'accepted': [data['operations'][0]['event_id']], 'rejected': [], 'conflicts': [], 'next_cursor': '0'};
-    h.api.handlePull = (q) async => {'events': q['cursor'] == '0' ? [childEvent('1'), deletedEvent('2')] : [], 'next_cursor': '2'};
+    h.api.handlePull = (q) async => {'events': q['cursor'] == '0' ? [childEvent('1'), deletedEvent('2')] : [], 'next_cursor': '2', 'resync_required': false};
     await h.engine.sync();
     expect(h.engine.currentStatus, SyncStatus.idle);
     expect(await h.db.select(h.db.localChildren).get(), isEmpty);
@@ -55,10 +55,10 @@ void main() {
     await tester.runAsync(() async { await h.db.syncState(); });
     await tester.pumpWidget(MaterialApp(home: ChildrenListPage(syncEngine: h.engine)));
     await tester.pumpAndSettle(); h.online = true;
-    h.api.handlePull = (q) async => {'events': q['cursor'] == '0' ? [childEvent('1')] : [], 'next_cursor': '1'};
+    h.api.handlePull = (q) async => {'events': q['cursor'] == '0' ? [childEvent('1')] : [], 'next_cursor': '1', 'resync_required': false};
     await tester.runAsync(h.engine.sync); await tester.pumpAndSettle();
     expect(find.text('Synthetic Child'), findsOneWidget);
-    h.api.handlePull = (q) async => {'events': q['cursor'] == '1' ? [deletedEvent('2')] : [], 'next_cursor': '2'};
+    h.api.handlePull = (q) async => {'events': q['cursor'] == '1' ? [deletedEvent('2')] : [], 'next_cursor': '2', 'resync_required': false};
     await tester.runAsync(h.engine.sync); await tester.pumpAndSettle();
     expect(find.text('Synthetic Child'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -72,7 +72,7 @@ void main() {
       if (defect == 'date') bad['payload']['date_of_birth'] = '2024-02-31';
       if (defect == 'version') bad['payload']['version'] = -1;
       if (defect == 'deleted_at') bad['event_type'] = 'deleted';
-      h.api.handlePull = (_) async => {'events': [childEvent('1'), bad], 'next_cursor': '2'};
+      h.api.handlePull = (_) async => {'events': [childEvent('1'), bad], 'next_cursor': '2', 'resync_required': false};
       await h.engine.sync();
       expect(h.engine.currentStatus, SyncStatus.contractError);
       expect(await h.db.select(h.db.localChildren).get(), isEmpty);
