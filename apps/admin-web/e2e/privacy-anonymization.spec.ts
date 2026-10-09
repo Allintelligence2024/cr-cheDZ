@@ -7,26 +7,28 @@ import pg from 'pg';
  * et PostgreSQL du job CI. L'enfant et son média sont synthétiques, uniques à
  * l'essai ; l'endpoint réel doit remonter la clé dont la purge S3 échoue.
  *
- * Compte : le rôle directeur est REFUSÉ par @Permissions('privacy:manage')
- * (remédiation 2.1/2.2 — séparation DPO de la loi 25-11 : le seed 003
- * attribue privacy:manage au dpo, jamais au director). On utilise donc le
- * compte DPO créé par seed-e2e.mjs. La recherche d'enfant et l'anonymisation
- * sont des actions privacy:manage ; les autres parcours e2e (director-flow)
- * utilisent le compte director pour les actions métier.
+ * Comptes : deux, car la séparation DPO (loi 25-11, remédiation 2.1/2.2)
+ * refuse au director les actions privacy et au DPO les actions métier :
+ *  - DIRECTOR_EMAIL crée l'enfant synthétique (POST /children exige
+ *    children:create, que le seed 003 attribue au director, pas au dpo) ;
+ *  - DPO_EMAIL fait le parcours anonymisation (privacy:manage est attribué
+ *    au dpo SEUL — @Permissions('privacy:manage') refuse le director).
+ * Les deux comptes sont créés par seed-e2e.mjs.
  */
-const EMAIL = 'e2e.dpo@test.dz';
+const DPO_EMAIL = 'e2e.dpo@test.dz';
+const DIRECTOR_EMAIL = 'e2e.director@test.dz';
 const PASSWORD = 'Password123!';
 
 async function loginUi(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/login');
-  await page.getByLabel('Email').fill(EMAIL);
+  await page.getByLabel('Email').fill(DPO_EMAIL);
   await page.getByLabel('Mot de passe').fill(PASSWORD);
   await page.getByRole('button', { name: 'Se connecter' }).click();
   await expect(page.getByText('Bienvenue')).toBeVisible();
 }
 
-async function apiLogin(request: APIRequestContext): Promise<string> {
-  const response = await request.post('/api/v1/auth/login', { data: { email: EMAIL, password: PASSWORD } });
+async function apiLogin(request: APIRequestContext, email: string = DPO_EMAIL): Promise<string> {
+  const response = await request.post('/api/v1/auth/login', { data: { email, password: PASSWORD } });
   expect(response.ok()).toBeTruthy();
   return ((await response.json()) as { access_token: string }).access_token;
 }
@@ -42,12 +44,15 @@ test('director : recherche un enfant sorti, confirme l’action et voit son rés
          JOIN users u ON u.email = $2
         WHERE o.slug = $1
         LIMIT 1`,
-      ['e2e-org', EMAIL],
+      ['e2e-org', DPO_EMAIL],
     );
     expect(site.rowCount, 'seed-e2e doit fournir un site').toBe(1);
 
     const searchName = `E2EAnon${randomUUID().slice(0, 8)}`;
-    const token = await apiLogin(request);
+    // children:create est une permission métier (director), pas privacy:manage
+    // (dpo) — la séparation DPO de la loi 25-11 coupe les deux sens. On crée
+    // donc le dossier synthétique avec le COMPTE DIRECTOR.
+    const token = await apiLogin(request, DIRECTOR_EMAIL);
     const created = await request.post('/api/v1/children', {
       headers: { authorization: `Bearer ${token}` },
       data: {

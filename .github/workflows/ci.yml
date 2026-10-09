@@ -85,10 +85,11 @@ jobs:
       # 090 (auth_device_validate), 091 (payroll_lines immuable),
       # 092 (sync_retention_purge planifiée), 093 (sync_resync_required),
       # 094 (scheduler advisory lock) + 095 (users unique partiel) + 096 (payments
-      # external_reference tenant-scoped) + 097 (sessions RLS super-admin) → 96
-      # migrations (001 → 097,
-      # 083 fut fusionné dans le seed 003 — le compte de fichiers est donc 96, pas 097).
-      - name: Migrations (reset + status 001→097, 96 fichiers)
+      # external_reference tenant-scoped) + 097 (sessions RLS super-admin)
+      # + 098 (sync_resync_required cursor 0) + 099 (audit/data_access insert permissive) → 98
+      # migrations (001 → 099,
+      # 083 fut fusionné dans le seed 003 — le compte de fichiers est donc 98, pas 099).
+      - name: Migrations (reset + status 001→099, 98 fichiers)
         run: |
           node scripts/migrate.mjs --reset
           node scripts/migrate.mjs

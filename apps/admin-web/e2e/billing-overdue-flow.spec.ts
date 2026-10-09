@@ -135,14 +135,16 @@ test.describe('billing — facture → envoi → encaissement → retard', () =>
     // base resetée : un doublon n'est pas « absorbé » par un catch, il doit
     // faire rougir le test plutôt que masquer une contamination de fixture.
     const listRes = await request.get('/api/v1/billing/invoices', {
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: *** ${token}` },
     });
     expect(listRes.ok()).toBeTruthy();
-    const invoices = (await listRes.json()) as Array<{
+    // 3.2.4 : la liste est une RÉPONSE PAGINÉE { items, total, page, limit }.
+    const listBody = (await listRes.json()) as { items: Array<{
       invoice_number: string;
       period_year: number;
       period_month: number;
-    }>;
+    }> };
+    const invoices = listBody.items;
     const created = invoices.find((i) => i.period_year === new Date().getFullYear() && i.period_month === month);
     expect(created, `la facture ${new Date().getFullYear()}-${month} créée par l'UI doit exister`).toBeTruthy();
     await expect(rowFor(page, created!.invoice_number)).toContainText('Brouillon');
