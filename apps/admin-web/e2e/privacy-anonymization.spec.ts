@@ -19,12 +19,17 @@ const DPO_EMAIL = 'e2e.dpo@test.dz';
 const DIRECTOR_EMAIL = 'e2e.director@test.dz';
 const PASSWORD = 'Password123!';
 
+// La page de destination après login dépend du rôle : le director atterrit sur
+// le tableau de bord (« Bienvenue »), mais le DPO est redirigé vers /privacy
+// (homeFor — il n'a pas accès au dashboard, loi 25-11). On attend donc que la
+// page quitte /login et que la nav s'affiche, quel que soit le rôle.
 async function loginUi(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/login');
   await page.getByLabel('Email').fill(DPO_EMAIL);
   await page.getByLabel('Mot de passe').fill(PASSWORD);
   await page.getByRole('button', { name: 'Se connecter' }).click();
-  await expect(page.getByText('Bienvenue')).toBeVisible();
+  await expect(page).toHaveURL((url) => !url.pathname.startsWith('/login'));
+  await expect(page.getByRole('link', { name: 'Vie privée' })).toBeVisible();
 }
 
 async function apiLogin(request: APIRequestContext, email: string = DPO_EMAIL): Promise<string> {

@@ -70,14 +70,29 @@ describe('redact (ADR-010 : aucune PII dans audit_logs)', () => {
 // ── AuditService — log vs logInTransaction ───────────────────────────────────
 
 describe('AuditService (atomique vs non-bloquant)', () => {
+  // 099 (2026-10-09) : audit_logs/data_access_logs sont FORCE RLS. log() et
+  // logDataAccess() posent app.tenant_id sur un client emprunté avant l'INSERT,
+  // puis RESTORENT la valeur précédente (pool partagée). Les mocks doivent
+  // donc exposer connect() en plus de query().
   const mk = async () => {
     const { AuditService } = await import('../privacy/audit.service');
     const executed: string[] = [];
+    const client = {
+      query: async (sql: string, params?: unknown[]) => {
+        executed.push(sql.replace(/\s+/g, ' ').trim());
+        // current_setting(...) doit renvoyer une ligne pour le RESTORE.
+        if (sql.includes('current_setting')) return { rows: [{ v: null }] };
+        if (params) executed.push(...params.map(String));
+        return { rows: [], rowCount: 1 };
+      },
+      release: async () => undefined,
+    };
     const pool = {
       query: async (sql: string) => {
         executed.push(sql.replace(/\s+/g, ' ').trim());
         return { rows: [], rowCount: 1 };
       },
+      connect: async () => client,
     } as unknown as import('pg').Pool;
     return { svc: new AuditService(pool), executed };
   };
@@ -86,6 +101,22 @@ describe('AuditService (atomique vs non-bloquant)', () => {
     const { svc, executed } = await mk();
     await svc.log({ organizationId: randomUUID(), userId: randomUUID(), action: 'update', resourceType: 'child', newValues: { first_name_fr: 'A' } });
     expect(executed.some((s) => s.startsWith('INSERT INTO audit_logs'))).toBe(true);
+  });
+
+  test('log() pose app.tenant_id avant l INSERT tenant puis restaure (099, RLS)', async () => {
+    const { svc, executed } = await mk();
+    const org = randomUUID();
+    await svc.log({ organizationId: org, action: 'update', resourceType: 'child' });
+    const setCalls = executed.filter((s) => s.startsWith('SELECT set_config'));
+    // 1) pose le tenant, 2) restaure la valeur précédente (vide ici)
+    expect(setCalls.length).toBe(2);
+  });
+
+  test('log() sans organizationId n emprunte pas de client (échec d auth, GUC inutile)', async () => {
+    const { svc, executed } = await mk();
+    await svc.log({ action: 'login_failed', resourceType: 'session' });
+    expect(executed.some((s) => s.startsWith('INSERT INTO audit_logs'))).toBe(true);
+    expect(executed.some((s) => s.includes('set_config'))).toBe(false);
   });
 
   test('log() avale les erreurs (l audit ne casse jamais le métier)', async () => {
@@ -118,16 +149,23 @@ describe('AuditService (atomique vs non-bloquant)', () => {
     expect(executed.some((s) => s.startsWith('INSERT INTO data_access_logs'))).toBe(true);
   });
 
-  test('logDataAccess() porte organization_id (policy RLS 088 : INSERT sans GUC tenant)', async () => {
-    // AuditService écrit via this.pool, pas le client tenant : la GUC
-    // app.tenant_id n'est PAS posée. La policy data_access_logs_insert_any
-    // (migration 088) accepte donc organization_id IS NULL, mais refuse un
-    // organization_id étranger. Ce test verrouille le contrat : le caller
-    // DOIT passer organizationId (requireTenant) — sinon l'audit est rejeté.
+  test('logDataAccess() porte organization_id (policy RLS 088 : INSERT exige le GUC tenant)', async () => {
+    // 099 : AuditService emprunte un client et pose app.tenant_id (FORCE RLS).
+    // Ce test verrouille le contrat : le caller DOIT passer organizationId
+    // (requireTenant) — sans lui, la policy refuse l'INSERT.
     const { AuditService } = await import('../privacy/audit.service');
     let capturedParams: unknown[] = [];
+    const client = {
+      query: async (_sql: string, params?: unknown[]) => {
+        if (_sql.includes('current_setting')) return { rows: [{ v: null }] };
+        if (params && _sql.includes('INSERT INTO data_access_logs')) capturedParams = params;
+        return { rows: [], rowCount: 1 };
+      },
+      release: async () => undefined,
+    };
     const pool = {
       query: async (_sql: string, params: unknown[]) => { capturedParams = params; return { rows: [], rowCount: 1 }; },
+      connect: async () => client,
     } as unknown as import('pg').Pool;
     const org = randomUUID();
     const svc = new AuditService(pool);
