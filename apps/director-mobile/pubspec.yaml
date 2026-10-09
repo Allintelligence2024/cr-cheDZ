@@ -31,7 +31,9 @@ dependencies:
   # M1 — FCM réel (V2.1)
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
-  sentry_flutter: ^8.14.2
+  # 9.x : compile contre android-35 (package_info_plus 9.0.1 exige compileSdk 35 ;
+  # 8.14.2 est restée sur android-34 → checkReleaseAarMetadata en échec).
+  sentry_flutter: ^9.0.0
 
 dev_dependencies:
   flutter_test:
