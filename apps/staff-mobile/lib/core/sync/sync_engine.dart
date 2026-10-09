@@ -140,11 +140,19 @@ class SyncEngine {
     } on DioException catch (error) {
       if (_stopped) return;
       final code = error.response?.statusCode;
+      // Diagnostic F4 (2026-10-09) : un 4xx non-2xx arrivait ici sans laisser
+      // de trace. On logge le code + le corps de la réponse pour le CI.
+      if (code != null && code >= 400 && code < 500 && code != 429 && code != 408) {
+        debugPrint('sync contractError (DioException $code): ${error.response?.data}');
+      }
       if (code == 401) { _block(SyncStatus.authenticationRequired); }
       else if (code == 403) { _block(SyncStatus.deviceRevoked); }
       else if (code != null && code >= 400 && code < 500 && code != 429 && code != 408) { _block(SyncStatus.contractError); }
       else { _retry(); }
-    } catch (_) { if (!_stopped) _retry(); }
+    } catch (error, stack) {
+      debugPrint('sync retry (unexpected): $error\n$stack');
+      if (!_stopped) _retry();
+    }
   }
 
   void _block(SyncStatus status) {
