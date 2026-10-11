@@ -6,6 +6,7 @@ import {
   Min, MinLength,
 } from 'class-validator';
 import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
+import { IsAlgerianPhone } from '../../../shared/validation/algerian-phone';
 
 export class CreateStaffDto {
   @IsUUID()
@@ -43,7 +44,7 @@ export class CreateStaffDto {
   base_salary?: number;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone invalide (ex. 0550 12 34 56)' })
   phone?: string;
 
   @IsOptional()
@@ -52,7 +53,7 @@ export class CreateStaffDto {
   emergency_contact_name?: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: "téléphone d'urgence invalide (ex. 0550 12 34 56)" })
   @MaxLength(30)
   emergency_contact_phone?: string;
 
@@ -92,7 +93,7 @@ export class UpdateStaffDto {
   base_salary?: number;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone invalide (ex. 0550 12 34 56)' })
   phone?: string;
 
   @IsOptional()

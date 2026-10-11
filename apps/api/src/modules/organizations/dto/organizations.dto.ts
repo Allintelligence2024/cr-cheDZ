@@ -11,6 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { IsAlgerianPhone } from '../../../shared/validation/algerian-phone';
 
 export class CreateOrganizationDto {
   @IsString()
@@ -42,7 +43,7 @@ export class CreateOrganizationDto {
   registration_number?: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone invalide (ex. 0550 12 34 56)' })
   phone?: string;
 
   @IsOptional()
@@ -100,7 +101,7 @@ export class UpdateOrganizationDto {
   establishment_type?: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone invalide (ex. 0550 12 34 56)' })
   phone?: string;
 
   @IsOptional()
@@ -130,7 +131,7 @@ export class CreateSiteDto {
   name_ar?: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone invalide (ex. 0550 12 34 56)' })
   phone?: string;
 
   @IsOptional()
@@ -167,7 +168,7 @@ export class UpdateSiteDto {
   name_ar?: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone invalide (ex. 0550 12 34 56)' })
   phone?: string;
 
   @IsOptional()

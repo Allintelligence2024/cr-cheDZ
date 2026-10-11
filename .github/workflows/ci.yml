@@ -45,6 +45,16 @@ jobs:
       # anonyme à Quay est refusé, sans aucune modification de code.
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+      # Gate E2/H2k (supervision réseau) : test-worker-monitoring-stack.mjs et
+      # test-metrics-collector-stack.mjs tirent prom/prometheus et
+      # prom/alertmanager de Docker Hub. Le plafond ANONYME est partagé par IP
+      # entre tous les runners GitHub — cause du `toomanyrequests` observé.
+      # Identifiants FACULTATIFS : vides par défaut → l'étape de connexion est
+      # ignorée (comportement inchangé). Les fournir (secrets de dépôt) relève le
+      # plafond de tirage, sans modification de code ni faux vert : une image
+      # injoignable ou une architecture non prévue fait toujours échouer le gate.
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       # H1 (24-25/09/2026) : `unauthorized` sur `quay.io/minio/minio`, puis MinIO
@@ -59,6 +69,12 @@ jobs:
       - name: Registre Quay (facultatif — H1)
         if: env.QUAY_USERNAME != ''
         run: echo "$QUAY_PASSWORD" | docker login quay.io --username "$QUAY_USERNAME" --password-stdin
+      # Gate E2/H2k : mêmes images prom/prometheus + prom/alertmanager tirées de
+      # Docker Hub. Facultatif et conditionné aux secrets, exactement comme Quay
+      # ci-dessus : sans identifiants, l'étape est ignorée (comportement inchangé).
+      - name: Registre Docker Hub (facultatif — gate E2/H2k)
+        if: env.DOCKERHUB_USERNAME != ''
+        run: echo "$DOCKERHUB_PASSWORD" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
       - uses: actions/setup-node@v4
         with:
           node-version: 22

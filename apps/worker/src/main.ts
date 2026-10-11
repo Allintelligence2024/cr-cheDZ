@@ -295,14 +295,16 @@ async function videoClipsPurge(): Promise<void> {
     const failures: string[] = [];
     for (const clip of expired.rows) {
       try {
-        // 3.6.2 : la LIGNE est supprimée avant l'objet stockage. Si le crash
-        // intervient entre les deux, la base reste cohérente (aucune ligne
-        // orpheline pointant vers un storage_key) et l'objet storage devient
-        // un résidu récupérable par le GC du bucket — c'est l'ordre inverse
-        // (storage d'abord) qui laissait des storage_key orphelins avec une
-        // ligne persistante en base.
-        await pool.query('SELECT video_clips_delete_purged($1::uuid[])', [[clip.id]]);
+        // Objet stockage SUPPRIMÉ AVANT la ligne (loi 25-11, doc §5 :
+        // « un clip dont le stockage échoue RESTE en base et fait
+        // échouer le job »). Un crash entre les deux laisse la ligne
+        // en place : le retry retente deleteFile (idempotent — ENOENT
+        // local toléré, DeleteObject S3 renvoie 204) puis supprime
+        // la ligne. L'ordre inverse (ligne d'abord) perdrait
+        // silencieusement le clip malgré l'échec de purge — la fausse
+        // purge que le job doit justement signaler.
         await deleteFile(clip.storage_key, clip.storage_backend);
+        await pool.query('SELECT video_clips_delete_purged($1::uuid[])', [[clip.id]]);
         purgedIds.push(clip.id);
       } catch (error) {
         failures.push(`${clip.id}:${error instanceof Error ? error.message : String(error)}`.slice(0, 160));

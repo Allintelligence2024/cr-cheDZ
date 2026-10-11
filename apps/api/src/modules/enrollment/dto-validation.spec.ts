@@ -20,7 +20,7 @@ const valid_CreateEnrollmentRequestDto = () => plainToInstance(CreateEnrollmentR
       child_last_name: "ok",
       child_date_of_birth: "2026-01-15",
       guardian_name: "ok",
-      guardian_phone: "00000000",
+      guardian_phone: "0550123456",
       desired_start_date: "2026-01-15",
     });
 

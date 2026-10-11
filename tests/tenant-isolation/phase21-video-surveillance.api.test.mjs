@@ -79,6 +79,7 @@ const main = async () => {
 
   try {
     const directorRole = (await db.query(`SELECT id FROM roles WHERE slug='director'`)).rows[0].id;
+    const dpoRole = (await db.query(`SELECT id FROM roles WHERE slug='dpo'`)).rows[0].id;
     await db.query(
       `INSERT INTO users(email,first_name,last_name,password_hash,status,is_super_admin) VALUES($1,'S','A',$2,'active',true)`,
       [`${tag}-super@test.dz`, hash],
@@ -87,6 +88,10 @@ const main = async () => {
       const org = (await db.query(`INSERT INTO organizations(slug,name_fr,wilaya) VALUES($1,'V','31') RETURNING id`, [slug])).rows[0].id;
       const director = (await db.query(`INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'D',$2,$3,'active') RETURNING id`, [`${slug}-director@test.dz`, 'T', hash])).rows[0].id;
       await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [org, director, directorRole]);
+      // 2.1/2.2 (loi 25-11) : privacy:manage est attribué au DPO
+      // (seed 003) — registre et DPIA sont portés par un compte DPO.
+      const dpo = (await db.query(`INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'P','O',$2,'active') RETURNING id`, [`${slug}-dpo@test.dz`, hash])).rows[0].id;
+      await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [org, dpo, dpoRole]);
       return { org, director };
     };
     const A = await mkOrg(`${tag}-a`);
@@ -94,13 +99,15 @@ const main = async () => {
     orgA = A.org; orgB = B.org;
     const tokenDirA = (await api('POST', '/auth/login', null, { email: `${tag}-a-director@test.dz`, password })).body.access_token;
     const tokenDirB = (await api('POST', '/auth/login', null, { email: `${tag}-b-director@test.dz`, password })).body.access_token;
+    const tokenDpoA = (await api('POST', '/auth/login', null, { email: `${tag}-a-dpo@test.dz`, password })).body.access_token;
+    const tokenDpoB = (await api('POST', '/auth/login', null, { email: `${tag}-b-dpo@test.dz`, password })).body.access_token;
     const tokenSuper = (await api('POST', '/auth/login', null, { email: `${tag}-super@test.dz`, password })).body.access_token;
     ok('JWT émis (directeurs A/B + super_admin)', Boolean(tokenDirA && tokenDirB && tokenSuper));
 
-    const enableVideoFor = async (orgId, tokenDir) => {
-      const registry = (await api('GET', '/privacy/registry', tokenDir)).body;
+    const enableVideoFor = async (orgId, tokenDpo) => {
+      const registry = (await api('GET', '/privacy/registry', tokenDpo)).body;
       const video = registry.find((r) => r.processing_name === 'Vidéosurveillance des locaux');
-      const dpia = await api('POST', '/privacy/dpias', tokenDir, {
+      const dpia = await api('POST', '/privacy/dpias', tokenDpo, {
         processing_registry_id: video.id,
         risk_assessment: { level: 'moderate', reference: 'docs/regulatory/DPIA-VIDEOSURVEILLANCE.md' },
         mitigation_measures: ['accès restreint', 'purge 30 j', 'visionnage journalisé'],
@@ -119,7 +126,7 @@ const main = async () => {
 
     // ── 2. Activation conforme (DPIA) + caméras ─────────────────────────────
     console.log('\n2) DPIA approuvée → flag → caméras');
-    await enableVideoFor(A.org, tokenDirA);
+    await enableVideoFor(A.org, tokenDpoA);
     const zone400 = await api('POST', '/video/cameras', tokenDirA, { name: 'Sanitaires', zone: 'bathroom' });
     ok('Zone invalide → 400 (DTO)', zone400.status === 400, `status=${zone400.status}`);
     const cam = await api('POST', '/video/cameras', tokenDirA, { name: 'Entrée principale', zone: 'entrance' });
@@ -133,7 +140,7 @@ const main = async () => {
     console.log('\n3) Tenant B : verrou puis isolation');
     const bDisabled = await api('GET', '/video/cameras', tokenDirB);
     ok('B sans flag : 422 VIDEO_FEATURE_DISABLED', bDisabled.status === 422 && bDisabled.body.code === 'VIDEO_FEATURE_DISABLED');
-    await enableVideoFor(B.org, tokenDirB);
+    await enableVideoFor(B.org, tokenDpoB);
     const camsB = await api('GET', '/video/cameras', tokenDirB);
     ok('B (flag on) : liste VIDE (pas les caméras de A)', camsB.status === 200 && Array.isArray(camsB.body) && camsB.body.length === 0, `n=${camsB.body?.length}`);
     const crossPatch = await api('PATCH', `/video/cameras/${cam.body.id}`, tokenDirB, { is_active: false });

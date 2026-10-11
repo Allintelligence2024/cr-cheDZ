@@ -57,7 +57,9 @@ const verbose = process.argv.includes('--verbose');
  */
 const EXEMPTIONS = new Map([
   ['users', 'table système — sans RLS par conception (accès cross-tenant contrôlé par les gardes applicatifs) ; déjà indexée sur email/phone'],
-  ['sessions', 'table système — sans RLS par conception ; déjà indexée sur user_id et refresh_token_hash'],
+  // `sessions` est SORTIE des exemptions (migration 088) : la table est
+  // désormais sous RLS tenant (sessions_tenant) et doit porter un index de
+  // tête organization_id comme toutes les autres — créé par la migration 100.
   ['feature_flags', 'configuration — quelques dizaines de lignes au maximum ; possède UNIQUE(flag_key, organization_id) qui sert la recherche courante'],
   ['processing_registry', 'configuration — modèles globaux + entrées par organisation, quelques dizaines de lignes ; le balayage y est optimal'],
 ]);

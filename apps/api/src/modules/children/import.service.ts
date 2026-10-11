@@ -5,6 +5,7 @@ import { requireTenant } from '../../shared/database/tenant-utils';
 import { AuditService } from '../privacy/audit.service';
 import { AppError } from '../../shared/errors';
 import { ageMonths, AGE_CRECHE_MIN_MONTHS, AGE_CRECHE_MAX_MONTHS } from '../../shared/compliance/age-creche';
+import { isAlgerianPhone } from '../../shared/validation/algerian-phone';
 import { ImportChildRowDto, type ImportError, type ImportResult } from './dto/import.dto';
 
 const VALID_GENDERS = new Set(['M', 'F']);
@@ -167,6 +168,16 @@ export class ImportService {
         field: 'guardian',
         message_fr: 'Responsable incomplet : nom ET téléphone requis si le prénom est renseigné',
         message_ar: 'ولي الأمر غير مكتمل: اللقب والهاتف مطلوبان',
+      });
+    }
+    // H3 : le DTO d'import reste volontairement permissif (rapport ligne par
+    // ligne), la validation métier est donc ici — un numéro non algérien
+    // partait auparavant tel quel chez le fournisseur SMS/WhatsApp.
+    if (row.guardian_phone && !isAlgerianPhone(row.guardian_phone)) {
+      out.push({
+        field: 'guardian_phone',
+        message_fr: 'Téléphone du responsable invalide (ex. 0550 12 34 56 ou +213550123456)',
+        message_ar: 'هاتف ولي الأمر غير صالح (مثال: 0550 12 34 56 أو +213550123456)',
       });
     }
     return out;

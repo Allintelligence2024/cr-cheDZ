@@ -98,6 +98,10 @@ const FROZEN_SECURITY_DEFINER_FUNCTIONS = new Set([
   // le worker (les 3 tables privacy_* sont FORCE RLS — lecture directe
   // interdite hors tenant).
   'compliance_deadlines_overdue',
+  // 100 révocations de sessions (088 FORCE RLS) — portée COMPTE ou
+  // (device, organisation) explicite en paramètre ; employées par
+  // SessionsService.revokeAllForUser / revokeByDevice.
+  'sessions_revoke_all_for_user', 'sessions_revoke_by_device',
   // 090 (phase 3.3.1) : validation d'un device_id avant association à une
   // session (lecture devices, table tenant).
   'auth_device_validate',
@@ -107,21 +111,26 @@ const FROZEN_SECURITY_DEFINER_FUNCTIONS = new Set([
  * Tables SYSTÈME (SANS RLS — CROISÉ avec pg_class en mode catalogue : chaque
  * entrée doit exister avec relrowsecurity = false) autorisées via pool brute,
  * avec justification :
- * - users / sessions / otp_codes : bootstrap auth AVANT pose du contexte
- *   tenant (login, refresh, OTP) — RLS absente par conception, l'isolation
- *   est assurée par les clauses WHERE (email, id de session…) ;
+ * - users / otp_codes : bootstrap auth AVANT pose du contexte tenant (login,
+ *   refresh, OTP) — RLS absente par conception, l'isolation est assurée par
+ *   les clauses WHERE (email, id de session…) ;
  * - organizations / roles / permissions / role_permissions : annuaire et
  *   enregistrement (pré-tenant) ;
  * - compliance_rules / compliance_rule_sets : référentiel global ;
- * - audit_logs / data_access_logs : INSERT append-only (jamais de SELECT
- *   tenant via pool brute) — l'audit ne doit pas faire échouer le métier ;
  * - schema_migrations : infra.
+ *
+ * SORTIES (migrations 088/097/099, dérive réparée par 100) : `sessions`,
+ * `audit_logs`, `data_access_logs` sont désormais des tables TENANT sous
+ * FORCE RLS. Leurs accès `pool.query` résiduels sont soit justifiés par un
+ * commentaire `rls-guard: allow` (GUC `app.tenant_id` posé au-dessus), soit
+ * passés par les nouvelles fonctions SECURITY DEFINER. Les remettre ici
+ * ferait échouer la garde (« table système figée [...] a désormais la RLS
+ * ACTIVE ») — c'est le mécanisme anti-dérive, il a fonctionné.
  */
 const FROZEN_SYSTEM_TABLES = new Set([
-  'users', 'sessions', 'otp_codes',
+  'users', 'otp_codes',
   'organizations', 'roles', 'permissions', 'role_permissions',
   'compliance_rules', 'compliance_rule_sets',
-  'audit_logs', 'data_access_logs',
   'schema_migrations',
 ]);
 

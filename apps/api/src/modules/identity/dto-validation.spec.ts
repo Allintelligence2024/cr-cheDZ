@@ -195,7 +195,7 @@ describe('TotpDto (4.2)', () => {
 });
 
 const valid_ParentOtpRequestDto = () => plainToInstance(ParentOtpRequestDto, {
-      phone: "00000000",
+      phone: "0550123456",
     });
 
 describe('ParentOtpRequestDto (4.2)', () => {

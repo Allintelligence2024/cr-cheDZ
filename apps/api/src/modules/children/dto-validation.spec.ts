@@ -585,7 +585,7 @@ const valid_CreateEmergencyContactDto = () => plainToInstance(CreateEmergencyCon
       first_name: "xx",
       last_name: "xx",
       relationship: "xx",
-      phone_primary: "xxxxxx",
+      phone_primary: "0550123456",
     });
 
 describe('CreateEmergencyContactDto (4.2)', () => {

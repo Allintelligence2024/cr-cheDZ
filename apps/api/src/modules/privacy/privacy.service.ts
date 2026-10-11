@@ -431,7 +431,7 @@ export class PrivacyService {
        JOIN roles r ON r.id=m.role_id
        WHERE u.id=$1 AND u.status='active' AND u.deleted_at IS NULL
          AND m.organization_id=$2 AND m.is_active=true
-         AND r.slug IN ('director','super_admin') LIMIT 1`,
+          AND r.slug IN ('director','super_admin','dpo') LIMIT 1`,
       [actorId, requireTenant(this.tenantContext)],
     );
     if (!actor.rows[0]) throw new AppError('DPIA_ACTOR_FORBIDDEN',

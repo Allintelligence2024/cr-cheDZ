@@ -18,8 +18,8 @@ try {
   const hash = await bcrypt.hash(password, 4), pinHash = await bcrypt.hash(pin, 4);
   const org = (await db.query("INSERT INTO organizations(slug,name_fr,wilaya) VALUES($1,'G1','31') RETURNING id", [randomUUID()])).rows[0].id;
   const makeUser = async () => {
-    const email = `${randomUUID()}@test.invalid`, phone = `+213${String(Math.floor(Math.random() * 1e9)).padStart(9,'0')}`;
-    const id = (await db.query("INSERT INTO users(email,phone,first_name,last_name,password_hash,parent_pin_hash,status) VALUES($1,$2,'G1','Test',$3,$4,'active') RETURNING id", [email, phone, hash, pinHash])).rows[0].id;
+    const email = `${randomUUID()}@test.invalid`, phone = `+2135${String(10000000 + Math.floor(Math.random() * 89999999))}`;
+    const id = (await db.query("INSERT INTO users(email,phone,organization_id,first_name,last_name,password_hash,parent_pin_hash,status) VALUES($1,$2,$3,'G1','Test',$4,$5,'active') RETURNING id", [email, phone, org, hash, pinHash])).rows[0].id;
     await db.query("INSERT INTO memberships(organization_id,user_id,role_id) SELECT $1,$2,id FROM roles WHERE slug='parent_primary'", [org,id]);
     await db.query("INSERT INTO guardians(organization_id,user_id,first_name_fr,last_name_fr,relationship,created_by) VALUES($1,$2,'G1','Test','parent',$2)", [org,id]);
     return { id,email,phone };

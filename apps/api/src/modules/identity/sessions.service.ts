@@ -95,29 +95,70 @@ export class SessionsService {
   }
 
   async revokeByRefreshHash(refreshHash: string, reason = 'logout'): Promise<boolean> {
-    const result = await this.pool.query(
-      `UPDATE sessions SET revoked_at = NOW(), revoked_reason = $2
-       WHERE refresh_token_hash = $1 AND revoked_at IS NULL`,
-      [refreshHash, reason],
-    );
-    return (result.rowCount ?? 0) > 0;
+    // Migration 088 : `sessions` est FORCE RLS (politique sessions_tenant sur
+    // organization_id). Un UPDATE brut sur la pool sans GUC app.tenant_id ne
+    // voit AUCUNE ligne (organization_id = NULL est NULL) : le logout
+    // répondait 204 sans révoquer quoi que ce soit — le refresh token restait
+    // valable jusqu'à expiration. On résout donc d'abord la session via la
+    // fonction SECURITY DEFINER existante (preuve par hachage du token),
+    // puis on pose le GUC le temps de l'UPDATE et on RESTORE la valeur
+    // précédente (pool partagée — jamais de fuite de tenant entre requêtes).
+    const row = (await this.pool.query(
+      `SELECT session_id, organization_id FROM auth_refresh_lookup($1)`, [refreshHash],
+    )).rows[0] as { id: string; organization_id: string | null } | undefined;
+    if (!row) return false;
+    if (!row.organization_id) {
+      // rls-guard: allow sessions hors organisation (super_admin) — policy permissive sessions_super_admin_no_org (migration 097, USING organization_id IS NULL) : visible SANS GUC tenant ; le filtre revient sur organization_id IS NULL.
+      // Session hors organisation (super-admin) : politique permissive 097.
+      const result = await this.pool.query(
+        `UPDATE sessions SET revoked_at = NOW(), revoked_reason = $2
+         WHERE refresh_token_hash = $1 AND revoked_at IS NULL AND organization_id IS NULL`,
+        [refreshHash, reason],
+      );
+      return (result.rowCount ?? 0) > 0;
+    }
+    const prev = (await this.pool.query(`SELECT current_setting('app.tenant_id', true) AS v`)).rows[0].v as string | null;
+    await this.pool.query(`SELECT set_config('app.tenant_id', $1, false)`, [row.organization_id]);
+    try {
+      // rls-guard: allow sessions FORCE RLS (088) — GUC app.tenant_id posé juste au-dessus depuis auth_refresh_lookup, restauré après ; portée réduite au hachage du token de la requête courante.
+      const result = await this.pool.query(
+        `UPDATE sessions SET revoked_at = NOW(), revoked_reason = $2
+         WHERE refresh_token_hash = $1 AND revoked_at IS NULL`,
+        [refreshHash, reason],
+      );
+      return (result.rowCount ?? 0) > 0;
+    } finally {
+      await this.pool.query(`SELECT set_config('app.tenant_id', $1, false)`, [prev ?? '']);
+    }
   }
 
-  /** Révocation de toutes les sessions d'un utilisateur (reuse détectée, mot de passe changé). */
-  async revokeAllForUser(userId: string, reason: string, client: Pick<PoolClient, 'query'> = this.pool): Promise<void> {
-    await client.query(
-      `UPDATE sessions SET revoked_at = NOW(), revoked_reason = $2
-       WHERE user_id = $1 AND revoked_at IS NULL`,
-      [userId, reason],
-    );
+  /**
+   * Révocation de toutes les sessions d'un utilisateur (reuse détecté, mot de passe changé).
+   *
+   * `sessions` est FORCE RLS (088) : un UPDATE brut sur la pool — appelant
+   * inclus — ne verrait aucune ligne. La sémantique est COMPTE (toutes les
+   * sessions, toutes organisations confondues pour un directeur multi-org),
+   * portée par la fonction SECURITY DEFINER `sessions_revoke_all_for_user`
+   * (migration 100). Quand l'appelant fournit un client (transaction de
+   * refresh), le GUC y est déjà posé par auth.service : le SQL direct reste
+   * alors correct et la transaction verrouille la révocation avec la rotation.
+   */
+  async revokeAllForUser(userId: string, reason: string, client?: Pick<PoolClient, 'query'>): Promise<void> {
+    if (client) {
+      await client.query(
+        `UPDATE sessions SET revoked_at = NOW(), revoked_reason = $2
+         WHERE user_id = $1 AND revoked_at IS NULL`,
+        [userId, reason],
+      );
+      return;
+    }
+    // rls-guard: allow sessions FORCE RLS (088) — suppression via fonction SECURITY DEFINER sessions_revoke_all_for_user (migration 100), portée COMPTE assumée après preuve d'authentification.
+    await this.pool.query(`SELECT sessions_revoke_all_for_user($1, $2)`, [userId, reason]);
   }
 
   /** Révocation de toutes les sessions liées à un appareil (révocation distante). */
   async revokeByDevice(deviceId: string, organizationId: string, reason: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE sessions SET revoked_at = NOW(), revoked_reason = $2
-       WHERE device_id = $1 AND organization_id = $3 AND revoked_at IS NULL`,
-      [deviceId, reason, organizationId],
-    );
+    // rls-guard: allow sessions FORCE RLS (088) — suppression via fonction SECURITY DEFINER sessions_revoke_by_device (migration 100), filtre (device, organisation) conservé en paramètre.
+    await this.pool.query(`SELECT sessions_revoke_by_device($1, $2, $3)`, [deviceId, organizationId, reason]);
   }
 }

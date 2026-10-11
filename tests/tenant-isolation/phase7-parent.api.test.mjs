@@ -64,7 +64,7 @@ const main = async () => {
   const tag = `p7-${randomUUID().slice(0, 8)}`;
   const password = 'Password123!';
   const hash = await bcrypt.hash(password, 12);
-  const digits = () => String(Math.floor(1e8 + Math.random() * 9e8)); // 9 chiffres après +213
+  const digits = () => '5' + String(Math.floor(Math.random() * 1e8)).padStart(8, '0'); // 9 chiffres après +213 (mobile algérien 05/06/07)
   const phoneA = `+213${digits()}`;
   const phoneB = `+213${digits()}`;
   const phoneC = `+213${digits()}`;
@@ -84,7 +84,7 @@ const main = async () => {
       [org.rows[0].id, site.rows[0].id, room.rows[0].id, creator.rows[0].id],
     );
     const mk = async (email, phone) => {
-      const u = await db.query(`INSERT INTO users(email,phone,first_name,last_name,password_hash,status) VALUES($1,$2,'P','T',$3,'active') RETURNING id`, [email, phone, hash]);
+      const u = await db.query(`INSERT INTO users(email,phone,organization_id,first_name,last_name,password_hash,status) VALUES($1,$2,$3,'P','T',$4,'active') RETURNING id`, [email, phone, org.rows[0].id, hash]);
       await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [org.rows[0].id, u.rows[0].id, role.rows[0].id]);
       const g = await db.query(`INSERT INTO guardians(organization_id,user_id,first_name_fr,last_name_fr,relationship,created_by) VALUES($1,$2,'P','T','parent',$3) RETURNING id`, [org.rows[0].id, u.rows[0].id, creator.rows[0].id]);
       return { u: u.rows[0].id, g: g.rows[0].id };
@@ -98,7 +98,7 @@ const main = async () => {
 
     // Org B : un parent qui ne doit rien voir de A
     const orgB = await db.query(`INSERT INTO organizations(slug,name_fr,wilaya) VALUES($1,'P7B','16') RETURNING id`, [`${tag}-b`]);
-    const uB = await db.query(`INSERT INTO users(email,phone,first_name,last_name,password_hash,status) VALUES($1,$2,'Q','T',$3,'active') RETURNING id`, [`${tag}-b2@test.dz`, phoneC, hash]);
+    const uB = await db.query(`INSERT INTO users(email,phone,organization_id,first_name,last_name,password_hash,status) VALUES($1,$2,$3,'Q','T',$4,'active') RETURNING id`, [`${tag}-b2@test.dz`, phoneC, orgB.rows[0].id, hash]);
     await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [orgB.rows[0].id, uB.rows[0].id, role.rows[0].id]);
     await db.query(`INSERT INTO guardians(organization_id,user_id,first_name_fr,last_name_fr,relationship,created_by) VALUES($1,$2,'Q','T','parent',$3)`, [orgB.rows[0].id, uB.rows[0].id, creator.rows[0].id]);
 

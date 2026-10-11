@@ -313,6 +313,14 @@ export class AuthService {
       const initial = (await client.query(`SELECT * FROM auth_refresh_lookup($1)`, [hash])).rows[0];
       if (!initial) throw Errors.invalidRefreshToken();
 
+      // 088 : `sessions` est FORCE RLS (politique sessions_tenant). Sans GUC
+      // app.tenant_id, le verrou FOR UPDATE et l'UPDATE de rotation plus bas
+      // ne voient AUCUNE ligne (organization_id = NULL est NULL) : l'ancien
+      // refresh token n'était jamais révoqué et la détection de réutilisation
+      // ne se déclenchait pas. is_local=true → la valeur disparaît au
+      // COMMIT/ROLLBACK de CETTE transaction, pas de fuite sur la pool.
+      await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [initial.organization_id]);
+
       // Same-user refreshes (including replay on another session) share one lock.
       // Lock user BEFORE session consistently; reload session state after waiting.
       const user = (await client.query<UserRow>(
@@ -431,13 +439,21 @@ export class AuthService {
       // Un refresh invalide → on refuse le switch (ne pas accepter un jeton
       // mort pour produire un jeton neuf).
       const hash = SessionsService.hashRefreshToken(refreshToken);
+      // 088 : `sessions` est FORCE RLS. Le JOIN sur sessions ci-dessous
+      // s'exécutait comme l'appelant → invisible sans GUC → la session
+      // courante n'était JAMAIS révoquée lors d'un changement d'organisation
+      // (l'ancien refresh restait valable). auth_refresh_lookup est SECURITY
+      // DEFINER : on résout la session par la fonction, puis on pose le GUC
+      // sur l'org de la session COURANTE (elle diffère de la cible) le temps
+      // de l'UPDATE (is_local → reverte au COMMIT).
       const cur = (await client.query(
-        `SELECT s.id FROM auth_refresh_lookup($1) r JOIN sessions s ON s.id=r.session_id WHERE r.user_id=$2`,
+        `SELECT session_id, organization_id FROM auth_refresh_lookup($1) WHERE user_id=$2`,
         [hash, user.id],
       )).rows[0];
       if (cur) {
+        await client.query(`SELECT set_config('app.tenant_id', $1, true)`, [cur.organization_id]);
         await client.query(
-          `UPDATE sessions SET revoked_at=NOW(), revoked_reason='org_switch' WHERE id=$1`, [cur.id],
+          `UPDATE sessions SET revoked_at=NOW(), revoked_reason='org_switch' WHERE id=$1`, [cur.session_id],
         );
       }
 

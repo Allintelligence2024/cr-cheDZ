@@ -110,7 +110,7 @@ try {
     const email = `${randomUUID()}@test.invalid`;
     const phone = `+2135${String(10000000 + Math.floor(Math.random() * 89999999))}`;
     const id = (await db.query(
-      "INSERT INTO users(email,first_name,last_name,password_hash,status,phone) VALUES($1,'G5','Parent',$2,'active',$3) RETURNING id", [email, hash, phone])).rows[0].id;
+      "INSERT INTO users(email,first_name,last_name,password_hash,status,phone,organization_id) VALUES($1,'G5','Parent',$2,'active',$3,$4) RETURNING id", [email, hash, phone, org])).rows[0].id;
     await db.query("INSERT INTO guardians(organization_id,user_id,first_name_fr,last_name_fr,relationship,phone_primary,created_by) VALUES($1,$2,'G5','Parent','parent',$3,$2)", [org, id, phone]);
     return { id, email, phone };
   };

@@ -70,7 +70,7 @@ try {
     const wanted = [...(rollback ? [] : [aRow]), ...bRows].map(r => r.aggregate_id);
     assert.deepEqual(new Set(received.map(e => e.aggregate_id)), new Set(wanted), 'A was permanently skipped after reading B');
     assert.equal(received.length, wanted.length, 'duplicate publication');
-    assert.deepEqual(await pull(next), { events: [], next_cursor: next });
+    assert.deepEqual(await pull(next), { events: [], next_cursor: next, resync_required: false });
   }
   await check('A slow/B fast: no late event is skipped after cursor advancement', () => race(1));
   await check('A slow/B fast across 500-event pages: every event arrives once', () => race(501));
