@@ -1,8 +1,9 @@
 // ESLint flat config minimal (audit, étape 4.3) — remplace le script `lint`
 // mensonger d'avant (eslint . sans config ni dépendance) par une config
 // RÉELLE : base JS recommended + typescript-eslint recommended, focus sur les
-// règles utiles au projet. no-explicit-any est en WARN (backend historique) :
-// chaque warn est un candidat de nettoyage, jamais un faux vert.
+// règles utiles au projet. no-explicit-any est en WARN : le burn-down (#17) est
+// TERMINÉ (0 occurrence `any` dans le périmètre TS, vérifié 2026-10-12) ; la
+// règle reste en WARN comme garde-fou anti-régression, jamais un faux vert.
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
@@ -45,8 +46,9 @@ export default tseslint.config(
       globals: { ...globals.node, ...globals.browser },
     },
     rules: {
-      // Audit 4.3 : any explicite en WARN partout (74 sites historiques à
-      // éteindre progressivement — jamais de faux vert, jamais de blocage).
+      // Audit 4.3 : any explicite en WARN. Burn-down #17 TERMINÉ (0 `any` restant
+      // dans apps/* et packages/*, vérifié 2026-10-12) — la règle reste en WARN
+      // pour empêcher toute réintroduction, jamais de faux vert, jamais de blocage.
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-console': 'off',
