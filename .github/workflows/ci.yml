@@ -105,7 +105,13 @@ jobs:
       # + 098 (sync_resync_required cursor 0) + 099 (audit/data_access insert permissive) → 98
       # migrations (001 → 099,
       # 083 fut fusionné dans le seed 003 — le compte de fichiers est donc 98, pas 099).
-      - name: Migrations (reset + status 001→099, 98 fichiers)
+      # Correctifs batterie d'isolation (2026-10-11) : 100 (sessions FORCE RLS 088 —
+      # logout/refresh/révocation écrivaient via pool directe sans GUC app.tenant_id),
+      # 101 (notif_queue_claim renvoie claimed_at::text — le fencing 080 échouait en
+      # silence), 102 (notif_queue_finish conservait p_failure_reason en branche succès)
+      # → 101 migrations (001 → 102).
+
+      - name: Migrations (reset + status 001→102, 101 fichiers)
         run: |
           node scripts/migrate.mjs --reset
           node scripts/migrate.mjs
