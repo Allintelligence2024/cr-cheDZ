@@ -60,7 +60,7 @@ let probeDumped=false;
 try {
   await db.query('UPDATE scheduler_ticks SET last_success_at=NOW()');
   await writeFile(join(dir,'token'),token,{mode:0o600});
-  await writeFile(join(dir,'exporter.env'),`DATA_SOURCE_NAME=${process.env.APP_DATABASE_URL}\nPG_EXPORTER_EXTEND_QUERY_PATH=/etc/e2/queries.yml\nPGSSLMODE=disable\n`,{mode:0o600});
+  await writeFile(join(dir,'exporter.env'),`DATA_SOURCE_NAME=${process.env.APP_DATABASE_URL}\nPG_EXPORTER_EXTEND_QUERY_PATH=/etc/e2/queries.yml\nPG_EXPORTER_DISABLE_DEFAULT_METRICS=true\nPGSSLMODE=disable\n`,{mode:0o600});
   await writeFile(join(dir,'queries.yml'),await readFile('infrastructure/monitoring/postgres-queries.yml'));
   // Expressions/routage inchangés ; uniquement délais accélérés. Les délais
   // de production sont évalués sans modification par promtool juste au-dessus.
