@@ -105,11 +105,24 @@ jobs:
       # + 098 (sync_resync_required cursor 0) + 099 (audit/data_access insert permissive) → 98
       # migrations (001 → 099,
       # 083 fut fusionné dans le seed 003 — le compte de fichiers est donc 98, pas 099).
-      # Correctifs batterie d'isolation (2026-10-11) : 100 (sessions FORCE RLS 088 —
+      # Correctifs batterie d’isolation (2026-10-11) : 100 (sessions FORCE RLS 088 —
       # logout/refresh/révocation écrivaient via pool directe sans GUC app.tenant_id),
       # 101 (notif_queue_claim renvoie claimed_at::text — le fencing 080 échouait en
       # silence), 102 (notif_queue_finish conservait p_failure_reason en branche succès)
       # → 101 migrations (001 → 102).
+
+      - name: Générer secrets de bootstrap
+        id: gen-passwords
+        run: |
+          echo "app_password=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")" >> "$GITHUB_OUTPUT"
+          echo "migrator_password=$(node -e "console.log(require('crypto').randomBytes(16).toString('hex'))")" >> "$GITHUB_OUTPUT"
+      - name: Bootstrap des rôles (Phase D)
+        run: |
+          node scripts/bootstrap-roles.mjs
+        env:
+          BOOTSTRAP_DATABASE_URL: postgres://postgres:postgres@localhost:5432/creche_test
+          APP_DATABASE_PASSWORD: ${{ steps.gen-passwords.outputs.app_password }}
+          MIGRATOR_DATABASE_PASSWORD: ${{ steps.gen-passwords.outputs.migrator_password }}
 
       - name: Migrations (reset + status 001→102, 101 fichiers)
         run: |
