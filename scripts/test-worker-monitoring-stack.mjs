@@ -79,13 +79,17 @@ try {
     .replace('/run/secrets/metrics-collector-token','/etc/e2/metrics-collector-token');
   await writeFile(join(dir,'prometheus.yml'),prom);
   await writeFile(join(dir,'metrics-collector-token'),'e2-gate-placeholder-not-a-real-credential\n',{mode:0o600});
+  // Nombre de séries attendues = ticks scheduler réellement ACTIVÉS en base.
+  // Migration 092 a ajouté `sync_purge` (4e tick) ; un littéral 3 provoquerait un
+  // timeout mensonger. On lit la vérité dans la source réellement scrappée.
+  const expectedScheduler=Number((await db.query('SELECT count(*)::int AS n FROM scheduler_ticks WHERE enabled')).rows[0].n);
   run('exporter',exporterImage,[`--web.listen-address=127.0.0.1:${exporterPort}`],['--env-file',join(dir,'exporter.env')]);
-  await until(async()=>{const r=await fetch(`http://127.0.0.1:${exporterPort}/metrics`);const text=await r.text();const n=(text.match(/^creche_worker_scheduler_overdue\{/gm)??[]).length;if(n===3)return true;
+  await until(async()=>{const r=await fetch(`http://127.0.0.1:${exporterPort}/metrics`);const text=await r.text();const n=(text.match(/^creche_worker_scheduler_overdue\{/gm)??[]).length;if(n===expectedScheduler)return true;
     // G5 : sans ceci, le catch avalait et le timeout ne disait QUE le label.
     // On publie ce que l'exporter sert réellement (aucune PII, métriques).
     if(!probeDumped){probeDumped=true;writeSync(1,`::group::probe /metrics (count=${n})\n${text.split('\n').filter(l=>/creche|scheduler|error|panic/i.test(l)).slice(0,30).join('\n')}\n::endgroup::\n`);}
     if(!r.ok)throw new Error(`exporter /metrics HTTP ${r.status}`); // jusqu'à ce qu'il réponde
-    return false;},'3 métriques SQL réelles');
+    return false;},`${expectedScheduler} métriques SQL réelles`);
   await Promise.all(pulls);
   run('am','prom/alertmanager:v0.27.0',['--config.file=/etc/e2/alertmanager.yml','--storage.path=/tmp/am',`--web.listen-address=127.0.0.1:${amPort}`,'--cluster.listen-address=']);
   await until(async()=>(await fetch(`http://127.0.0.1:${amPort}/-/ready`)).ok,'Alertmanager prêt');
@@ -93,11 +97,11 @@ try {
   await until(async()=>(await fetch(`http://127.0.0.1:${promPort}/-/ready`)).ok,'Prometheus prêt');
   // AUCUN worker n'est démarré dans ce test. C'est la DB qui porte la fraîcheur.
   await db.query("UPDATE scheduler_ticks SET last_success_at=NOW()-INTERVAL '3 days'");
-  await until(async()=>new Set((await journal()).filter(x=>x.status==='firing'&&x.name==='WorkerScheduledJobOverdue').map(x=>x.job)).size===3,'alertes reçues localement sans worker');
-  await until(()=>f.mails.length>=3&&f.calls.filter(c=>c.has('ContentSid')).length>=3&&f.calls.filter(c=>!c.has('ContentSid')).length>=3,'e-mail/SMS/WhatsApp transmis');
+  await until(async()=>new Set((await journal()).filter(x=>x.status==='firing'&&x.name==='WorkerScheduledJobOverdue').map(x=>x.job)).size===expectedScheduler,'alertes reçues localement sans worker');
+  await until(()=>f.mails.length>=expectedScheduler&&f.calls.filter(c=>c.has('ContentSid')).length>=expectedScheduler&&f.calls.filter(c=>!c.has('ContentSid')).length>=expectedScheduler,'e-mail/SMS/WhatsApp transmis');
   await db.query('UPDATE scheduler_ticks SET last_success_at=NOW()');
-  await until(async()=>new Set((await journal()).filter(x=>x.status==='resolved'&&x.name==='WorkerScheduledJobOverdue').map(x=>x.job)).size===3,'résolution reçue');
-  await until(()=>f.mails.length>=6&&f.calls.filter(c=>c.has('ContentSid')).length>=6&&f.calls.filter(c=>!c.has('ContentSid')).length>=6,'résolutions transmises aux trois canaux');
+  await until(async()=>new Set((await journal()).filter(x=>x.status==='resolved'&&x.name==='WorkerScheduledJobOverdue').map(x=>x.job)).size===expectedScheduler,'résolution reçue');
+  await until(()=>f.mails.length>=expectedScheduler*2&&f.calls.filter(c=>c.has('ContentSid')).length>=expectedScheduler*2&&f.calls.filter(c=>!c.has('ContentSid')).length>=expectedScheduler*2,'résolutions transmises aux trois canaux');
   execFileSync('docker',['stop',names[0]],{stdio:'ignore'});
   await until(async()=>(await journal()).some(x=>x.status==='firing'&&x.name==='DatabaseMetricsUnavailable'),'perte exporter signalée');
   console.log('✓ E2 STACK : SQL app → exporter → Prometheus → Alertmanager → local/SMTP/SMS/WhatsApp ; firing/résolution/perte exporter. Aucun worker, aucun envoi externe.');
