@@ -8,7 +8,11 @@ import {pathToFileURL} from 'node:url';
 import nodemailer from 'nodemailer';
 
 const ALERTS = new Set(['WorkerScheduledJobOverdue','WorkerSchedulerMonitoringUnavailable','DatabaseMetricsUnavailable']);
-const JOBS = new Set(['payments_expire','retention_purge','video_clips_purge']);
+// Whitelist fermée des job_type du scheduler (056/092). Migration 092 a ajouté
+// `sync_purge` (4e tick activé) : sans lui, l'alerte WorkerScheduledJobOverdue
+// de ce tick était rejetée (ALERT_JOB_INVALID) et le gate E2 monitoring
+// expirait en attendant une 4e alerte jamais relayée.
+const JOBS = new Set(['payments_expire','retention_purge','video_clips_purge','sync_purge']);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const phone = value => /^\+[1-9]\d{6,14}$/.test(value ?? '');
 const email = value => /^[^\s<>@,]+@[^\s<>@,]+\.[^\s<>@,]+$/.test(value ?? '');
