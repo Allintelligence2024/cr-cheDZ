@@ -32,12 +32,39 @@
 | **parent** (13 routes enfant) | Utilisateur/membership actifs + lien gardien/enfant courant ; capacités distinctes, pas le seul rôle JWT | Absence : journal ; consentement : lien courant | Finances minimisées H2d ; autres projections à revoir |
 | **enrollment** (migration 070, post-v14) | `director`, `receptionist` (liste + capacité — PII des demandes scopée tenant) | `create` : `director`, `receptionist` (saisie des demandes au comptoir) ; `waitlist`/`offer`/`decide` : **`director` seul** (R5 : décision de capacité + création d'enfant — contrôle au niveau contrôle **ET** service, première implémentation du double contrôle) | Non — projections DTO (noms/nés tuteur, tél, email) scopées tenant |
 
-## Décisions à reconfirmer en Phase H (G2/H2)
+## Inventaire des 40 routes sans `@Roles`/`@Public` (revue 2026-10-14)
+
+`npm run check:routes-inventory` → 205 routes, **40 sans `@Roles` ni `@Public`** (le plan ancien
+disait 44/41 ; le compteur a baissé avec la reconnaissance des décorateurs de classe). Toutes sont
+des routes **self-service scopées dans le service** : le guard JWT global authentifie, l'isolation
+tenant (RLS `NOBYPASSRLS`) + les capacités métier (liens gardien/enfant, `can_*`) font l'autorisation
+fine. Aucune n'expose un rôle transverse → aucune ne reçoit de `@Roles` (ajouter une garde sans test
+est explicitement proscrit).
+
+| Contrôleur | Routes | Justification (aucune garde de rôle ajoutée) |
+|---|---|---|
+| `identity/auth.controller.ts` | `2fa/enable`, `2fa/verify`, `2fa/disable`, `change-password`, `logout`, `parent/pin` | Le sujet agit sur **son propre compte** (identité = JWT). Le second facteur / PIN / mot de passe ne se délèguent pas à un rôle. Voir G1d, G5. |
+| `identity/devices.controller.ts` | `GET`, `POST`, `POST :id/revoke` | Gestion de **ses propres appareils** (sessions). `revoke` ne révoque que l'appareil du sujet. |
+| `messaging/messaging.controller.ts` | `conversations`, `conversations/:id`, `…/messages`, `…/read` | Messagerie self-service : conversations de l'utilisateur courant, autorisation par membership (pas par rôle). |
+| `notifications/notifications.controller.ts` | `inbox`, `inbox/:id/read` | Centre in-app de l'utilisateur courant. |
+| `organizations/rooms.controller.ts` | `GET`, `GET :id` | Lecture seule de la configuration du tenant (scopée tenant). Pas de champ sensible. |
+| `organizations/sites.controller.ts` | `GET`, `GET :id` | idem. |
+| `parents/parents.controller.ts` (17) | `children`, `children/:id/consents`, `…/feed`, `…/health`, `…/media`, `…/media/:mid/content`, `…/download`, `invoices`, `invoices/:id`, `invoices/:id/pdf`, `notification-preferences` (GET/POST), `receipts`, `receipts/:pid`, `absence`, `consents` | Portail parent self-service (H2c/H2d/H2g) : autorisation par **lien gardien/enfant courant** + capacités `can_view_journal`/`can_view_health`/`can_receive_invoices`/`can_pay_invoices`, pas par rôle JWT. Finances minimisées H2d. |
+| `privacy/privacy.controller.ts` (5) | `privacy/requests` (GET/POST), `privacy/requests/:id`, `privacy/requests/:id/export` | Droits RGPD/ANPDP **self-service** (H2a) : tout utilisateur peut déposer/consulter/suivre ses demandes d'accès/export. Pas de rôle requis — c'est un droit de la personne. |
+| `users/users.controller.ts` | `GET me` | Le profil du sujet lui-même. |
+
+**Total** : 40 routes. Aucune frontière de rôle transverse ; `super_admin` jamais implicite. Ces
+routes restent sous guard JWT global + RLS ; une évolution qui introduirait un rôle (ex. un
+`director` lisant les demandes privacy d'un autre) deviendrait une **nouvelle** route `@Roles`,
+pas un élargissement de celles-ci.
+
+
 
 - L'accountant lit `staff` (liste + détail sans champs sensibles) : confirmé par alignement sur
   payroll — à revalider avec le métier.
-- Les 41 routes sans garde explicite (inventaire `npm run check:routes-inventory`, 3.11.2 : décorateurs au niveau classe enfin reconnus — 9 faux positifs en moins) : revue module
-  par module + justification écrite pour chaque route self-service conservée sans `@Roles`.
+- Les 40 routes sans garde explicite (inventaire `npm run check:routes-inventory`) : **revue
+  faite 2026-10-14** — voir « Inventaire des 40 routes sans `@Roles`/`@Public` » ci-dessus. Toutes
+  self-service, justifiées ligne à ligne ; aucune garde ajoutée sans test.
 - `staff_documents.storage_key` (création) : préfixe tenant C3 appliqué dans H2h ;
   existence/contenu des objets et anciennes références non qualifiés.
 
