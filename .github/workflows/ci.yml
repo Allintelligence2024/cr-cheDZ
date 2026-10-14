@@ -186,8 +186,10 @@ jobs:
     # backup.sh chiffré → intégrité sha256 → preuve de chiffrement
     # (mauvaise passphrase refusée) → restauration sur cluster jetable →
     # comparaison source/restauré (lignes, politiques RLS, fonctions).
-    # Source en postgres:16 : version de docker-compose.prod.yml ET du
-    # client pg_dump préinstallé sur le runner (≥ serveur exigé par le drill).
+    # Source en postgres:18 : version de docker-compose.{dev,staging,prod}.yml ET du
+    # client pg_dump préinstallé sur le runner (≥ serveur exigé par le drill). Le
+    # commentaire historique citait 16 ; tout le dépôt est uniformément en PG 18
+    # (ADR-015). JAMAIS 16/17.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
