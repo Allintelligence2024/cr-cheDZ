@@ -7,6 +7,22 @@
 
 ---
 
+## Suivi de cette session (v3.4) — revue des issues ouvertes (2026-10-14)
+
+- **Vérifié localement sur `6663707`** (PostgreSQL 18.4 embarqué, rôles de production) :
+  - gate strict `scripts/test-production-roles.mjs` : **77/77 suites vertes**, `GATE D` atteint ;
+  - migrations 001→102 appliquées, `migrate --status`, seeds, `schema-check`,
+    `rls-behavior-check`, `check-tenant-index` : verts ;
+  - `npm audit --omit=dev` : **0 vulnérabilité** ; `npm run lint` (`--max-warnings=0`) : 0 warning ;
+  - `typecheck`, `build`, `test:unit` : verts ; workflow `flutter` (pub get, analyze, tests, APK) : vert sur `main`.
+- **Issues déjà résolues sur `main`** (les constats datés sont périmés) : #55 et #35
+  (`multer` 2.4.0, `nodemailer` 10.x, audit 0), #17 (lint 0 warning), #15 (`intl ^0.20.3`),
+  #16 (`app_database.g.dart` committé, généré).
+- **Restent ouverts (hors de portée de l'environnement de revue)** : #14 (restauration
+  sur VM vierge chronométrée — `gpg` et Docker absents), gates Flutter Dart de F (SDK non
+  joignable), staging Docker de H, et décisions client (règle de paie, `next_org_sequence`).
+  Le draft de décision `next_org_sequence` est `docs/adr/ADR-015-next-org-sequence-numbering.md` (statut **Proposé**).
+
 ## Suivi de cette session (v3.3) — H2k, H2l, OpenAPI, G4, G5
 
 - **H2k livré** : credential de collecteur Prometheus à privilège limité pour
