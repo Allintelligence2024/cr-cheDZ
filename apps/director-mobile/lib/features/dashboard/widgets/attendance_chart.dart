@@ -35,9 +35,9 @@ class AttendanceChart extends StatelessWidget {
               height: 180,
               child: LineChart(
                 LineChartData(
-                  gridData: FlGridData(show: true, drawVerticalLine: false),
+                  gridData: const FlGridData(show: true, drawVerticalLine: false),
                   titlesData: FlTitlesData(
-                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32)),
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32)),
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
@@ -54,8 +54,8 @@ class AttendanceChart extends StatelessWidget {
                   ),
                   borderData: FlBorderData(show: false),
                   lineBarsData: [
-                    LineChartBarData(spots: spotsPresent, isCurved: true, color: palette.success, barWidth: 3, dotData: FlDotData(show: true)),
-                    LineChartBarData(spots: spotsExpected, isCurved: true, color: palette.info, barWidth: 2, dotData: FlDotData(show: false), dashArray: [5, 5]),
+                    LineChartBarData(spots: spotsPresent, isCurved: true, color: palette.success, barWidth: 3, dotData: const FlDotData(show: true)),
+                    LineChartBarData(spots: spotsExpected, isCurved: true, color: palette.info, barWidth: 2, dotData: const FlDotData(show: false), dashArray: const [5, 5]),
                   ],
                 ),
               ),

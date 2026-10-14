@@ -64,8 +64,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   color: read ? null : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
                   child: ListTile(
                     leading: Icon(n['type'] == 'incident' ? Icons.warning : Icons.notifications, color: read ? SereniteStatusColors.of(context).textFaint : Theme.of(context).colorScheme.primary),
-                    title: Text(n['title']?.toString() ?? n['type']?.toString() ?? 'Notification', style: TextStyle(fontWeight: read ? FontWeight.normal : FontWeight.bold)),
-                    subtitle: Text('${n['body']?.toString() ?? n['message']?.toString() ?? ''}\n${n['created_at']?.toString().substring(0, 16) ?? ''}', style: const TextStyle(fontSize: 12)),
+                    title: Text(n['title_fr']?.toString() ?? n['title']?.toString() ?? n['type']?.toString() ?? 'Notification', style: TextStyle(fontWeight: read ? FontWeight.normal : FontWeight.bold)),
+                    subtitle: Text('${n['body_fr']?.toString() ?? n['body']?.toString() ?? n['message']?.toString() ?? ''}\n${n['created_at']?.toString().substring(0, 16) ?? ''}', style: const TextStyle(fontSize: 12)),
                     isThreeLine: true,
                   ),
                 );

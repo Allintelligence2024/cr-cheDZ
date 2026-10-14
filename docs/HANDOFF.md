@@ -16,6 +16,21 @@ citée dans la branche de session puis travailler dessus).
 ÉTAT ACTUEL (validé sur PostgreSQL 18 réel, rôle applicatif NOBYPASSRLS) :
 - 24/24 suites d'isolation vertes (schema-check, rls-behavior, isolation,
   phase3 → phase21 inclus) — ordre canonique rejouable.
+- **REMÉDIATION 297 FINDINGS TERMINÉE (2026-10-06)** : Phases 0–4 du
+  `docs/PLAN-MAITRE-REMEDIATION.md` closes — 297/297 (18 CRITICAL · 57 HIGH ·
+  133 MEDIUM · 89 LOW, 20 zones). Vérification locale finale : API jest
+  **956/956** (45 suites, dont 737 tests de validation DTO générés sur 17
+  modules + 79 tests sur les 7 derniers modules sans spec), worker **5/5**,
+  admin-web **10/10**, contracts node --test (claims 12/12, media-wiring 8/8,
+  parent-session 9/9, sync-resync 4/4).
+  Quatre bugs trouvés au passage : (1) `validateProductionConfig` comparait
+  `resolve(dir)` au littéral brut de `DEV_STORAGE_LOCAL_DIR` — sous Windows le
+  garde-fou production laissait passer `/tmp/creche-pdf` ; (2)
+  `parent-session-contract` cassé par les séparateurs `\` Windows ; (3) spec
+  liveness worker obsolète (sonde profonde 4.5 non reflétée) ; (4)
+  **`redact()` (ADR-010, loi 25-11) ne masquait pas les clés camelCase** —
+  `passwordHash`, `refreshTokenHash`, `phonePrimary` atterrissaient en clair
+  dans `audit_logs`.
 - Migrations 001-048 immuables (ADR-007, runner à checksums).
 - Phases 0-11 (fondations, auth, orgs, enfants, présences, journal, parents,
   facturation, admin-web, santé/conformité/vie privée/support, durcissement)
@@ -739,8 +754,8 @@ n'est pas verrouillée, une mesure datée n'est pas une propriété.
 qualifiée, phrase fausse canonique réintroduite, compteur de suites périmé, décompte de
 healthchecks périmé, sonde renommée sur disque) → mutation : 6 rouges ; restaurations → 9/9 vert
 (journal au plan §5).
-Mesure du jour : 198 routes / 50 sans `@Roles`, 76 migrations, 73 entrées, 71 suites `phaseNN`,
-89 fichiers d'isolation, 14 ADR, 32 runbooks.
+Mesure du jour : 199 routes / 41 sans `@Roles`, 95 migrations, 74 entrées, 72 suites `phaseNN`,
+91 fichiers d'isolation, 15 ADR, 33 runbooks.
 
 ---
 

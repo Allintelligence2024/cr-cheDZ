@@ -4,6 +4,11 @@ export default {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/*.spec.ts'],
+  // 4.2 : class-validator utilise Reflect.getMetadata au moment de l'import
+  // des décorateurs. Sans reflect-metadata chargé en premier, toute spec qui
+  // importe un DTO décoré échoue à se lancer (« Reflect.getMetadata is not a
+  // function »). Charger une fois pour toutes les specs.
+  setupFiles: ['reflect-metadata'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: { module: 'commonjs', esModuleInterop: true, target: 'es2022' } }],
   },

@@ -363,7 +363,7 @@ export class PrivacyService {
   }
 
   /** Notification ANPDP : SMTP réel requis — sinon 503 explicite (jamais de faux). */
-  async notifyAnpdp(violationId: string): Promise<Record<string, unknown>> {
+  async notifyAnpdp(violationId: string, actorId: string): Promise<Record<string, unknown>> {
     const tenantId = requireTenant(this.tenantContext);
     const violation = await this.tenantContext.withTenantConnection(async (client) => {
       const r = await client.query(
@@ -403,8 +403,12 @@ export class PrivacyService {
       text: `Violation de données signalée le ${new Date(violation.discovered_at).toISOString()}.\nDescription : ${violation.description}\nÉchéance de notification ANPDP : ${new Date(violation.notification_deadline).toISOString()}`,
     });
     return this.tenantContext.withTenantConnection(async (client) => (await client.query(
-      `UPDATE privacy_violations SET anpdp_notified_at=NOW(), notification_status='sent' WHERE id=$1
-       RETURNING id, status, notification_status, anpdp_notified_at`, [violationId],
+      `UPDATE privacy_violations
+          SET anpdp_notified_at=NOW(),
+              anpdp_notified_by=$2,
+              notification_status='sent'
+        WHERE id=$1
+       RETURNING id, status, notification_status, anpdp_notified_at, anpdp_notified_by`, [violationId, actorId],
     )).rows[0]);
   }
 
@@ -427,7 +431,7 @@ export class PrivacyService {
        JOIN roles r ON r.id=m.role_id
        WHERE u.id=$1 AND u.status='active' AND u.deleted_at IS NULL
          AND m.organization_id=$2 AND m.is_active=true
-         AND r.slug IN ('director','super_admin') LIMIT 1`,
+          AND r.slug IN ('director','super_admin','dpo') LIMIT 1`,
       [actorId, requireTenant(this.tenantContext)],
     );
     if (!actor.rows[0]) throw new AppError('DPIA_ACTOR_FORBIDDEN',

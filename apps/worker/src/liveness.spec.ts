@@ -63,12 +63,15 @@ describe('liveness du worker (F2 — audit 2026-09-24)', () => {
   it('câblage réel dans `main.ts` : démarré après les gardes de boot, arrêté sur SIGTERM', () => {
     const main = readFileSync(join(__dirname, 'main.ts'), 'utf8');
     expect(main).toContain("import { startLiveness } from './liveness'");
-    expect(main).toContain('const stopLiveness = await startLiveness()');
+    // 4.5 : la sonde est profonde — le marqueur n'est rafraîchi QUE si un
+    // `SELECT 1` borné réussit. Un pool DB mort laisse le marqueur périmer.
+    expect(main).toContain('const stopLiveness = await startLiveness(process.env, async () => {');
+    expect(main).toContain("await pool.query('SELECT 1')");
     expect(main).toContain("process.once(signal, () => void stopLiveness())");
     // un conteneur mal configuré ne doit pas paraître sain : la garde de rôle
     // précède l'écriture du marqueur
     expect(main.indexOf('assertApplicationDatabaseRole(pool)')).toBeLessThan(
-      main.indexOf('await startLiveness()'),
+      main.indexOf('await startLiveness('),
     );
   });
 });

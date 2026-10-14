@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://creche.dz/contracts/sync/v1",
-  "title": "Sync wire v1 \u2014 envelopes, not business payload validation",
+  "title": "Sync wire v1 — envelopes, not business payload validation",
   "definitions": {
     "Cursor": {
       "type": "string",
@@ -276,11 +276,15 @@
         },
         "next_cursor": {
           "$ref": "#/definitions/Cursor"
+        },
+        "resync_required": {
+          "type": "boolean"
         }
       },
       "required": [
         "events",
-        "next_cursor"
+        "next_cursor",
+        "resync_required"
       ],
       "additionalProperties": false
     },

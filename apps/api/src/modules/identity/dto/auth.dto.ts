@@ -1,4 +1,5 @@
-import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsAlgerianPhone } from '../../../shared/validation/algerian-phone';
 
 export class LoginDto {
   @IsEmail({}, { message: 'email invalide' })
@@ -47,6 +48,21 @@ export class RefreshDto {
   device_id?: string;
 }
 
+export class SwitchOrgDto {
+  /** Organisation cible (membership actif obligatoire). */
+  @IsUUID()
+  organization_id!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(16)
+  refresh_token?: string;
+
+  @IsOptional()
+  @IsString()
+  device_id?: string;
+}
+
 export class ChangePasswordDto {
   @IsString()
   @MinLength(8)
@@ -65,7 +81,7 @@ export class TotpDto {
 }
 
 export class ParentOtpRequestDto {
-  @Matches(/^\+?[0-9]{8,15}$/, { message: 'numéro de téléphone invalide' })
+  @IsAlgerianPhone({ message: 'numéro de téléphone algérien invalide (ex. 0550 12 34 56)' })
   phone!: string;
 
   /** Canal de livraison de l'OTP (défaut : sms). 'whatsapp' exige le flag global whatsapp_otp. */

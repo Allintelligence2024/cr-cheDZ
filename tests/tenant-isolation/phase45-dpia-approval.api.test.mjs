@@ -27,8 +27,11 @@ try {
     await db.query('INSERT INTO memberships(organization_id,user_id,role_id) SELECT $1,$2,id FROM roles WHERE slug=$3', [tenant, id, role]);
     return { id, email };
   };
-  const author = await actor('director'), reviewer = await actor('director'), admin = await actor('super_admin');
-  const foreign = await actor('director', b), accountant = await actor('accountant'), educator = await actor('educator'), parent = await actor('parent_primary');
+  // 2.1/2.2 (loi 25-11) : privacy:manage est attribué au DPO
+  // (seed 003) — les acteurs DPIA (création/approbation) sont
+  // donc des dpo, jamais des director/super_admin de tenant.
+  const author = await actor('dpo'), reviewer = await actor('dpo'), admin = await actor('dpo');
+  const foreign = await actor('dpo', b), accountant = await actor('accountant'), educator = await actor('educator'), parent = await actor('parent_primary');
   Object.assign(process.env, { DATABASE_URL: appUrl(), NODE_ENV: 'test', RATE_LIMIT_DISABLED: 'true', SENTRY_DSN: '' });
   const { createApp } = await import('../../apps/api/dist/app.factory.js');
   const { PG_POOL } = await import('../../apps/api/dist/shared/database/database.provider.js');
@@ -58,7 +61,7 @@ try {
     if (code) assert.equal(r.body.code, code);
     assert.deepEqual(await snapshot(), before);
   };
-  for (const [label, u] of [['director', author], ['tenant super_admin', admin]]) {
+  for (const [label, u] of [['dpo author', author], ['tenant dpo', admin]]) {
     await check(`${label}: creation records actor and one minimized audit`, async () => {
       const id = await draft(u), d = await row(id), log = await audits(id);
       assert.equal(d.created_by, u.id); assert.equal(d.status, 'draft'); assert.equal(log.length, 1);
@@ -110,7 +113,7 @@ try {
     ['suspended user', "UPDATE users SET status='suspended' WHERE id=$1", "UPDATE users SET status='active' WHERE id=$1"],
     ['deleted user', 'UPDATE users SET deleted_at=NOW() WHERE id=$1', 'UPDATE users SET deleted_at=NULL WHERE id=$1'],
     ['inactive membership', 'UPDATE memberships SET is_active=false WHERE user_id=$1', 'UPDATE memberships SET is_active=true WHERE user_id=$1'],
-    ['downgraded role with old JWT', "UPDATE memberships SET role_id=(SELECT id FROM roles WHERE slug='educator') WHERE user_id=$1", "UPDATE memberships SET role_id=(SELECT id FROM roles WHERE slug='director') WHERE user_id=$1"],
+    ['downgraded role with old JWT', "UPDATE memberships SET role_id=(SELECT id FROM roles WHERE slug='educator') WHERE user_id=$1", "UPDATE memberships SET role_id=(SELECT id FROM roles WHERE slug='dpo') WHERE user_id=$1"],
   ]) {
     await db.query(change, [reviewer.id]);
     try {

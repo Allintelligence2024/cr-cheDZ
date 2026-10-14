@@ -102,3 +102,25 @@ ON CONFLICT DO NOTHING;
 
 -- Parents : permissions déléguées via child_guardians (pas via rôles)
 -- → aucune permission de rôle parent, l'accès passe par child_guardians.
+
+-- DPO (2.1) : le commentaire ligne 64 promettait « audit/privacy : DPO
+-- uniquement » mais AUCUN rôle `dpo` n'était inséré → privacy:manage et
+-- audit:read n'étaient attribuées à PERSONNE. Loi 25-11 : la crèche doit
+-- avoir un DPO ; on crée le rôle système ici (les permissions existent déjà
+-- plus haut, dans ce même seed).
+INSERT INTO roles (organization_id, name, slug, description_fr, description_ar, is_system)
+VALUES (NULL, 'Délégué à la Protection des Données', 'dpo',
+        'Accès aux registres privacy/audit (loi 25-11)',
+        'مفوض حماية البيانات', true)
+ON CONFLICT (organization_id, slug) DO NOTHING;
+
+-- DPO : privacy + audit + compliance. Le director garde tout SAUF
+-- privacy/audit (décision de la ligne 64, confirmée par la loi 25-11 qui
+-- sépare le DPO de la direction).
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM roles r
+JOIN permissions p ON TRUE
+WHERE r.slug = 'dpo'
+  AND p.resource IN ('privacy', 'audit', 'compliance')
+ON CONFLICT DO NOTHING;

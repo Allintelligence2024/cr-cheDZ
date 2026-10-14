@@ -280,7 +280,7 @@ phase3.api.test.mjs (base fraîche)       → ✓ Phase 3 validée
 npm run test:unit   → 13 suites, 95 tests, 0 échec
 npm run lint        → exit 0 (0 erreur, 0 warning)   npm run typecheck → exit 0 (4 workspaces)
 npm run test:unit --workspace @creche/admin-web → 7 tests, 0 échec
-node scripts/inventory-route-guards.mjs → 204 routes (201 + 2 `/content` + 1 `/media/upload`) — 50 « sans
+node scripts/inventory-route-guards.mjs → 205 routes (202 + 2 `/content` + 1 `/media/upload`) — 50 « sans
   @Roles ni @Public » (49 + la route parent, dont le périmètre est la filiation, pas un rôle)
 
 # Deux suites NON rejouables dans ce bac à sable (prérequis Gate D) :

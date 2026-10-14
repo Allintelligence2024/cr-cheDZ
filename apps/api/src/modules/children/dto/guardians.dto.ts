@@ -5,6 +5,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
+import { IsAlgerianPhone } from '../../../shared/validation/algerian-phone';
 
 export class CreateGuardianDto {
   @IsString()
@@ -33,12 +34,12 @@ export class CreateGuardianDto {
   relationship!: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone principal invalide (ex. 0550 12 34 56)' })
   @MaxLength(30)
   phone_primary?: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone secondaire invalide (ex. 0550 12 34 56)' })
   @MaxLength(30)
   phone_secondary?: string;
 
@@ -83,12 +84,12 @@ export class UpdateGuardianDto {
   relationship?: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone principal invalide (ex. 0550 12 34 56)' })
   @MaxLength(30)
   phone_primary?: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone secondaire invalide (ex. 0550 12 34 56)' })
   @MaxLength(30)
   phone_secondary?: string;
 
@@ -174,13 +175,13 @@ export class CreateEmergencyContactDto {
   @MaxLength(50)
   relationship!: string;
 
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone invalide (ex. 0550 12 34 56)' })
   @MinLength(6)
   @MaxLength(30)
   phone_primary!: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone secondaire invalide (ex. 0550 12 34 56)' })
   @MaxLength(30)
   phone_secondary?: string;
 
@@ -208,7 +209,7 @@ export class CreatePickupDto {
   relationship!: string;
 
   @IsOptional()
-  @IsString()
+  @IsAlgerianPhone({ message: 'téléphone invalide (ex. 0550 12 34 56)' })
   @MaxLength(30)
   phone?: string;
 

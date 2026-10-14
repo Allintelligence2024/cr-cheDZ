@@ -18,11 +18,11 @@ Monorepo du SaaS de gestion de crèche : présences offline, journal quotidien, 
 ## Structure
 
 ```
-apps/            api (NestJS) · worker · admin-web · parent-mobile · staff-mobile · support-console
-packages/        api-contracts · design-system · i18n · shared-config
+apps/            api (NestJS) · worker · admin-web · parent-mobile · staff-mobile · director-mobile · support-console
+packages/        api-contracts · design-system · i18n · prod-config · shared-config · sync-contract
 infrastructure/  docker · database/migrations · nginx · monitoring
-docs/            architecture · adr · regulatory · api
-tests/           tenant-isolation · sync · financial · e2e
+docs/            architecture · adr · regulatory · design · paiement · pilot
+tests/           tenant-isolation · contracts · sync · financial · load · monitoring · e2e
 ```
 
 ## Démarrage rapide (dev)

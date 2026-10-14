@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Phase 5 (rapport 5 analyses) — C3 : endpoint POST /privacy/children/:id/anonymize
-// (directeur/super_admin uniquement), branché sur anonymize_child (067).
+// (DPO uniquement — privacy:manage, seed 003), branché sur anonymize_child (067).
 // Prouve : refus par rôle (éducateur, comptable, parent : 403 sans écrit),
 // tenant étranger 404, enfant actif 409, motif court 400, succès 201 avec
 // résultat structuré + clôture de la demande de droits + purge S3 HONNÊTE
@@ -31,19 +31,19 @@ try {
     await db.query('INSERT INTO memberships(organization_id,user_id,role_id) SELECT $1,$2,id FROM roles WHERE slug=$3', [tenant, id, role]);
     return { id, email };
   };
-  const director = await actor('director'), foreign = await actor('director', b);
+  const dpo = await actor('dpo'), foreign = await actor('dpo', b);
   const educator = await actor('educator'), accountant = await actor('accountant'), parent = await actor('parent_primary');
   const site = (await db.query("INSERT INTO sites(organization_id,name_fr) VALUES($1,'P56b') RETURNING id", [a])).rows[0].id;
   const child = async (status) => (await db.query(
     `INSERT INTO children(organization_id,site_id,first_name_fr,last_name_fr,date_of_birth,status,departure_date,created_by)
      VALUES($1,$2,'Canari','P56b','2021-01-10',$3,$4,$5) RETURNING id`,
-    [a, site, status, status === 'departed' ? '2026-08-31' : null, director.id])).rows[0].id;
+    [a, site, status, status === 'departed' ? '2026-08-31' : null, dpo.id])).rows[0].id;
   const departed = await child('departed'), active = await child('active');
   await db.query(`INSERT INTO media_assets(organization_id,child_id,uploaded_by,media_type,storage_key,mime_type) VALUES($1,$2,$3,'photo',$4,'image/jpeg')`,
-    [a, departed, director.id, `${a}/photo/p56b-${randomUUID().slice(0, 8)}.jpg`]);
+    [a, departed, dpo.id, `${a}/photo/p56b-${randomUUID().slice(0, 8)}.jpg`]);
   const request = (await db.query(
     `INSERT INTO privacy_requests(organization_id,requester_id,request_type,subject_id,deadline) VALUES($1,$2,'opposition',$3,NOW()+interval '30 days') RETURNING id`,
-    [a, director.id, departed])).rows[0].id;
+    [a, dpo.id, departed])).rows[0].id;
 
   Object.assign(process.env, { DATABASE_URL: appUrl(), NODE_ENV: 'test', RATE_LIMIT_DISABLED: 'true', SENTRY_DSN: '', S3_ENDPOINT: 'http://127.0.0.1:9' });
   const { createApp } = await import('../../apps/api/dist/app.factory.js');
@@ -54,7 +54,7 @@ try {
     const r = await fetch(base + path, { method, headers: { 'content-type': 'application/json', ...(user?.token ? { authorization: `Bearer ${user.token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(20000) });
     return { status: r.status, body: await r.json() };
   };
-  for (const u of [director, foreign, educator, accountant, parent]) {
+  for (const u of [dpo, foreign, educator, accountant, parent]) {
     const r = await req('POST', '/auth/login', null, { email: u.email, password });
     assert.equal(r.status, 200, JSON.stringify(r.body)); u.token = r.body.access_token; assert.ok(u.token);
   }
@@ -69,26 +69,26 @@ try {
       assert.equal(await name(departed), 'Canari');
     });
   }
-  await check('directeur d’un AUTRE tenant → 404 (pas d’oracle), aucun écrit', async () => {
+  await check('DPO d’un AUTRE tenant → 404 (pas d’oracle), aucun écrit', async () => {
     const r = await anonymize(foreign, departed);
     assert.equal(r.status, 404, JSON.stringify(r.body));
     assert.equal(await name(departed), 'Canari');
   });
   await check('enfant encore actif → 409 CHILD_STILL_ACTIVE', async () => {
-    const r = await anonymize(director, active);
+    const r = await anonymize(dpo, active);
     assert.equal(r.status, 409, JSON.stringify(r.body)); assert.equal(r.body.code, 'CHILD_STILL_ACTIVE');
     assert.equal(await name(active), 'Canari');
   });
   await check('motif trop court → 400 ANONYMIZE_REASON_REQUIRED', async () => {
-    const r = await anonymize(director, departed, { reason: 'ok' });
+    const r = await anonymize(dpo, departed, { reason: 'ok' });
     assert.equal(r.status, 400, JSON.stringify(r.body)); assert.equal(r.body.code, 'ANONYMIZE_REASON_REQUIRED');
     assert.equal(await name(departed), 'Canari');
   });
-  await check('id non UUID → 400 (validation)', async () => { const r = await anonymize(director, 'nope'); assert.equal(r.status, 400); });
+  await check('id non UUID → 400 (validation)', async () => { const r = await anonymize(dpo, 'nope'); assert.equal(r.status, 400); });
 
   let first;
-  await check('directeur → 201 : enfant anonymisé, demande de droits clôturée, purge S3 HONNÊTE (échec remonté, pas de faux « purgé »)', async () => {
-    first = await anonymize(director, departed, { reason: 'Demande d’effacement 25-11 du tuteur', request_id: request });
+  await check('DPO → 201 : enfant anonymisé, demande de droits clôturée, purge S3 HONNÊTE (échec remonté, pas de faux « purgé »)', async () => {
+    first = await anonymize(dpo, departed, { reason: 'Demande d’effacement 25-11 du tuteur', request_id: request });
     assert.equal(first.status, 201, JSON.stringify(first.body));
     assert.equal(first.body.already_anonymized, false);
     assert.match(await name(departed), /^Anonyme-[0-9a-f]{8}$/);
@@ -97,12 +97,12 @@ try {
     assert.equal(first.body.media_purge.failed.length, 1);
     assert.equal(first.body.media_purge.failed[0].key, first.body.media_storage_keys[0]);
     const pr = (await db.query('SELECT status, resolved_by FROM privacy_requests WHERE id=$1', [request])).rows[0];
-    assert.equal(pr.status, 'resolved'); assert.equal(pr.resolved_by, director.id);
+    assert.equal(pr.status, 'resolved'); assert.equal(pr.resolved_by, dpo.id);
     const purgeAudit = (await db.query("SELECT new_values FROM audit_logs WHERE resource_type='media_purge' AND resource_id=$1", [departed])).rows;
     assert.equal(purgeAudit.length, 1); assert.equal(purgeAudit[0].new_values.purged, 0); assert.equal(purgeAudit[0].new_values.failed.length, 1);
   });
   await check('rejeu → 201 already_anonymized=true, pas de nouvelle purge ni audit', async () => {
-    const r = await anonymize(director, departed);
+    const r = await anonymize(dpo, departed);
     assert.equal(r.status, 201, JSON.stringify(r.body)); assert.equal(r.body.already_anonymized, true);
     assert.equal(r.body.media_purge.purged, 0); assert.equal(r.body.media_purge.failed.length, 0);
     const n = (await db.query("SELECT count(*)::int n FROM audit_logs WHERE resource_type IN ('media_purge','child') AND resource_id=$1 AND action='delete'", [departed])).rows[0].n;

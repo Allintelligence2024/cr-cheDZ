@@ -112,7 +112,13 @@ async function main() {
       return { org: org.rows[0].id, site: site.rows[0].id, room: room.rows[0].id, room2: room2.rows[0].id, edu: edu.rows[0].id };
     }
 
-    const A = await makeOrg('p4-a', 'Crèche P4 A');
+        // Date de naissance relative : la fenetre legale (3 mois - 3 ans, decret 19-253)
+    // est verifiee a la creation. Une date FIGEE vieillit et finit par sortir de la
+    // fenetre (les 39 mois de '2023-06-15' ont fait echouer cette suite en 409
+    // AGE_CRECHE_OUT_OF_RANGE a partir d octobre 2026). On calcule donc depuis
+    // aujourd hui : -18 mois reste valable jusqu en 2029.
+    const dobMonthsAgo = (months) => new Date(Date.now() - months * 30.44 * 86400000).toISOString().slice(0, 10);
+const A = await makeOrg('p4-a', 'Crèche P4 A');
     const B = await makeOrg('p4-b', 'Crèche P4 B');
 
     const loginA = await api('POST', '/auth/login', null, { email: 'p4.dir.p4-a@test.dz', password });
@@ -129,7 +135,7 @@ async function main() {
       room_id: A.room,
       first_name_fr: 'Yanis',
       last_name_fr: 'Amrani',
-      date_of_birth: '2024-03-01',
+      date_of_birth: dobMonthsAgo(30),
       gender: 'M',
       schedule_type: 'full_time',
     });
@@ -144,7 +150,7 @@ async function main() {
       room_id: A.room,
       first_name_fr: 'Lina',
       last_name_fr: 'Amrani',
-      date_of_birth: '2023-06-15',
+      date_of_birth: dobMonthsAgo(18),
       gender: 'F',
     });
     check('Second enfant → référence séquentielle différente',

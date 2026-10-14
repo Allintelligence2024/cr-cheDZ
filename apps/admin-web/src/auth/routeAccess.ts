@@ -15,6 +15,7 @@ export type RoleSlug = 'super_admin' | 'director' | 'accountant' | 'educator' | 
 const CARE = ['super_admin', 'director', 'educator', 'receptionist'] as const;
 const FINANCE = ['super_admin', 'director', 'accountant'] as const;
 const ADMIN = ['super_admin', 'director'] as const;
+const PRIVACY = ['super_admin', 'director', 'dpo'] as const;
 const ALL_STAFF = ['super_admin', 'director', 'educator', 'receptionist', 'accountant'] as const;
 
 /** Rôles (slug) autorisés à VOIR chaque écran. Une route absente = tout le personnel. */
@@ -26,7 +27,7 @@ export const ROUTE_ROLES: Readonly<Record<string, readonly string[]>> = {
   '/media': CARE,               // media.controller STAFF_ROLES
   '/messaging': CARE,           // messaging.controller STAFF_CREATE
   '/exports': FINANCE,          // exports.controller
-  '/privacy': FINANCE,          // privacy.controller STAFF_ROLES (director, accountant, super_admin)
+  '/privacy': PRIVACY,       // privacy.controller — @Permissions('privacy:manage') (dpo) + @Roles staff
   '/payroll': FINANCE,          // payroll.controller
   '/video': ADMIN,              // video.controller VIDEO_ROLES
   '/marketplace': ALL_STAFF,    // marketplace.controller (aucun @Roles)
@@ -65,12 +66,17 @@ export function canAccess(user: AccessSubject | null | undefined, path: string):
   return role !== null && allowed.includes(role);
 }
 
-/** L'anonymisation détruit irréversiblement des données : directeur ou super-admin seulement. */
+/** L'anonymisation détruit irréversiblement des données : DPO (privacy:manage,
+ *  loi 25-11 — le seed 003 attribue cette permission au dpo uniquement),
+ *  directeur ou super-admin. Miroir de @Roles('director','super_admin') +
+ *  @Permissions('privacy:manage') sur privacy.controller.anonymizeChild :
+ *  le backend reste l'autorité, ceci évite seulement d'offrir une action
+ *  vouée au 403. */
 export function canAnonymizeChild(user: AccessSubject | null | undefined): boolean {
   if (!user) return false;
   if (user.is_super_admin) return true;
   const role = currentRole(user);
-  return role === 'director' || role === 'super_admin';
+  return role === 'director' || role === 'dpo' || role === 'super_admin';
 }
 
 /** Premier écran accessible (cible du renvoi quand une route est refusée). */

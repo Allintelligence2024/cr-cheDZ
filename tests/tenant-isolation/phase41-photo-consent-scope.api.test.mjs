@@ -11,8 +11,8 @@ assert.ok(new URL(url).pathname.endsWith('_test'));
 const db = new pg.Client({ connectionString: url }); await db.connect();
 let app, pool, passed = 0, failed = 0;
 async function check(name, fn) {
-  try { await fn(); passed++; console.log(`✓ ${name}`); }
-  catch (error) { failed++; console.error(`✗ ${name}: ${error.stack}`); }
+  try { await fn(); passed++; console.log(`Ô£ô ${name}`); }
+  catch (error) { failed++; console.error(`Ô£ù ${name}: ${error.stack}`); }
 }
 try {
   await ensureAppRole(db);
@@ -83,20 +83,25 @@ try {
       });
       // Independent historical-read proof: a previous version may already have published it.
       await db.query('UPDATE media_assets SET is_visible_to_parents=true WHERE id=$1', [id]);
-      await check(`${item.name}: direct parent URL and access log`, async () => {
+      await check(`${item.name}: direct parent URL (no phantom access log)`, async () => {
         const before = await countAccess(id);
         const response = await req('GET', `/parent/children/${child}/media/${id}/download`, parent);
         assert.equal(response.status, item.allowed ? 200 : 422, JSON.stringify(response.body));
-        // LOT 2 (P0 F5) : chemin same-origin exact (plus d'URL signée S3).
+        // LOT 2 (P0 F5) : chemin same-origin exact (plus d'URL sign├®e S3).
         if (item.allowed) assert.equal(response.body.url, `/api/v1/parent/children/${child}/media/${id}/content`); else assert.equal(response.body.url, undefined);
-        assert.equal(await countAccess(id), before + (item.allowed ? 1 : 0));
+        // H2 (3.1.6) : g├®n├®rer un chemin n'est PAS une lecture ÔÇö seul streamContent()
+        // journalise. Le /download ne cr├®e donc AUCUN acc├¿s fant├┤me (phase66 verrouille
+        // ┬½ exactement 1 ligne ┬╗ c├┤t├® lecture r├®elle).
+        assert.equal(await countAccess(id), before);
       });
-      await check(`${item.name}: parent list`, async () => {
+      await check(`${item.name}: parent list (no phantom access log)`, async () => {
         const before = await countAccess(id), response = await req('GET', `/parent/children/${child}/media`, parent);
         assert.equal(response.status, 200, JSON.stringify(response.body));
         assert.equal(response.body.some(row => row.id === id), item.allowed);
         if (item.allowed) assert.equal(response.body.find(row => row.id === id).url, `/api/v1/parent/children/${child}/media/${id}/content`);
-        assert.equal(await countAccess(id), before + (item.allowed ? 1 : 0));
+        // M├¬me contrat H2 : lister les chemins ne journalise pas ÔÇö seule la
+        // lecture des octets (streamContent) ├®crit media_access_logs.
+        assert.equal(await countAccess(id), before);
       });
       await check(`${item.name}: withdrawal always possible, metadata retained`, async () => {
         const response = await publish(id, false); assert.equal(response.status, 200);

@@ -7,7 +7,7 @@
   `app_tenant_id()` (safe-by-default), filtres organisation explicites en
   défense en profondeur sur les lectures sensibles (billing, parents, santé,
   journal, sync — lot C, 2026-09). Vérifié par les suites
-  `tests/tenant-isolation/*` (phase3 → phase54 + gardes contrat/schema/RLS)
+  `tests/tenant-isolation/*` (isolation + phase3 → phase78 + gardes contrat/schema/RLS)
   sur PostgreSQL réel, **rejouvées en CI avec les rôles de production**
   (Gate D — `scripts/test-production-roles.mjs`).
 - **Rôles base de données** : bootstrap reproductible (`roles.sql` exécuté par

@@ -480,7 +480,8 @@
     "definition": "PullResponse",
     "value": {
       "events": [],
-      "next_cursor": "9223372036854775807"
+      "next_cursor": "9223372036854775807",
+      "resync_required": false
     },
     "valid": true
   },

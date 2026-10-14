@@ -45,11 +45,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       ]);
       if (!mounted) return;
       setState(() {
-        _overview = results[0] as Map<String, dynamic>;
-        _attendanceTrend = (results[1] as Map<String, dynamic>)['data'] as List<dynamic>? ?? [];
-        _billingTrend = (results[2] as Map<String, dynamic>)['data'] as List<dynamic>? ?? [];
-        _revenueTrend = (results[3] as Map<String, dynamic>)['data'] as List<dynamic>? ?? [];
-        _occupancy = results[4] as Map<String, dynamic>;
+        _overview = results[0];
+        _attendanceTrend = results[1]['data'] as List<dynamic>? ?? [];
+        _billingTrend = results[2]['data'] as List<dynamic>? ?? [];
+        _revenueTrend = results[3]['data'] as List<dynamic>? ?? [];
+        _occupancy = results[4];
         _loading = false;
       });
     } catch (e) {
@@ -120,9 +120,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             children: [
               _KpiCard(icon: '👶', label: 'Enfants actifs', value: '${kpis['children_active'] ?? 0}', sub: '${kpis['capacity_total'] ?? 0} places • ${kpis['occupancy_rate'] ?? 0}%', color: Theme.of(context).colorScheme.primary, gradient: [Theme.of(context).colorScheme.primary, const Color(0xFF0F766E)]),
               _KpiCard(icon: '📍', label: 'Présents aujourd\'hui', value: '${attendanceToday['present'] ?? 0}', sub: '${attendanceToday['expected'] ?? 0} attendus • ${attendanceToday['absent'] ?? 0} absents', color: palette.success, gradient: [palette.success, const Color(0xFF136A32)]),
-              _KpiCard(icon: '💰', label: 'CA mois', value: '${_fmt(billingMonth['invoiced'])} DZD', sub: '${billingMonth['count'] ?? 0} factures • ${billingMonth['paid_count'] ?? 0} payées', color: const Color(0xFF0F766E), gradient: [const Color(0xFF0F766E), const Color(0xFF115E59)]),
+              _KpiCard(icon: '💰', label: 'CA mois', value: '${_fmt(billingMonth['invoiced'])} DZD', sub: '${billingMonth['count'] ?? 0} factures • ${billingMonth['paid_count'] ?? 0} payées', color: const Color(0xFF0F766E), gradient: const [Color(0xFF0F766E), Color(0xFF115E59)]),
               _KpiCard(icon: '⚠️', label: 'Impayés', value: '${_fmt(aged['total'])} DZD', sub: '${billingMonth['overdue'] ?? 0} en retard', color: palette.danger, gradient: [palette.danger, const Color(0xFFBE123C)]),
-              _KpiCard(icon: '👥', label: 'Staff actif', value: '${staff['active'] ?? 0}', sub: '${staff['total'] ?? 0} total', color: const Color(0xFF6366f1), gradient: [const Color(0xFF6366f1), const Color(0xFF4f46e5)]),
+              _KpiCard(icon: '👥', label: 'Staff actif', value: '${staff['active'] ?? 0}', sub: '${staff['total'] ?? 0} total', color: const Color(0xFF6366f1), gradient: const [Color(0xFF6366f1), Color(0xFF4f46e5)]),
               _KpiCard(icon: '🚨', label: 'Incidents 7j', value: '${incidents['total'] ?? 0}', sub: '${incidents['critical'] ?? 0} critiques', color: (incidents['critical'] ?? 0) > 0 ? palette.danger : palette.textMuted, gradient: (incidents['critical'] ?? 0) > 0 ? [palette.danger, Colors.red] : [palette.textMuted, palette.textFaint]),
             ],
           ),
@@ -132,15 +132,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           _SectionCard(
             title: '📈 Présences — 30 derniers jours',
             child: _attendanceTrend.isEmpty
-                ? EmptyState(icon: Icons.bar_chart, title: 'Pas de données présences', subtitle: 'Les présences alimentent ce graphique')
+                ? const EmptyState(icon: Icons.bar_chart, title: 'Pas de données présences', subtitle: 'Les présences alimentent ce graphique')
                 : SizedBox(
                     height: 200,
                     child: BarChart(
                       BarChartData(
-                        gridData: FlGridData(show: true, drawVerticalLine: false),
+                        gridData: const FlGridData(show: true, drawVerticalLine: false),
                         borderData: FlBorderData(show: false),
                         titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36)),
+                          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 36)),
                           bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, meta) {
                             final idx = v.toInt();
                             if (idx < 0 || idx >= _attendanceTrend.length) return const SizedBox.shrink();
@@ -172,10 +172,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     height: 200,
                     child: LineChart(
                       LineChartData(
-                        gridData: FlGridData(show: true),
+                        gridData: const FlGridData(show: true),
                         borderData: FlBorderData(show: false),
                         titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 48)),
+                          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 48)),
                           bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (v, meta) {
                             final idx = v.toInt();
                             if (idx < 0 || idx >= _billingTrend.length) return const SizedBox.shrink();
@@ -186,9 +186,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                         ),
                         lineBarsData: [
-                          LineChartBarData(spots: _billingTrend.asMap().entries.map((e) => FlSpot(e.key.toDouble(), _toDouble((e.value as Map)['invoiced']))).toList(), isCurved: true, color: Theme.of(context).colorScheme.primary, barWidth: 3, dotData: FlDotData(show: false)),
-                          LineChartBarData(spots: _billingTrend.asMap().entries.map((e) => FlSpot(e.key.toDouble(), _toDouble((e.value as Map)['paid']))).toList(), isCurved: true, color: palette.success, barWidth: 3, dotData: FlDotData(show: false)),
-                          LineChartBarData(spots: _billingTrend.asMap().entries.map((e) => FlSpot(e.key.toDouble(), _toDouble((e.value as Map)['balance']))).toList(), isCurved: true, color: palette.danger, barWidth: 2, dotData: FlDotData(show: false), dashArray: [5, 5]),
+                          LineChartBarData(spots: _billingTrend.asMap().entries.map((e) => FlSpot(e.key.toDouble(), _toDouble((e.value as Map)['invoiced']))).toList(), isCurved: true, color: Theme.of(context).colorScheme.primary, barWidth: 3, dotData: const FlDotData(show: false)),
+                          LineChartBarData(spots: _billingTrend.asMap().entries.map((e) => FlSpot(e.key.toDouble(), _toDouble((e.value as Map)['paid']))).toList(), isCurved: true, color: palette.success, barWidth: 3, dotData: const FlDotData(show: false)),
+                          LineChartBarData(spots: _billingTrend.asMap().entries.map((e) => FlSpot(e.key.toDouble(), _toDouble((e.value as Map)['balance']))).toList(), isCurved: true, color: palette.danger, barWidth: 2, dotData: const FlDotData(show: false), dashArray: [5, 5]),
                         ],
                       ),
                     ),
@@ -210,7 +210,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           height: 160,
                           child: BarChart(
                             BarChartData(
-                              gridData: FlGridData(show: false),
+                              gridData: const FlGridData(show: false),
                               borderData: FlBorderData(show: false),
                               titlesData: const FlTitlesData(show: false),
                               barGroups: _revenueTrend.asMap().entries.map((e) {
@@ -244,7 +244,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     final m = s as Map<String, dynamic>;
                     final enrolled = (m['enrolled'] as num?)?.toInt() ?? 0;
                     final cap = (m['capacity'] as num?)?.toInt() ?? 0;
-                    final pct = cap > 0 ? (enrolled / cap) * 100 : 0;
+                    final pct = cap > 0 ? (enrolled / cap) * 100.0 : 0.0;
                     return _OccupancyBar(label: m['name_fr']?.toString() ?? 'Site', enrolled: enrolled, capacity: cap, pct: pct);
                   }),
                   const SizedBox(height: 12),
@@ -252,7 +252,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     final m = r as Map<String, dynamic>;
                     final enrolled = (m['enrolled'] as num?)?.toInt() ?? 0;
                     final cap = (m['max_capacity'] as num?)?.toInt() ?? 0;
-                    final pct = cap > 0 ? (enrolled / cap) * 100 : 0;
+                    final pct = cap > 0 ? (enrolled / cap) * 100.0 : 0.0;
                     return _OccupancyBar(label: '${m['name_fr']} · ${m['site_name']}', enrolled: enrolled, capacity: cap, pct: pct);
                   }),
                 ],

@@ -1,10 +1,11 @@
 import {
   IsBoolean, IsEmail, IsIn,
   IsInt, IsOptional, IsString,
-  IsUUID, Matches, MaxLength,
+  IsUUID, MaxLength,
   Min,
 } from 'class-validator';
 import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
+import { IsAlgerianPhone } from '../../../shared/validation/algerian-phone';
 
 export class CreateEnrollmentRequestDto {
   @IsUUID() site_id!: string;
@@ -12,7 +13,7 @@ export class CreateEnrollmentRequestDto {
   @IsString() @MaxLength(80) child_last_name!: string;
   @IsStrictIsoDate() child_date_of_birth!: string;
   @IsString() @MaxLength(120) guardian_name!: string;
-  @Matches(/^\+?[0-9]{8,15}$/) guardian_phone!: string;
+  @IsAlgerianPhone({ message: 'téléphone du tuteur invalide (ex. 0550 12 34 56)' }) guardian_phone!: string;
   @IsOptional() @IsEmail() guardian_email?: string;
   @IsStrictIsoDate() desired_start_date!: string;
   @IsOptional() @IsIn(['full_time', 'half_time', 'daily', 'custom']) schedule_type?: string;

@@ -164,11 +164,11 @@ async function main() {
 
     /** Parent rattaché à un enfant (child_guardians vivant). */
     const makeParent = async (scope, { viewJournal, invoices }) => {
-      const phone = `+213${String(Math.floor(1e8 + Math.random() * 9e8))}`;
+      const phone = `+2135${String(10000000 + Math.floor(Math.random() * 89999999))}`;
       const email = `${tag}-${scope}-parent@test.dz`;
       const user = (await admin.query(
-        `INSERT INTO users(email,phone,first_name,last_name,password_hash,status) VALUES($1,$2,'P','T',$3,'active') RETURNING id`,
-        [email, phone, hash],
+        `INSERT INTO users(email,phone,organization_id,first_name,last_name,password_hash,status) VALUES($1,$2,$3,'P','T',$4,'active') RETURNING id`,
+        [email, phone, A.org, hash],
       )).rows[0].id;
       await admin.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [A.org, user, parentRole]);
       const guardian = (await admin.query(
@@ -187,8 +187,8 @@ async function main() {
 
     // Parent hors organisation : il ne doit jamais atteindre le contenu de A.
     const otherUser = (await admin.query(
-      `INSERT INTO users(email,phone,first_name,last_name,password_hash,status) VALUES($1,$2,'Q','T',$3,'active') RETURNING id`,
-      [`${tag}-b-parent@test.dz`, `+213${String(Math.floor(1e8 + Math.random() * 9e8))}`, hash],
+        `INSERT INTO users(email,phone,organization_id,first_name,last_name,password_hash,status) VALUES($1,$2,$3,'Q','T',$4,'active') RETURNING id`,
+        [`${tag}-b-parent@test.dz`, `+2135${String(10000000 + Math.floor(Math.random() * 89999999))}`, B.org, hash],
     )).rows[0].id;
     await admin.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [B.org, otherUser, parentRole]);
     await admin.query(
@@ -211,8 +211,19 @@ async function main() {
       `INSERT INTO media_assets(organization_id,child_id,uploaded_by,media_type,storage_key,mime_type,original_filename,file_size_bytes,
                                 is_visible_to_parents,all_consents_checked,children_in_photo,exif_stripped)
        VALUES($1,$2,$3,'photo',$4,'image/jpeg','photo.jpg',$5,true,true,$6::uuid[],true) RETURNING id`,
-      [A.org, A.child, A.director, photoKey, photoBytes.length, [A.child]],
+       [A.org, A.child, A.director, photoKey, photoBytes.length, [A.child]],
     )).rows[0].id;
+
+    // Le flux d'upload réel ne positionne all_consents_checked qu'APRÈS
+    // collecte des consentements photo (loi 25-11, H2g). La fixture
+    // insère directement en base : le consentement accordé du tuteur
+    // rattaché doit donc exister, sinon la garde fail-closed refuse
+    // correctement la lecture (CONSENT_REVOKED).
+    await admin.query(
+      `INSERT INTO consent_records(organization_id,guardian_id,child_id,consent_type,granted,granted_at,collection_method)
+       VALUES($1,$2,$3,'photo_individual',true,NOW(),'app')`,
+      [A.org, parentA.guardian, A.child],
+    );
 
     const download = await api('GET', `/media/${media}/download`, tokenDirA);
     ok('Lien de lecture rendu sous forme de chemin relatif (aucun hôte de stockage)',
@@ -232,8 +243,14 @@ async function main() {
       && content.res.headers.get('location') === null,
       `ct=${content.res.headers.get('content-type')} cc=${content.res.headers.get('cache-control')}`);
 
+    // H2 (P0 F5) : générer un chemin n'est PAS une lecture — le
+    // /download ci-dessus ne journalise RIEN (sinon chaque photo
+    // listée créerait un accès fantôme). La LECTURE réelle (GET
+    // /content, octets servis) est journalisée — une seule, donc
+    // exactement 1 ligne : ni 0 (lecture non tracée, loi 25-11),
+    // ni 2 (accès fantôme de la génération de lien).
     const logs = await admin.query(`SELECT COUNT(*)::int AS n FROM media_access_logs WHERE media_id=$1`, [media]);
-    ok('Chaque lecture journalisée (loi 25-11)', logs.rows[0].n >= 2, `n=${logs.rows[0].n}`);
+    ok('Chaque lecture journalisée (loi 25-11) — exactement 1 accès réel', logs.rows[0].n === 1, `n=${logs.rows[0].n}`);
 
     const cross = await raw(`/media/${media}/content`, tokenDirB);
     ok('Autre organisation : le MÊME chemin → 404, aucun octet',

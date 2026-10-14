@@ -3,7 +3,22 @@
  *
  * Sert des données synthétiques pour que l'admin-web soit cliquable dans la
  * preview sans PostgreSQL ni la vraie API NestJS. Aucune authentification
- * réelle : n'importe quel mot de passe est accepté.
+ * réelle : n'importe quel mot de passe est accepté, l'e-mail choisit le RÔLE.
+ *
+ * Comptes de démonstration (un par rôle admin-web — miroir de l'invite
+ * affichée par le LoginPage en mode VITE_PREVIEW_DEMO=1) :
+ *   superadmin@demo.creche.dz    super_admin   (plateforme, /organizations)
+ *   nadia.benali@demo.creche.dz  director
+ *   amina.haddad@demo.creche.dz  educator
+ *   karim.boudiaf@demo.creche.dz accountant
+ *   sara.meziane@demo.creche.dz  receptionist
+ * Les rôles parent_primary / parent_secondary n'ont AUCUN écran web
+ * (application mobile parent) : aucun compte ici.
+ *
+ * Session : access token `preview-token:<slug>` (Authorization: Bearer) et
+ * cookie de refresh `creche_refresh` (Path=/api/v1/auth — miroir de
+ * apps/api/src/shared/auth/auth-cookies.ts). Le refresh sans cookie renvoie
+ * 401 comme la vraie API, pour que l'écran de connexion soit atteint.
  *
  * ⚠️ NE JAMAIS déployer ni importer depuis le code applicatif.
  * Usage (deux terminaux) :
@@ -21,26 +36,57 @@ const PORT = Number(process.env.PREVIEW_API_PORT ?? 3100);
 const ISO = (d) => d.toISOString().slice(0, 10);
 const today = ISO(new Date());
 
-const ME = {
-  id: '00000000-0000-4000-8000-000000000001',
-  email: 'nadia.benali@demo.creche.dz',
-  first_name: 'Nadia',
-  last_name: 'Benali',
-  is_super_admin: false,
+const REFRESH_COOKIE = 'creche_refresh';
+const REFRESH_MAX_AGE_S = 7 * 24 * 60 * 60;
+
+/** Un compte de démonstration par rôle — l'e-mail sélectionne le rôle. */
+const ACCOUNTS = [
+  { slug: 'super_admin', email: 'superadmin@demo.creche.dz', first_name: 'Farid', last_name: 'Cherif', role_name: 'Super Admin Plateforme', is_super_admin: true, id: '00000000-0000-4000-8000-000000000000' },
+  { slug: 'director', email: 'nadia.benali@demo.creche.dz', first_name: 'Nadia', last_name: 'Benali', role_name: 'Directrice', is_super_admin: false, id: '00000000-0000-4000-8000-000000000001' },
+  { slug: 'educator', email: 'amina.haddad@demo.creche.dz', first_name: 'Amina', last_name: 'Haddad', role_name: 'Éducatrice', is_super_admin: false, id: '00000000-0000-4000-8000-000000000002' },
+  { slug: 'accountant', email: 'karim.boudiaf@demo.creche.dz', first_name: 'Karim', last_name: 'Boudiaf', role_name: 'Comptable', is_super_admin: false, id: '00000000-0000-4000-8000-000000000003' },
+  { slug: 'receptionist', email: 'sara.meziane@demo.creche.dz', first_name: 'Sara', last_name: 'Meziane', role_name: 'Réception', is_super_admin: false, id: '00000000-0000-4000-8000-000000000004' },
+];
+
+const ORG_ID = '00000000-0000-4000-8000-0000000000a1';
+
+const profileOf = (account) => ({
+  id: account.id,
+  email: account.email,
+  first_name: account.first_name,
+  last_name: account.last_name,
+  is_super_admin: account.is_super_admin,
   memberships: [
     {
-      organization_id: '00000000-0000-4000-8000-0000000000a1',
+      organization_id: ORG_ID,
       organization_name: 'Les Petits Pas',
-      role_slug: 'director',
-      role_name: 'Directrice',
+      role_slug: account.slug,
+      role_name: account.role_name,
       site_id: null,
       room_ids: [],
       joined_at: '2026-01-05T08:00:00.000Z',
-      permissions: ['*'],
+      permissions: account.slug === 'director' || account.is_super_admin ? ['*'] : [],
     },
   ],
-  current_organization_id: '00000000-0000-4000-8000-0000000000a1',
+  current_organization_id: ORG_ID,
+});
+
+const tokenFor = (account) => `preview-token:${account.slug}`;
+const accountForToken = (token) => ACCOUNTS.find((a) => token === tokenFor(a)) ?? null;
+const accountForEmail = (email) =>
+  ACCOUNTS.find((a) => a.email.toLowerCase() === String(email ?? '').trim().toLowerCase()) ?? null;
+
+const readCookie = (req) => {
+  for (const part of String(req.headers.cookie ?? '').split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === REFRESH_COOKIE) return decodeURIComponent(v.join('='));
+  }
+  return null;
 };
+
+const refreshCookie = (token) =>
+  `${REFRESH_COOKIE}=${encodeURIComponent(token)}; Path=/api/v1/auth; HttpOnly; SameSite=Lax; Max-Age=${REFRESH_MAX_AGE_S}`;
+const clearRefreshCookie = `${REFRESH_COOKIE}=; Path=/api/v1/auth; HttpOnly; SameSite=Lax; Max-Age=0`;
 
 const DASHBOARD = {
   date: today,
@@ -101,10 +147,6 @@ const CHILDREN = [
 }));
 
 const routes = [
-  [/^\/auth\/login$/, () => ({ access_token: 'preview-token', refresh_token: 'preview-refresh' })],
-  [/^\/auth\/refresh$/, () => ({ access_token: 'preview-token' })],
-  [/^\/auth\/logout$/, () => ({ ok: true })],
-  [/^\/me$/, () => ME],
   [/^\/dashboard\/summary/, () => DASHBOARD],
   [/^\/rooms/, () => ({ rooms: ROOMS, items: ROOMS })],
   [/^\/sites/, () => ({ sites: [
@@ -113,10 +155,18 @@ const routes = [
   ] })],
   [/^\/children/, () => ({ children: CHILDREN, items: CHILDREN, total: CHILDREN.length })],
   [/^\/organizations/, () => ({ organizations: [
-    { id: ME.memberships[0].organization_id, slug: 'petits-pas', name_fr: 'Les Petits Pas', name_ar: 'روضة الخطوات الصغيرة', wilaya: 'Alger' },
+    { id: ORG_ID, slug: 'petits-pas', name_fr: 'Les Petits Pas', name_ar: 'روضة الخطوات الصغيرة', wilaya: 'Alger' },
   ] })],
   [/^\/health/, () => ({ status: 'ok', database: 'ok', storage: 'ok', worker: 'ok' })],
 ];
+
+const send = (res, status, payload, headers = {}) => {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...headers });
+  res.end(JSON.stringify(payload));
+};
+
+const unauthorized = (res) =>
+  send(res, 401, { code: 'UNAUTHORIZED', message_fr: 'Session invalide', message_ar: 'جلسة غير صالحة' });
 
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
@@ -131,13 +181,56 @@ const server = createServer((req, res) => {
   let body = '';
   req.on('data', (c) => { body += c; });
   req.on('end', () => {
+    let json = {};
+    try { json = body ? JSON.parse(body) : {}; } catch { json = {}; }
+
+    // ── Authentification multi-rôles (aperçu uniquement) ─────────────
+    if (path === '/auth/login') {
+      const account = accountForEmail(json.email);
+      if (!account) {
+        send(res, 401, {
+          code: 'INVALID_CREDENTIALS',
+          message_fr: 'Email ou mot de passe incorrect',
+          message_ar: 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
+        });
+        return;
+      }
+      const token = tokenFor(account);
+      const headers = json.web_client ? { 'set-cookie': refreshCookie(token) } : {};
+      send(res, 200, { access_token: token, refresh_token: token, expires_in: 15 * 60 }, headers);
+      return;
+    }
+
+    if (path === '/auth/refresh') {
+      const account = accountForToken(readCookie(req));
+      if (!account) { unauthorized(res); return; }
+      const token = tokenFor(account);
+      send(res, 200, { access_token: token, expires_in: 15 * 60 }, { 'set-cookie': refreshCookie(token) });
+      return;
+    }
+
+    if (path === '/auth/logout') {
+      send(res, 200, { ok: true }, { 'set-cookie': clearRefreshCookie });
+      return;
+    }
+
+    if (path === '/me') {
+      const auth = String(req.headers.authorization ?? '');
+      const account = accountForToken(auth.replace(/^Bearer\s+/i, ''));
+      if (!account) { unauthorized(res); return; }
+      send(res, 200, profileOf(account));
+      return;
+    }
+
+    // ── Données synthétiques (identiques pour tous les rôles) ─────────
     const hit = routes.find(([re]) => re.test(path));
     const payload = hit ? hit[1]() : { items: [], rows: [], data: [] };
-    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify(payload));
+    send(res, 200, payload);
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[preview-api] données synthétiques sur http://0.0.0.0:${PORT}`);
+  console.log('[preview-api] comptes de démonstration (mot de passe libre) :');
+  for (const a of ACCOUNTS) console.log(`  ${a.email}  →  ${a.slug}`);
 });

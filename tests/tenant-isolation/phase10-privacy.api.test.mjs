@@ -8,7 +8,7 @@
  *   2. la directrice exporte le JSON (enfant + santé + journal + factures) ;
  *   3. B ne lit/exporte pas les demandes de A (404) ;
  *   4. un parent de B ne lit pas les demandes de A (404) ;
- *   5. résolution de la demande (directrice) ;
+ *   5. résolution de la demande (DPO, privacy:manage) ;
  *   6. violation créée avec échéance ANPDP +5 jours ; invisible pour B ;
  *   7. notification ANPDP sans SMTP → 503 VIOLATION_NOTIFY_NOT_CONFIGURED ;
  *   8. DPIA créée depuis le registre puis approuvée ;
@@ -65,6 +65,7 @@ const main = async () => {
   try {
     const directorRole = await db.query(`SELECT id FROM roles WHERE slug='director'`);
     const parentRole = await db.query(`SELECT id FROM roles WHERE slug='parent_primary'`);
+    const dpoRole = await db.query(`SELECT id FROM roles WHERE slug='dpo'`);
     // super_admin de la plateforme
     const superAdmin = await db.query(
       `INSERT INTO users (email, first_name, last_name, password_hash, status, is_super_admin)
@@ -80,6 +81,11 @@ const main = async () => {
     };
     const A = await mkOrg(`${tag}-a`);
     const B = await mkOrg(`${tag}-b`);
+    // 2.1/2.2 (loi 25-11) : privacy:manage est attribué au DPO
+    // (seed 003 — jamais au director). Un compte DPO dédié porte
+    // les actions réglementaires (résolution, ANPDP, registre, DPIA).
+    const dpoUser = await db.query(`INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'D','P',$2,'active') RETURNING id`, [`${tag}-dpo@test.dz`, hash]);
+    await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [A.org, dpoUser.rows[0].id, dpoRole.rows[0].id]);
     const childA = await db.query(
       `INSERT INTO children(organization_id,site_id,room_id,reference_number,first_name_fr,last_name_fr,date_of_birth,created_by)
        VALUES($1,$2,$3,'PV-A1','Yanis','Test','2024-01-01',$4) RETURNING id`,
@@ -103,7 +109,8 @@ const main = async () => {
     const tokenPA = (await api('POST', '/auth/login', null, { email: `${tag}-pa@test.dz`, password })).body.access_token;
     const tokenPB = (await api('POST', '/auth/login', null, { email: `${tag}-pb@test.dz`, password })).body.access_token;
     const tokenSuper = (await api('POST', '/auth/login', null, { email: `${tag}.super@test.dz`, password })).body.access_token;
-    ok('JWT émis (directeurs, parents, super_admin)', Boolean(tokenA && tokenB && tokenPA && tokenPB && tokenSuper));
+    const tokenDpo = (await api('POST', '/auth/login', null, { email: `${tag}-dpo@test.dz`, password })).body.access_token;
+    ok('JWT émis (directeurs, parents, dpo, super_admin)', Boolean(tokenA && tokenB && tokenPA && tokenPB && tokenSuper && tokenDpo));
 
     // Données A pour l'export : santé + journal + facture
     await api('PUT', `/health/${childA.rows[0].id}`, tokenA, { blood_type: 'O+', family_doctor: 'Dr B' });
@@ -137,9 +144,9 @@ const main = async () => {
     const reqListB = await api('GET', '/privacy/requests', tokenB);
     ok('B : aucune demande de A dans sa liste', reqListB.status === 200 && reqListB.body.length === 0);
 
-    // ── 5. Résolution ───────────────────────────────────────────────────────
+    // ── 5. Résolution (DPO, privacy:manage) ───────────────────────────
     console.log('\n5) Résolution de la demande');
-    const resolved = await api('POST', `/privacy/requests/${reqId}/resolve`, tokenA, {});
+    const resolved = await api('POST', `/privacy/requests/${reqId}/resolve`, tokenDpo, {});
     ok('Résolution → status resolved', (resolved.status === 200 || resolved.status === 201) && resolved.body.status === 'resolved', JSON.stringify(resolved.body).slice(0, 100));
 
     // ── 6/7. Violations ─────────────────────────────────────────────────────
@@ -153,14 +160,14 @@ const main = async () => {
     const violId = violation.body.id;
     const violB = await api('GET', '/privacy/violations', tokenB);
     ok('B : aucune violation de A visible', violB.status === 200 && violB.body.length === 0);
-    const notify = await api('POST', `/privacy/violations/${violId}/anpdp-notify`, tokenA, {});
+    const notify = await api('POST', `/privacy/violations/${violId}/anpdp-notify`, tokenDpo, {});
     ok('Notification ANPDP sans SMTP → 503 VIOLATION_NOTIFY_NOT_CONFIGURED', notify.status === 503 && notify.body.code === 'VIOLATION_NOTIFY_NOT_CONFIGURED', JSON.stringify(notify.body).slice(0, 120));
 
     // ── 8. DPIA ─────────────────────────────────────────────────────────────
     console.log('\n8) DPIA');
-    const registry = await api('GET', '/privacy/registry', tokenA);
+    const registry = await api('GET', '/privacy/registry', tokenDpo);
     ok('Registre des traitements listé', registry.status === 200 && registry.body.length >= 1);
-    const dpia = await api('POST', '/privacy/dpias', tokenA, {
+    const dpia = await api('POST', '/privacy/dpias', tokenDpo, {
       processing_registry_id: registry.body[0].id,
       risk_assessment: { risk_level: 'high', justification: 'photos enfants' },
       mitigation_measures: ['urls signées', 'consentements'],

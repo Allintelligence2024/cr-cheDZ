@@ -37,6 +37,11 @@ class _StaffAppState extends State<StaffApp> {
     super.initState();
     _authApi = widget.authApi ?? ApiClient();
     _auth = AuthService(_authApi, const FlutterSecureStorage());
+    // 3.10.2 : branche la rotation de token sur l'intercepteur 401 du ApiClient.
+    // Sans ce branchement, un access token expiré (15 min) bloquait l'app
+    // définitivement en 401 — l'intercepteur avait `_onRefresh == null` et
+    // laissait l'erreur remonter.
+    _authApi.onRefresh = _auth.refresh;
     unawaited(_bootstrap());
   }
 
@@ -118,7 +123,7 @@ class _StaffAppState extends State<StaffApp> {
       : _sessionError != null ? Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(_sessionError!), TextButton(onPressed: _logout, child: const Text('Se reconnecter')),
         ])))
-      : _engine != null ? ChildrenListPage(key: ValueKey(_db!.scope.key), syncEngine: _engine!, onLogout: () => unawaited(_logout()))
+      : _engine != null ? ChildrenListPage(key: ValueKey(_db!.scope.key), syncEngine: _engine!, api: _authApi, onLogout: () => unawaited(_logout()))
       : LoginPage(auth: _auth, onAuthenticated: _activate),
   );
 }

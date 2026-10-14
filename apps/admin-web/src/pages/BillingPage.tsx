@@ -151,8 +151,18 @@ function InvoicesTab({ onError, onMessage }: { onError: (m: string) => void; onM
   const [month, setMonth] = useState('1');
   const [dueDate, setDueDate] = useState('');
 
+  // 3.2.4 (fix régression e2e 2026-10-08) — GET /billing/invoices renvoie
+  // désormais une RÉPONSE PAGINÉE { items, total, page, limit } (remédiation
+  // 3.2.4 côté API), pas un tableau nu. L'ancien code faisait
+  // `setItems(res)` avec l'objet complet → `items.map` n'était plus une
+  // fonction → InvoicesTab plantait à l'affichage de la table et le
+  // formulaire de génération ne s'affichait jamais (e2e director-flow et
+  // billing-overdue-flow en timeout sur getByLabel('Contrat (UUID)')).
   const load = (): void => {
-    http.get<Invoice[]>('/billing/invoices').then(setItems).catch((e: unknown) => onError((e as { messageFr?: string }).messageFr ?? ""));
+    http
+      .get<Invoice[] | { items: Invoice[] }>('/billing/invoices')
+      .then((res) => setItems(Array.isArray(res) ? res : res.items))
+      .catch((e: unknown) => onError((e as { messageFr?: string }).messageFr ?? ''));
   };
   useEffect(load, []);
 

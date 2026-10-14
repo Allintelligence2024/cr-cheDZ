@@ -66,7 +66,6 @@ void main() {
     expect(client.sites, isA<Function>());
     expect(client.rooms, isA<Function>());
     expect(client.exports, isA<Function>());
-    expect(client.orgSettings, isA<Function>());
     expect(client.organizations, isA<Function>());
     expect(client.videoCameras, isA<Function>());
     // V2.3 write
@@ -78,9 +77,10 @@ void main() {
     expect(client.createJournalEvent, isA<Function>());
     expect(client.staffCheckIn, isA<Function>());
     expect(client.staffCheckOut, isA<Function>());
-    expect(client.payInvoice, isA<Function>());
+    expect(client.payInvoiceCash, isA<Function>());
+    expect(client.payInvoiceOnline, isA<Function>());
     expect(client.generateInvoices, isA<Function>());
-    // Analytics
+    // Analytics (MERGE_HEAD)
     expect(client.analyticsOverview, isA<Function>());
     expect(client.analyticsAttendance, isA<Function>());
     expect(client.analyticsBilling, isA<Function>());

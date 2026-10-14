@@ -114,6 +114,7 @@ const main = async () => {
   let prodApi = null;
   try {
     const directorRole = (await db.query(`SELECT id FROM roles WHERE slug='director'`)).rows[0].id;
+    const dpoRole = (await db.query(`SELECT id FROM roles WHERE slug='dpo'`)).rows[0].id;
     await db.query(
       `INSERT INTO users(email,first_name,last_name,password_hash,status,is_super_admin) VALUES($1,'S','A',$2,'active',true)`,
       [`${tag}-super@test.dz`, hash],
@@ -124,12 +125,18 @@ const main = async () => {
       const room = (await db.query(`INSERT INTO rooms(organization_id,site_id,name_fr,max_capacity) VALUES($1,$2,'R',10) RETURNING id`, [org, site])).rows[0].id;
       const director = (await db.query(`INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'D','T',$2,'active') RETURNING id`, [`${slug}-director@test.dz`, hash])).rows[0].id;
       await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [org, director, directorRole]);
+      // 2.1/2.2 (loi 25-11) : privacy:manage est attribué au DPO
+      // (seed 003) — registre et DPIA sont portés par un compte DPO.
+      const dpo = (await db.query(`INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'P','O',$2,'active') RETURNING id`, [`${slug}-dpo@test.dz`, hash])).rows[0].id;
+      await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [org, dpo, dpoRole]);
       return { org, site, room, director };
     };
     const A = await mkOrg(`${tag}-a`);
     const B = await mkOrg(`${tag}-b`);
     const tokenDirA = (await api('POST', '/auth/login', null, { email: `${tag}-a-director@test.dz`, password })).body.access_token;
     const tokenDirB = (await api('POST', '/auth/login', null, { email: `${tag}-b-director@test.dz`, password })).body.access_token;
+    const tokenDpoA = (await api('POST', '/auth/login', null, { email: `${tag}-a-dpo@test.dz`, password })).body.access_token;
+    const tokenDpoB = (await api('POST', '/auth/login', null, { email: `${tag}-b-dpo@test.dz`, password })).body.access_token;
     const tokenSuper = (await api('POST', '/auth/login', null, { email: `${tag}-super@test.dz`, password })).body.access_token;
     ok('JWT émis (directeurs A/B + super_admin)', Boolean(tokenDirA && tokenDirB && tokenSuper));
 
@@ -179,10 +186,10 @@ const main = async () => {
     ok('Paiement failed + erreur persistée', failedRow?.status === 'failed' && Boolean(failedRow.gateway_response));
 
     // ══ Préparation vidéo (DPIA + flag, comme phase21) ═══════════════════
-    const enableVideoFor = async (orgId, tokenDir) => {
-      const registry = (await api('GET', '/privacy/registry', tokenDir)).body;
+    const enableVideoFor = async (orgId, tokenDpo) => {
+      const registry = (await api('GET', '/privacy/registry', tokenDpo)).body;
       const video = registry.find((r) => r.processing_name === 'Vidéosurveillance des locaux');
-      const dpia = await api('POST', '/privacy/dpias', tokenDir, {
+      const dpia = await api('POST', '/privacy/dpias', tokenDpo, {
         processing_registry_id: video.id,
         risk_assessment: { level: 'moderate', reference: 'docs/regulatory/DPIA-VIDEOSURVEILLANCE.md' },
         mitigation_measures: ['accès restreint', 'purge 30 j', 'visionnage journalisé'],
@@ -192,8 +199,8 @@ const main = async () => {
       ok('DPIA approuvée par un responsable distinct', approval.status === 201 && approval.body.status === 'approved');
       await api('POST', '/support/flags/video_surveillance', tokenSuper, { organization_id: orgId, is_enabled: true });
     };
-    await enableVideoFor(A.org, tokenDirA);
-    await enableVideoFor(B.org, tokenDirB);
+    await enableVideoFor(A.org, tokenDpoA);
+    await enableVideoFor(B.org, tokenDpoB);
     const cam = await api('POST', '/video/cameras', tokenDirA, { name: 'Entrée p22', zone: 'entrance' });
     ok('Caméra A créée (prérequis)', cam.status === 201 || cam.status === 200, JSON.stringify(cam.body).slice(0, 100));
     const capturedAt = new Date(Date.now() - 3600_000).toISOString();

@@ -17,6 +17,24 @@ test('E2 : local + SMTP réel de test + SMS/WhatsApp simulés, puis déduplicati
     assert.equal((await f.post(resolved)).status,200);assert.equal(f.mails.length,2);assert.equal(f.calls.length,4);
   }finally{await f.close();}
 });
+test('E2 : chaque tick scheduler activé (056/092, dont sync_purge) est accepté, jamais ALERT_JOB_INVALID',async()=>{
+  // Régression gate E2 monitoring : la migration 092 a ajouté `sync_purge` (4e tick
+  // activé). Un job_type activé mais absent de la whitelist était rejeté (400), donc
+  // jamais relayé, et le stack E2 expirait en attendant la 4e alerte WorkerScheduledJobOverdue.
+  const f=await fixture();try{
+    for(const job of ['payments_expire','retention_purge','video_clips_purge','sync_purge']) {
+      const body=structuredClone(sample);body.alerts[0].labels.job_type=job;
+      assert.equal((await f.post(body)).status,200,`job_type ${job} doit être relayé`);
+    }
+    const journal=await readFile(join(f.dir,'alerts.jsonl'),'utf8');
+    for(const job of ['payments_expire','retention_purge','video_clips_purge','sync_purge']) {
+      assert.ok(journal.includes(job),`le journal doit tracer ${job}`);
+    }
+    // Whitelist fermée : un job_type inconnu reste refusé (400).
+    const unknown=structuredClone(sample);unknown.alerts[0].labels.job_type='send_monthly_invoices';
+    assert.equal((await f.post(unknown)).status,400,'job_type hors whitelist reste refusé');
+  }finally{await f.close();}
+});
 test('E2 : échec SMS → 503/retry ; e-mail et WhatsApp déjà acceptés ne sont pas renvoyés',async()=>{
   const f=await fixture();try{f.rejectSms(true);assert.equal((await f.post()).status,503);
     f.rejectSms(false);await f.restart();assert.equal((await f.post()).status,200);

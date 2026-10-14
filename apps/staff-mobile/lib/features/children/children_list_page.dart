@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/database/app_database.dart';
+import '../../core/media/media_uploader.dart';
+import '../../core/network/api_client.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../theme/serenite_theme.dart';
 import '../sync/sync_status_banner.dart';
@@ -10,9 +13,11 @@ import 'child.dart';
 /// Liste des enfants d'une section (données locales Drift) avec statut de
 /// présence du jour et actions Arrivée/Départ (offline-first).
 class ChildrenListPage extends StatefulWidget {
-  const ChildrenListPage({super.key, required this.syncEngine, this.onLogout});
+  const ChildrenListPage({super.key, required this.syncEngine, this.api, this.onLogout});
 
   final SyncEngine syncEngine;
+  // 3.10.3 : client API pour l'upload photo (MediaUploader).
+  final ApiClient? api;
   final VoidCallback? onLogout;
 
   @override
@@ -149,6 +154,39 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
     }
   }
 
+  // 3.10.3 : capture photo staff — MediaUploader était complet mais n'avait
+  // aucun appelant. Ce bouton est le chemin photo de l'app personnel.
+  Future<void> _takePhoto(Child child) async {
+    final api = widget.api;
+    if (api == null) return;
+    try {
+      final picker = ImagePicker();
+      final xfile = await picker.pickImage(source: ImageSource.camera, imageQuality: 80, maxWidth: 1600);
+      if (xfile == null) return; // capture annulée
+      final bytes = await xfile.readAsBytes();
+      final uploader = MediaUploader(api);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Envoi de la photo…')));
+      await uploader.uploadPhoto(
+        childId: child.id,
+        bytes: bytes,
+        mimeType: 'image/jpeg',
+        filename: 'photo-${child.id}-${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Photo envoyée'),
+        backgroundColor: SereniteStatusColors.of(context).success,
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Échec de l\'envoi : $e'),
+        backgroundColor: SereniteStatusColors.of(context).danger,
+      ));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -202,7 +240,18 @@ class _ChildrenListPageState extends State<ChildrenListPage> {
                                     ),
                                   )
                                 : null,
-                            trailing: _trailing(child),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // 3.10.3 : chemin photo staff (MediaUploader).
+                                IconButton(
+                                  icon: const Icon(Icons.camera_alt),
+                                  tooltip: 'Photo',
+                                  onPressed: () => _takePhoto(child),
+                                ),
+                                _trailing(child),
+                              ],
+                            ),
                           ),
                         );
                       },

@@ -74,14 +74,14 @@ export class EnrollmentService {
     });
   }
 
-  private async capacityWith(c: { query: (q: string, p?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> }, org: string, siteId: string) {
+  private async capacityWith(c: { query: (q: string, p?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> }, org: string, siteId: string, excludeOfferId?: string) {
     const r = (await c.query(
       `SELECT
          (SELECT COALESCE(SUM(max_capacity),0)::int FROM rooms WHERE organization_id=$1 AND site_id=$2 AND is_active) AS capacity,
          (SELECT COUNT(*)::int FROM children WHERE organization_id=$1 AND site_id=$2 AND deleted_at IS NULL AND status IN ('active','pre_registered','on_leave')) AS enrolled,
-         (SELECT COUNT(*)::int FROM enrollment_requests WHERE organization_id=$1 AND site_id=$2 AND status='offered' AND offer_expires_at > NOW()) AS offered,
+         (SELECT COUNT(*)::int FROM enrollment_requests WHERE organization_id=$1 AND site_id=$2 AND status='offered' AND offer_expires_at > NOW() AND ($3::uuid IS NULL OR id <> $3)) AS offered,
          (SELECT COUNT(*)::int FROM enrollment_requests WHERE organization_id=$1 AND site_id=$2 AND status IN ('pending','waitlisted')) AS waiting`,
-      [org, siteId],
+      [org, siteId, excludeOfferId ?? null],
     )).rows[0] as { capacity: number; enrolled: number; offered: number; waiting: number };
     return { site_id: siteId, ...r, available: Math.max(0, r.capacity - r.enrolled - r.offered) };
   }
@@ -148,6 +148,23 @@ export class EnrollmentService {
       if (dto.decision === 'accepted') {
         if (req.status !== 'offered') throw new AppError('ENROLLMENT_NO_OFFER', 'Une place doit être proposée avant acceptation', 'يجب عرض مكان قبل القبول', 409);
         if (new Date(req.offer_expires_at).getTime() <= Date.now()) throw new AppError('ENROLLMENT_OFFER_EXPIRED', 'L’offre a expiré', 'انتهت صلاحية العرض', 409);
+        // P0 (remédiation 2026-10-03, phase 1.5) — contrôle de capacité manquant.
+        // children.service.ts (create) et import.service.ts appliquent le
+        // plafond établissement, MAIS decide() créait l'enfant sans le
+        // vérifier → inscription au-delà des plafonds (décret 19-253 art. 4).
+        // On vérifie la capacité du site OFFERT (offre + enfant = 1 place).
+        // La place est DÉJÀ réservée par l'offre en cours de cette demande : on
+        // l'exclut du compteur `offered` sinon l'acceptation est faussement
+        // rejetée (CAPACITY_EXCEEDED) alors que l'enfant n'occupe qu'une place.
+        const cap = await this.capacityWith(c, org, String(req.site_id), id);
+        if (cap.available < 1) {
+          throw new AppError(
+            'CAPACITY_EXCEEDED',
+            `Capacité du site atteinte (${cap.capacity} places, ${cap.enrolled + cap.offered} occupées) — décret 19-253`,
+            `تم بلوغ سعة الموقع (${cap.capacity} أماكن، ${cap.enrolled + cap.offered} مشغولة) — المرسوم 19-253`,
+            409,
+          );
+        }
         const seq = (await c.query(`SELECT next_org_sequence($1) AS n`, [org])).rows[0].n;
         childId = (await c.query(
           `INSERT INTO children(organization_id,site_id,room_id,reference_number,first_name_fr,last_name_fr,date_of_birth,status,enrollment_date,schedule_type,created_by)

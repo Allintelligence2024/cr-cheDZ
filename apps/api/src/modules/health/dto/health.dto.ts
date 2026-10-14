@@ -4,11 +4,12 @@ import {
   MaxLength, Min,
 } from 'class-validator';
 import { IsStrictIsoDate } from '../../../shared/validation/iso-date';
+import { IsAlgerianPhone } from '../../../shared/validation/algerian-phone';
 
 export class UpsertHealthRecordDto {
   @IsOptional() @IsString() @MaxLength(20) blood_type?: string;
   @IsOptional() @IsString() @MaxLength(120) family_doctor?: string;
-  @IsOptional() @IsString() @MaxLength(30) doctor_phone?: string;
+  @IsOptional() @IsAlgerianPhone({ message: 'téléphone du médecin invalide (ex. 0550 12 34 56)' }) @MaxLength(30) doctor_phone?: string;
   @IsOptional() @IsString() @MaxLength(80) health_insurance?: string;
   @IsOptional() @IsString() @MaxLength(1000) chronic_conditions?: string;
   @IsOptional() @IsString() @MaxLength(1000) general_notes?: string;

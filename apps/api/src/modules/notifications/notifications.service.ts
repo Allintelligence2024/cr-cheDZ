@@ -59,6 +59,49 @@ export class NotificationsService {
     }
   }
 
+  /** Notification parent pour une administration de médicament (P0 1.7).
+   *  Contrairement aux événements journal, l'administration n'est pas un
+   *  daily_log_event : on notifie directement les guardians autorisés au
+   *  push + ceux ayant le droit journal (santé = cercle journal). */
+  async notifyGuardiansOfMedication(
+    client: PoolClient,
+    tenantId: string,
+    childId: string,
+    administrationId: string,
+    medicationName: string,
+    dose: string,
+  ): Promise<void> {
+    const guardians = await client.query(
+      `SELECT cg.guardian_id, g.user_id, g.phone_primary, g.first_name_fr, c.first_name_fr AS child_name
+       FROM child_guardians cg
+       JOIN guardians g ON g.id = cg.guardian_id
+       JOIN children c ON c.id = cg.child_id
+       WHERE cg.child_id = $1 AND cg.can_receive_push = true
+         AND g.user_id IS NOT NULL AND g.deleted_at IS NULL AND c.deleted_at IS NULL
+         AND cg.can_view_journal = true`,
+      [childId],
+    );
+    const event = {
+      fr: 'Médicament', ar: 'دواء',
+      body_fr: `a reçu ${medicationName} (${dose || 'dose prescrite'})`,
+      body_ar: `تلقى ${medicationName} (${dose || 'الجرعة الموصوفة'})`,
+    };
+    for (const g of guardians.rows) {
+      const data = { scope: 'medication', child_id: childId, administration_id: administrationId };
+      if (!await notificationAllowed(client, tenantId, g.user_id, data, 'inbox')) continue;
+      await this.enqueue(client, tenantId, {
+        userId: g.user_id,
+        eventType: 'medication_administered',
+        titleFr: event.fr,
+        titleAr: event.ar,
+        bodyFr: `${g.child_name} ${event.body_fr}`,
+        bodyAr: `${g.child_name} ${event.body_ar}`,
+        data,
+      });
+      await this.enqueueWhatsApp(client, tenantId, g.user_id, g.phone_primary, event, g.child_name, data);
+    }
+  }
+
   /** Canal WhatsApp : soumis au flag whatsapp_notifications + téléphone présent. */
   private async enqueueWhatsApp(
     client: PoolClient,
