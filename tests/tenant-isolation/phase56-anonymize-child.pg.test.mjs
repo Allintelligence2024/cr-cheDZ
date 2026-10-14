@@ -66,6 +66,10 @@ try {
     ids.parentUser = (await c.query(`INSERT INTO users(email,phone,first_name,last_name,status,password_hash,totp_secret,totp_enabled)
       VALUES($1,$2,'ParentCanari','P56','active','$2b$10$abcdefghijklmnopqrstuv','JBSWY3DPEHPK3PXP',true) RETURNING id, token_epoch`, [K.uEmail, K.uPhone])).rows[0];
     ids.sharedUser = (await c.query(`INSERT INTO users(email,first_name,last_name,status) VALUES($1,'ParentPartage','P56','active') RETURNING id`, [`shared-${RUN}@parent.invalid`])).rows[0].id;
+  });
+  // `sessions` is tenant-scoped under FORCE RLS (migration 088): construct the
+  // tenant session within org A rather than in the global-org fixture above.
+  await committed(ids.orgA, async (c) => {
     ids.session = (await c.query(`INSERT INTO sessions(user_id,organization_id,refresh_token_hash,expires_at) VALUES($1,$2,$3,NOW()+interval '1 day') RETURNING id`,
       [ids.parentUser.id, ids.orgA, `h-${RUN}`])).rows[0].id;
   });
