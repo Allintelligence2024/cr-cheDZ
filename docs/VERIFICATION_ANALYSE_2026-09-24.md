@@ -655,7 +655,8 @@ SDK : voir `docs/PLAN_REPARATION_2026-09-24.md` §2 (L3) et §6 (D4).
   périmètre** : `notification_inbox` et les fichiers joints (`media_assets`) — décisions
   séparées du DPO.
 - OpenAPI : 13 chemins écrits à la main sur 205 routes — assumé et testé comme tel.
-- 15 ADR / 33 runbooks / 701 fichiers (mesure `git ls-files` au 2026-09-24) : corriger les chiffres du rapport.
+- Volumétrie au 2026-09-24 (mesure `git ls-files`) : 15 ADR, 33 runbooks, 701 fichiers : corriger les chiffres du rapport.
+  - Mise à jour mesurée au 2026-10-14 : 16 ADR / 33 runbooks (ADR-015 ajouté depuis).
 
 ### 🟢 À préserver (ne pas régresser)
 RLS `FORCE` + rôles séparés + `default privileges` · TOTP scellé AES-256-GCM à AAD · révocation
