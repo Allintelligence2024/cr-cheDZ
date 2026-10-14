@@ -7,7 +7,7 @@
  *
  *   1. chaque table avec la RLS active et une colonne `organization_id` porte
  *      un index VALIDE dont cette colonne est la TÊTE (indkey[0]) ;
- *   2. les 4 exemptions (2 tables système, 2 tables de configuration) sont les
+ *   2. les 3 exemptions (1 table système, 2 tables de configuration) sont les
  *      seules tolérées, et chacune nomme une table qui existe ;
  *   3. une exemption système n'a PAS la RLS (sinon l'exemption est un défaut
  *      déguisé) ;
@@ -42,9 +42,11 @@ const ok = (name, pass, detail) => {
   if (!pass) failures.push(name);
 };
 
-/** Exemptions admises — doit rester synchrone de scripts/check-tenant-index.mjs. */
+/** Exemptions admises — doit rester synchrone de scripts/check-tenant-index.mjs.
+ *  `sessions` n'en fait plus partie depuis la migration 088 (RLS tenant) ;
+ *  l'index de tête organization_id est créé par la migration 100. */
 const EXEMPTIONS = {
-  system: new Set(['users', 'sessions']),
+  system: new Set(['users']),
   config: new Set(['feature_flags', 'processing_registry']),
 };
 const isExempt = (t) => EXEMPTIONS.system.has(t) || EXEMPTIONS.config.has(t);

@@ -4,7 +4,7 @@
  * les autres suites. SMTP local réel, SMS/WA via simulateur HTTP sans frais.
  */
 import assert from 'node:assert/strict';
-import {execFileSync,spawnSync} from 'node:child_process';
+import {execFileSync,spawnSync,spawn} from 'node:child_process';
 import {createServer} from 'node:net';
 import {mkdtemp,writeFile,readFile,chmod} from 'node:fs/promises';
 import {writeSync} from 'node:fs';
@@ -47,12 +47,20 @@ const run=(name,image,args,extra=[])=>{
   execFileSync('docker',['run','-d','--name',n,'--network','host','--user',`${process.getuid()}:${process.getgid()}`,
     '-v',`${dir}:/etc/e2:ro`,...extra,image,...args],{stdio:['ignore','pipe','pipe']});
 };
-async function until(check,label,ms=90000){const deadline=Date.now()+ms;while(Date.now()<deadline){try{if(await check())return;}catch{/* démarrage réseau */}await delay(300);}throw new Error(`Timeout: ${label}`);}
+// GitHub runner : le cold pull des images consommerait les budgets `until`.
+// On démarre l'exporter SEUL en premier (c'est la seule image nécessaire au
+// premier until), et on lance les pulls Prometheus/Alertmanager en parallèle
+// pendant que l'exporter se prépare — le démarrage réseau est libre.
+const exporterImage='prometheuscommunity/postgres-exporter:v0.15.0';
+execFileSync('docker',['pull',exporterImage],{stdio:['ignore','pipe','pipe']});
+const pulls=['prom/alertmanager:v0.27.0','prom/prometheus:v2.53.0'].map(i=>new Promise((r,rej)=>{const p=spawn('docker',['pull',i],{stdio:'ignore'});p.on('exit',c=>c===0?r():rej(new Error(`docker pull ${i} exit ${c}`)));p.on('error',rej);}));
+async function until(check,label,ms=90000){const deadline=Date.now()+ms;let lastErr;while(Date.now()<deadline){try{if(await check())return;}catch(e){lastErr=e;/* démarrage réseau */}await delay(300);}throw new Error(`Timeout: ${label}${lastErr?` — dernière cause: ${String(lastErr.message||lastErr).slice(0,400)}`:''}`);}
 async function journal(){return (await readFile(join(f.dir,'alerts.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);}
+let probeDumped=false;
 try {
   await db.query('UPDATE scheduler_ticks SET last_success_at=NOW()');
   await writeFile(join(dir,'token'),token,{mode:0o600});
-  await writeFile(join(dir,'exporter.env'),`DATA_SOURCE_NAME=${process.env.APP_DATABASE_URL}\nPG_EXPORTER_EXTEND_QUERY_PATH=/etc/e2/queries.yml\nPGSSLMODE=disable\n`,{mode:0o600});
+  await writeFile(join(dir,'exporter.env'),`DATA_SOURCE_NAME=${process.env.APP_DATABASE_URL}\nPG_EXPORTER_EXTEND_QUERY_PATH=/etc/e2/queries.yml\nPG_EXPORTER_DISABLE_DEFAULT_METRICS=true\nPGSSLMODE=disable\n`,{mode:0o600});
   await writeFile(join(dir,'queries.yml'),await readFile('infrastructure/monitoring/postgres-queries.yml'));
   // Expressions/routage inchangés ; uniquement délais accélérés. Les délais
   // de production sont évalués sans modification par promtool juste au-dessus.
@@ -71,19 +79,29 @@ try {
     .replace('/run/secrets/metrics-collector-token','/etc/e2/metrics-collector-token');
   await writeFile(join(dir,'prometheus.yml'),prom);
   await writeFile(join(dir,'metrics-collector-token'),'e2-gate-placeholder-not-a-real-credential\n',{mode:0o600});
-  run('exporter','prometheuscommunity/postgres-exporter:v0.15.0',[`--web.listen-address=127.0.0.1:${exporterPort}`],['--env-file',join(dir,'exporter.env')]);
-  await until(async()=>{const text=await(await fetch(`http://127.0.0.1:${exporterPort}/metrics`)).text();return (text.match(/^creche_worker_scheduler_overdue\{/gm)??[]).length===3;},'3 métriques SQL réelles');
+  // Nombre de séries attendues = ticks scheduler réellement ACTIVÉS en base.
+  // Migration 092 a ajouté `sync_purge` (4e tick) ; un littéral 3 provoquerait un
+  // timeout mensonger. On lit la vérité dans la source réellement scrappée.
+  const expectedScheduler=Number((await db.query('SELECT count(*)::int AS n FROM scheduler_ticks WHERE enabled')).rows[0].n);
+  run('exporter',exporterImage,[`--web.listen-address=127.0.0.1:${exporterPort}`],['--env-file',join(dir,'exporter.env')]);
+  await until(async()=>{const r=await fetch(`http://127.0.0.1:${exporterPort}/metrics`);const text=await r.text();const n=(text.match(/^creche_worker_scheduler_overdue\{/gm)??[]).length;if(n===expectedScheduler)return true;
+    // G5 : sans ceci, le catch avalait et le timeout ne disait QUE le label.
+    // On publie ce que l'exporter sert réellement (aucune PII, métriques).
+    if(!probeDumped){probeDumped=true;writeSync(1,`::group::probe /metrics (count=${n})\n${text.split('\n').filter(l=>/creche|scheduler|error|panic/i.test(l)).slice(0,30).join('\n')}\n::endgroup::\n`);}
+    if(!r.ok)throw new Error(`exporter /metrics HTTP ${r.status}`); // jusqu'à ce qu'il réponde
+    return false;},`${expectedScheduler} métriques SQL réelles`);
+  await Promise.all(pulls);
   run('am','prom/alertmanager:v0.27.0',['--config.file=/etc/e2/alertmanager.yml','--storage.path=/tmp/am',`--web.listen-address=127.0.0.1:${amPort}`,'--cluster.listen-address=']);
   await until(async()=>(await fetch(`http://127.0.0.1:${amPort}/-/ready`)).ok,'Alertmanager prêt');
   run('prom','prom/prometheus:v2.53.0',['--config.file=/etc/e2/prometheus.yml','--storage.tsdb.path=/tmp/prom',`--web.listen-address=127.0.0.1:${promPort}`]);
   await until(async()=>(await fetch(`http://127.0.0.1:${promPort}/-/ready`)).ok,'Prometheus prêt');
   // AUCUN worker n'est démarré dans ce test. C'est la DB qui porte la fraîcheur.
   await db.query("UPDATE scheduler_ticks SET last_success_at=NOW()-INTERVAL '3 days'");
-  await until(async()=>new Set((await journal()).filter(x=>x.status==='firing'&&x.name==='WorkerScheduledJobOverdue').map(x=>x.job)).size===3,'alertes reçues localement sans worker');
-  await until(()=>f.mails.length>=3&&f.calls.filter(c=>c.has('ContentSid')).length>=3&&f.calls.filter(c=>!c.has('ContentSid')).length>=3,'e-mail/SMS/WhatsApp transmis');
+  await until(async()=>new Set((await journal()).filter(x=>x.status==='firing'&&x.name==='WorkerScheduledJobOverdue').map(x=>x.job)).size===expectedScheduler,'alertes reçues localement sans worker');
+  await until(()=>f.mails.length>=expectedScheduler&&f.calls.filter(c=>c.has('ContentSid')).length>=expectedScheduler&&f.calls.filter(c=>!c.has('ContentSid')).length>=expectedScheduler,'e-mail/SMS/WhatsApp transmis');
   await db.query('UPDATE scheduler_ticks SET last_success_at=NOW()');
-  await until(async()=>new Set((await journal()).filter(x=>x.status==='resolved'&&x.name==='WorkerScheduledJobOverdue').map(x=>x.job)).size===3,'résolution reçue');
-  await until(()=>f.mails.length>=6&&f.calls.filter(c=>c.has('ContentSid')).length>=6&&f.calls.filter(c=>!c.has('ContentSid')).length>=6,'résolutions transmises aux trois canaux');
+  await until(async()=>new Set((await journal()).filter(x=>x.status==='resolved'&&x.name==='WorkerScheduledJobOverdue').map(x=>x.job)).size===expectedScheduler,'résolution reçue');
+  await until(()=>f.mails.length>=expectedScheduler*2&&f.calls.filter(c=>c.has('ContentSid')).length>=expectedScheduler*2&&f.calls.filter(c=>!c.has('ContentSid')).length>=expectedScheduler*2,'résolutions transmises aux trois canaux');
   execFileSync('docker',['stop',names[0]],{stdio:'ignore'});
   await until(async()=>(await journal()).some(x=>x.status==='firing'&&x.name==='DatabaseMetricsUnavailable'),'perte exporter signalée');
   console.log('✓ E2 STACK : SQL app → exporter → Prometheus → Alertmanager → local/SMTP/SMS/WhatsApp ; firing/résolution/perte exporter. Aucun worker, aucun envoi externe.');

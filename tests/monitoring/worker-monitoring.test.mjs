@@ -16,6 +16,7 @@ test('E2 : exporter indépendant des workers, requête de santé câblée après
   const compose=read('infrastructure/docker/docker-compose.prod.yml');
   const block=compose.split('  postgres-exporter:')[1].split('  grafana:')[0];
   assert.match(block,/PG_EXPORTER_EXTEND_QUERY_PATH: \/etc\/postgres-exporter\/queries.yml/);
+  assert.match(block,/PG_EXPORTER_DISABLE_DEFAULT_METRICS: "true"/);
   assert.match(block,/monitoring\/postgres-queries.yml:\/etc\/postgres-exporter\/queries.yml:ro/);
   assert.match(block,/migrate:\s+condition: service_completed_successfully/);
   assert.doesNotMatch(block,/worker:/);

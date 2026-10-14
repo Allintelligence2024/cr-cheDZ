@@ -25,7 +25,10 @@ Future<void> main() async {
     if (path == '/sync/push') {
       return {'accepted': [event], 'rejected': [], 'conflicts': [], 'next_cursor': '9007199254740993'};
     }
-    return {'events': [], 'next_cursor': decoded['cursor']};
+    // PullResponse requires resync_required (migrations 093/098). A recording
+    // transport must emit a schema-valid envelope or the generated client's
+    // response validation rejects it — resync_required:false is the steady state.
+    return {'events': [], 'next_cursor': decoded['cursor'], 'resync_required': false};
   });
   await client.registerDevice({'name': 'Tablette contrat', 'device_fingerprint': 'installation-contract-1', 'platform': 'android'});
   final request = <String, dynamic>{

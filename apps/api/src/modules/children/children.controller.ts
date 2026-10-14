@@ -40,7 +40,11 @@ class GuardianIdParam {
   id!: string;
 }
 
-const READ_ROLES = ['super_admin', 'director', 'receptionist', 'educator'];
+// 2.1/2.2 (loi 25-11) : le DPO anonymise les enfants sortis (privacy:manage).
+// L'UI AnonymizeChildTab recherche les dossiers partis via ce même endpoint —
+// le dpo doit donc lire les enfants, sans pour autant pouvoir en CRÉER
+// (WRITE_ROLES reste inchangé : la saisie d'un dossier est une action métier).
+const READ_ROLES = ['super_admin', 'director', 'receptionist', 'educator', 'dpo'];
 const WRITE_ROLES = ['super_admin', 'director', 'receptionist'];
 
 @Controller('children')

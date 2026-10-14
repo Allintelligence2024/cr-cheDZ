@@ -12,7 +12,7 @@
  *      VIDEO_SURVEILLANCE_GLOBAL_FORBIDDEN (bilingue) ;
  *   3. activation pour A sans DPIA → 422 DPIA_REQUIRED ;
  *   4. DPIA créée mais NON approuvée (draft) → 422 DPIA_REQUIRED toujours ;
- *   5. DPIA approuvée par la directrice → activation pour A : 200 ;
+ *   5. DPIA approuvée par le DPO → activation pour A : 200 ;
  *   6. B sans DPIA approuvée → toujours 422 (la dérogation est par org) ;
  *   7. isolation : la DPIA de A n'apparaît pas dans la liste de B ;
  *   8. la DÉSACTIVATION reste possible sans DPIA (B : false → 200), et un
@@ -71,6 +71,7 @@ const main = async () => {
 
   try {
     const directorRole = (await db.query(`SELECT id FROM roles WHERE slug='director'`)).rows[0].id;
+    const dpoRole = (await db.query(`SELECT id FROM roles WHERE slug='dpo'`)).rows[0].id;
     const superAdmin = (await db.query(
       `INSERT INTO users(email,first_name,last_name,password_hash,status,is_super_admin) VALUES($1,'S','A',$2,'active',true) RETURNING id`,
       [`${tag}-super@test.dz`, hash],
@@ -80,18 +81,24 @@ const main = async () => {
       const org = (await db.query(`INSERT INTO organizations(slug,name_fr,wilaya) VALUES($1,'V','31') RETURNING id`, [slug])).rows[0].id;
       const director = (await db.query(`INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'D','T',$2,'active') RETURNING id`, [`${slug}-director@test.dz`, hash])).rows[0].id;
       await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [org, director, directorRole]);
+      // 2.1/2.2 (loi 25-11) : privacy:manage est attribué au DPO
+      // (seed 003) — registre et DPIA sont portés par un compte DPO.
+      const dpo = (await db.query(`INSERT INTO users(email,first_name,last_name,password_hash,status) VALUES($1,'P','O',$2,'active') RETURNING id`, [`${slug}-dpo@test.dz`, hash])).rows[0].id;
+      await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [org, dpo, dpoRole]);
       return { org, director };
     };
     const A = await mkOrg(`${tag}-a`);
     const B = await mkOrg(`${tag}-b`);
     const tokenDirA = (await api('POST', '/auth/login', null, { email: `${tag}-a-director@test.dz`, password })).body.access_token;
     const tokenDirB = (await api('POST', '/auth/login', null, { email: `${tag}-b-director@test.dz`, password })).body.access_token;
+    const tokenDpoA = (await api('POST', '/auth/login', null, { email: `${tag}-a-dpo@test.dz`, password })).body.access_token;
+    const tokenDpoB = (await api('POST', '/auth/login', null, { email: `${tag}-b-dpo@test.dz`, password })).body.access_token;
     const tokenSuper = (await api('POST', '/auth/login', null, { email: `${tag}-super@test.dz`, password })).body.access_token;
     ok('JWT émis (directeurs A/B + super_admin)', Boolean(tokenDirA && tokenDirB && tokenSuper));
 
     // ── 1. Modèle de registre vidéosurveillance + marqueurs sensibles ────────
     console.log('\n1) Registre : modèle « Vidéosurveillance des locaux »');
-    const registry = await api('GET', '/privacy/registry', tokenDirA);
+    const registry = await api('GET', '/privacy/registry', tokenDpoA);
     const video = registry.body.find?.((r) => r.processing_name === VIDEO_PROCESSING);
     ok('Modèle vidéosurveillance présent (global)', Boolean(video), `${registry.body?.length ?? 0} traitements`);
     ok('Modèle inactif + requires_dpia=true (avant DPIA)', video?.is_active === false && video?.requires_dpia === true, JSON.stringify(video));
@@ -113,7 +120,7 @@ const main = async () => {
 
     // ── 4. DPIA draft ≠ approved → 422 toujours ─────────────────────────────
     console.log('\n4) DPIA créée mais non approuvée');
-    const dpia = await api('POST', '/privacy/dpias', tokenDirA, {
+    const dpia = await api('POST', '/privacy/dpias', tokenDpoA, {
       processing_registry_id: video.id,
       risk_assessment: { level: 'high', reference: 'docs/regulatory/DPIA-VIDEOSURVEILLANCE.md' },
       mitigation_measures: ['accès restreint DPO/directeur', 'purge 30 jours', 'journalisation des visionnages'],
@@ -139,9 +146,9 @@ const main = async () => {
 
     // ── 7. Isolation des DPIA ────────────────────────────────────────────────
     console.log('\n7) Isolation tenant des DPIA');
-    const dpiasB = await api('GET', '/privacy/dpias', tokenDirB);
+    const dpiasB = await api('GET', '/privacy/dpias', tokenDpoB);
     ok('B ne voit aucune DPIA de A', dpiasB.status === 200 && Array.isArray(dpiasB.body) && dpiasB.body.length === 0, JSON.stringify(dpiasB.body).slice(0, 120));
-    const approveCross = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, tokenDirB, {});
+    const approveCross = await api('POST', `/privacy/dpias/${dpia.body.id}/approve`, tokenDpoB, {});
     ok('B ne peut pas (ré)approuver la DPIA de A (404)', approveCross.status === 404, `status=${approveCross.status}`);
 
     // ── 8. Désactivation libre + autres flags inchangés ──────────────────────

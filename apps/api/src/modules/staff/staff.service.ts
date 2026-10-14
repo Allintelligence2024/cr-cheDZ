@@ -33,7 +33,17 @@ export class StaffService {
                 sp.contract_type, sp.hire_date, sp.is_active,
                 u.email, COALESCE(u.first_name,'') AS first_name, COALESCE(u.last_name,'') AS last_name,
                 (SELECT COUNT(*)::int FROM staff_assignments sa
-                  WHERE sa.staff_id = sp.id AND sa.is_active = true) AS active_assignments
+                  WHERE sa.staff_id = sp.id AND sa.is_active = true) AS active_assignments,
+                -- 3.2.10 : site principal + rôle système attendus par
+                -- l'UI director-mobile (staff_page.dart:142). Le site vient
+                -- de l'affectation active (staff_profiles n'a pas de site_id).
+                COALESCE((SELECT s.name_fr FROM staff_assignments sa
+                           JOIN rooms r ON r.id = sa.room_id JOIN sites s ON s.id = r.site_id
+                           WHERE sa.staff_id = sp.id AND sa.is_active = true
+                           ORDER BY sa.start_date DESC LIMIT 1), '') AS site_name,
+                COALESCE((SELECT r.slug FROM memberships m JOIN roles r ON r.id = m.role_id
+                           WHERE m.user_id = sp.user_id AND m.organization_id = sp.organization_id
+                             AND m.is_active = true LIMIT 1), sp.qualification) AS role
          FROM staff_profiles sp
          JOIN users u ON u.id = sp.user_id
          WHERE sp.organization_id = $1

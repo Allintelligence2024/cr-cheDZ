@@ -7,6 +7,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// M1 — FCM : Google Services s'applique UNIQUEMENT si le fichier de config
+// existe (google-services.json — jamais commité, voir .gitignore). Sans lui,
+// le build release reste vert (CI, devs sans secret) mais l'app n'a pas de
+// push ; avec lui, Firebase.initializeApp() fonctionne.
+if (project.file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // P1-2 : signature release. Les secrets viennent de android/key.properties
 // (jamais commité — voir .gitignore) ou des variables d'environnement CI
 // (ANDROID_KEYSTORE_PATH / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS /

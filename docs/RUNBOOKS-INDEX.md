@@ -1,8 +1,8 @@
 # RUNBOOKS-INDEX — Ordre de lecture & porte d'entrée (Phase 4 / S7)
 
-> **G-beyond / S7 (remédiation 2026-09-21, Phase 4)** — index des 31 runbooks
+> **G-beyond / S7 (remédiation 2026-09-21, Phase 4)** — index des 32 runbooks
 > existants (`docs/PHASE_*_RUNBOOK.md`, `BACKUP-RUNBOOK`, `PRIVACY_ERASURE`).
-> **Ce qu'il ne faut PAS faire** : créer un nouveau runbook. Il y en a déjà 31
+> **Ce qu'il ne faut PAS faire** : créer un nouveau runbook. Il y en a déjà 32
 > (cf. §6 du `PLAN_REMEDIATION_FINAL.md`) — le manque est une **page d'index**,
 > pas un doublon.
 >
@@ -85,12 +85,13 @@ Si tu as 1 jour : ajoute la phase correspondant à ton incident.
 | [PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK](./PHASE_G4_PRINCIPAL_REVOCATION_RUNBOOK.md) | Révoquer un principal (epoch token, garde G4) |
 | [PHASE_G5_MFA_RUNBOOK](./PHASE_G5_MFA_RUNBOOK.md) | Politique MFA (qui/quand/combien), exemptions |
 
-### PHASE_H — Métier & conformité (12 runbooks)
+### PHASE_H — Métier & conformité (13 runbooks)
 
 | Runbook | Quand l'ouvrir |
 |---|---|
 | [PHASE_H1_DEV_RUNBOOK](./PHASE_H1_DEV_RUNBOOK.md) | Onboarding dev (env local, secrets, outils) |
 | [PHASE_H2_CONFIDENTIALITY_RUNBOOK](./PHASE_H2_CONFIDENTIALITY_RUNBOOK.md) | Vue d'ensemble conformité 25-11 |
+| [PHASE_H2_DIR_MOBILE_RUNBOOK](./PHASE_H2_DIR_MOBILE_RUNBOOK.md) | Application directrice mobile (V2, offline Drift, FCM, Sentry) |
 | [PHASE_H2B_NOTIFICATION_RUNBOOK](./PHASE_H2B_NOTIFICATION_RUNBOOK.md) | Notifications (FCM/APNs/email/SMS), échec PUSH_NOT_CONFIGURED |
 | [PHASE_H2C_PARENT_ACCESS_RUNBOOK](./PHASE_H2C_PARENT_ACCESS_RUNBOOK.md) | Espace parent (auth séparée, R5) |
 | [PHASE_H2D_FINANCIAL_PROJECTION_RUNBOOK](./PHASE_H2D_FINANCIAL_PROJECTION_RUNBOOK.md) | Projections financières, facturation |

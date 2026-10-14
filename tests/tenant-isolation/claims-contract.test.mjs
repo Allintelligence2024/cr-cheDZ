@@ -70,8 +70,13 @@ function walk(dir, predicate, acc = []) {
 
 const rel = (file) => relative(REPO, file);
 /** Accepte un chemin relatif au dépôt comme un chemin absolu (parcours récursif). */
-const read = (file) => readFileSync(file.startsWith('/') ? file : join(REPO, file), 'utf8');
+const isAbsolute = (file) => file.startsWith('/') || /^[A-Za-z]:[\\/]/.test(file);
+const read = (file) => readFileSync(isAbsolute(file) ? file : join(REPO, file), 'utf8');
 const lines = (file) => read(file).split('\n');
+/** Normalise les fins de ligne : le repo est checkout CRLF sous Windows
+ *  (core.autocrlf=true), les regexes du contrat sont écrites en LF — les
+ *  deux doivent passer. */
+const readLF = (file) => read(file).replace(/\r\n/g, '\n');
 
 /** Toutes les lignes de documentation du dépôt. */
 function docFiles() {
@@ -292,8 +297,11 @@ test('compteurs — migrations : les recettes courantes ne mentent pas', () => {
     label: 'migrations',
     actual: MIGRATIONS,
     sites: [
-      // Libellé du job CI (« Migrations (reset + status 001→075) »).
-      { file: '.github/workflows/ci.yml', regex: /001→(\d{3})/g },
+      // Libellé du job CI (« Migrations (reset + status 001→093, 92 fichiers) »).
+      // La plage 001→NNN est le NOM du dernier fichier, pas le compte (la 083
+      // a été fusionnée dans le seed 003) — c'est le compte de fichiers qui
+      // est comparé à MIGRATIONS.
+      { file: '.github/workflows/ci.yml', regex: /Migrations \(reset \+ status \d+→\d+, (\d+) fichiers\)/g },
       // Recettes locales COURANTES : leurs compteurs doivent correspondre au disque.
       // Le bloc « État de validation (2026-09-21) » reste un relevé historique
       // (76 migrations réellement exécutées ce jour-là) et ne doit pas être
@@ -538,7 +546,7 @@ test('SECURITY.md — « Limites connues » reflète le code et les preuves exé
 
 // ── 7. L4 : CodeQL et Trivy sont présents, et l’image est scannée avant push ─
 test('sécurité CI — CodeQL sur PR/hebdo et Trivy bloquant avant GHCR', () => {
-  const codeql = read('.github/workflows/codeql.yml');
+  const codeql = readLF('.github/workflows/codeql.yml');
   assert.match(codeql, /^name: codeql$/m);
   assert.match(codeql, /^  push:\n    branches: \[main\]/m);
   assert.match(codeql, /^  pull_request:\n    branches: \[main\]/m);

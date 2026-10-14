@@ -39,8 +39,8 @@ class _AttendancePageState extends State<AttendancePage> {
       ]);
       if (!mounted) return;
       setState(() {
-        _summary = results[0] as Map<String, dynamic>;
-        _ratios = results[1] as Map<String, dynamic>;
+        _summary = results[0];
+        _ratios = results[1];
         _loading = false;
       });
     } catch (e) {
@@ -94,7 +94,9 @@ class _AttendancePageState extends State<AttendancePage> {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Départ enregistré'), backgroundColor: SereniteStatusColors.of(context).success));
       } else if (result.startsWith('abs:')) {
         final id = result.substring(4).trim();
-        await widget.api.markAbsent({'child_id': id, 'date': _date});
+        // P0 (phase 1.8) — MarkAbsentDto n'accepte pas 'date' mais
+        // child_id + reason + occurred_at (attendance.dto.ts:27).
+        await widget.api.markAbsent({'child_id': id, 'occurred_at': _date});
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Absent marqué'), backgroundColor: SereniteStatusColors.of(context).warning));
       }
       _load();
@@ -109,7 +111,9 @@ class _AttendancePageState extends State<AttendancePage> {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) return buildApiError(context, _error, _load);
 
-    final rooms = (_summary?['rooms'] as List?) ?? (_summary?['data'] as List?) ?? [];
+    // 3.2.6 : l'API renvoie 'items' (attendance.service.ts:137) — l'UI lisait
+    // 'rooms'/'data' qui n'existent pas → liste TOUJOURS vide à l'écran.
+    final rooms = (_summary?['items'] as List?) ?? (_summary?['rooms'] as List?) ?? [];
     final ratioRooms = (_ratios?['rooms'] as List?) ?? [];
 
     return Stack(

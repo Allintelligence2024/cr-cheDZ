@@ -131,12 +131,12 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                   label: const Text('Envoyer'),
                 ),
               if (status == 'sent' || status == 'partially_paid')
-                ElevatedButton.icon(
-                  onPressed: () => _action(() => widget.api.markOverdue(widget.invoiceId), 'Marquée en retard'),
-                  icon: const Icon(Icons.warning),
-                  label: const Text('Marquer en retard'),
-                  style: ElevatedButton.styleFrom(backgroundColor: palette.warning, foregroundColor: palette.onWarning),
-                ),
+                // P0 (phase 1.8) — bouton supprimé : la transition overdue
+                // est AUTOMATIQUE côté serveur (job worker de relance,
+                // migration 068). L'endpoint /mark-overdue n'existe pas →
+                // ce bouton renvoyait un 404 permanent à chaque tap.
+                // L'état réel reste visible via agedBalance (billing_page).
+                const SizedBox.shrink(),
               ElevatedButton.icon(
                 onPressed: () => _showReminderDialog(),
                 icon: const Icon(Icons.email),

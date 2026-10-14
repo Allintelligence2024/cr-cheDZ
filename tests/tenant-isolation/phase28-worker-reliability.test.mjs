@@ -178,7 +178,7 @@ test('E5 : erreur enqueue PDF annule aussi la création de facture (transaction 
   } finally { await db.query('DROP TRIGGER phase28_reject_pdf ON background_jobs; DROP FUNCTION phase28_reject_pdf()'); }
 });
 
-test('E2 : trois producteurs planifiés exécutent réellement leurs effets, jamais la facturation', async () => {
+test('E2 : quatre producteurs planifiés exécutent réellement leurs effets, jamais la facturation', async () => {
   const audit=(await db.query("INSERT INTO audit_logs(action,resource_type,occurred_at) VALUES('create','phase28',NOW()-INTERVAL '10 years') RETURNING id")).rows[0].id;
   const camera=(await db.query("INSERT INTO video_cameras(organization_id,name,zone,created_by) VALUES($1,'E28','entrance',$2) RETURNING id",[org,user])).rows[0].id;
   const key=`${org}/video/expired.mp4`; mkdirSync(dirname(join(root,key)),{recursive:true}); writeFileSync(join(root,key),'clip test');
@@ -196,7 +196,10 @@ test('E2 : trois producteurs planifiés exécutent réellement leurs effets, jam
   assert.equal((await db.query('SELECT status FROM payments WHERE id=$1',[payment])).rows[0].status,'failed');
   assert.equal((await db.query("SELECT 1 FROM background_jobs WHERE job_type='send_monthly_invoices'")).rowCount,0);
   await delay(300);
-  assert.equal((await db.query('SELECT count(*)::int AS n FROM background_jobs')).rows[0].n,3, state.output);
+  // 4 producteurs : video_clips_purge, retention_purge, payments_expire
+  // + sync_purge (migration 092 — sync_changelog croissait sans borne).
+  // send_monthly_invoices est DÉSACTIVÉ (CHECK 056) : jamais de facturation.
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM background_jobs')).rows[0].n,4, state.output);
 });
 
 
@@ -281,9 +284,11 @@ test('E2 : concurrence scheduler sans doublon et facturation impossible à activ
   await Promise.all(connections.map(c=>c.connect()));
   try {
     const results=await Promise.all(connections.map(c=>c.query('SELECT scheduler_enqueue_due() AS n')));
-    assert.equal(results.reduce((n,r)=>n+r.rows[0].n,0),3);
+    // 4 producteurs (sync_purge depuis 092) — un seul gagne la course
+    // (verrou consultatif 094), l'autre appel est un no-op.
+    assert.equal(results.reduce((n,r)=>n+r.rows[0].n,0),4);
     assert.equal((await appDb.query('SELECT scheduler_enqueue_due() AS n')).rows[0].n,0);
-    assert.equal((await db.query('SELECT 1 FROM background_jobs')).rowCount,3);
+    assert.equal((await db.query('SELECT 1 FROM background_jobs')).rowCount,4);
     assert.equal((await appDb.query('SELECT 1 FROM scheduler_ticks')).rowCount,0);
     await assert.rejects(appDb.query("INSERT INTO scheduler_ticks(job_type,enabled,next_run_at) VALUES('payments_expire',true,NOW())"),{code:'42501'});
     await assert.rejects(db.query("UPDATE scheduler_ticks SET enabled=true WHERE job_type='send_monthly_invoices'"),{code:'23514'});
@@ -294,12 +299,13 @@ test('E2 : horaires Alger et alerte de fraîcheur lisible sans worker', async ()
   for(const [type,after,expected] of [
     ['video_clips_purge','2026-09-13T23:00:00Z','2026-09-14T01:00:00.000Z'],
     ['retention_purge','2026-09-14T01:00:00Z','2026-09-15T01:00:00.000Z'],
+    ['sync_purge','2026-09-14T01:00:00Z','2026-09-15T01:00:00.000Z'],
     ['payments_expire','2026-09-14T23:15:00Z','2026-09-15T00:00:00.000Z'],
     ['send_monthly_invoices','2026-08-31T21:00:00Z','2026-09-01T02:00:00.000Z'],
   ]) assert.equal((await appDb.query('SELECT scheduler_next_run($1,$2) AS t',[type,after])).rows[0].t.toISOString(),expected);
   await db.query("UPDATE scheduler_ticks SET last_success_at=NOW()-INTERVAL '3 days'");
   const rows=(await appDb.query('SELECT * FROM scheduler_health()')).rows;
-  assert.equal(rows.length,3); assert.ok(rows.every(r=>r.overdue));
+  assert.equal(rows.length,4); assert.ok(rows.every(r=>r.overdue));
   await db.query('UPDATE scheduler_ticks SET last_success_at=NOW()');
   assert.ok((await appDb.query('SELECT * FROM scheduler_health()')).rows.every(r=>!r.overdue));
 });

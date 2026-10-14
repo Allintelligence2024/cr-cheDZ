@@ -26,8 +26,18 @@ test('éducateur : pas de paie/facturation/exports/vidéo, mais présence/journa
 
 test('comptable : finance oui, soins non', () => {
   const acc = user('accountant');
-  for (const p of ['/', '/payroll', '/billing', '/exports', '/compliance', '/staff', '/privacy']) assert.equal(canAccess(acc, p), true, p);
-  for (const p of ['/attendance', '/children', '/health', '/video', '/sites']) assert.equal(canAccess(acc, p), false, p);
+  // /privacy exige privacy:manage (dpo) : le comptable est refusé côté API
+  // par @Permissions — l'UI ne doit pas lui montrer l'écran (cf. PRIVACY).
+  for (const p of ['/', '/payroll', '/billing', '/exports', '/compliance', '/staff']) assert.equal(canAccess(acc, p), true, p);
+  for (const p of ['/privacy', '/attendance', '/children', '/health', '/video', '/sites']) assert.equal(canAccess(acc, p), false, p);
+});
+
+test('dpo : écrans vie privée (privacy:manage, loi 25-11), pas les soins', () => {
+  const dpo = user('dpo');
+  for (const p of ['/privacy']) assert.equal(canAccess(dpo, p), true, p);
+  for (const p of ['/billing', '/payroll', '/attendance', '/children', '/health', '/video', '/sites'] as const) {
+    assert.equal(canAccess(dpo, p), false, p);
+  }
 });
 
 test('directeur : tout sauf organisations (plateforme)', () => {
@@ -56,7 +66,8 @@ test('non connecté / rôle inconnu : refus ; route non listée : autorisée', (
   assert.equal(canAccess(user('mystery'), '/whatever'), true);
 });
 
-test('anonymisation enfant : director et super_admin seulement', () => {
+test('anonymisation enfant : dpo, director et super_admin (privacy:manage, loi 25-11)', () => {
+  assert.equal(canAnonymizeChild(user('dpo')), true);
   assert.equal(canAnonymizeChild(user('director')), true);
   assert.equal(canAnonymizeChild(user('super_admin')), true);
   assert.equal(canAnonymizeChild(user('accountant')), false);

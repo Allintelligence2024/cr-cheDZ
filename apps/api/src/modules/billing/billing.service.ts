@@ -20,6 +20,17 @@ import { buildReceiptNumber } from './receipt';
  * Immuabilité : une facture payée ou annulée ne se modifie jamais
  * (trigger C04 + garde applicative → 422 INVOICE_IMMUTABLE).
  */
+/**
+ * 3.2.4 (remédiation 2026-10-04) — statuts métier de facture reconnus par le
+ * filtre `listInvoices`. Un statut inconnu est ignoré (renvoie tout) plutôt
+ * que de planter en 500 : un client qui envoie un filtre périmé récupère une
+ * réponse utile. Exporté pour le test de régression `invoice-filter.spec.ts`.
+ */
+export const KNOWN_INVOICE_STATUSES = ['draft', 'sent', 'paid', 'overdue', 'cancelled', 'void'] as const;
+
+/**
+ * Service facturation.
+ */
 @Injectable()
 export class BillingService {
   constructor(
@@ -170,7 +181,11 @@ export class BillingService {
       await c.query(
         `INSERT INTO invoice_lines(organization_id,invoice_id,description_fr,description_ar,quantity,unit_price,total_price,line_type)
          VALUES($1,$2,'Garde mensuelle','الرعاية الشهرية',1,$3,$3,'care')`,
-        [org, invoice.id, subtotal],
+        // 3.4.1 (F1) : la ligne 'Garde mensuelle' portait le SOUS-TOTAL
+        // complet (base + repas + transport) en plus des lignes Repas et
+        // Transport séparées — la somme des lignes dépassait
+        // invoices.subtotal d'exactement (repas + transport).
+        [org, invoice.id, Number(contract.monthly_base_amount)],
       );
       if (contract.includes_meals) {
         await c.query(
@@ -194,16 +209,43 @@ export class BillingService {
     });
   }
 
-  async listInvoices(childId?: string): Promise<Array<Record<string, unknown>>> {
+  /**
+   * 3.2.4 (remédiation 2026-10-04) — le client director-mobile envoie
+   * status/page/limit qui étaient SILENCIEUSEMENT ignorés : la liste
+   * renvoyait TOUTES les factures de l'org, sans filtrage ni pagination.
+   * Sur une org active après 1 an, c'est des centaines de lignes téléchargées
+   * à chaque ouverture de l'onglet Facturation.
+   */
+  async listInvoices(
+    childId?: string,
+    status?: string | undefined,
+    page = 1,
+    limit = 20,
+  ): Promise<{ items: Array<Record<string, unknown>>; total: number; page: number; limit: number }> {
     const org = requireTenant(this.tenant);
     return this.tenant.withTenantConnection(async (c) => {
       const params: unknown[] = [org];
-      let where = '';
-      if (childId) { params.push(childId); where = ' AND child_id=$2'; }
-      return (await c.query(
+      const where: string[] = [];
+      if (childId) { params.push(childId); where.push(`child_id=$${params.length}`); }
+      // Statut métier (KNOWN_INVOICE_STATUSES). Inconnu = ignoré
+      // plutôt que 500 — un client qui envoie un filtre périmé récupère tout.
+      if (status && KNOWN_INVOICE_STATUSES.includes(status as never)) { params.push(status); where.push(`status=$${params.length}`); }
+      const clause = where.length ? ` AND ${where.join(' AND ')}` : '';
+      // Page borne (1..200, limit 1..100) : jamais de requête non bornée.
+      const safeLimit = Math.min(Math.max(Math.trunc(limit) || 20, 1), 100);
+      const safePage = Math.min(Math.max(Math.trunc(page) || 1, 1), 200);
+      const offset = (safePage - 1) * safeLimit;
+      const total = (await c.query(
+        `SELECT COUNT(*)::int AS n FROM invoices WHERE organization_id=$1${clause}`, params,
+      )).rows[0].n as number;
+      const rows = (await c.query(
         `SELECT id,invoice_number,child_id,contract_id,period_year,period_month,subtotal,discount_amount,total_amount,paid_amount,balance,status,due_date,pdf_url,created_at
-         FROM invoices WHERE organization_id=$1${where} ORDER BY created_at DESC`, params,
+         FROM invoices WHERE organization_id=$1${clause}
+         ORDER BY created_at DESC
+         LIMIT ${safeLimit} OFFSET ${offset}`,
+        params,
       )).rows;
+      return { items: rows, total, page: safePage, limit: safeLimit };
     });
   }
 
@@ -740,6 +782,18 @@ export class BillingService {
         'PAYMENT_AMOUNT_MISMATCH',
         'Le montant du webhook ne correspond pas au montant du paiement — le paiement n’est PAS confirmé, contactez le support',
         'مبلغ الـ webhook غير مطابق لمبلغ الدفع — الدفع غير مؤكد، اتصل بالدعم',
+        422,
+      );
+    }
+    if (message.includes('PAYMENT_TENANT_MISMATCH')) {
+      // P0 (phase 1.2) — webhook cross-tenant : external_reference et
+      // invoice_id appartiennent à des organisations différentes (migration
+      // 082). Refus explicite : la facture d'une autre crèche ne peut JAMAIS
+      // être confirmée par ce tenant.
+      return new AppError(
+        'PAYMENT_TENANT_MISMATCH',
+        'Le paiement et la facture appartiennent à des organisations différentes',
+        'الدفع والفاتورة ينتميان إلى مؤسستين مختلفتين',
         422,
       );
     }

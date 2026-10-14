@@ -20,16 +20,26 @@ const SENSITIVE_KEYS = new Set([
   'ip_address',
 ]);
 
+// Même liste, sans les underscores (`passwordhash`), pour comparer aussi bien
+// `passwordHash` (camelCase DTO) que `password_hash` (snake_case SQL).
+const NORMALIZED_SENSITIVE = new Set([...SENSITIVE_KEYS].map((k) => k.replace(/_/g, '')));
+
 function isSensitiveKey(key: string): boolean {
-  if (SENSITIVE_KEYS.has(key)) return true;
   const lower = key.toLowerCase();
+  // Les DTO utilisent camelCase (`passwordHash`, `phonePrimary`,
+  // `refreshTokenHash`) et la base snake_case (`password_hash`) : on compare
+  // les trois formes, sinon les clés camelCase contournaient le masquage.
+  const normalized = lower.replace(/_/g, '');
+  const camelNormalized = lower.replace(/_(.)/g, (_, c: string) => c);
+  if (SENSITIVE_KEYS.has(lower) || SENSITIVE_KEYS.has(camelNormalized) || NORMALIZED_SENSITIVE.has(normalized)) return true;
   return (
     lower.includes('health') ||
     lower.includes('medication') ||
     lower.includes('temperature') ||
     lower.includes('chronic') ||
     lower.includes('token') ||
-    lower.includes('secret')
+    lower.includes('secret') ||
+    lower.includes('password')
   );
 }
 

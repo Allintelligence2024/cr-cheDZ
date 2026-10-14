@@ -38,87 +38,28 @@ export async function ensureAppRole(admin) {
       END IF;
     END $$;
   `);
+  // ── Grants : MIROIR de infrastructure/database/grants.sql ──────────────────
+  // Le rôle de test doit avoir EXACTEMENT les droits que le migrateur donne à
+  // creche_app en production. Jusqu'ici la liste des fonctions SECURITY
+  // DEFINER autorisées était recopiée à la main : elle a dérivé (migration 084
+  // `auth_user_permissions` — le PermissionsGuard répondait « permission denied
+  // for function » sur CHAQUE route, 30+ suites rouges pour la même cause).
+  // Un `GRANT EXECUTE ON ALL FUNCTIONS` + DEFAULT PRIVILEGES, comme en prod,
+  // supprime la classe entière de dérive : une fonction ajoutée par une
+  // migration est utilisable immédiatement, sans toucher ce helper.
   await admin.query('GRANT USAGE ON SCHEMA public TO creche_app_test');
   await admin.query('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO creche_app_test');
   await admin.query('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO creche_app_test');
-  // Fonctions SECURITY DEFINER du bootstrap auth (migration 015)
-  await admin.query('GRANT EXECUTE ON FUNCTION auth_get_memberships(uuid) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION auth_refresh_lookup(text) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION auth_get_device(uuid) TO creche_app_test');
-  // Fonctions SECURITY DEFINER des invitations (migration 016)
-  await admin.query('GRANT EXECUTE ON FUNCTION invite_get_membership(uuid, uuid) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION invite_upsert_membership(uuid, uuid, uuid, uuid, uuid[]) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION invite_accept(uuid, uuid) TO creche_app_test');
-  // G4 (migration 062) : révocabilité globale — lecture d'époque par les gardes.
-  await admin.query('GRANT EXECUTE ON FUNCTION auth_principal_epoch(uuid) TO creche_app_test');
-  // Séquence de référence enfants (migration 017)
-  await admin.query('GRANT EXECUTE ON FUNCTION next_org_sequence(uuid) TO creche_app_test');
-  // Helper RLS (migration 018) — utilisé par toutes les politiques
-  await admin.query('GRANT EXECUTE ON FUNCTION app_tenant_id() TO creche_app_test');
-  // Phase 8 (migration 024) : webhook de paiement + cycle de vie des jobs
-  await admin.query('GRANT EXECUTE ON FUNCTION billing_webhook_apply(uuid, text, numeric, text, timestamptz, text) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION jobs_claim_next() TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION jobs_finish(uuid, boolean, text) TO creche_app_test');
-  // E1 (053) — uniquement pour le mode historique. Le mode prod plus haut
-  // n'ajoute JAMAIS de grants : il vérifie ceux livrés par le migrateur.
-  const leased = await admin.query("SELECT to_regprocedure('jobs_claim_leased()') AS fn");
-  if (leased.rows[0].fn) {
-    await admin.query(`GRANT EXECUTE ON FUNCTION jobs_claim_leased(), jobs_heartbeat(uuid,uuid),
-      jobs_finish_leased(uuid,uuid,boolean,text), jobs_reap_stale(interval) TO creche_app_test`);
-  }
-  // E2/E6 : mode historique seulement ; en prod, grants de migrations inchangés.
-  if ((await admin.query("SELECT to_regprocedure('scheduler_enqueue_due()') AS fn")).rows[0].fn) {
-    await admin.query('GRANT EXECUTE ON FUNCTION scheduler_enqueue_due(), scheduler_health(), scheduler_next_run(text,timestamptz) TO creche_app_test');
-  }
-  if ((await admin.query("SELECT to_regprocedure('exports_reconcile_tenant()') AS fn")).rows[0].fn) {
-    await admin.query('GRANT EXECUTE ON FUNCTION exports_fail_job(uuid,uuid), exports_fail_stale(interval,uuid), exports_reconcile_tenant() TO creche_app_test');
-  }
-  // O4 (migration 065) : reprise des notifications 'processing' orphelines (worker)
-  if ((await admin.query("SELECT to_regprocedure('notif_queue_reclaim(interval)') AS fn")).rows[0].fn) {
-    await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_reclaim(interval) TO creche_app_test');
-  }
-  // Phase 7 (migration 025) : bootstrap login parent (guardians sous RLS)
-  await admin.query('GRANT EXECUTE ON FUNCTION auth_parent_lookup_by_phone(text) TO creche_app_test');
-  // Phase 10 (migration 029) : console support (recherche globale, jobs)
-  await admin.query('GRANT EXECUTE ON FUNCTION support_global_search(text) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION support_list_jobs(integer) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION support_retry_job(uuid) TO creche_app_test');
-  // Phase 11 (migration 034) : rétention des journaux (5 ans)
-  await admin.query('GRANT EXECUTE ON FUNCTION retention_purge_logs(timestamptz) TO creche_app_test');
-  // L4/D2 (migration 076) : rétention de la messagerie (file + contenu)
-  await admin.query('GRANT EXECUTE ON FUNCTION retention_purge_messaging(timestamptz, timestamptz) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION retention_expired_body_marker() TO creche_app_test');
-  // Phase 11 (migration 035) : console support — feature flags
-  await admin.query('GRANT EXECUTE ON FUNCTION support_list_flags() TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION support_set_flag(text, uuid, boolean) TO creche_app_test');
-  // Phase 12 (migration 036) : suivi pilote (agrégats par organisation)
-  await admin.query('GRANT EXECUTE ON FUNCTION support_pilot_summary() TO creche_app_test');
-  // Phase 5 rapport 5 analyses (migration 067) : effacement 25-11 par anonymisation
-  await admin.query('GRANT EXECUTE ON FUNCTION anonymize_child(uuid, uuid, text) TO creche_app_test');
-  // Roadmap v2 (migration 040) : multi-rôles — liste des rôles effectifs
-  await admin.query('GRANT EXECUTE ON FUNCTION auth_user_roles(uuid) TO creche_app_test');
-  // Roadmap v2 (migration 042) : drain notification_queue sous NOBYPASSRLS
-  await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_claim(integer) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION notif_queue_finish(uuid, boolean, text) TO creche_app_test');
-  // Roadmap v2 (migration 046) : garde-fou DPIA vidéosurveillance
-  await admin.query('GRANT EXECUTE ON FUNCTION privacy_approved_dpia_exists(uuid, text) TO creche_app_test');
-  // Roadmap v2 (migration 047) : purge des clips vidéo à 30 jours
-  await admin.query('GRANT EXECUTE ON FUNCTION video_clips_expired(integer) TO creche_app_test');
-  await admin.query('GRANT EXECUTE ON FUNCTION video_clips_delete_purged(uuid[]) TO creche_app_test');
-  // Mission P1 (migration 051) : expiration des paiements pending SATIM.
-  // GRANT conditionnel : la preuve par mutation retire 051 temporairement —
-  // la suite doit alors échouer sur le COMPORTEMENT (fonction absente), pas
-  // sur le GRANT lui-même.
-  const expiryFn = await admin.query(`SELECT 1 FROM pg_proc WHERE proname='payments_expire_pending'`);
-  if (expiryFn.rows.length > 0) {
-    await admin.query('GRANT EXECUTE ON FUNCTION payments_expire_pending(integer, integer) TO creche_app_test');
-  }
-  // P2-3 (migration 068) : transition overdue à la lecture (SECURITY INVOKER, RLS).
-  if ((await admin.query("SELECT to_regprocedure('invoices_mark_overdue(uuid)') AS fn")).rows[0].fn) {
-    await admin.query('GRANT EXECUTE ON FUNCTION invoices_mark_overdue(uuid) TO creche_app_test');
-  }
-  // Fondations audit (migration 050) : jauges globales /metrics
-  await admin.query('GRANT EXECUTE ON FUNCTION metrics_global_counts() TO creche_app_test');
+  await admin.query('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO creche_app_test');
+  await admin.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO creche_app_test`);
+  await admin.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT USAGE, SELECT ON SEQUENCES TO creche_app_test`);
+  await admin.query(`ALTER DEFAULT PRIVILEGES IN SCHEMA public
+    GRANT EXECUTE ON FUNCTIONS TO creche_app_test`);
+  // Le registre de migrations est lisible (schema-check), pas modifiable —
+  // même restriction que grants.sql pour creche_app.
+  await admin.query('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON schema_migrations FROM creche_app_test');
 }
 
 /** URL de connexion avec le rôle applicatif (même hôte/port/base que DATABASE_URL). */

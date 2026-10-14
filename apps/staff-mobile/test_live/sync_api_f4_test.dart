@@ -25,7 +25,11 @@ class Device {
   Future<void> sync() async { online = true; await engine.sync(); expect(engine.currentStatus, SyncStatus.idle); }
   Future<String> enqueue(String command, String child, {int? baseVersion, Map<String, dynamic> extra = const {}}) async {
     online = false;
-    final id = await engine.enqueue(command: command, entityType: command.startsWith('log_') ? 'daily_log' : command == 'add_photo' ? 'media' : 'attendance', payload: {'child_id': child, ...extra}, baseVersion: baseVersion);
+    // L'API n'accepte que SYNC_ENTITY_TYPES = [attendance_session, daily_log]
+    // (dto-validation côté serveur). L'UI envoie les mêmes littéraux
+    // (children_list_page / journal_*_sheet) ; ce test doit faire de même.
+    final entityType = command.startsWith('log_') ? 'daily_log' : 'attendance_session';
+    final id = await engine.enqueue(command: command, entityType: entityType, payload: {'child_id': child, ...extra}, baseVersion: baseVersion);
     await engine.sync(); return id;
   }
   Future<void> replay(String event) async {

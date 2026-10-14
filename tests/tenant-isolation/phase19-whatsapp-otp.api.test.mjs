@@ -71,8 +71,8 @@ const main = async () => {
     const room = (await db.query(`INSERT INTO rooms(organization_id,site_id,name_fr,max_capacity) VALUES($1,$2,'R',10) RETURNING id`, [org, site])).rows[0].id;
     const parentRole = (await db.query(`SELECT id FROM roles WHERE slug='parent_primary'`)).rows[0].id;
     const parent = (await db.query(
-      `INSERT INTO users(email,first_name,last_name,password_hash,status,phone) VALUES($1,'P','T',$2,'active',$3) RETURNING id`,
-      [`${tag}-parent@test.dz`, hash, phone],
+      `INSERT INTO users(email,first_name,last_name,password_hash,status,phone,organization_id) VALUES($1,'P','T',$2,'active',$3,$4) RETURNING id`,
+      [`${tag}-parent@test.dz`, hash, phone, org],
     )).rows[0].id;
     await db.query(`INSERT INTO memberships(organization_id,user_id,role_id,is_active,joined_at) VALUES($1,$2,$3,true,NOW())`, [org, parent, parentRole]);
     await db.query(`INSERT INTO guardians(organization_id,user_id,first_name_fr,last_name_fr,relationship,phone_primary,created_by) VALUES($1,$2,'P','T','parent',$3,$2)`, [org, parent, phone]);

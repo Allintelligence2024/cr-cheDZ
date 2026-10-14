@@ -25,7 +25,7 @@ try {
     const membership = (await db.query('INSERT INTO memberships(organization_id,user_id,role_id) SELECT $1,$2,id FROM roles WHERE slug=$3 RETURNING *', [tenant, id, role])).rows[0];
     return { id, email, role, membership };
   };
-  const director = await actor('director'), parent = await actor('parent_primary'), accountant = await actor('accountant'), operator = await actor('super_admin'), peer = await actor('parent_primary'), foreign = await actor('director', other);
+  const director = await actor('director'), parent = await actor('parent_primary'), accountant = await actor('accountant'), operator = await actor('dpo'), peer = await actor('parent_primary'), foreign = await actor('director', other);
   const site = (await db.query("INSERT INTO sites(organization_id,name_fr) VALUES($1,'H2f') RETURNING id", [org])).rows[0].id;
   const child = (await db.query("INSERT INTO children(organization_id,site_id,first_name_fr,last_name_fr,date_of_birth,created_by) VALUES($1,$2,'H2F_CHILD','Synthetic','2024-01-01',$3) RETURNING id", [org, site, director.id])).rows[0].id;
   for (const user of [parent, accountant]) {
@@ -77,7 +77,7 @@ try {
         const before = await stateInDb(user.request);
         const response = await req(method, path, user, body);
         const after = await stateInDb(user.request);
-        const denied = inactive || (name === 'resolve' && !['director', 'super_admin'].includes(user.role));
+        const denied = inactive || (name === 'resolve' && user.role !== 'dpo');
         // G4 (migration 062) : membership inactive/absent, suspension et
         // suppression douce sont des événements révocatoires — l'époque du JWT
         // est dépassée par le déclencheur DB et le refus survient AU GARDE

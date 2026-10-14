@@ -24,7 +24,7 @@ class RecordingApi extends ApiClient {
   @override
   Future<T> get<T>(String path, {Map<String, dynamic>? query}) async {
     calls.add(path);
-    return <String, dynamic>{'events': [], 'next_cursor': '0'} as T;
+    return <String, dynamic>{'events': [], 'next_cursor': '0', 'resync_required': false} as T;
   }
 }
 
@@ -64,7 +64,7 @@ class FakeApi extends ApiClient {
   Future<T> get<T>(String path, {Map<String, dynamic>? query}) async {
     requests.add({'path': path, 'data': query!});
     if (handlePull != null) return await handlePull!(query) as T;
-    return {'events': [], 'next_cursor': query['cursor']} as T;
+    return {'events': [], 'next_cursor': query['cursor'], 'resync_required': false} as T;
   }
 }
 
@@ -127,7 +127,7 @@ void main() {
         'last_name_fr': 'Enfant', 'date_of_birth': '2024-01-01', 'status': 'active',
         'version': 1, 'is_walking': false,
       },
-    }] : [], 'next_cursor': '1'};
+    }] : [], 'next_cursor': '1', 'resync_required': false};
     h.online = true; await tester.runAsync(h.engine.sync);
     await tester.pumpAndSettle(); expect(find.text('Test Enfant'), findsOneWidget);
     await tester.tap(find.byIcon(Icons.logout)); expect(logout, true);
@@ -148,7 +148,7 @@ void main() {
     final first = Harness(file: file);
     await first.enqueue(); final before = await first.db.syncState();
     first.online = true;
-    first.api.handlePull = (q) async => {'events': q['cursor'] == '0' ? [attendance('9007199254740993')] : [], 'next_cursor': '9007199254740993'};
+    first.api.handlePull = (q) async => {'events': q['cursor'] == '0' ? [attendance('9007199254740993')] : [], 'next_cursor': '9007199254740993', 'resync_required': false};
     await first.engine.sync(); await first.close();
     final second = Harness(file: file); addTearDown(second.close);
     final after = await second.db.syncState();
@@ -171,7 +171,7 @@ void main() {
   });
   test('page application and cursor rollback together on bad second event', () async {
     final h = Harness(); addTearDown(h.close); h.online = true;
-    h.api.handlePull = (_) async => {'events': [attendance('1'), attendance('2', malformed: true)], 'next_cursor': '2'};
+    h.api.handlePull = (_) async => {'events': [attendance('1'), attendance('2', malformed: true)], 'next_cursor': '2', 'resync_required': false};
     await h.engine.sync();
     expect(h.engine.currentStatus, SyncStatus.contractError);
     expect((await h.db.syncState())['cursor'], '0');
@@ -179,7 +179,7 @@ void main() {
   });
   test('unknown projection never silently advances cursor', () async {
     final h = Harness(); addTearDown(h.close); h.online = true;
-    h.api.handlePull = (_) async => {'events': [{...attendance('1'), 'type': 'future_entity'}], 'next_cursor': '1'};
+    h.api.handlePull = (_) async => {'events': [{...attendance('1'), 'type': 'future_entity'}], 'next_cursor': '1', 'resync_required': false};
     await h.engine.sync(); expect(h.engine.currentStatus, SyncStatus.contractError);
     expect((await h.db.syncState())['cursor'], '0');
   });
@@ -199,7 +199,7 @@ void main() {
     h.api.handlePull = (_) { entered.complete(); return response.future; };
     final flight = h.engine.sync(); await entered.future;
     final closing = h.engine.close();
-    response.complete({'events': [attendance('1')], 'next_cursor': '1'});
+    response.complete({'events': [attendance('1')], 'next_cursor': '1', 'resync_required': false});
     await closing; await flight;
     expect((await h.db.syncState())['cursor'], '0');
     expect(await h.db.select(h.db.localAttendanceSessions).get(), isEmpty);

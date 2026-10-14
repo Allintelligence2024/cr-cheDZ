@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { IsArray, IsIn, IsInt, IsObject, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { CurrentUser, type CurrentUserPayload } from '../../shared/decorators/current-user.decorator';
 import { Roles } from '../../shared/decorators/roles.decorator';
+import { Permissions } from '../../shared/decorators/permissions.decorator';
 import { PrivacyService } from './privacy.service';
 
 class CreatePrivacyRequestDto {
@@ -90,7 +91,12 @@ class SetFlagDto {
   is_enabled!: boolean;
 }
 
-const STAFF_ROLES = ['director', 'accountant', 'super_admin'] as const;
+// 2.1/2.2 (loi 25-11) : les actions privacy:manage sont attribuées au DPO
+// (seed 003 — le director n'a NI privacy NI audit). @Roles doit donc ouvrir
+// la route au dpo, sinon le guard de rôle rejette avant même que
+// PermissionsGuard (privacy:manage) puisse s'exprimer : les deux guards sont
+// en série (JWT → rôles → permissions).
+const STAFF_ROLES = ['director', 'accountant', 'super_admin', 'dpo'] as const;
 
 @Controller()
 export class PrivacyController {
@@ -100,20 +106,24 @@ export class PrivacyController {
 
   @Get('privacy/registry')
   @Roles(...STAFF_ROLES)
+  @Permissions('privacy:manage')
   registry() { return this.privacy.registry(); }
 
   @Get('privacy/dpias')
   @Roles(...STAFF_ROLES)
+  @Permissions('privacy:manage')
   dpias() { return this.privacy.listDpias(); }
 
   @Post('privacy/dpias')
-  @Roles('director', 'super_admin')
+  @Roles('director', 'super_admin', 'dpo')
+  @Permissions('privacy:manage')
   createDpia(@Body() dto: CreateDpiaDto, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.createDpia(u.sub, dto);
   }
 
   @Post('privacy/dpias/:id/approve')
-  @Roles('director', 'super_admin')
+  @Roles('director', 'super_admin', 'dpo')
+  @Permissions('privacy:manage')
   approveDpia(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.approveDpia(p.id, u.sub);
   }
@@ -141,7 +151,8 @@ export class PrivacyController {
   }
 
   @Post('privacy/requests/:id/resolve')
-  @Roles('director', 'super_admin')
+  @Roles('director', 'super_admin', 'dpo')
+  @Permissions('privacy:manage')
   resolveRequest(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.resolveRequest(p.id, u.sub);
   }
@@ -149,7 +160,8 @@ export class PrivacyController {
   // ── Effacement 25-11 : anonymisation à chaud d'un enfant sorti ────────────
 
   @Post('privacy/children/:id/anonymize')
-  @Roles('director', 'super_admin')
+  @Roles('director', 'super_admin', 'dpo')
+  @Permissions('privacy:manage')
   anonymizeChild(@Param() p: IdParam, @Body() dto: AnonymizeChildDto, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.anonymizeChild(p.id, u.sub, dto.reason, dto.request_id);
   }
@@ -161,15 +173,16 @@ export class PrivacyController {
   violations() { return this.privacy.listViolations(); }
 
   @Post('privacy/violations')
-  @Roles('director', 'super_admin')
+  @Roles('director', 'super_admin', 'dpo')
   createViolation(@Body() dto: CreateViolationDto, @CurrentUser() u: CurrentUserPayload) {
     return this.privacy.createViolation(u.sub, dto);
   }
 
   @Post('privacy/violations/:id/anpdp-notify')
-  @Roles('director', 'super_admin')
-  notifyAnpdp(@Param() p: IdParam) {
-    return this.privacy.notifyAnpdp(p.id);
+  @Roles('director', 'super_admin', 'dpo')
+  @Permissions('privacy:manage')
+  notifyAnpdp(@Param() p: IdParam, @CurrentUser() u: CurrentUserPayload) {
+    return this.privacy.notifyAnpdp(p.id, u.sub);
   }
 
   // ── Console support (super_admin uniquement) ──────────────────────────────

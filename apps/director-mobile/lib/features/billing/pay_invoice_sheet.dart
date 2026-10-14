@@ -23,7 +23,7 @@ Future<void> showPayInvoiceSheet(BuildContext context, DirectorApiClient api, St
             TextField(controller: amountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Montant DZD *', prefixIcon: Icon(Icons.payments))),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: method,
+              initialValue: method,
               decoration: const InputDecoration(labelText: 'Méthode', prefixIcon: Icon(Icons.account_balance_wallet)),
               items: const [
                 DropdownMenuItem(value: 'cash', child: Text('Espèces')),
@@ -41,7 +41,22 @@ Future<void> showPayInvoiceSheet(BuildContext context, DirectorApiClient api, St
                   return;
                 }
                 try {
-                  await api.payInvoice(invoiceId, {'amount': double.tryParse(amountCtrl.text.trim()) ?? 0, 'payment_method': method});
+                  // P0 (phase 1.8) — POST /billing/invoices/:id/payments
+                  // n'existe pas. Routes réelles : POST /billing/payments/cash
+                  // (RecordCashPaymentDto) et /billing/payments/online.
+                  // L'ancien payment_method 'cash|bank_transfer|check' est
+                  // devenu cash (route dédiée) ; 'online' via la route online.
+                  if (method == 'online') {
+                    await api.payInvoiceOnline({
+                      'invoice_id': invoiceId,
+                      'amount': double.tryParse(amountCtrl.text.trim()) ?? 0,
+                    });
+                  } else {
+                    await api.payInvoiceCash({
+                      'invoice_id': invoiceId,
+                      'amount': double.tryParse(amountCtrl.text.trim()) ?? 0,
+                    });
+                  }
                   if (context.mounted) Navigator.pop(context, true);
                 } catch (e) {
                   final msg = e is DirectorApiException ? (e.message ?? e.kind) : e.toString();

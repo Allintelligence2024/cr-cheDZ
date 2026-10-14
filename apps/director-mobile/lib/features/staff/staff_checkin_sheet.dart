@@ -26,7 +26,7 @@ Future<void> showStaffCheckInSheet(BuildContext context, DirectorApiClient api, 
             Text('Pointage personnel', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: selectedStaffId,
+              initialValue: selectedStaffId,
               decoration: const InputDecoration(labelText: 'Membre', prefixIcon: Icon(Icons.person)),
               items: staff.map((s) {
                 final m = s as Map<String, dynamic>;
@@ -40,24 +40,33 @@ Future<void> showStaffCheckInSheet(BuildContext context, DirectorApiClient api, 
                 Expanded(child: FilledButton.icon(onPressed: () async {
                   if (selectedStaffId == null) return;
                   try {
-                    await api.staffCheckIn({'staff_id': selectedStaffId, 'check_in': DateTime.now().toUtc().toIso8601String()});
+                    // P0 (phase 1.8) — StaffAttendanceDto exige attendance_date
+                    // + check_in/check_out (staff.dto.ts) ; la route est
+                    // POST /staff/:id/attendance.
+                    await api.staffCheckIn(selectedStaffId!, {
+                      'attendance_date': DateTime.now().toUtc().toIso8601String(),
+                      'check_in': DateTime.now().toUtc().toIso8601String(),
+                    });
                     if (context.mounted) Navigator.pop(context, true);
                   } catch (e) {
                     final msg = e is DirectorApiException ? (e.message ?? e.kind) : e.toString();
                     if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $msg'), backgroundColor: SereniteStatusColors.of(context).danger));
                   }
-                }, icon: const Icon(Icons.login), label: const Text('Arrivée'))),
-                const SizedBox(width: 8),
-                Expanded(child: OutlinedButton.icon(onPressed: () async {
-                  if (selectedStaffId == null) return;
-                  try {
-                    await api.staffCheckOut({'staff_id': selectedStaffId, 'check_out': DateTime.now().toUtc().toIso8601String()});
-                    if (context.mounted) Navigator.pop(context, true);
-                  } catch (e) {
-                    final msg = e is DirectorApiException ? (e.message ?? e.kind) : e.toString();
-                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $msg'), backgroundColor: SereniteStatusColors.of(context).danger));
-                  }
-                }, icon: const Icon(Icons.logout), label: const Text('Départ'))),
+                  }, icon: const Icon(Icons.login), label: const Text('Arrivée'))),
+                  const SizedBox(width: 8),
+                  Expanded(child: OutlinedButton.icon(onPressed: () async {
+                    if (selectedStaffId == null) return;
+                    try {
+                      await api.staffCheckOut(selectedStaffId!, {
+                        'attendance_date': DateTime.now().toUtc().toIso8601String(),
+                        'check_out': DateTime.now().toUtc().toIso8601String(),
+                      });
+                      if (context.mounted) Navigator.pop(context, true);
+                    } catch (e) {
+                      final msg = e is DirectorApiException ? (e.message ?? e.kind) : e.toString();
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $msg'), backgroundColor: SereniteStatusColors.of(context).danger));
+                    }
+                  }, icon: const Icon(Icons.logout), label: const Text('Départ'))),
               ],
             ),
           ],

@@ -80,7 +80,14 @@ export function AttendancePage(): React.JSX.Element {
     setBusyChild(correcting.child_id);
     setMessage(null);
     try {
-      await http.post('/attendance/correct', { child_id: correcting.child_id, action: 'correct', reason: reason.trim() });
+      // 3.9.2 : le DTO n'accepte QUE 'check_in'|'check_out'|'absent' —
+      // 'correct' était rejeté par validation et la correction échouait
+      // silencieusement (message d' erreur générique). On envoie le
+      // statut CIBLE de la correction, lu sur la ligne corrigée.
+      const target = correcting.status === 'absent' ? 'absent'
+        : correcting.status === 'departed' ? 'check_out'
+          : 'check_in';
+      await http.post('/attendance/correct', { child_id: correcting.child_id, action: target, reason: reason.trim() });
       setMessage(t('att.corrected'));
       setCorrecting(null);
       setReason('');

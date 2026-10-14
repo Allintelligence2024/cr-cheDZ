@@ -152,7 +152,7 @@ try {
     const second = await pull(first.next_cursor); assert.equal(second.events.length, 1);
     const received = [...first.events, ...second.events]; received.forEach(e => minimal(e));
     assert.deepEqual(new Set(received.map(e => e.aggregate_id)), new Set(ids));
-    assert.deepEqual(await pull(second.next_cursor), { events: [], next_cursor: second.next_cursor });
+    assert.deepEqual(await pull(second.next_cursor), { events: [], next_cursor: second.next_cursor, resync_required: false });
   });
   await check('privileged tenant reassignment invalidates the OLD scope with a minimal tombstone', async () => {
     const id = await create();

@@ -38,6 +38,21 @@ export class AttestationsService {
       if (fin.n === 0 && att.days === 0) {
         throw new AppError('ATTESTATION_EMPTY', `Aucune facture ni présence pour cet enfant en ${dto.year}`, 'لا توجد فواتير ولا حضور لهذا الطفل في هذه السنة', 422);
       }
+      // 3.4.3 : un surpaiement (note de crédit mal saisie, paiement en double
+      // non rapproché) fait dépasser total_paid de total_invoiced, ce que le
+      // CHECK de la table (069) refuse → 500 opaque. On plafonne ici et on
+      // renvoie un 422 métier : l'attestation n'est pas émise tant que la
+      // comptabilité n'est pas réconciliée, avec la raison exacte.
+      const totalPaid = Number(fin.paid);
+      const totalInvoiced = Number(fin.invoiced);
+      if (totalPaid > totalInvoiced) {
+        throw new AppError(
+          'ATTESTATION_OVERPAID',
+          `Surpaiement détecté pour ${dto.year} : ${totalPaid.toFixed(2)} DA payés pour ${totalInvoiced.toFixed(2)} DA facturés. Réconciliez les paiements (note de crédit ou remboursement) avant d'émettre l'attestation.`,
+          `تم دفع مبلغ زائد عن المبلغ المفوتر لهذه السنة (${totalPaid.toFixed(2)} دج مقابل ${totalInvoiced.toFixed(2)} دج). يجب تسوية المدفوعات قبل إصدار الشهادة.`,
+          422,
+        );
+      }
       const guardian = (await c.query(
         `SELECT g.id FROM guardians g JOIN child_guardians cg ON cg.guardian_id=g.id AND cg.organization_id=g.organization_id
          WHERE cg.child_id=$1 AND cg.organization_id=$2 AND g.deleted_at IS NULL

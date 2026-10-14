@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
-import '../../core/error_state.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../theme/serenite_theme.dart';
 
@@ -59,7 +58,7 @@ class _VideoPageState extends State<VideoPage> {
     }
 
     if (_cameras.isEmpty) {
-      return EmptyState(icon: Icons.videocam, title: 'Aucune caméra', subtitle: 'Ajoutez des caméras depuis admin-web /video (zones limitées par DPIA)');
+      return const EmptyState(icon: Icons.videocam, title: 'Aucune caméra', subtitle: 'Ajoutez des caméras depuis admin-web /video (zones limitées par DPIA)');
     }
 
     return ListView.builder(
