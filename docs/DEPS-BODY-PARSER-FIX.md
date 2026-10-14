@@ -76,4 +76,14 @@ vert.
 
 - Reproductibilité lockfile sur clone propre (§3.5.1) : `pnpm-workspace.yaml` absent (confirmé),
   à cocher après un `git clone` + `npm ci` + `git status` vierge.
+
+## Reproductibilité — validée 2026-10-14
+
+Sur un clone propre de `fix/body-parser-2-override` (`git clone` → `npm ci --ignore-scripts`) :
+
+- `npm ci` : **exit 0**, 916 packages.
+- `git status --short` : **vide** (le lockfile n'est pas modifié par l'install).
+- `npm ls body-parser qs` : `body-parser@2.3.0 overridden`, aucun ELSPROBLEMS.
+
+⇒ item « lockfile reproductible » (§3.5.1) **coché**. `pnpm-workspace.yaml` absent (confirmé).
 - L'override `body-parser 2.3.0` devra être re-vérifié si `express` monte en version majeure.
