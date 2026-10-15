@@ -656,7 +656,8 @@ SDK : voir `docs/PLAN_REPARATION_2026-09-24.md` §2 (L3) et §6 (D4).
   séparées du DPO.
 - OpenAPI : 13 chemins écrits à la main sur 205 routes — assumé et testé comme tel.
 - Volumétrie au 2026-09-24 (mesure `git ls-files`) : 15 ADR, 33 runbooks, 701 fichiers : corriger les chiffres du rapport.
-  - Mise à jour mesurée au 2026-10-14 : 16 ADR / 33 runbooks (ADR-015 ajouté depuis).
+  - Mise à jour mesurée au 2026-10-15 : 17 ADR / 33 runbooks (ADR-015-moteur ajouté, et
+    `next_org_sequence` renuméroté ADR-016 pour libérer le numéro réservé).
 
 ### 🟢 À préserver (ne pas régresser)
 RLS `FORCE` + rôles séparés + `default privileges` · TOTP scellé AES-256-GCM à AAD · révocation
