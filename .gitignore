@@ -62,3 +62,7 @@ GoogleService-Info.plist
 
 # Dossier temporaire du test de libellés (supprimé automatiquement ; filet de sécurité)
 packages/design-system/src/.tmp-label-test-*/
+
+# Cluster de données PostgreSQL embarqué (run_pg.mjs / embedded-postgres) — jamais versionné
+infrastructure/database/pgtest/
+/tmp/pgtest/
