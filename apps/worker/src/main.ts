@@ -2,7 +2,7 @@ import { GoogleAuth } from 'google-auth-library';
 import { createSign } from 'node:crypto';
 import * as http2 from 'node:http2';
 import { Pool, PoolClient, types } from 'pg';
-import { assertApplicationDatabaseRole, assertProductionConfig, BUSINESS_TIME_ZONE, dateOnly, monthBounds, notificationAllowed, NOTIFICATION_DENIED_REASON } from '@creche/prod-config';
+import { assertApplicationDatabaseRole, assertProductionConfig, BUSINESS_TIME_ZONE, businessDateTime, dateOnly, monthBounds, notificationAllowed, NOTIFICATION_DENIED_REASON } from '@creche/prod-config';
 import { buildXlsx, storeExport, type ExportPayload } from './exports';
 import { runWorker, type ClaimedJob, type JobHandlers } from './job-runtime';
 import { startLiveness } from './liveness';
@@ -220,7 +220,8 @@ async function generateInvoicePdf(job: ClaimedJob): Promise<void> {
     subtotal: Number(data.invoice.subtotal),
     discount: Number(data.invoice.discount_amount),
     total: Number(data.invoice.total_amount),
-    generatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
+    // E4 : mention « Générée le » du document famille = heure d'Alger, pas UTC.
+    generatedAt: businessDateTime(),
   });
 
   const key = `${orgId}/invoices/${invoiceId}.pdf`;

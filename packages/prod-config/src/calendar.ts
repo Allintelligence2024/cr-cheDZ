@@ -47,6 +47,19 @@ export function localCalendarDay(value: unknown): string {
   return businessDate(instant);
 }
 
+/** Horodatage lisible (AAAA-MM-JJ HH:MM) dans le fuseau métier — pour les mentions
+ *  « Générée le … » des documents livrés aux familles ; jamais l'heure UTC du process. */
+export function businessDateTime(now: Date | string | number = new Date()): string {
+  const instant = now instanceof Date ? now : new Date(now);
+  if (!Number.isFinite(instant.getTime())) throw new Error('INSTANT_INVALID');
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: BUSINESS_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(instant);
+  const read = (type: Intl.DateTimeFormatPartTypes): string => parts.find((p) => p.type === type)?.value ?? '';
+  return `${read('year')}-${read('month')}-${read('day')} ${read('hour')}:${read('minute')}`;
+}
+
 /** Année calendaire du fuseau métier — préfixe des références (CR-, IMP-, PRE-,
  *  ATT-) : une saisie du 31 décembre 23:30 UTC est déjà le 1er janvier à Alger. */
 export function businessYear(now: Date = new Date()): number {

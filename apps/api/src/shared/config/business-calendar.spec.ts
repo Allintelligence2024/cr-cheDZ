@@ -8,7 +8,7 @@
 // worker `phase28`, qui démarre le worker avec `TZ` et `PGOPTIONS`).
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
-import { businessDate, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay } from '@creche/prod-config';
+import { businessDate, businessDateTime, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay } from '@creche/prod-config';
 
 // apps/api/src/shared/config → racine du monorepo
 const repo = resolve(__dirname, '..', '..', '..', '..', '..');
@@ -16,9 +16,9 @@ const repo = resolve(__dirname, '..', '..', '..', '..', '..');
 /** Évalue un snippet dans un processus Node dont le fuseau est imposé. */
 function runInTz(tz: string, expression: string): string {
   const script = `
-    import { businessDate, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay }
+    import { businessDate, businessDateTime, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay }
       from ${JSON.stringify(join(repo, 'packages/prod-config/src/calendar.ts'))};
-    const parts = { businessDate, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay };
+    const parts = { businessDate, businessDateTime, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay };
     void parts;
     process.stdout.write(String(${expression}));
   `;
@@ -32,7 +32,7 @@ function runInTz(tz: string, expression: string): string {
 const POSITIVE_TZ = ['Africa/Algiers', 'Pacific/Kiritimati'];
 
 describe('businessDate — jour civil du fuseau métier pour un INSTANT', () => {
-  it('rend le jour d\u2019Alger, pas le jour UTC (23:30 UTC → 31 à Alger)', () => {
+  it('rend le jour d’Alger, pas le jour UTC (23:30 UTC → 31 à Alger)', () => {
     expect(businessDate(new Date('2026-10-30T23:30:00Z'))).toBe('2026-10-31');
     expect(businessDate(new Date('2026-10-31T00:30:00Z'))).toBe('2026-10-31');
     // Le jour UTC, lui, est bien la veille : c'est le défaut corrigé.
@@ -47,16 +47,26 @@ describe('businessDate — jour civil du fuseau métier pour un INSTANT', () => 
 
   it('refuse un instant non datable', () => {
     expect(() => businessDate('pas-une-date')).toThrow('INSTANT_INVALID');
+    expect(() => businessDateTime('pas-une-date')).toThrow('INSTANT_INVALID');
   });
 
-  it('businessYear : une saisie du 31/12 23:30 UTC est déjà de l\u2019année suivante à Alger', () => {
+  it('businessDateTime — horodatage du document, heure d’Alger et non UTC', () => {
+    // L’en-tête « Générée le … » d’une facture rendue à 23:30 UTC porte déjà
+    // l’heure du lendemain à Alger : c’est le jour que la famille voit à
+    // l’écran, donc le jour que le document doit porter.
+    expect(businessDateTime(new Date('2026-10-30T23:30:00Z'))).toBe('2026-10-31 00:30');
+    expect(runInTz('America/Los_Angeles', `parts.businessDateTime(new Date('2026-10-30T23:30:00Z'))`)).toBe('2026-10-31 00:30');
+    expect(runInTz('Africa/Algiers', `parts.businessDateTime(new Date('2026-10-30T23:30:00Z'))`)).toBe('2026-10-31 00:30');
+  });
+
+  it('businessYear : une saisie du 31/12 23:30 UTC est déjà de l’année suivante à Alger', () => {
     expect(businessYear(new Date('2026-12-31T23:30:00Z'))).toBe(2027);
     expect(new Date('2026-12-31T23:30:00Z').getFullYear()).toBe(2026);
   });
 });
 
-describe('localCalendarDay — relecture d\u2019une colonne `date` rendue par pg', () => {
-  it('dans un fuseau en avance sur UTC, l\u2019ancien `toISOString()` reculait d\u2019un jour', () => {
+describe('localCalendarDay — relecture d’une colonne `date` rendue par pg', () => {
+  it('dans un fuseau en avance sur UTC, l’ancien `toISOString()` reculait d’un jour', () => {
     for (const tz of POSITIVE_TZ) {
       // `postgres-date` construit un `date` en minuit LOCAL : sous TZ=+01:00,
       // ce même instant relu en UTC est la veille. `localCalendarDay` rend le
@@ -78,7 +88,7 @@ describe('localCalendarDay — relecture d\u2019une colonne `date` rendue par pg
   });
 });
 
-describe('toCivilDay — jour d\u2019une saisie (chaîne), sans conversion', () => {
+describe('toCivilDay — jour d’une saisie (chaîne), sans conversion', () => {
   it('AAAA-MM-JJ est repris tel quel, quel que soit le fuseau du process', () => {
     for (const tz of ['America/Los_Angeles', 'UTC', ...POSITIVE_TZ]) {
       expect(runInTz(tz, `parts.toCivilDay('2024-01-01')`)).toBe('2024-01-01');
