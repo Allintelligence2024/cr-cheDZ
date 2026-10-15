@@ -360,6 +360,32 @@ paiements et rétention expirées n'étaient pas traitées automatiquement.
       `YYYY-MM-DD` est une rupture de contrat mobile à décider avec le client, puis à
       valider par le gate deux côtés (`check:sync-contract`).
 
+      **Précision (2026-10-15, soirée) — le format n'a toujours pas changé, mais il ne
+      dépend plus de l'hôte** sur le chemin public mesuré : le portail parent (H2d —
+      `GET /parent/invoices`, `/parent/invoices/:id`) compose sa chaîne avec
+      `utcDayInstant` à partir du **jour civil**, donc les octets rendus restent
+      `AAAA-MM-JJT00:00:00.000Z` (ce que la prod à `TZ=UTC` envoyait déjà) sans hériter
+      du fuseau de la machine. Mesuré avant/après : `phase38-parent-financial-projection`
+      était ROUGE sous `TZ=Africa/Algiers` — le fuseau du client, pas un cas exotique —
+      comme sous `Asia/Tokyo`, verte sous `TZ=UTC` ; verte dans les trois depuis le
+      correctif, plus 18 cas de matrice TZ en processus enfants dans le plan de test.
+      Le passage à `YYYY-MM-DD` **reste une décision client non prise** ; il n'est plus
+      la seule chose qui séparait le rendu HTTP d'un déterminisme complet.
+
+      **Inventaire du résidu, rejoué (et non déduit)** : les 77 suites d'isolation
+      lancées sous `TZ=Africa/Algiers` rendent 72 vertes ; 4 échecs (phase22, phase36,
+      phase47, phase49) se reproduisent **à l'identique sous `TZ=UTC` dans le même mode
+      autonome** — ils tiennent à l'environnement de la commande isolée (rôles/reset
+      fournis par `test-production-roles.mjs`), pas au fuseau, et sont verts dans le
+      gate D complet (77/77). Un seul échec était imputable au fuseau, et c'était une
+      **lecture de test**, non du code livré : `phase56` relisait `date_of_birth` via
+      `new Date(colonne).getUTCDate()` — minuit local relu en UTC, donc le 30 au lieu
+      du 1er — alors que la base stockait bien le 1er (`date_trunc('month', …)::date`,
+      migration 067). L'assertion est désormais prise côté SQL, verte sous UTC, Alger,
+      Tokyo et Los Angeles, et vérifiée rouge si l'on force le jour attendu à « 02 ».
+      Autrement dit : **aucune minimisation confidentielle n'était fausse**, seule la
+      preuve en était fragile.
+
 ### E5. Facturation mensuelle — corrigé, automatique toujours désactivée
 
 - [x] Reproduction : contrats commençant le 15/09 ou le 01/10 facturés en septembre.

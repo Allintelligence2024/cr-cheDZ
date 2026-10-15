@@ -233,7 +233,7 @@ Mettre à jour les critères de **#14** (migrations 001–102, plus de « 61/61 
 8. **Q2** : inventaire 205 routes / 40 sans garde, rejoué sur cette branche ; la section
    « Inventaire des 40 routes » de `docs/architecture/authorization-matrix.md` (v15) les justifie.
 9. **TZ résiduelle** : le format de fil des colonnes `date` reste dépendant du fuseau du **processus**
-   (mesuré, pas supposé) — voir §9.
+   (mesuré, pas supposé) — voir §9.1.
 
 ---
 
@@ -242,3 +242,21 @@ Mettre à jour les critères de **#14** (migrations 001–102, plus de « 61/61 
 - Aucun accès aux pages GitHub « Security » (dependabot/code-scanning/secret-scanning) : le jeton renvoie 403. Les alertes éventuelles sont à consulter par un admin dépôt.
 - Pas de Docker ni de Flutter/Dart dans l'environnement : tâches Docker/Flutter restent à la CI ou à une machine dédiée.
 - Aucun merge effectué (règle du dépôt) ; les changements sont sur la branche de session, à ouvrir en PR.
+
+### 9.1 Résidu hors UTC — mesuré ce jour, plus que rien ne reste en suspens côté livré
+
+Question posée au lieu d'être supposée : « le `TZ=UTC` des images est-il la seule chose
+qui rend le rendu correct ? ». Réponse obtenue en rejouant les **77 suites d'isolation
+sous `TZ=Africa/Algiers`** (le fuseau du client) :
+
+| Résultat | Suites | Attribution |
+|---|---|---|
+| vertes | 72 | dont toutes les suites de calendrier, facturation, caisse, exports, sync, santé |
+| rouges, **sans lien avec le fuseau** | 4 (phase22, phase36, phase47, phase49) | se reproduisent **à l'identique sous `TZ=UTC`** en mode autonome : ce sont les rôles/reset que fournit `test-production-roles.mjs`, absents de la commande isolée ; **vertes dans le gate D complet** (77/77, cf. §0) |
+| rouge **imputable au fuseau** | 1 (phase56, anonymisation enfant) | lecture de TEST, pas de code livré : `new Date(colonne_date).getUTCDate()` relit en UTC un `Date` construit en minuit local → le 30 au lieu du 1er, alors que la base stockait bien le 1er (migration 067). Corrigée (assertion prise côté SQL), verte sous UTC / Alger / Tokyo / Los Angeles, et vérifiée rouge quand on force le jour attendu à « 02 » |
+
+Deux choses à retenir de ce relevé : la **minimisation confidentielle n'a jamais été
+fausse** (seule sa preuve était fragile), et le format de fil des colonnes `date` ne
+dépend plus de l'hôte sur le chemin public parent (`utcDayInstant`, tableau E4). Le
+passage à `YYYY-MM-DD` reste **une décision client non prise** — volontairement, il
+serait une rupture de contrat mobile à valider par `check:sync-contract` des deux côtés.
