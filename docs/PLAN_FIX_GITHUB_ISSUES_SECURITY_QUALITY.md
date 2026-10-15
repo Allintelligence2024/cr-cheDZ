@@ -30,7 +30,7 @@ sécurité (`.github/workflows/security-audit.yml`, `codeql.yml`, `SECURITY.md`)
 | Contrat documentaire | `claims-contract.test.mjs` | 12/12 |
 | Specs e2e | `check-e2e-skeletons.mjs` | 8 fichiers, aucun squelette |
 | Chemins SPA | `check-spa-static-paths.mjs` | vert |
-| **Gate D (rôles de prod)** | `test-production-roles.mjs` | **vert** (59 suites/contrôles, 0 échec) — preuve capturée ce jour |
+| **Gate D (rôles de prod)** | `test-production-roles.mjs` | **vert** (59 suites/contrôles, 0 échec) — preuve capturée ce jour, et rejoué par la CI à chaque push/PR (délégation de `run-isolation-suites.sh`, cf. §2 #38) |
 | Inventaire routes | `check:routes-inventory` | 205 routes, **40 sans `@Roles`/`@Public`** (toutes self-service, justifiées dans `docs/architecture/authorization-matrix.md`) |
 
 Non vérifié ici (hors périmètre sans Docker/Flutter) : `check-staff-sync.mjs`, tests Flutter, stacks monitoring (E2), `docker-compose.staging.yml`, build d'image Docker.
@@ -76,7 +76,7 @@ Déjà en place et vérifiée : RLS `USING`+`WITH CHECK` sur toutes les tables t
 | #16 | build_runner staff-mobile | **Résolu** : `app_database.g.dart` committé (3 582 lignes) | Fermer (action humaine) |
 | #17 | burn-down 72 warnings lint | **Périmé** : `npm run lint` → 0 warning | Fermer (action humaine) |
 | #35 | régression npm audit multer/nodemailer | **Résolu** : audit 0, multer 2.4.0, nodemailer 10.x | Fermer (action humaine) |
-| #38 | Phase D — RLS effective en prod | **Gate vert** (59 suites/contrôles, preuve capturée ce jour). Reste : plan de rollback (déjà écrit), décision moteur (ADR), câblage CI | Agent : documenter la preuve ; humain : relecture rollback + décision moteur |
+| #38 | Phase D — RLS effective en prod | **Gate vert** (59 suites/contrôles, preuve capturée ce jour). **Câblage CI : déjà en place** — vérifié dans le code, pas deviné : `scripts/run-isolation-suites.sh` contient `if GITHUB_ACTIONS=true && PRODUCTION_ROLE_TESTS!=1 && aucun argument de filtre → ALLOW_DATABASE_RESET=1 node scripts/test-production-roles.mjs`, et l'étape `database` de `ci.yml` appelle exactement ce runner sans argument. Le gate D strict tourne donc sur **chaque** push/PR (c'est la durée réelle du job : 33 min 44 s, vert sur `0bb4d3a`, run `38804941475`) — d'où la ligne « Gate D non câblé » obtenue en cherchant `test:production-roles` dans le YAML seul. Le plan de rollback, lui, est déjà écrit. | Reste humain : relecture rollback + décision moteur (ADR) |
 | #39 | Phase E — fiabilité worker | E1–E6 implémentés et verts (phase27/28 dans le gate). Reste : décision paie sans prorata (D2), activation E2 (D3), gate monitoring (Docker) | Humain : D2, D3, CI pour monitoring |
 | #40 | Phase F — contrat sync mobile bout-à-bout | F1/F3 vérifiés (phase29–34). F2/F4 côté Dart non vérifiés (pas de Flutter ici) | Agent avec Flutter 3.47.1 : `flutter analyze/test`, `check-staff-sync.mjs`, F4 |
 | #41 | Phase G — HIGH restants | G1–G5 livrés et verts (gate). **Frontières privilégiées : fait** (Q2, matrice v15 + inventaire 40 lignes à ligne). **`anonymize.sql` : déjà couvert** — vérification faite ce jour, `phase52-anonymization.pg.test.mjs`, `phase56/56b-anonymize-child` sont dans `scripts/run-isolation-suites.sh` (donc dans le gate D) et `test-production-roles.mjs` rend la ligne de preuve H2l (canary scan, no-purge, réécriture déterministe, idempotence, garde de nom de base). Le runbook `docs/PHASE_H2L_ANONYMIZATION_RUNBOOK.md` est à jour ; binaire objet de stockage et remises vendeur restent hors périmètre (dit par le script). | Humain : D1 uniquement |
@@ -115,6 +115,11 @@ elle est silencieuse à l'exécution, donc invisible pour les tests applicatifs.
   n’était **pas importable** par un test ; (b) le motif non protégé était développé par `sh` et
   ne voyait que les fichiers à une profondeur, les tests d’un sous-dossier plus profond étaient
   ignorés **en silence**. Corrigé en `node --experimental-transform-types --test "src/**/*.test.ts"`.
+  Les tests ne sont pas décoratifs : **vérifiés par mutation** sur `client.ts` — retirer
+  `credentials: 'include'`, supprimer le `finally` du single-flight, inverser le `retry`, retirer la
+  garde `access ? … : {}`, rendre un 204 comme du JSON ou propager une erreur non-JSON rend la suite
+  rouge (7 mutations rejouées, et la 8ᵉ — un faux changement sémantiquement neutre — reste verte,
+  preuve que la suite ne se contente pas de répéter le code).
   Le contrat de vérité documentaire (`claims-contract.test.mjs`) ne verrouillait pas ces compteurs,
   c’est donc le présent document qui doit suivre l’état du disque — et non l’inverse.
 - E2E Playwright : non bloquant (job `e2e`), honnête.

@@ -16,6 +16,7 @@ import {
   ApiError,
   api,
   apiDownload,
+  apiOpenBlob,
   clearTokens,
   getAccessToken,
   http,
@@ -35,6 +36,8 @@ type Handler = (url: string, init: RequestInit) => Response | Promise<Response>;
 type Harness = { calls: Recorded[]; restore: () => void };
 
 const BASE = '/api/v1';
+const ACCESS_TOKEN_KEY = 'creche_access_token';
+let memoryToken: string | null = null;
 
 /** Installe un faux `fetch` : enregistre chaque appel, puis délègue au handler. */
 function installFetch(handler: Handler): Harness {
@@ -205,22 +208,36 @@ test('A2 single-flight : dix 401 simultanés déclenchent UN seul rafraîchissem
   assert.equal(refreshes, 1, 'un seul rafraîchissement en vol, pas un par requête');
 });
 
-test('A2 : un rafraîchissement refusé clôture la session sans empoisonner le cache', async () => {
+test('A2 : un rafraîchissement refusé clôt la session sans empoisonner le cache', async () => {
+  // Le `finally` qui libère `refreshing` est le correctif d'origine : sans lui,
+  // la promesse (résolue à `null`) reste en place et plus AUCUN renouvellement
+  // ne peut être retenté après un re-login — la page est morte jusqu'au F5.
   harness = withFetch({
-    '/children': [expired, { status: 200, body: { ok: true } }],
-    '/auth/refresh': { status: 401, body: { code: 'REFRESH_REVOKED', message_fr: 'session révoquée' } },
+    '/children': [expired, expired, { status: 200, body: { ok: true } }],
+    '/auth/refresh': [
+      { status: 401, body: { code: 'REFRESH_REVOKED', message_fr: 'session révoquée' } },
+      refreshAccepted,
+    ],
   });
   setAccessToken('stale');
 
   await assert.rejects(() => http.get('/children'), (error: unknown) => (error as ApiError).status === 401);
   assert.equal(getAccessToken(), null, 'le refus du cookie de refresh clôt la session');
 
-  // Le `finally` doit avoir libéré le créneau, sinon plus AUCUNE requête de la
-  // page ne repartirait après un re-login : c'est exactement le défaut d'origine.
-  harness.restore();
-  harness = withFetch({ '/children': { status: 200, body: { ok: true } } });
   setAccessToken('after-login');
-  assert.deepEqual(await http.get('/children'), { ok: true });
+  assert.deepEqual(await http.get('/children'), { ok: true }, 'le re-login repart normalement');
+  assert.deepEqual(
+    harness.calls.map((call) => call.url),
+    [
+      `${BASE}/children`,
+      `${BASE}/auth/refresh`,
+      `${BASE}/children`,
+      `${BASE}/auth/refresh`,
+      `${BASE}/children`,
+    ],
+    'un deuxième rafraîchissement a bien été tenté : le créneau a été libéré',
+  );
+  assert.equal(getAccessToken(), 'fresh-token');
 });
 
 test('A2 : rate-limit (429) ou panne (5xx) du rafraîchissement conserve les jetons', async () => {
@@ -273,35 +290,106 @@ test('LOT 2/F5 : le téléchargement binaire est authentifié et suit le même r
   assert.equal(harness.calls[2].headers.authorization, 'Bearer fresh-token', 'le rejouage porte le jeton frais');
 });
 
-test('R14 : aucun jeton ne transite par le web storage (mémoire seule)', async () => {
-  // Le module ne doit lire/écrire sessionStorage que si `window` existe ; en
-  // Node, l'absence de `window` rendrait un accès direct silencieux. On rend
-  // donc les deux stockages bruyants : le test échoue dès qu'une fuite y entre.
-  const tripwire = (name: string) =>
-    new Proxy({} as Storage, {
-      get: () => {
-        throw new Error(`${name} ne doit plus être utilisé par le client API (R14)`);
-      },
-    });
+test('R14 : le rafraîchissement ne transite jamais par le web storage, seulement le jeton d’accès', async () => {
+  // Sans `window`, le module court-circuite tout accès au storage : le test
+  // serait vide de sens. On simule donc le navigateur, on trace chaque clé
+  // touchée, et `localStorage` devient un fil piégé — c'est lui qui avait
+  // servi de coffre au refresh token avant R14 (exfiltrable par un XSS).
+  const touched = new Set<string>();
+  const recording = {
+    getItem: (key: string) => (touched.add(`get:${key}`), key === ACCESS_TOKEN_KEY ? memoryToken : null),
+    setItem: (key: string, value: string) => {
+      touched.add(`set:${key}`);
+      memoryToken = value;
+    },
+    removeItem: (key: string) => {
+      touched.delete(`get:${key}`);
+      touched.add(`remove:${key}`);
+      if (key === ACCESS_TOKEN_KEY) memoryToken = null;
+    },
+  } as unknown as Storage;
+  const tripwire = new Proxy({} as Storage, {
+    get: () => {
+      throw new Error('localStorage ne doit plus être utilisé par le client API (R14)');
+    },
+  });
   const descriptors = new Map<string, PropertyDescriptor | undefined>();
-  for (const name of ['sessionStorage', 'localStorage'] as const) {
+  for (const [name, value] of [
+    ['window', { session: true }],
+    ['sessionStorage', recording],
+    ['localStorage', tripwire],
+  ] as const) {
     descriptors.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
-    Object.defineProperty(globalThis, name, { value: tripwire(name), configurable: true });
+    Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
   }
   harness = withFetch({
-    '/children': { status: 200, body: { ok: true } },
+    '/children': [expired, { status: 200, body: { ok: true } }],
     '/auth/refresh': refreshAccepted,
   });
   try {
     setAccessToken('access-1');
     assert.deepEqual(await http.get('/children'), { ok: true });
-    setAccessToken('access-2');
+    assert.equal(
+      getAccessToken(),
+      'fresh-token',
+      'le 401 a déclenché la rotation : la mémoire porte le jeton frais, et rien d’autre',
+    );
+
+    setAccessToken('stale');
+    assert.deepEqual(await http.get('/children'), { ok: true });
     clearTokens();
-    assert.equal(getAccessToken(), null);
+
+    const keys = [...touched].map((entry) => entry.split(':')[1]);
+    assert.deepEqual(
+      [...new Set(keys)],
+      [ACCESS_TOKEN_KEY],
+      'seule la clé du jeton d’accès est touchée : rien qui ressemble à un refresh token persisté',
+    );
+    assert.ok(
+      ![...touched].some((entry) => /refresh/i.test(entry)),
+      'aucune clé « refresh » ne doit apparaître dans le storage',
+    );
   } finally {
     for (const [name, descriptor] of descriptors) {
       if (descriptor) Object.defineProperty(globalThis, name, descriptor);
       else Reflect.deleteProperty(globalThis, name);
     }
+  }
+});
+
+test('LOT 2/F5 : apiOpenBlob ouvre un blob authentifié et le révoque après 60 s', async () => {
+  const opened: Array<{ url: string; target: string; features: string }> = [];
+  const timers: Array<{ delay: number }> = [];
+  const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', {
+    value: {
+      open: (url: string, target: string, features: string) => {
+        opened.push({ url, target, features });
+        return null;
+      },
+      setTimeout: (_callback: () => void, delay: number) => timers.push({ delay }),
+    },
+    configurable: true,
+    writable: true,
+  });
+  const storageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+  Object.defineProperty(globalThis, 'sessionStorage', {
+    value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined } as unknown as Storage,
+    configurable: true,
+    writable: true,
+  });
+  harness = withFetch({ '/media/1/original': { status: 200, body: { octet: 'stream' } } });
+  try {
+    await apiOpenBlob('/media/1/original');
+    assert.equal(opened.length, 1, 'un seul onglet ouvert');
+    assert.ok(opened[0].url.startsWith('blob:'), `objet URL attendu, reçu : ${opened[0].url}`);
+    assert.equal(opened[0].target, '_blank');
+    assert.equal(opened[0].features, 'noopener', 'fenêtre sans accès inverse (noopener)');
+    assert.deepEqual(timers, [{ delay: 60_000 }], 'la révocation est programmée à 60 s, pas oubliée');
+  } finally {
+    if (windowDescriptor) Object.defineProperty(globalThis, 'window', windowDescriptor);
+    else Reflect.deleteProperty(globalThis, 'window');
+    if (storageDescriptor) Object.defineProperty(globalThis, 'sessionStorage', storageDescriptor);
+    else Reflect.deleteProperty(globalThis, 'sessionStorage');
   }
 });
