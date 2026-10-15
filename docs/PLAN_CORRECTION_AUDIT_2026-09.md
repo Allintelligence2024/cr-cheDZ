@@ -21,7 +21,7 @@
 - **Restent ouverts (hors de portée de l'environnement de revue)** : #14 (restauration
   sur VM vierge chronométrée — `gpg` et Docker absents), gates Flutter Dart de F (SDK non
   joignable), staging Docker de H, et décisions client (règle de paie, `next_org_sequence`).
-  Le draft de décision `next_org_sequence` est `docs/adr/ADR-015-next-org-sequence-numbering.md` (statut **Proposé**).
+  Le draft de décision `next_org_sequence` est `docs/adr/ADR-016-next-org-sequence-numbering.md` (statut **Proposé**).
 
 ## Suivi de cette session (v3.3) — H2k, H2l, OpenAPI, G4, G5
 

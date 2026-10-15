@@ -7,7 +7,8 @@
 > `next_org_sequence_numbering`. Cette décision moteur étant déjà tranchée par les faits
 > (dépôt uniformément en 18) et nécessaire pour clore la ligne « choix 16 vs 18 » du plan §D,
 > elle est consignée ici sous `ADR-015-moteur`. La numérotation de facture (`next_org_sequence`)
-> prendra le prochain numéro libre (ADR-016) après décision client.
+> prend le prochain numéro libre : `docs/adr/ADR-016-next-org-sequence-numbering.md`
+> (statut **Proposé**, en attente de décision client).
 
 ## Contexte
 

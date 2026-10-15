@@ -169,7 +169,7 @@ Critère : `flutter analyze` sans erreur, `flutter test` vert sur staff/parent, 
 **État** : G1 (auth), G2 (RLS), G3a (DPIA), G4 (révocation), G5 (MFA) livrés et verts dans le gate 77/77.
 
 Restent :
-1. **`next_org_sequence`** : décision légale et produit. Lire `docs/adr/ADR-015-next-org-sequence-numbering.md`
+1. **`next_org_sequence`** : décision légale et produit. Lire `docs/adr/ADR-016-next-org-sequence-numbering.md`
    (statut **Proposé**). **Humain** tranche entre A / B / C. Après décision, implémenter dans une **nouvelle migration (103+)** :
    - si B : colonne de référence publique opaque + backfill + test « référence non devinable » + numéro légal inchangé ;
    - mettre à jour `billing.service.ts`, `payment-provider.service.ts` et le webhook selon le choix.
@@ -319,7 +319,7 @@ Action : fermer (section 7). Le workflow `security-audit.yml` rouvrira une issue
 
 | # | Décision | Bloque | Référence |
 |---|---|---|---|
-| D1 | Numérotation factures : séquentiel légal vs référence publique opaque | #41 | ADR-015 |
+| D1 | Numérotation factures : séquentiel légal vs référence publique opaque | #41 | ADR-016 |
 | D2 | Paie sans prorata (règle de paie) | #39, #42 | plan H3 l.762 |
 | D3 | Fournisseur SMTP / Twilio et secrets d'exploitation | #39 E2, #41 invitations | plan l.321, l.524 |
 | D4 | Revue de sécurité du stockage / pin MinIO | #42 | plan l.643 |

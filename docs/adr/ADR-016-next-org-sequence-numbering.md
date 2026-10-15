@@ -1,4 +1,4 @@
-# ADR-015 — Numérotation `next_org_sequence` : séquentielle vs non devinable
+# ADR-016 — Numérotation `next_org_sequence` : séquentielle vs non devinable
 
 **Statut** — **Proposé** (2026-10-14). En attente de décision client et d'avis juridique.
 Ce document ne tranche pas la question : il la pose, documente l'existant et
