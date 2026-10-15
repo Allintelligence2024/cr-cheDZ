@@ -19,7 +19,7 @@ sécurité (`.github/workflows/security-audit.yml`, `codeql.yml`, `SECURITY.md`)
 | Lint | `npm run lint` (`--max-warnings=0`) | **0 erreur, 0 warning** (warning `MODULE_TYPELESS_PACKAGE_JSON` retiré par ajout `"type": "module"` à `packages/shared-config/package.json`) |
 | Typecheck | `npm run typecheck` | vert (api, worker, admin-web, support-console) |
 | Build | `npm run build --workspace @creche/api` / `@creche/worker` | vert |
-| Tests unitaires | `npm run test:unit` | 46 suites / 967 tests verts (api) + 5 (worker) |
+| Tests unitaires | `npm run test:unit` | **49 suites / 999 tests verts** — api 48 suites / 994 tests, worker 1 suite / 5 tests (re-mesuré ce jour : les specs E4 et `utcDayInstant` ont ajouté 2 suites / 27 tests au compteur annoncé hier) |
 | Migrations | `node scripts/migrate.mjs --status` | 101 appliquées (001→102) |
 | Schéma / RLS | `schema-check.mjs --verbose`, `rls-behavior-check.mjs` | verts |
 | Indexation tenant | `check-tenant-index.mjs --verbose` | vert |
@@ -103,12 +103,12 @@ elle est silencieuse à l'exécution, donc invisible pour les tests applicatifs.
 
 ### 3.2 Couverture de tests
 
-- API : 46 suites jest, 967 tests, couverture ~20 % (seuils cliquets `jest.config.mts`).
-- **Admin-web (Q7, fait ce jour)** : 3 suites `node --test`, **35 tests** pour 4 655 LOC hors tests.
+- API : 48 suites jest, 994 tests — dont 18 sur la seule matrice TZ de `business-calendar.spec.ts` (E4 + `utcDayInstant`) —, couverture ~20 % (seuils cliquets `jest.config.mts`).
+- **Admin-web (Q7, fait ce jour)** : 4 suites `node --test`, **36 tests** pour 4 655 LOC hors tests.
   Sont désormais verrouillés, et seulement eux : les invariants de session du client API
-  (`api/client.ts` — R14 cookie httpOnly et mémoire seule, A2 single-flight nettoyé en `finally`,
-  429/5xx ne déconnecte pas, rejet d’un 401 une seule fois, erreurs bilingues FR/AR,
-  téléchargement binaire authentifié LOT 2/F5), les champs `type="date"` (E4) et l’interpolation
+  (`api/client.ts` — R14 cookie httpOnly et mémoire seule, A2 single-flight nettoyé en `finally` +
+  re-tentative après re-login, 429/5xx ne déconnecte pas, rejet d’un 401 une seule fois, erreurs
+  bilingues FR/AR, téléchargement binaire authentifié et onglet `noopener` révoqué à 60 s — LOT 2/F5), les champs `type="date"` (E4) et l’interpolation
   `{jeton}` (i18n). Les pages React restent non testées — c’est la dette réelle, elle reste documentée.
   Le runner du workspace utilisait `node --experimental-strip-types --test src/**/*.test.ts` :
   (a) `strip-types` refuse les *parameter properties*, donc `client.ts` — le module sensible —
@@ -132,9 +132,9 @@ elle est silencieuse à l'exécution, donc invisible pour les tests applicatifs.
 | Q2 | Frontières privilégiées (authorization-matrix déjà documenté ; vérifier les 40 routes self-service restent justifiées) | **Fait** — matrice v15 à jour, inventaire 205 routes / 40 self-service justifiées ligne à ligne |
 | Q3 | H3 : validation téléphone (`algerian-phone.ts`) | **Fait** — les 7 DTO avec champ téléphone portent `@IsAlgerianPhone` ; `import.dto.guardian_phone` est validé dans le service (rapport FR/AR par ligne, pas un 400 global) |
 | Q4 | H3 : i18n arabe | **Fait (périmètre vérifiable)** — 369 clés fr/ar symétriques ; `bill.exportExcel`/`bill.exportRequested` traduits en arabe ; `{n}` de `children.imported` réellement interpolé ; rapport d'import affiche `message_ar` en locale ar. Les notifs push/WhatsApp/inbox portent déjà les deux langues et suivent `users.locale` |
-| Q5 | H3 : harmonisation timezone | **Fait (lectures/affichages)** — voir E4 ci-dessous ; format de fil des colonnes `date` volontairement non changé (décision client + gate deux côtés) |
+| Q5 | H3 : harmonisation timezone | **Fait** — voir E4 ci-dessous. Le format de fil des colonnes `date` reste `AAAA-MM-JJT00:00:00.000Z` (ce que mobile et administration reçoivent déjà) mais n'est **plus produit par le fuseau de l'hôte** : `utcDayInstant` construit ces octets depuis le jour civil. Aucune décision client n'est donc requise, et le `TZ=UTC` des images devient un renforcement de défense en profondeur plutôt qu'une condition de justesse |
 | Q6 | Lint : avertissement `MODULE_TYPELESS_PACKAGE_JSON` | **Fait** |
-| Q7 | Admin-web : augmenter la couverture (1 test → objectif minimal) | **Fait** — 35 tests dans 3 suites (`api/client.test.ts` 12 tests d’invariants de session, `lib/interpolate.test.ts` 7, `lib/dates.test.ts` + `auth/routeAccess.test.ts` 16) ; runner réparé (`transform-types` + glob protégé) ; détaillé en §3.2 |
+| Q7 | Admin-web : augmenter la couverture (1 test → objectif minimal) | **Fait** — 36 tests dans 4 suites : `api/client.test.ts` 14 (invariants de session, éprouvés par mutation), `lib/interpolate.test.ts` 7, `lib/dates.test.ts` 4, `auth/routeAccess.test.ts` 11 ; runner réparé (`transform-types` + glob protégé) ; détaillé en §3.2 |
 
 ### E4 — harmonisation des fuseaux (exécutée 2026-10-15)
 
@@ -151,6 +151,7 @@ serveur est en avance sur UTC — le cas d'Alger (UTC+1). Corrections :
 | `analytics` — fenêtres 30/90 jours | `from` en UTC contre `to` à Alger | deux bornes en jours civils d'Alger |
 | `children`/`import`/`enrollment` — année des références, âge légal (décret 19-253) | dépendaient du fuseau du serveur (jusqu'à un faux « date de naissance dans le futur ») | calendrier pur (`toCivilDay`, `monthsBetweenDates`, `businessYear`) |
 | `admin-web` — champs `type="date"` | s'ouvraient sur la veille entre 00:00 et 01:00 à Alger | `localDateInputValue()` |
+| `parents` (H2d) — portail parent, `due_date` des factures | la valeur HTTP dépendait de la machine : sous `TZ=Africa/Algiers` **comme** sous `TZ=Asia/Tokyo`, la suite phase38 rendait la veille de l'échéance ; sous `TZ=UTC` elle passait — c'est pourquoi la classe restait invisible | `parentInvoiceWireRow` + `utcDayInstant` : mêmes octets sur le fil, jour civil épinglé, plus aucune dépendance à l'hôte |
 
 Déploiement : `TZ=UTC` est épinglé dans `apps/api/Dockerfile` et `apps/worker/Dockerfile`
 (commenté dans `.env.prod.example`), ce qui fige le rendu HTTP des colonnes `date` et rend
