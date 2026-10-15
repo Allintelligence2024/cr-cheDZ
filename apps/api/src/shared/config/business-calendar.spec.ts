@@ -8,7 +8,7 @@
 // worker `phase28`, qui démarre le worker avec `TZ` et `PGOPTIONS`).
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
-import { businessDate, businessDateTime, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay } from '@creche/prod-config';
+import { businessDate, businessDateTime, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay, utcDayInstant } from '@creche/prod-config';
 
 // apps/api/src/shared/config → racine du monorepo
 const repo = resolve(__dirname, '..', '..', '..', '..', '..');
@@ -16,9 +16,9 @@ const repo = resolve(__dirname, '..', '..', '..', '..', '..');
 /** Évalue un snippet dans un processus Node dont le fuseau est imposé. */
 function runInTz(tz: string, expression: string): string {
   const script = `
-    import { businessDate, businessDateTime, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay }
+    import { businessDate, businessDateTime, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay, utcDayInstant }
       from ${JSON.stringify(join(repo, 'packages/prod-config/src/calendar.ts'))};
-    const parts = { businessDate, businessDateTime, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay };
+    const parts = { businessDate, businessDateTime, businessYear, localCalendarDay, monthsBetweenDates, shiftDateOnly, toCivilDay, utcDayInstant };
     void parts;
     process.stdout.write(String(${expression}));
   `;
@@ -131,5 +131,36 @@ describe('monthsBetweenDates / shiftDateOnly — arithmétique de calendrier pur
       expect(runInTz(tz, `parts.shiftDateOnly('2026-10-15', -30)`)).toBe('2026-09-15');
       expect(runInTz(tz, `parts.monthsBetweenDates('2024-02-29', '2025-02-28')`)).toBe('11');
     }
+  });
+});
+
+describe('utcDayInstant — format de fil d’une colonne `date`, indépendant de l’hôte', () => {
+  it('rend le jour civil suivi de T00:00:00.000Z (mêmes octets qu’une prod à TZ=UTC)', () => {
+    // C'est exactement ce que vaut une colonne `date` dans le processus :
+    // minuit LOCAL (analyse `postgres-date`), puis `JSON.stringify` → instant UTC.
+    expect(utcDayInstant(new Date(2026, 8, 30))).toBe('2026-09-30T00:00:00.000Z');
+  });
+
+  it('ignore le fuseau du process, y compris là où `toISOString()` dérivait', () => {
+    for (const tz of ['UTC', 'Africa/Algiers', 'Asia/Tokyo', 'America/Los_Angeles', 'Pacific/Kiritimati']) {
+      expect(runInTz(tz, 'parts.utcDayInstant(new Date(2026, 8, 30))')).toBe('2026-09-30T00:00:00.000Z');
+    }
+    // La dérive est MESURÉE, pas supposée : lire une colonne `date` puis
+    // `toISOString().slice(0, 10)` rend LA VEILLE dès que l'hôte est à l'est de UTC (Alger +1,
+    // Tokyo +9). À l'ouest (Los Angeles -7), minuit local tombe le même jour en UTC : le
+    // défaut ne s'y voit pas — c'est ce qui l'a rendu invisible si longtemps. `utcDayInstant`
+    // supprime les deux comportements, sur toute la plage.
+    expect(runInTz('Africa/Algiers', 'new Date(2026, 8, 30).toISOString().slice(0, 10)')).toBe('2026-09-29');
+    expect(runInTz('Asia/Tokyo', 'new Date(2026, 8, 30).toISOString().slice(0, 10)')).toBe('2026-09-29');
+    expect(runInTz('America/Los_Angeles', 'new Date(2026, 8, 30).toISOString().slice(0, 10)')).toBe('2026-09-30');
+    expect(runInTz('UTC', 'new Date(2026, 8, 30).toISOString().slice(0, 10)')).toBe('2026-09-30');
+  });
+
+  it('accepte la chaîne AAAA-MM-JJ d’un select `::text` (chemin worker)', () => {
+    expect(utcDayInstant('2026-09-30')).toBe('2026-09-30T00:00:00.000Z');
+  });
+
+  it('refuse un jour inexistant plutôt que d’inventer le lendemain', () => {
+    expect(() => utcDayInstant('2027-02-29')).toThrow('DATE_ONLY_INVALID');
   });
 });

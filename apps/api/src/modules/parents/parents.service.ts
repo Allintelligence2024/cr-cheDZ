@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { photoConsentsAllowed } from '../../shared/authorization/photo-consent';
-import { PARENT_INVOICE_FIELDS_SQL, PARENT_RECEIPT_FIELDS_SQL } from './financial-projection';
+import { PARENT_INVOICE_FIELDS_SQL, PARENT_RECEIPT_FIELDS_SQL, parentInvoiceWireRow } from './financial-projection';
 import { CURRENT_GUARDIAN_LINK_SQL } from '../../shared/authorization/guardian-access';
 import { PARENT_JOURNAL_VISIBILITY_SQL } from '../../shared/authorization/journal-disclosure';
 import type { PoolClient } from 'pg';
@@ -200,7 +200,7 @@ export class ParentsService {
        JOIN children c ON c.id = i.child_id
        WHERE g.user_id = $1 AND ${CURRENT_GUARDIAN_LINK_SQL} AND cg.can_receive_invoices = true
        ORDER BY i.created_at DESC`, [userId],
-    )).rows);
+    )).rows.map(parentInvoiceWireRow));
   }
 
   async invoiceDetail(userId: string, invoiceId: string): Promise<Record<string, unknown>> {
@@ -216,7 +216,7 @@ export class ParentsService {
         `SELECT id, description_fr, description_ar, quantity, unit_price, total_price, line_type
          FROM invoice_lines WHERE invoice_id = $1 ORDER BY sort_order, id`, [invoiceId],
       )).rows;
-      return { ...invoice, lines };
+      return { ...parentInvoiceWireRow(invoice), lines };
     });
   }
 

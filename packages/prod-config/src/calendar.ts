@@ -80,6 +80,19 @@ export function toCivilDay(value: unknown): string {
   return businessDate(new Date(text));
 }
 
+/** Format de FIL d’une colonne `date`, figé indépendamment du fuseau du processus.
+ *  node-postgres construit un `Date` en minuit LOCAL ; `JSON.stringify` (qui passe
+ *  par `Date.prototype.toJSON`) rend alors l’instant UTC — donc **la veille** dès
+ *  que l’hôte est en avance sur UTC (Alger UTC+1, Tokyo UTC+9). Cette fonction
+ *  produit exactement les octets que la production rend aujourd’hui (son fuseau est
+ *  épinglé à `UTC`, cf. `apps/api/Dockerfile`) : le jour civil suivi de
+ *  `T00:00:00.000Z`. Aucun client ne voit sa valeur changer ; elle cesse en
+ *  revanche de dépendre de l’hôte, y compris hors conteneur (VM, `node` direct).
+ *  Une chaîne `AAAA-MM-JJ` (lecture `col::text`) est acceptée, comme `toCivilDay`. */
+export function utcDayInstant(value: unknown): string {
+  return `${toCivilDay(value)}T00:00:00.000Z`;
+}
+
 export function shiftDateOnly(value: string, days: number): string {
   const iso = dateOnly(value);
   if (!Number.isInteger(days)) throw new Error('SHIFT_DAYS_INVALID');
