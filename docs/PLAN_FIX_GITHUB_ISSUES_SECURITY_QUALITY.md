@@ -134,6 +134,10 @@ serveur est en avance sur UTC — le cas d'Alger (UTC+1). Corrections :
 | `children`/`import`/`enrollment` — année des références, âge légal (décret 19-253) | dépendaient du fuseau du serveur (jusqu'à un faux « date de naissance dans le futur ») | calendrier pur (`toCivilDay`, `monthsBetweenDates`, `businessYear`) |
 | `admin-web` — champs `type="date"` | s'ouvraient sur la veille entre 00:00 et 01:00 à Alger | `localDateInputValue()` |
 
+Déploiement : `TZ=UTC` est épinglé dans `apps/api/Dockerfile` et `apps/worker/Dockerfile`
+(commenté dans `.env.prod.example`), ce qui fige le rendu HTTP des colonnes `date` et rend
+le comportement identique quel que soit l'hôte.
+
 Helpers partagés dans `@creche/prod-config` (`businessDate`, `businessDateTime`,
 `businessYear`, `localCalendarDay`, `toCivilDay`, `monthsBetweenDates`, `shiftDateOnly`),
 couverte par `business-calendar.spec.ts` et `age-creche.spec.ts` (chaque cas TZ est rejoué

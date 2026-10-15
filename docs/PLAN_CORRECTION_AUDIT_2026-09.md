@@ -349,6 +349,12 @@ paiements et rétention expirées n'étaient pas traitées automatiquement.
       médicament (phase10-health) rouges sous `TZ=Asia/Tokyo` avant correction, vertes
       après ; specs de calendrier en processus enfant à TZ forcé (UTC, Alger, Los
       Angeles, Kiritimati).
+- [x] Déterminisme du déploiement : `TZ=UTC` est épinglé dans les deux images
+      livrées (`apps/api/Dockerfile`, `apps/worker/Dockerfile`) et documenté dans
+      `.env.prod.example`. C'est ce qui fige le rendu HTTP des colonnes `date`
+      (minuit UTC, format attendu côté client) ; les calendriers métier restent lus
+      en `AT TIME ZONE 'Africa/Algiers'` côté SQL et n'en dépendent pas.
+
       **Hors périmètre assumé** : le FORMAT DE FIL des colonnes `date` en réponse HTTP
       (instance `Date` sérialisée en horodatage UTC) est inchangé — le passer en
       `YYYY-MM-DD` est une rupture de contrat mobile à décider avec le client, puis à
