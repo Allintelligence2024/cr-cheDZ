@@ -341,7 +341,18 @@ paiements et rétention expirées n'étaient pas traitées automatiquement.
       horaires de présence explicitement en `Africa/Algiers`.
 - [x] Vrais PDF/XLSX : DATE au premier du mois, échéance exacte, tests TZ positif
       **et** négatif ; sessions SQL à fuseaux différents pour les heures.
-- [ ] Harmonisation des autres modules H3 : **pas revendiquée comme faite**.
+- [x] Harmonisation API/admin-web des lectures calendrier (2026-10-15) : les
+      colonnes `date` sont relues par leurs composants locaux (`localCalendarDay`),
+      les instants sont datés à `Africa/Algiers` (`businessDate`/`businessDateTime`),
+      les âges légaux et les fenêtres de période sont comparés en jours civils
+      (`monthsBetweenDates`/`shiftDateOnly`). Preuve : bornes de l'autorisation de
+      médicament (phase10-health) rouges sous `TZ=Asia/Tokyo` avant correction, vertes
+      après ; specs de calendrier en processus enfant à TZ forcé (UTC, Alger, Los
+      Angeles, Kiritimati).
+      **Hors périmètre assumé** : le FORMAT DE FIL des colonnes `date` en réponse HTTP
+      (instance `Date` sérialisée en horodatage UTC) est inchangé — le passer en
+      `YYYY-MM-DD` est une rupture de contrat mobile à décider avec le client, puis à
+      valider par le gate deux côtés (`check:sync-contract`).
 
 ### E5. Facturation mensuelle — corrigé, automatique toujours désactivée
 

@@ -103,13 +103,34 @@ Déjà en place et vérifiée : RLS `USING`+`WITH CHECK` sur toutes les tables t
 
 | # | Action | Effort |
 |---|---|---|
-| Q1 | Preuve lockfile sur clone propre (`git clone . /tmp/clone && npm ci && git status --short` vide) | faible |
-| Q2 | Frontières privilégiées (authorization-matrix déjà documenté ; vérifier les 40 routes self-service restent justifiées) | moyen |
-| Q3 | H3 : validation téléphone (déjà implémenté `algerian-phone.ts` + utilisé dans 8 DTO) — vérifier les modules restants | moyen |
-| Q4 | H3 : i18n arabe manquant (`nap_start`, `{n} enfant(s)`, push FR seulement) | moyen |
-| Q5 | H3 : harmonisation timezone UTC+1 (auditer module par module) | moyen |
+| Q1 | Preuve lockfile sur clone propre | **Fait** — `git clone` + `npm ci` (920 paquets) → `git status --short` vide, exit 0 |
+| Q2 | Frontières privilégiées (authorization-matrix déjà documenté ; vérifier les 40 routes self-service restent justifiées) | **Fait** — matrice v15 à jour, inventaire 205 routes / 40 self-service justifiées ligne à ligne |
+| Q3 | H3 : validation téléphone (`algerian-phone.ts`) | **Fait** — les 7 DTO avec champ téléphone portent `@IsAlgerianPhone` ; `import.dto.guardian_phone` est validé dans le service (rapport FR/AR par ligne, pas un 400 global) |
+| Q4 | H3 : i18n arabe | **Fait (périmètre vérifiable)** — 369 clés fr/ar symétriques ; `bill.exportExcel`/`bill.exportRequested` traduits en arabe ; `{n}` de `children.imported` réellement interpolé ; rapport d'import affiche `message_ar` en locale ar. Les notifs push/WhatsApp/inbox portent déjà les deux langues et suivent `users.locale` |
+| Q5 | H3 : harmonisation timezone | **Fait (lectures/affichages)** — voir E4 ci-dessous ; format de fil des colonnes `date` volontairement non changé (décision client + gate deux côtés) |
 | Q6 | Lint : avertissement `MODULE_TYPELESS_PACKAGE_JSON` | **Fait** |
-| Q7 | Admin-web : augmenter la couverture (1 test → objectif minimal) | élevé |
+| Q7 | Admin-web : augmenter la couverture (1 test → objectif minimal) | ouvert |
+
+### E4 — harmonisation des fuseaux (exécutée 2026-10-15)
+
+Défaut vérifié : `node-postgres` construit les colonnes `date` en **minuit local** du
+process ; les relire via `toISOString().slice(0,10)` recule le jour dès que le fuseau du
+serveur est en avance sur UTC — le cas d'Alger (UTC+1). Corrections :
+
+| Zone | Effet du défaut | Après correction |
+|---|---|---|
+| `health` — fenêtre d'autorisation de médicament | le **dernier jour autorisé** était rejeté (422) et la **veille du premier jour** acceptée | bornes incluses ; phase10-health épingle les deux cas (rouge sous `TZ=Asia/Tokyo` avant, vert après) |
+| `billing` — caisse (`CASH_OPEN_PREVIOUS_DAY`) | message nommant le mauvais jour | jour calendaire exact |
+| `attestations` — « Fait le » du PDF | jour UTC (une émission entre 00:00 et 01:00 à Alger datée de la veille) | jour civil du fuseau métier |
+| `worker` — « Générée le » de la facture | horodatage UTC | horodatage Alger (`businessDateTime`) |
+| `analytics` — fenêtres 30/90 jours | `from` en UTC contre `to` à Alger | deux bornes en jours civils d'Alger |
+| `children`/`import`/`enrollment` — année des références, âge légal (décret 19-253) | dépendaient du fuseau du serveur (jusqu'à un faux « date de naissance dans le futur ») | calendrier pur (`toCivilDay`, `monthsBetweenDates`, `businessYear`) |
+| `admin-web` — champs `type="date"` | s'ouvraient sur la veille entre 00:00 et 01:00 à Alger | `localDateInputValue()` |
+
+Helpers partagés dans `@creche/prod-config` (`businessDate`, `businessDateTime`,
+`businessYear`, `localCalendarDay`, `toCivilDay`, `monthsBetweenDates`, `shiftDateOnly`),
+couverte par `business-calendar.spec.ts` et `age-creche.spec.ts` (chaque cas TZ est rejoué
+dans un **processus enfant** à `TZ` forcé — Jest épingle `TZ=UTC`).
 
 ### 3.4 Actions qualité (humain)
 
