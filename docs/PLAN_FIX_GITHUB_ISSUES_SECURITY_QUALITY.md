@@ -26,7 +26,7 @@ sécurité (`.github/workflows/security-audit.yml`, `codeql.yml`, `SECURITY.md`)
 | Garde RLS | `check-rls-usage.mjs` (avec PG) | 68 accès conformes |
 | Env example | `check-env-example.mjs` | vert |
 | Manifest Android | `check-android-manifest.mjs` | vert (6 avertissements non bloquants) |
-| Gardiens câblés | `check-guards-wired.mjs` | 15 gardiens, vert |
+| Gardiens câblés | `check-guards-wired.mjs` | 16 gardiens, vert |
 | Contrat documentaire | `claims-contract.test.mjs` | 12/12 |
 | Specs e2e | `check-e2e-skeletons.mjs` | 8 fichiers, aucun squelette |
 | Chemins SPA | `check-spa-static-paths.mjs` | vert |
@@ -79,7 +79,7 @@ Déjà en place et vérifiée : RLS `USING`+`WITH CHECK` sur toutes les tables t
 | #38 | Phase D — RLS effective en prod | **Gate vert** (59 suites/contrôles, preuve capturée ce jour). Reste : plan de rollback (déjà écrit), décision moteur (ADR), câblage CI | Agent : documenter la preuve ; humain : relecture rollback + décision moteur |
 | #39 | Phase E — fiabilité worker | E1–E6 implémentés et verts (phase27/28 dans le gate). Reste : décision paie sans prorata (D2), activation E2 (D3), gate monitoring (Docker) | Humain : D2, D3, CI pour monitoring |
 | #40 | Phase F — contrat sync mobile bout-à-bout | F1/F3 vérifiés (phase29–34). F2/F4 côté Dart non vérifiés (pas de Flutter ici) | Agent avec Flutter 3.47.1 : `flutter analyze/test`, `check-staff-sync.mjs`, F4 |
-| #41 | Phase G — HIGH restants | G1–G5 livrés et verts (gate). Reste : décision `next_org_sequence` (D1), privilèges (frontières), anonymize.sql | Humain : D1 ; agent : frontières privilégiées + anonymize |
+| #41 | Phase G — HIGH restants | G1–G5 livrés et verts (gate). **Frontières privilégiées : fait** (Q2, matrice v15 + inventaire 40 lignes à ligne). **`anonymize.sql` : déjà couvert** — vérification faite ce jour, `phase52-anonymization.pg.test.mjs`, `phase56/56b-anonymize-child` sont dans `scripts/run-isolation-suites.sh` (donc dans le gate D) et `test-production-roles.mjs` rend la ligne de preuve H2l (canary scan, no-purge, réécriture déterministe, idempotence, garde de nom de base). Le runbook `docs/PHASE_H2L_ANONYMIZATION_RUNBOOK.md` est à jour ; binaire objet de stockage et remises vendeur restent hors périmètre (dit par le script). | Humain : D1 uniquement |
 | #42 | Phase H — staging + dette MEDIUM/LOW | body-parser déjà résolu, lockfile à prouver sur clone propre, 40 routes justifiées (fait), H3 agent-tasks partiellement faits (téléphone, i18n, timezone) | Agent : lockfile proof, H3 restants ; humain : staging Docker |
 | #55 | security-audit vulnérabilités prod | **Résolu** (même cause que #35) | Fermer (action humaine) |
 
@@ -103,7 +103,20 @@ elle est silencieuse à l'exécution, donc invisible pour les tests applicatifs.
 
 ### 3.2 Couverture de tests
 
-- API : 46 suites jest, 967 tests, couverture ~20 % (seuils cliquets jest.config.mts). Admin-web : 1 test pour 4 342 LOC (dette documentée).
+- API : 46 suites jest, 967 tests, couverture ~20 % (seuils cliquets `jest.config.mts`).
+- **Admin-web (Q7, fait ce jour)** : 3 suites `node --test`, **35 tests** pour 4 655 LOC hors tests.
+  Sont désormais verrouillés, et seulement eux : les invariants de session du client API
+  (`api/client.ts` — R14 cookie httpOnly et mémoire seule, A2 single-flight nettoyé en `finally`,
+  429/5xx ne déconnecte pas, rejet d’un 401 une seule fois, erreurs bilingues FR/AR,
+  téléchargement binaire authentifié LOT 2/F5), les champs `type="date"` (E4) et l’interpolation
+  `{jeton}` (i18n). Les pages React restent non testées — c’est la dette réelle, elle reste documentée.
+  Le runner du workspace utilisait `node --experimental-strip-types --test src/**/*.test.ts` :
+  (a) `strip-types` refuse les *parameter properties*, donc `client.ts` — le module sensible —
+  n’était **pas importable** par un test ; (b) le motif non protégé était développé par `sh` et
+  ne voyait que les fichiers à une profondeur, les tests d’un sous-dossier plus profond étaient
+  ignorés **en silence**. Corrigé en `node --experimental-transform-types --test "src/**/*.test.ts"`.
+  Le contrat de vérité documentaire (`claims-contract.test.mjs`) ne verrouillait pas ces compteurs,
+  c’est donc le présent document qui doit suivre l’état du disque — et non l’inverse.
 - E2E Playwright : non bloquant (job `e2e`), honnête.
 
 ### 3.3 Actions qualité restantes (agent)
@@ -116,7 +129,7 @@ elle est silencieuse à l'exécution, donc invisible pour les tests applicatifs.
 | Q4 | H3 : i18n arabe | **Fait (périmètre vérifiable)** — 369 clés fr/ar symétriques ; `bill.exportExcel`/`bill.exportRequested` traduits en arabe ; `{n}` de `children.imported` réellement interpolé ; rapport d'import affiche `message_ar` en locale ar. Les notifs push/WhatsApp/inbox portent déjà les deux langues et suivent `users.locale` |
 | Q5 | H3 : harmonisation timezone | **Fait (lectures/affichages)** — voir E4 ci-dessous ; format de fil des colonnes `date` volontairement non changé (décision client + gate deux côtés) |
 | Q6 | Lint : avertissement `MODULE_TYPELESS_PACKAGE_JSON` | **Fait** |
-| Q7 | Admin-web : augmenter la couverture (1 test → objectif minimal) | ouvert |
+| Q7 | Admin-web : augmenter la couverture (1 test → objectif minimal) | **Fait** — 35 tests dans 3 suites (`api/client.test.ts` 12 tests d’invariants de session, `lib/interpolate.test.ts` 7, `lib/dates.test.ts` + `auth/routeAccess.test.ts` 16) ; runner réparé (`transform-types` + glob protégé) ; détaillé en §3.2 |
 
 ### E4 — harmonisation des fuseaux (exécutée 2026-10-15)
 
@@ -206,6 +219,15 @@ Mettre à jour les critères de **#14** (migrations 001–102, plus de « 61/61 
 3. Build `@creche/worker` réalisé (prérequis du gate D).
 4. Schéma / RLS / indexation tenant / garde RLS vérifiés verts.
 5. Ce document de plan.
+6. **Q7 (couverture admin-web)** : 12 tests d’invariants de session sur `api/client.ts`, extraction
+   de `interpolate` dans `lib/interpolate.ts` + 7 tests, soit 35 tests dans le workspace ; runner
+   réparé (`--experimental-transform-types`, glob protégé) — sans cela `client.ts` n’était ni
+   importable ni testable, et les suites d’un sous-dossier profond étaient silencieusement ignorées.
+7. **#41 anonymize** : statut vérifié (rien à refaire) — suites et preuve H2l déjà dans le gate.
+8. **Q2** : inventaire 205 routes / 40 sans garde, rejoué sur cette branche ; la section
+   « Inventaire des 40 routes » de `docs/architecture/authorization-matrix.md` (v15) les justifie.
+9. **TZ résiduelle** : le format de fil des colonnes `date` reste dépendant du fuseau du **processus**
+   (mesuré, pas supposé) — voir §9.
 
 ---
 
