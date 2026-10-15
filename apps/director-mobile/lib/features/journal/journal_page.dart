@@ -109,7 +109,7 @@ class _JournalPageState extends State<JournalPage> {
                             margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             child: ListTile(
                               leading: Icon(_iconFor(e['event_type']?.toString() ?? ''), color: isIncident ? SereniteStatusColors.of(context).danger : Theme.of(context).colorScheme.primary),
-                              title: Text('${e['event_type'] ?? ''} — ${e['first_name_fr'] ?? ''} ${e['last_name_fr'] ?? ''}'.trim()),
+                              title: Text('${_labelFor(e['event_type']?.toString() ?? '')} — ${e['first_name_fr'] ?? ''} ${e['last_name_fr'] ?? ''}'.trim()),
                               subtitle: Text(
                                 '${e['occurred_at']?.toString().substring(11, 16) ?? ''} — ${e['meal_type'] ?? e['activity_type'] ?? e['incident_severity'] ?? e['note_text'] ?? e['description'] ?? ''}',
                                 style: const TextStyle(fontSize: 12),
@@ -127,11 +127,32 @@ class _JournalPageState extends State<JournalPage> {
     );
   }
 
+  /// Libellés bilingues (FR / AR) des 9 types du journal
+  /// (JOURNAL_EVENT_TYPES côté API) — le type brut (`nap_start`) n'est
+  /// jamais affiché tel quel. À relire par un locuteur arabe (dette H3).
+  String _labelFor(String type) {
+    return switch (type) {
+      'meal' => 'Repas / وجبة',
+      'nap_start' => 'Début de sieste / بداية القيلولة',
+      'nap_end' => 'Fin de sieste / نهاية القيلولة',
+      'diaper' => 'Couche / حفاض',
+      'activity' => 'Activité / نشاط',
+      'temperature' => 'Température / حرارة',
+      'note' => 'Note / ملاحظة',
+      'health_observation' => 'Observation santé / ملاحظة صحية',
+      'incident' => 'Incident / حادث',
+      _ => type,
+    };
+  }
+
   IconData _iconFor(String type) {
     switch (type) {
       case 'meal':
         return Icons.restaurant;
-      case 'nap':
+      // Les types réels du journal sont nap_start / nap_end (le « nap »
+      // unique tombait toujours dans le default).
+      case 'nap_start':
+      case 'nap_end':
         return Icons.bedtime;
       case 'diaper':
         return Icons.child_care;
