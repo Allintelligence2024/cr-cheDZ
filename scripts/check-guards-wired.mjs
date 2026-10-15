@@ -21,6 +21,15 @@
  * (Dockerfile, fichier .md) est signalé comme orphelin — c'est voulu : une procédure
  * écrite dans un runbook n'exécute rien en CI.
  *
+ * Seconde classe verrouillée (2026-10-15, trouvée en auditant Q7) : toute **suite**
+ * posée sous `tests/` (`*.test.mjs`) doit être atteignable elle aussi. Le runner
+ * d'isolation énumère ses suites à la main (`SUITES=( … )`) : un fichier déposé là
+ * sans être ajouté à la liste ne tourne JAMAIS, et rien ne le dit — exactement la
+ * classe du glob non protégé (« src/ » + « ** » + « .test.ts ») développé par `sh`,
+ * qui ignorait en silence les suites d'un sous-dossier. Vérifié ce jour : 87 suites sur disque, 76 dans le
+ * runner, les 11 autres appelées par `test-production-roles.mjs` ou `ci.yml` —
+ * aucun orphelin, mais rien ne garantissait que cela le reste.
+ *
  * Usage : node scripts/check-guards-wired.mjs [--verbose]
  * Sortie : 0 = tous les gardiens sont câblés, 1 = au moins un orphelin (liste explicite).
  */
@@ -119,6 +128,30 @@ if (verbose || orphans.length > 0) {
   }
 }
 
+// ── Suites : tout fichier de test sous tests/ doit être appelé quelque part ──
+const SUITE_NAME = /\.test\.(mjs|cjs|js)$/;
+const suites = [...candidates]
+  .filter((f) => f.startsWith('tests/') && SUITE_NAME.test(basename(f)))
+  .sort();
+const suiteOrphans = suites.filter((f) => !reachable.has(f));
+
+if (verbose) {
+  console.log(`Suites recensées sous tests/ (${SUITE_NAME}) : ${suites.length}`);
+  for (const t of suites) {
+    console.log(`  ${reachable.has(t) ? '✓ appelée     ' : '✗ ORPHELINE   '} ${t}`);
+  }
+}
+
+if (suiteOrphans.length > 0) {
+  console.error(`\n✗ ${suiteOrphans.length} suite(s) que rien n'appelle :`);
+  for (const o of suiteOrphans) console.error(`  - ${o}`);
+  console.error(
+    '\nUne suite que rien n\'exécute ne prouve rien. Soit l\'ajouter à `SUITES` de\n' +
+      '`scripts/run-isolation-suites.sh` (ou à un job de `.github/workflows/ci.yml`),\n' +
+      'soit la retirer du dépôt.',
+  );
+}
+
 if (orphans.length > 0) {
   console.error(`\n✗ ${orphans.length} gardien(s) que rien n'appelle en CI :`);
   for (const o of orphans) console.error(`  - ${o}`);
@@ -128,5 +161,9 @@ if (orphans.length > 0) {
   );
   process.exit(1);
 }
+if (suiteOrphans.length > 0) process.exit(1);
 
-console.log(`✓ ${guards.length} gardiens recensés, tous atteignables depuis un workflow GitHub Actions.`);
+console.log(
+  `✓ ${guards.length} gardiens recensés, tous atteignables depuis un workflow GitHub Actions`
+    + ` ; ${suites.length} suites sous tests/, toutes appelées.`,
+);
