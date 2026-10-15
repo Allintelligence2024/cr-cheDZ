@@ -55,6 +55,19 @@ Aucun `package.json` ne demande `1.20.8`.
 > npm (lockfileVersion 3) n'enregistre pas les `overrides` dans le lockfile : il les applique
 > depuis `package.json` à l'install. Le lockfile reste donc sans champ `overrides`, comme avant.
 
+### Correctif prod `--omit=dev` : `iconv-lite` dev → prod (2026-10-15)
+
+Révélé par le job CI `database` (`check-api-runtime.mjs`) : l'install de **prod**
+(`npm ci --omit=dev`, image livrée) échouait sur `Cannot find module 'iconv-lite'` au chargement
+de `app.factory.js`. Cause : `body-parser@1.x` embarquait `iconv-lite` en *nested* (donc toujours
+présent en prod) ; `body-parser@2.3.0` s'appuie sur l'`iconv-lite` **hoisté racine** — lequel
+portait le résidu `"dev": true` (requis uniquement en dev dans l'ancien arbre). En `--omit=dev`,
+npm ne l'installait plus. **Correctif** : retirer `"dev": true` de
+`node_modules/iconv-lite` (il devient une dépendance de prod via `body-parser`/`raw-body`). Toute
+la chaîne a été revérifiée en `dev:false` : `bytes`, `content-type` (racine + nested 2.1.0),
+`debug`, `http-errors`, `iconv-lite`, `on-finished`, `qs`, `raw-body`, `type-is`, `unpipe`,
+`safer-buffer`.
+
 ## Validation (2026-10-14, PostgreSQL 18.4 embarqué)
 
 | Contrôle | Commande | Résultat |
