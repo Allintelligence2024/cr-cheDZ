@@ -90,9 +90,16 @@ Déjà en place et vérifiée : RLS `USING`+`WITH CHECK` sur toutes les tables t
 ### 3.1 Gardiens (tous verts, cf. §0)
 
 `schema-check`, `rls-behavior-check`, `check-tenant-index`, `check-rls-usage`, `check-env-example`,
-`check-android-manifest`, `check-guards-wired`, `check-e2e-skeletons`, `check-spa-static-paths`,
-`check-sync-contract` (partiel, sans Dart), `claims-contract` (12/12), `media-client-wiring`,
-`parent-session-contract`, `sync-resync-contract`.
+`check-android-manifest`, `check-guards-wired` (16 gardiens, tous câblés), `check-e2e-skeletons`,
+`check-spa-static-paths`, `check-sync-contract` (partiel, sans Dart), `claims-contract` (12/12),
+`media-client-wiring`, `parent-session-contract`, `sync-resync-contract`.
+
+**Ajouté ce jour** : `scripts/check-i18n-parity.mjs` (`npm run check:i18n-parity`, step CI `quality`)
+— parité des jeux de clés fr/ar, refus d'une valeur non traduite (sauf acronyme assumé),
+conservation des jetons `{nom}` à travers la traduction, et existence de chaque `t('…')` appelé
+depuis l'administration. La classe de défaut qu'il verrouille est exactement celle trouvée par
+l'audit (deux chaînes laissées en français dans le bloc arabe + un `{n}` affiché littéralement) :
+elle est silencieuse à l'exécution, donc invisible pour les tests applicatifs.
 
 ### 3.2 Couverture de tests
 
