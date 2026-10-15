@@ -26,9 +26,13 @@
  * d'isolation énumère ses suites à la main (`SUITES=( … )`) : un fichier déposé là
  * sans être ajouté à la liste ne tourne JAMAIS, et rien ne le dit — exactement la
  * classe du glob non protégé (« src/ » + « ** » + « .test.ts ») développé par `sh`,
- * qui ignorait en silence les suites d'un sous-dossier. Vérifié ce jour : 87 suites sur disque, 76 dans le
- * runner, les 11 autres appelées par `test-production-roles.mjs` ou `ci.yml` —
- * aucun orphelin, mais rien ne garantissait que cela le reste.
+ * qui ignorait en silence les suites d'un sous-dossier. Inventaire mesuré ce jour (non déduit) :
+ * 87 fichiers `*.test.mjs` dans le dossier d'isolation, dont 74 listés par `SUITES` (le tableau
+ * compte 76 entrées, mais `schema-check.mjs` et `rls-behavior-check.mjs` ne sont pas des suites)
+ * — et 13 appelées ailleurs : 10 par `test-production-roles.mjs` (le gate D), 3 nommées aussi en
+ * racine dans `ci.yml` (`claims-contract`, `media-client-wiring`, `parent-session-contract`).
+ * Soit **0 orpheline** sur les 91 fichiers `*.test.*` de `tests/` ; rien ne garantissait que cela
+ * le reste, désormais si.
  *
  * Usage : node scripts/check-guards-wired.mjs [--verbose]
  * Sortie : 0 = tous les gardiens sont câblés, 1 = au moins un orphelin (liste explicite).
