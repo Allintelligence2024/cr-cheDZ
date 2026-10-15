@@ -14,13 +14,11 @@ interface I18nValue {
   dir: 'ltr' | 'rtl';
 }
 
-/** Remplace les jetons `{nom}` par la valeur fournie ; un jeton sans valeur reste affiché. */
-export function interpolate(text: string, params?: Record<string, string | number>): string {
-  if (!params) return text;
-  return text.replace(/\{(\w+)\}/g, (token, name: string) =>
-    Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : token,
-  );
-}
+// L'interpolation vit dans `lib/interpolate.ts` (module `.ts`, testable par
+// `node --test` — voir lib/interpolate.test.ts) et reste ré-exportée ici.
+import { interpolate } from './lib/interpolate';
+
+export { interpolate };
 
 const I18nContext = createContext<I18nValue>({
   locale: 'fr',
