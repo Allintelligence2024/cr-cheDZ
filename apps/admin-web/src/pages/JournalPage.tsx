@@ -4,6 +4,7 @@ import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
 import { http } from '../api/client';
 import { useI18n } from '../i18n';
 import { canDestruct } from '../hooks/usePermissions';
+import { localDateInputValue } from '../lib/dates';
 
 interface JournalEvent {
   id: string;
@@ -27,7 +28,7 @@ interface JournalEvent {
 export function JournalPage(): React.JSX.Element {
   const { t } = useI18n();
   const [childId, setChildId] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localDateInputValue());
   const [items, setItems] = useState<JournalEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);

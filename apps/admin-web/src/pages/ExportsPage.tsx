@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
 import { ApiError, apiDownload, http } from '../api/client';
 import { useI18n } from '../i18n';
+import { localDateInputValue } from '../lib/dates';
 
 interface ExportRow {
   id: string;
@@ -24,8 +25,8 @@ export function ExportsPage(): React.JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
   const [reportType, setReportType] = useState<'attendance' | 'invoices'>('attendance');
   const [period, setPeriod] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const [rangeStart, setRangeStart] = useState(new Date().toISOString().slice(0, 10));
-  const [rangeEnd, setRangeEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [rangeStart, setRangeStart] = useState(localDateInputValue());
+  const [rangeEnd, setRangeEnd] = useState(localDateInputValue());
   const [busy, setBusy] = useState(false);
 
   const load = (): void => {

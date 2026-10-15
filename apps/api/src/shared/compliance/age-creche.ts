@@ -1,3 +1,4 @@
+import { businessDate, monthsBetweenDates, toCivilDay } from '@creche/prod-config';
 import { AppError } from '../errors';
 
 /**
@@ -9,12 +10,17 @@ import { AppError } from '../errors';
 export const AGE_CRECHE_MIN_MONTHS = 3;
 export const AGE_CRECHE_MAX_MONTHS = 36;
 
-/** Écart en mois entre `dob` et maintenant (partie entière, calendrier). */
+/**
+ * Écart en mois entre `dob` et maintenant (partie entière, calendrier).
+ *
+ * E4 (harmonisation API, 2026-10-15) : la comparaison se fait sur des JOURS
+ * CALENDAIRES, jamais sur des instants. `new Date('2024-01-01')` se parse en minuit
+ * UTC puis se relit en heure locale : dans un fuseau ouest, le jour recule — un
+ * enfant exactement à 3 ans ou à 3 mois était jugé sur le mauvais jour. `toCivilDay`
+ * fige le jour de naissance, `businessDate` le jour du jour à Africa/Algiers.
+ */
 export function ageMonths(dob: string | Date, now: Date = new Date()): number {
-  const d = typeof dob === 'string' ? new Date(dob) : dob;
-  let months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
-  if (now.getDate() < d.getDate()) months -= 1; // anniversaire du mois pas encore passé
-  return months;
+  return monthsBetweenDates(toCivilDay(dob), businessDate(now));
 }
 
 /**
@@ -44,4 +50,9 @@ export function assertCrecheAge(dob: string | undefined | null): void {
       409,
     );
   }
+}
+
+/** Jour de naissance strictement postérieur au jour courant (à Alger). */
+export function isFutureBirthDate(dob: string | Date, now: Date = new Date()): boolean {
+  return toCivilDay(dob) > businessDate(now);
 }

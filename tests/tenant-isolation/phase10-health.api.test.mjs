@@ -158,6 +158,24 @@ const main = async () => {
       authorization_id: authId, administered_at: '2025-06-01T08:00:00Z', dose_given: '1 bouffée',
     });
     ok('Administration hors période autorisée → 422 MEDICATION_OUTSIDE_AUTH', outside.status === 422 && outside.body.code === 'MEDICATION_OUTSIDE_AUTH', JSON.stringify(outside.body).slice(0, 100));
+    // E4 (harmonisation des fuseaux) : les BORNES sont incluses, et elles ne
+    // bougent pas d'un jour selon le TZ du serveur. PostgreSQL renvoie les `date`
+    // en minuit LOCAL du process ; une relecture `toISOString()` les ramenait à la
+    // veille en fuseau positif — le dernier jour autorisé était alors rejeté, et la
+    // veille du premier jour acceptée.
+    const lastAuthorizedDay = await api('POST', `/health/${childA.rows[0].id}/medication-administrations`, tokenA, {
+      authorization_id: authId, administered_at: '2026-12-31T08:00:00Z', dose_given: '1 bouffée',
+    });
+    ok('Administration le dernier jour de la période → 201 (borne incluse)', lastAuthorizedDay.status === 201, JSON.stringify(lastAuthorizedDay.body).slice(0, 100));
+    // La ligne de borne est effacée : la suite vérifie ensuite l'état parent attendu
+    // (une administration confirmée, la plus récente) et ne doit pas la voir changer.
+    if (lastAuthorizedDay.body.id) {
+      await db.query(`DELETE FROM medication_administrations WHERE id=$1`, [lastAuthorizedDay.body.id]);
+    }
+    const dayBeforeStart = await api('POST', `/health/${childA.rows[0].id}/medication-administrations`, tokenA, {
+      authorization_id: authId, administered_at: '2025-12-31T08:00:00Z', dose_given: '1 bouffée',
+    });
+    ok('Administration la veille du premier jour → 422 MEDICATION_OUTSIDE_AUTH', dayBeforeStart.status === 422 && dayBeforeStart.body.code === 'MEDICATION_OUTSIDE_AUTH', JSON.stringify(dayBeforeStart.body).slice(0, 100));
     await db.query(`UPDATE medication_authorizations SET is_active=false WHERE id=$1`, [authId]);
     const inactive = await api('POST', `/health/${childA.rows[0].id}/medication-administrations`, tokenA, {
       authorization_id: authId, administered_at: '2026-06-01T08:00:00Z', dose_given: '1 bouffée',

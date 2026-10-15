@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
 import { http } from '../api/client';
 import { useI18n } from '../i18n';
+import { localDateInputValue } from '../lib/dates';
 
 interface SummaryItem {
   child_id: string;
@@ -31,7 +32,7 @@ export function AttendancePage(): React.JSX.Element {
   const { t } = useI18n();
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [roomId, setRoomId] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(localDateInputValue());
   const [items, setItems] = useState<SummaryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyChild, setBusyChild] = useState<string | null>(null);

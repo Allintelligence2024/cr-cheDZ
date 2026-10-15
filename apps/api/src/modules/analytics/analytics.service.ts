@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { businessDate, shiftDateOnly } from '@creche/prod-config';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 
@@ -106,7 +107,9 @@ export class AnalyticsService {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       const today = (await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date::text AS d`)).rows[0].d as string;
-      const fromDate = from ?? new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().substring(0, 10);
+      // E4 : fenêtre calendaire du fuseau métier (pas le jour UTC du process, qui
+      // décalerait le bornage d'un jour entre 00:00 et 01:00 à Alger).
+      const fromDate = from ?? shiftDateOnly(businessDate(), -30);
       const toDate = to ?? today;
 
       const trunc = groupBy === 'month' ? 'month' : groupBy === 'week' ? 'week' : 'day';
@@ -187,7 +190,7 @@ export class AnalyticsService {
     const tenantId = requireTenant(this.tenantContext);
     return this.tenantContext.withTenantConnection(async (client) => {
       const today = (await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date::text AS d`)).rows[0].d as string;
-      const fromDate = from ?? new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().substring(0, 10);
+      const fromDate = from ?? shiftDateOnly(businessDate(), -90);
       const toDate = to ?? today;
 
       // Revenue = paiements encaissés par jour.

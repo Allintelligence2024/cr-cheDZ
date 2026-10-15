@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { businessYear } from '@creche/prod-config';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
@@ -55,7 +56,7 @@ export class EnrollmentService {
            guardian_name,guardian_phone,guardian_email,desired_start_date,schedule_type,has_sibling,is_staff_child,priority_notes,priority_score,notes,created_by)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
          RETURNING id, reference_number, status, priority_score, site_id, desired_start_date, created_at`,
-        [org, dto.site_id, `PRE-${new Date().getFullYear()}-${seq}`, dto.child_first_name.trim(), dto.child_last_name.trim(), dto.child_date_of_birth,
+        [org, dto.site_id, `PRE-${businessYear()}-${seq}`, dto.child_first_name.trim(), dto.child_last_name.trim(), dto.child_date_of_birth,
           dto.guardian_name.trim(), dto.guardian_phone, dto.guardian_email ?? null, dto.desired_start_date, dto.schedule_type ?? 'full_time',
           !!dto.has_sibling, !!dto.is_staff_child, dto.priority_notes ?? null, score, dto.notes ?? null, userId],
       )).rows[0];

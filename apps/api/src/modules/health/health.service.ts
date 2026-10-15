@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { localCalendarDay } from '@creche/prod-config';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
@@ -239,10 +240,18 @@ export class HealthService {
       if (auth.child_id !== childId) {
         throw new AppError('MEDICATION_AUTH_MISMATCH', 'L’autorisation ne concerne pas cet enfant', 'التفويض لا يخص هذا الطفل', 422);
       }
-      // node-postgres renvoie les DATE comme objets Date → format ISO explicite.
-      const fmt = (d: unknown): string => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
-      const day = fmt(dto.administered_at);
-      if (day < fmt(auth.start_date) || (auth.end_date && day > fmt(auth.end_date))) {
+      // E4 (harmonisation API, 2026-10-15) : node-postgres construit les DATE en
+      // minuit LOCAL du fuseau du process. Un `toISOString()` recule donc le jour dès
+      // qu'on est à l'est de UTC (Africa/Algiers = UTC+1) — une administration
+      // parfaitement dans la période autorisée était rejetée en 422 le dernier jour,
+      // et une administration la veille du premier jour était acceptée. `localCalendarDay`
+      // relit les composants locaux : le jour calendaire exact, quel que soit le TZ.
+      // Le jour demandé reste la partie calendaire de la saisie (cohérent avec
+      // l'index unique `uq_medication_admin_per_day`, qui dérive le jour en UTC).
+      const day = String(dto.administered_at).slice(0, 10);
+      const firstDay = localCalendarDay(auth.start_date);
+      const lastDay = auth.end_date ? localCalendarDay(auth.end_date) : null;
+      if (day < firstDay || (lastDay !== null && day > lastDay)) {
         throw new AppError('MEDICATION_OUTSIDE_AUTH', 'Administration hors de la période autorisée', 'الإعطاء خارج الفترة المصرح بها', 422);
       }
       // P0 (phase 1.6) — une seule administration par (autorisation, jour).
