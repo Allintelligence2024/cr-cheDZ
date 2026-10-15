@@ -68,9 +68,20 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   String _label(String type) {
+    // Libellés bilingues (FR / AR) des 9 types du journal
+    // (JOURNAL_EVENT_TYPES côté API). Le fallback `_ => type` reste
+    // pour qu'un type futur ne casse jamais l'écran.
+    // NOTE : traductions simples, à relire par un locuteur arabe
+    // (dette H3 — plan §3.5, handoff « i18n »).
     return switch (type) {
       'meal' => 'Repas / وجبة',
+      'nap_start' => 'Début de sieste / بداية القيلولة',
       'nap_end' => 'Fin de sieste / نهاية القيلولة',
+      'diaper' => 'Couche / حفاض',
+      'activity' => 'Activité / نشاط',
+      'temperature' => 'Température / حرارة',
+      'note' => 'Note / ملاحظة',
+      'health_observation' => 'Observation santé / ملاحظة صحية',
       'incident' => 'Incident / حادث',
       _ => type,
     };

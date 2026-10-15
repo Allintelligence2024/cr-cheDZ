@@ -23,6 +23,51 @@ Les migrations 001–052 restent immuables.
 - Si les tables appartiennent à `creche_app`, arrêter : transfert de propriété
   contrôlé par un administrateur requis, jamais une rétrogradation aveugle.
 
+### Ordre de révocation des rôles (retour arrière)
+
+Les migrations sont **forward-only** (ADR-007) : aucun `DOWN` n'existe. Un retour arrière
+complet = **restauration d'une sauvegarde** ([BACKUP-RUNBOOK.md](BACKUP-RUNBOOK.md)) + image
+applicative précédente, puis — seulement si l'on veut aussi retirer la séparation des rôles —
+révocation dans cet ordre strict (du plus privilégié au moins privilégié, pour ne jamais
+laisser `creche_app` sans le cadre attendu) :
+
+1. **Arrêter les écritures** : scale à 0 l'API et le worker (aucune connexion applicative
+   active). Vérifier `pg_stat_activity` : plus aucune session `creche_app`/`creche_migrator`.
+2. **Révoquer les grants de `creche_app`** (le moins privilégié d'abord) :
+   ```sql
+   REVOKE ALL ON ALL TABLES IN SCHEMA public FROM creche_app;
+   REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM creche_app;
+   REVOKE USAGE ON SCHEMA public FROM creche_app;
+   ```
+3. **Révoquer les grants de `creche_migrator`** :
+   ```sql
+   REVOKE ALL ON ALL TABLES IN SCHEMA public FROM creche_migrator;
+   REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM creche_migrator;
+   REVOKE CREATE ON SCHEMA public FROM creche_migrator;
+   ```
+4. **Ne PAS `DROP ROLE` tant que des objets appartiennent à `creche_migrator`** :
+   la propriété du schéma reste au propriétaire. Un changement de propriétaire
+   (`REASSIGN OWNED` / `ALTER … OWNER TO`) est une décision humaine distincte, jamais
+   automatisée ici.
+5. **Réappliquer la configuration précédente** (rôle unique si l'on revient au modèle
+   pré-D) puis relancer bootstrap + migrations idempotents depuis l'image précédente.
+
+> Garde-fou : après révocation, redémarrer l'API doit échouer proprement sur la garde
+> `DATABASE_ROLE_UNSAFE` si le rôle attendu n'a plus ses privilèges — c'est le comportement
+> voulu, pas un rétablissement SUPERUSER.
+
+### Qui décide
+
+- **Déclenchement du retour arrière** : le responsable d'exploitation (OPS) seul, après
+  constat d'échec bootstrap/migration/garde en production.
+- **Restauration de sauvegarde** (chemin « données réelles ») : validation conjointe OPS +
+  responsable conformité (RGPD/ANPDP), car elle réintroduit un état antérieur de données
+  personnelles. Fenêtre de maintenance annoncée.
+- **Changement de propriété / `DROP ROLE`** : administrateur PostgreSQL de l'organisation,
+  jamais l'agent ni un script automatisé.
+- L'agent (Arena/Antigravity) **prépare** les commandes et le diagnostic, il ne les exécute
+  pas en production.
+
 ## Modèle cible
 
 - `postgres` : bootstrap administrateur uniquement ; jamais transmis à API/worker.
