@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { businessYear } from '@creche/prod-config';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
@@ -141,7 +142,9 @@ export class ChildrenService {
       }
 
       const seq = await client.query(`SELECT next_org_sequence($1) AS seq`, [tenantId]);
-      const year = new Date().getFullYear();
+      // E4 : année de la RÉFÉRENCE = année calendaire du fuseau métier (un enfant
+      // né le 31/12 23:30 UTC est déjà du 1er janvier à Alger).
+      const year = businessYear();
       const prefix = (site.rows[0].slug ?? 'CR').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'CR';
       const reference = `${prefix}-${year}-${String(seq.rows[0].seq).padStart(5, '0')}`;
 

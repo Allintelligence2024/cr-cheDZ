@@ -271,6 +271,14 @@ jobs:
         run: node scripts/check-env-example.mjs
       - name: Garde manifest Android (INTERNET en release)
         run: node scripts/check-android-manifest.mjs
+      # E4/H3 (2026-10-15) : les traductions arabes étaient partielles (deux
+      # chaînes laissées en français dans le bloc `ar`) et un jeton `{n}` rendu
+      # littéralement — deux défauts silencieux à l'exécution. Ce gardien compare
+      # les jeux de clés, refuse une valeur non traduite (sauf acronyme assumé),
+      # vérifie que chaque jeton `{nom}` survit à la traduction, et que tout
+      # `t('…')` appelé depuis l'administration existe dans le paquet.
+      - name: Parité des traductions fr/ar (aucune clé orpheline, aucun jeton perdu)
+        run: node scripts/check-i18n-parity.mjs
       - name: Inventaire des gardes de route (205 routes × @Roles/@Public)
         run: node scripts/inventory-route-guards.mjs
       - name: Sanity check des scripts de charge (seuils p95)

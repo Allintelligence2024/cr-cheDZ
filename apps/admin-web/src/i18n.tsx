@@ -5,9 +5,20 @@ import { dirOf, messages, type Locale } from '@creche/i18n';
 interface I18nValue {
   locale: Locale;
   setLocale: (l: Locale) => void;
-  t: (key: string) => string;
+  /**
+   * Traduit `key` et interpole les jetons `{nom}` présents dans la chaîne.
+   * Sans paramètre, le comportement est identique à l'ancien `t(key)` ;
+   * une clé inconnue renvoie la clé elle-même (aucune chaîne vide).
+   */
+  t: (key: string, params?: Record<string, string | number>) => string;
   dir: 'ltr' | 'rtl';
 }
+
+// L'interpolation vit dans `lib/interpolate.ts` (module `.ts`, testable par
+// `node --test` — voir lib/interpolate.test.ts) et reste ré-exportée ici.
+import { interpolate } from './lib/interpolate';
+
+export { interpolate };
 
 const I18nContext = createContext<I18nValue>({
   locale: 'fr',
@@ -35,7 +46,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }): React
   const value: I18nValue = {
     locale,
     setLocale,
-    t: (key: string) => messages[locale][key] ?? key,
+    t: (key: string, params?: Record<string, string | number>) =>
+      interpolate(messages[locale][key] ?? key, params),
     dir,
   };
 

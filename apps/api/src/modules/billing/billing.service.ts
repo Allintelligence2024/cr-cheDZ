@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool, type PoolClient } from 'pg';
+import { localCalendarDay } from '@creche/prod-config';
 import { PG_POOL } from '../../shared/database/database.provider';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -601,7 +602,10 @@ export class BillingService {
         [dto.site_id, date],
       )).rows[0];
       if (previous) {
-        const prevDate = new Date(previous.register_date).toISOString().slice(0, 10);
+        // E4 : register_date est une colonne DATE ; le relire en jour calendaire
+        // local (pas via toISOString) pour que le message nomme le VRAI jour, quel
+        // que soit le fuseau du process.
+        const prevDate = localCalendarDay(previous.register_date);
         throw new AppError(
           'CASH_OPEN_PREVIOUS_DAY',
           `Un registre du ${prevDate} reste ouvert sur ce site — clôturez-le avant d'ouvrir la caisse du jour`,

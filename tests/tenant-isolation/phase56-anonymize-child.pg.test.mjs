@@ -144,7 +144,21 @@ try {
     assert.match(r.first_name_fr, /^Anonyme-[0-9a-f]{8}$/);
     assert.equal(r.last_name_fr, 'Anonyme');
     assert.equal(r.notes, null); assert.equal(r.gender, null); assert.equal(r.photo_url, null);
-    assert.equal(new Date(r.date_of_birth).getUTCDate(), 1);
+    // La garantie est « le jour est ramené au 1er », et elle est tenue CÔTÉ BASE
+    // (`date_trunc('month', date_of_birth)::date`, migration 067). Elle doit donc
+    // être lue côté base : `new Date(colonne_date).getUTCDate()` mélange les deux
+    // conventions — node-postgres construit la colonne `date` en minuit LOCAL, UTC
+    // relit le jour — et rendait le 30 sous `TZ=Africa/Algiers` pour une valeur
+    // parfaitement minimisée (mesuré : suite verte à UTC, rouge à Alger et Tokyo
+    // avant ce correctif ; le `SELECT *` ci-dessus reste inchangé par ailleurs).
+    const dob = (await db.query(
+      `SELECT to_char(date_of_birth, 'YYYY-MM-DD') AS day,
+              (date_of_birth = date_trunc('month', date_of_birth)::date) AS is_month_start
+       FROM children WHERE id=$1`, [ids.child],
+    )).rows[0];
+    assert.equal(dob.is_month_start, true, 'la précision jour, identifiante, ne doit pas survivre');
+    assert.equal(dob.day.slice(8), '01');
+    assert.equal(r.date_of_birth.getFullYear(), Number(dob.day.slice(0, 4)));
     assert.equal(r.status, 'departed'); assert.ok(r.deleted_at); assert.equal(r.departure_reason, 'ANONYMIZED');
   });
 

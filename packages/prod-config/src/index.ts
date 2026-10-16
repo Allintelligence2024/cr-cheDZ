@@ -146,7 +146,7 @@ export function assertProductionConfig(env: EnvLike = process.env): void {
 
 export { assertApplicationDatabaseRole } from './database-role';
 
-export { BUSINESS_TIME_ZONE, dateOnly, monthBounds, exportRange } from './calendar';
+export { BUSINESS_TIME_ZONE, businessDate, businessDateTime, businessYear, dateOnly, localCalendarDay, monthsBetweenDates, monthBounds, shiftDateOnly, toCivilDay, utcDayInstant, exportRange } from './calendar';
 
 export { JOURNAL_NOTIFICATION_TYPES, NOTIFICATION_DENIED_REASON, NOTIFICATION_INBOX_ALLOWED_SQL, notificationAllowed } from './notification-access';
 

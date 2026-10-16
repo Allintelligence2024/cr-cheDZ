@@ -3,6 +3,7 @@ import React from 'react';
 import { Button, Card, Table, TextField, tokens } from '@creche/design-system';
 import { http } from '../api/client';
 import { useI18n } from '../i18n';
+import { localDateInputValue } from '../lib/dates';
 
 interface Staff {
   id: string;
@@ -39,7 +40,7 @@ export function StaffPage(): React.JSX.Element {
   const [items, setItems] = useState<Staff[]>([]);
   const [userId, setUserId] = useState('');
   const [qualification, setQualification] = useState('educator_qualified');
-  const [hireDate, setHireDate] = useState(new Date().toISOString().slice(0, 10));
+  const [hireDate, setHireDate] = useState(localDateInputValue());
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   // Multi-rôles : cible de la modale + rôles additionnels par user

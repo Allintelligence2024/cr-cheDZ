@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { businessYear } from '@creche/prod-config';
 import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AuditService } from '../privacy/audit.service';
 import { AppError } from '../../shared/errors';
-import { ageMonths, AGE_CRECHE_MIN_MONTHS, AGE_CRECHE_MAX_MONTHS } from '../../shared/compliance/age-creche';
+import { ageMonths, AGE_CRECHE_MIN_MONTHS, AGE_CRECHE_MAX_MONTHS, isFutureBirthDate } from '../../shared/compliance/age-creche';
 import { isAlgerianPhone } from '../../shared/validation/algerian-phone';
 import { ImportChildRowDto, type ImportError, type ImportResult } from './dto/import.dto';
 
@@ -138,12 +139,15 @@ export class ImportService {
       const d = new Date(row.date_of_birth);
       if (Number.isNaN(d.getTime())) {
         out.push({ field: 'date_of_birth', message_fr: 'Date de naissance invalide (YYYY-MM-DD)', message_ar: 'تاريخ ميلاد غير صالح' });
-      } else if (d > new Date()) {
+      } else if (isFutureBirthDate(row.date_of_birth)) {
         out.push({ field: 'date_of_birth', message_fr: 'Date de naissance dans le futur', message_ar: 'تاريخ الميلاد في المستقبل' });
       } else {
         // AGE_CRECHE (2.6) : l'import ne bloquait pas non plus — on marque la
         // ligne en erreur (la feuille d'import le signale à l'utilisatrice).
-        const months = ageMonths(d);
+        // La chaîne brute, pas `d` : `new Date('YYYY-MM-DD')` est minuit UTC et se
+        // relit en heure locale — un jour de naissance jugé sur le mauvais jour dans
+        // un fuseau ouest (E4).
+        const months = ageMonths(row.date_of_birth);
         if (months < AGE_CRECHE_MIN_MONTHS || months >= AGE_CRECHE_MAX_MONTHS) {
           out.push({
             field: 'date_of_birth',
@@ -202,7 +206,7 @@ export class ImportService {
     }
 
     const seq = await client.query(`SELECT next_org_sequence($1) AS seq`, [tenantId]);
-    const year = new Date().getFullYear();
+    const year = businessYear();
     const reference = `IMP-${year}-${String(seq.rows[0].seq).padStart(5, '0')}`;
 
     const res = await client.query(

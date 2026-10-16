@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { businessDate } from '@creche/prod-config';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
 import { AppError, Errors } from '../../shared/errors';
@@ -134,7 +135,10 @@ export class AttestationsService {
       guardianName: data.g_first ? `${data.g_first} ${data.g_last}`.trim() : 'la famille',
       totalInvoiced: Number(data.total_invoiced), totalPaid: Number(data.total_paid), invoiceCount: data.invoice_count, daysPresent: data.days_present,
       periodStart: data.period_start ? String(data.period_start) : null, periodEnd: data.period_end ? String(data.period_end) : null,
-      issuedAt: new Date(data.issued_at).toISOString().slice(0, 10),
+      // E4 : issued_at est un instant ; le « Fait le » du document légal est le jour
+      // civil du fuseau métier, pas le jour UTC (une émission entre 00:00 et 01:00 à
+      // Alger daterait le document de la veille).
+      issuedAt: businessDate(data.issued_at),
     });
     return { buffer, filename: `${data.attestation_number}.pdf` };
   }

@@ -98,7 +98,7 @@ const HEADERS = [
 ];
 
 export function ChildrenPage(): React.JSX.Element {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [items, setItems] = useState<Child[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
@@ -228,7 +228,7 @@ export function ChildrenPage(): React.JSX.Element {
       {error && <p style={{ color: tokens.colors.danger }}>{error}</p>}
       {imported !== null && (
         <p style={{ color: tokens.colors.success, fontSize: tokens.typography.small }}>
-          {`${t('children.imported')} : ${imported}`}
+          {t('children.imported', { n: imported })}
         </p>
       )}
       {report && report.length > 0 && (
@@ -237,7 +237,8 @@ export function ChildrenPage(): React.JSX.Element {
           <ul style={{ fontSize: tokens.typography.small, marginBottom: 0 }}>
             {report.map((r, i) => (
               <li key={i}>
-                {t('children.row')} {r.row} — {r.field} : {r.message_fr}
+                {t('children.row')} {r.row} — {r.field} :{' '}
+                {locale === 'ar' ? r.message_ar || r.message_fr : r.message_fr}
               </li>
             ))}
           </ul>

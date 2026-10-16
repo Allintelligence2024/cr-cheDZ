@@ -11,6 +11,13 @@ RUN npm prune --omit=dev && mkdir -p apps/api/node_modules
 
 FROM node:22.23.3-alpine3.24 AS runtime
 ENV NODE_ENV=production
+# E4 (harmonisation des fuseaux, 2026-10-15) : le fuseau du process est ÉPINGLÉ à
+# UTC. Les colonnes `date` PostgreSQL sont rendues aux clients comme des instants
+# ancrés à minuit UTC (contrat actuel du mobile et de l'administration) ; un TZ
+# d'héritage (ex. Africa/Algiers, UTC+1) ferait basculer le jour affiché chez les
+# clients, alors que les calendriers métier, eux, sont déjà lus en `AT TIME ZONE
+# 'Africa/Algiers'` côté SQL. Épingler UTC rend les deux chemins déterministes.
+ENV TZ=UTC
 WORKDIR /app
 # npm ci a déjà tourné en build : on copie l'arbre prod TEL QUEL
 # (package-lock inclus pour la reproductibilité documentée).

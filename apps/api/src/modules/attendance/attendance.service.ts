@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { businessDate } from '@creche/prod-config';
 import { PoolClient } from 'pg';
 import { TenantContextService } from '../../shared/database/tenant-context.service';
 import { requireTenant } from '../../shared/database/tenant-utils';
@@ -415,8 +416,9 @@ export class AttendanceService {
       const res = await client.query(`SELECT (NOW() AT TIME ZONE 'Africa/Algiers')::date::text AS d`);
       return res.rows[0].d as string;
     }
-    const now = new Date(Date.now() + 60 * 60 * 1000);
-    return now.toISOString().slice(0, 10);
+    // Hors connexion (aucun SQL possible) : même jour civil que la requête
+    // `NOW() AT TIME ZONE 'Africa/Algiers'` ci-dessus — jamais le jour UTC du process.
+    return businessDate();
   }
 
   private rejected(reason: string, message: string): CommandResult {

@@ -600,8 +600,8 @@ export const messages: Record<Locale, Record<string, string>> = {
     'bill.closedAt': 'أغلق في',
     'bill.balance': 'الرصيد',
     'bill.pdf': 'PDF',
-    'bill.exportExcel': 'Exporter Excel',
-    'bill.exportRequested': 'Export Excel demandé',
+    'bill.exportExcel': 'تصدير إلى Excel',
+    'bill.exportRequested': 'تم طلب التصدير — سيكون جاهزاً خلال لحظات',
     'bill.period': 'الفترة',
     'bill.paidAmount': 'المدفوع',
     // Phase 9 — fiche enfant
