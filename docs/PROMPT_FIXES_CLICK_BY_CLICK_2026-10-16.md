@@ -1,7 +1,7 @@
 # Exécution clic par clic — après la fusion de la PR #60
 
 **Date** : 2026-10-16 · **Base** : `main` @ `7e8862b` (fusion de `arena/4efe1e90-cr-chedz`, 17 commits, 14/14 checks au vert dont le job `database` = Gate D strict, 34 min 35 s)
-**À qui s'adresse ce document** : §1 à l'humain qui clique dans GitHub ; §2 à un agent (prompt autonome à copier-coller) ; §3–§5 aux tâches qui exigent une VM, Docker ou Flutter.
+**À qui s'adresse ce document** : §1 à l'humain qui clique dans GitHub ; §2 à un agent (prompt autonome à copier-coller) ; §3 à §5 aux tâches qui exigent une VM, Docker ou Flutter ; §6 à ce qu'il ne faut PAS refaire.
 
 > Ce document ne remplace pas `docs/PLAN_FIX_GITHUB_ISSUES_SECURITY_QUALITY.md` (l'état vérifié
 > et le relevé TZ, §9.1) ni `docs/HANDOFF-OPEN-ISSUES-2026-10-14.md` (règles du dépôt).
@@ -46,7 +46,7 @@ interrupteurs, les alertes ne sont jamais publiées et le job `security-audit` r
 **Ne pas** cocher « Delete branch automatically on merge » : la branche de session Arena
 (`arena/…`) doit survivre à la fusion.
 
-### 1.6 Les six décisions à transmettre au client (à ne pas deviner)
+### 1.6 Les sept décisions à transmettre au client (à ne pas deviner)
 À copier dans le canal client tel quel. Chacune bloque du code, pas de la documentation.
 
 | # | Question au client | Bloque | Où consigner la réponse |
