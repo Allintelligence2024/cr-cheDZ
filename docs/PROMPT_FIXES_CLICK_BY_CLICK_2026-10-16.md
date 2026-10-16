@@ -51,10 +51,10 @@ interrupteurs, les alertes ne sont jamais publiées et le job `security-audit` r
 
 | # | Question au client | Bloque | Où consigner la réponse |
 |---|---|---|---|
-| D1 | Numérotation des factures : séquentiel légal (`FAC-AAAA-MM-NNNN`) ou référence publique opaque ? | #41, `next_org_sequence` | nouvel ADR (ADR-016 déjà proposé) |
+| D1 | Numérotation des factures : séquentiel légal (`FAC-AAAA-MM-NNNN`) ou référence publique opaque ? | #41, `next_org_sequence` | **l'ADR existe déjà** : `docs/adr/ADR-016-next-org-sequence-numbering.md`, statut **Proposé** — la réponse du client (et l'avis juridique) fait passer le statut à Accepté/Rejeté, elle ne se rédige pas ailleurs |
 | D2 | Paie : conserve-t-on le calcul **sans prorata** (décision actuelle) ou non ? | #39 E5, #42 | plan H3 l.762 + ADR |
 | D3 | Fournisseur SMTP + Twilio réels, et qui détient les secrets ? | #39 E2, invitations #41 | secrets de dépôt + `.env.prod` |
-| D4 | La revue de sécurité du stockage et le pin de l'image MinIO sont-ils validés tels quels ? | #42 (qualification prod) | `docs/PHASE_H2I…` + SECURITY.md |
+| D4 | La revue de sécurité du stockage et le pin de l'image MinIO sont-ils validés tels quels ? | #42 (qualification prod) | `docs/PHASE_H2I_STORAGE_SELECTION_RUNBOOK.md` + `SECURITY.md` |
 | D5 | Keystore Android + qualification release : qui le détient, quelle date ? | #40 | runbook release |
 | D6 | **Autorisation de merger** les PR de remédiation | tout | accord écrit (celui du 2026-10-16 a couvert #60) |
 | D7 | Format de fil des colonnes `date` en HTTP : garder `AAAA-MM-JJT00:00:00.000Z` (actuel, déterministe depuis ce jour) ou passer à `YYYY-MM-DD` ? | contrat mobile + admin-web | ADR + `check:sync-contract` des deux côtés — **ne rien changer avant la réponse** |
@@ -139,9 +139,15 @@ T4 (P1, Docker requis) — `docker compose -f infrastructure/docker/docker-compo
    `node scripts/test-worker-monitoring-stack.mjs` et `node scripts/test-metrics-collector-stack.mjs`,
    `node scripts/build-minio-image.mjs`, `node scripts/test-staging-stack.mjs`. Attendu : tous verts,
    aucune image non épinglée par somme SHA-256.
-T5 (P2, doc) — Consigner la décision moteur (Phase D, #38) dans un ADR (`docs/adr/`, prochain numéro
-   libre) et la décision `next_org_sequence` (#41, D1) dans ADR-016. SI la réponse du client n'est pas
-   disponible : rédiger l'ADR en marquant explicitement « DÉCISION EN ATTENTE » — ne pas trancher.
+T5 (P2, doc) — Décisions : NE RIEN INVENTER, DEUX ADR EXISTENT.
+   - Moteur : `docs/adr/ADR-015-moteur.md`, statut **Accepté** (PG 18 uniforme) → la ligne « décision
+     moteur à consigner » du handoff Phase D est CLOSE, ne pas rouvrir l'ADR.
+   - Numérotation : `docs/adr/ADR-016-next-org-sequence-numbering.md`, statut **Proposé**, en attente du
+     client **et d'un avis juridique**. Tâche réelle : obtenir la réponse (D1), puis (a) passer le
+     statut à Accepté ou Rejeté avec la date et qui a tranché, (b) si Accepté ≠ situation actuelle,
+     implémenter dans `next_org_sequence` (migration ≥ 103, 001→102 immuables) + test d'isolation.
+   Sans réponse : ne pas trancher, ne pas « pré-acter ». Le rôle de l'agent est de vérifier qu'aucun
+   document ne revendique une décision absente — et de corriger le document, pas l'ADR.
 T6 (P2) — Revérifier les 40 routes sans `@Roles`/`@Public` (`npm run check:routes-inventory`) contre
    `docs/architecture/authorization-matrix.md` après toute modification d'API ; justifier ligne à ligne,
    ne pas ajouter de garde sans test d'isolation associé (pattern `tests/tenant-isolation/phase61-…`).
